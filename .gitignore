@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+red-magic-api/node_modules/
+app-source/node_modules/
+
+# Runtime data and secrets
+.env
+red-magic-api/.env
+red-magic-api/data/
+
+# Generated archives and release outputs
+*.zip
+*.exe
+fresh-assets.zip
+red-magic-api.zip
+execute-text.txt
+
+# Keep the desktop resource update package because the server serves it.
+!red-magic-api/public/assets/desktop/1.1.1/assets.zip
+
+# Keep the project-local Electron runtime needed to rebuild the installer.
+!runtime/@zsdesktop/PYGdata.exe
+!runtime/@zsdesktop/resources/
+!runtime/@zsdesktop/resources/**
+!runtime/@zsdesktop/resources/elevate.exe
+!runtime/@zsdesktop/resources/pgy-chart-renderer.exe
+
+# Reverse-engineering and temporary work directories
+analysis/
+/resources/
+patched-output/
+verify-installed/
+verify-installed2/
+app-source-clean/
+
+# Local scratch/input folders
+pic/
+user-images-keep/
+tools/__pycache__/
+tools/pgy-chart-renderer.py
+output/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,18 @@
+{
+  "name": "red-magic-api",
+  "version": "1.0.0",
+  "description": "Minimal Express + SQLite backend for xhs.red-magic.cn compatibility.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "sqlite3": "^5.1.7"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>易美数据抓取 Desktop</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background:
+        radial-gradient(ellipse 80% 70% at 10% 15%, rgba(200, 180, 255, 0.55), transparent 65%),
+        radial-gradient(ellipse 50% 50% at 30% 40%, rgba(255, 180, 200, 0.45), transparent 55%),
+        radial-gradient(ellipse 35% 35% at 0% 5%, rgba(180, 160, 255, 0.35), transparent 45%),
+        radial-gradient(ellipse 35% 40% at 80% 8%, rgba(200, 180, 255, 0.3), transparent 55%),
+        radial-gradient(ellipse 30% 35% at 92% 18%, rgba(255, 190, 210, 0.25), transparent 50%),
+        linear-gradient(135deg, #faf8ff 0%, #fff 35%, #fff 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+      overflow: hidden;
+    }
+
+    .splash-container {
+      text-align: center;
+      color: #5b4a7a;
+    }
+
+    .logo {
+      width: 120px;
+      height: 120px;
+      margin: 0 auto 30px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 12px rgba(100, 80, 160, 0.3));
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(1.05);
+        opacity: 0.9;
+      }
+    }
+
+    .app-name {
+      font-size: 32px;
+      font-weight: 600;
+      margin-bottom: 40px;
+      letter-spacing: 2px;
+    }
+
+    .status-text {
+      font-size: 14px;
+      margin-bottom: 20px;
+      opacity: 0.9;
+      min-height: 20px;
+    }
+
+    .progress-container {
+      width: 300px;
+      height: 4px;
+      background: rgba(180, 160, 255, 0.15);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: rgba(160, 140, 220, 0.6);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    .progress-text {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+
+    .error-container {
+      display: none;
+      text-align: center;
+    }
+
+    .error-message {
+      font-size: 13px;
+      color: #c0392b;
+      margin-bottom: 16px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .retry-button {
+      padding: 8px 32px;
+      background: rgba(160, 140, 220, 0.15);
+      color: #5b4a7a;
+      border: 1px solid rgba(160, 140, 220, 0.3);
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .retry-button:hover {
+      background: rgba(160, 140, 220, 0.25);
+      transform: translateY(-1px);
+    }
+
+    .retry-button:active {
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <div class="splash-container">
+    <div class="logo"><img src="./logo.png" alt="logo"></div>
+    <div class="app-name">易美数据抓取</div>
+    <div id="progressArea">
+      <div class="status-text" id="status">正在初始化...</div>
+      <div class="progress-container">
+        <div class="progress-bar" id="progress"></div>
+      </div>
+      <div class="progress-text" id="progressText">0%</div>
+    </div>
+    <div class="error-container" id="errorArea">
+      <div class="error-message" id="errorText"></div>
+      <button class="retry-button" id="retryBtn">重试</button>
+    </div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    const progressArea = document.getElementById('progressArea');
+    const statusEl = document.getElementById('status');
+    const progressEl = document.getElementById('progress');
+    const progressTextEl = document.getElementById('progressText');
+    const errorArea = document.getElementById('errorArea');
+    const errorTextEl = document.getElementById('errorText');
+    const retryBtn = document.getElementById('retryBtn');
+
+    function showProgress() {
+      progressArea.style.display = '';
+      errorArea.style.display = 'none';
+    }
+
+    function showError(message) {
+      progressArea.style.display = 'none';
+      errorArea.style.display = '';
+      errorTextEl.textContent = message;
+    }
+
+    // 监听状态更新
+    ipcRenderer.on('splash:status', (event, message) => {
+      statusEl.textContent = message;
+    });
+
+    // 监听进度更新
+    ipcRenderer.on('splash:progress', (event, progress) => {
+      const percent = Math.round(progress);
+      progressEl.style.width = `${percent}%`;
+      progressTextEl.textContent = `${percent}%`;
+    });
+
+    // 监听错误
+    ipcRenderer.on('splash:error', (event, message) => {
+      showError(message);
+    });
+
+    // 重试
+    retryBtn.addEventListener('click', () => {
+      showProgress();
+      statusEl.textContent = '正在重试...';
+      progressEl.style.width = '0%';
+      progressTextEl.textContent = '0%';
+      ipcRenderer.send('splash:retry');
+    });
+
+    // 监听完成
+    ipcRenderer.on('splash:complete', () => {
+      statusEl.textContent = '启动完成';
+      progressEl.style.width = '100%';
+      progressTextEl.textContent = '100%';
+    });
+
+    // 通知主进程启动页已准备好
+    window.addEventListener('DOMContentLoaded', () => {
+      ipcRenderer.send('splash:ready');
+    });
+  </script>
+</body>
+</html>

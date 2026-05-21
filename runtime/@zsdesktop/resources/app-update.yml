@@ -1,0 +1,6 @@
+provider: generic
+url: https://your-cdn.com/releases/
+channel: latest
+updaterCacheDirName: 'emagic-data-crawler-updater'
+publisherName:
+  - 'Developer ID Application: Wuhan Gaozhen Technology Co., Ltd. (XZU5LRXJ34)'

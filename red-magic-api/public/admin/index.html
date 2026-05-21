@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Red Magic 管理后台</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter,
+          "Microsoft YaHei",
+          "PingFang SC",
+          Arial,
+          sans-serif;
+        background: #f7f4f3;
+        color: #1f2933;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 18% -10%, rgba(231, 53, 53, 0.12), transparent 32%),
+          linear-gradient(180deg, #fff8f6 0%, #f7f4f3 52%, #f4f6f8 100%);
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .page {
+        width: min(1260px, calc(100vw - 40px));
+        margin: 0 auto;
+        padding: 28px 0 48px;
+      }
+
+      .topbar,
+      .brand,
+      .toolbar,
+      .search,
+      .tabs,
+      .pager {
+        display: flex;
+        align-items: center;
+      }
+
+      .topbar {
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 24px;
+      }
+
+      .brand {
+        gap: 12px;
+      }
+
+      .mark {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border-radius: 8px;
+        background: #e73535;
+        color: #fff;
+        font-weight: 900;
+        box-shadow: 0 10px 24px rgba(231, 53, 53, 0.22);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 24px;
+        letter-spacing: 0;
+      }
+
+      .subtle {
+        color: #6b7280;
+        font-size: 13px;
+      }
+
+      .panel,
+      .card,
+      .login {
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid #ece2df;
+        border-radius: 8px;
+        box-shadow: 0 18px 42px rgba(127, 32, 32, 0.08);
+      }
+
+      .login {
+        width: min(420px, calc(100vw - 40px));
+        margin: 12vh auto 0;
+        padding: 26px;
+      }
+
+      .login h1 {
+        margin-bottom: 8px;
+      }
+
+      .field {
+        display: grid;
+        gap: 7px;
+        margin-top: 18px;
+      }
+
+      label {
+        color: #344054;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      input {
+        width: 100%;
+        height: 42px;
+        border: 1px solid #ddd3d0;
+        border-radius: 6px;
+        padding: 0 12px;
+        color: #1f2933;
+        background: #fff;
+        outline: none;
+      }
+
+      input:focus {
+        border-color: #e73535;
+        box-shadow: 0 0 0 3px rgba(231, 53, 53, 0.12);
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 88px;
+        height: 40px;
+        border: 0;
+        border-radius: 6px;
+        padding: 0 16px;
+        background: #e73535;
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .btn.secondary {
+        border: 1px solid #ddd3d0;
+        background: #fff;
+        color: #344054;
+      }
+
+      .btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      .message {
+        min-height: 22px;
+        margin-top: 14px;
+        color: #c01818;
+        font-size: 13px;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+
+      .card {
+        padding: 18px;
+      }
+
+      .card .value {
+        margin-top: 12px;
+        font-size: 26px;
+        font-weight: 800;
+      }
+
+      .tabs {
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .tab {
+        height: 38px;
+        border: 1px solid #ddd3d0;
+        border-radius: 6px;
+        padding: 0 16px;
+        background: rgba(255, 255, 255, 0.75);
+        color: #4b5563;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .tab.active {
+        border-color: #e73535;
+        background: #e73535;
+        color: #fff;
+      }
+
+      .toolbar {
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px;
+        border-bottom: 1px solid #f0e7e4;
+      }
+
+      .search {
+        width: min(520px, 100%);
+        gap: 10px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 14px 16px;
+        border-bottom: 1px solid #f0e7e4;
+        text-align: left;
+        white-space: nowrap;
+      }
+
+      th {
+        color: #6b7280;
+        font-size: 12px;
+        font-weight: 800;
+        background: #fff8f6;
+      }
+
+      td {
+        font-size: 14px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-width: 54px;
+        justify-content: center;
+        height: 24px;
+        border-radius: 999px;
+        background: #ecfdf3;
+        color: #027a48;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .badge.deleted {
+        background: #fff1f0;
+        color: #b42318;
+      }
+
+      .amount {
+        font-weight: 800;
+        color: #027a48;
+      }
+
+      .amount.negative {
+        color: #c01818;
+      }
+
+      .empty {
+        padding: 40px 16px;
+        color: #6b7280;
+        text-align: center;
+      }
+
+      .pager {
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 14px 16px;
+      }
+
+      @media (max-width: 980px) {
+        .stats {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .topbar,
+        .toolbar,
+        .search {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .table-wrap {
+          overflow-x: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main id="loginView" class="login">
+      <div class="brand">
+        <div class="mark">RM</div>
+        <div>
+          <h1>管理员登录</h1>
+          <div class="subtle">登录后可查看用户、加积分和用户流水</div>
+        </div>
+      </div>
+      <form id="loginForm">
+        <div class="field">
+          <label for="username">管理员账号</label>
+          <input id="username" autocomplete="username" value="admin" />
+        </div>
+        <div class="field">
+          <label for="password">管理员密码</label>
+          <input id="password" type="password" autocomplete="current-password" />
+        </div>
+        <button id="loginBtn" class="btn" style="width: 100%; margin-top: 20px" type="submit">登录</button>
+        <div id="loginMessage" class="message"></div>
+      </form>
+    </main>
+
+    <main id="adminView" class="page hidden">
+      <header class="topbar">
+        <div class="brand">
+          <div class="mark">RM</div>
+          <div>
+            <h1>Red Magic 管理后台</h1>
+            <div class="subtle">用户、积分和流水管理</div>
+          </div>
+        </div>
+        <button id="logoutBtn" class="btn secondary" type="button">退出登录</button>
+      </header>
+
+      <section class="stats">
+        <article class="card">
+          <div class="subtle">用户总数</div>
+          <div id="statUsers" class="value">0</div>
+        </article>
+        <article class="card">
+          <div class="subtle">已注销用户</div>
+          <div id="statDeletedUsers" class="value">0</div>
+        </article>
+        <article class="card">
+          <div class="subtle">今日新增</div>
+          <div id="statTodayUsers" class="value">0</div>
+        </article>
+        <article class="card">
+          <div class="subtle">当前积分总余额</div>
+          <div id="statBalance" class="value">0</div>
+        </article>
+        <article class="card">
+          <div class="subtle">后台累计加分</div>
+          <div id="statAdded" class="value">0</div>
+        </article>
+      </section>
+
+      <div class="tabs">
+        <button class="tab active" type="button" data-tab="users">用户列表</button>
+        <button class="tab" type="button" data-tab="transactions">用户流水</button>
+      </div>
+
+      <section id="usersPanel" class="panel">
+        <div class="toolbar">
+          <div>
+            <strong>用户列表</strong>
+            <div id="tableMeta" class="subtle">加载中</div>
+          </div>
+          <form id="searchForm" class="search">
+            <input id="keyword" placeholder="搜索手机号或昵称" />
+            <button class="btn secondary" type="submit">搜索</button>
+            <button id="refreshBtn" class="btn" type="button">刷新</button>
+          </form>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>手机号</th>
+                <th>昵称</th>
+                <th>状态</th>
+                <th>积分余额</th>
+                <th>注册时间</th>
+                <th>注销时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="userRows"></tbody>
+          </table>
+        </div>
+        <div id="emptyRows" class="empty hidden">暂无用户</div>
+        <div class="pager">
+          <button id="prevBtn" class="btn secondary" type="button">上一页</button>
+          <button id="nextBtn" class="btn secondary" type="button">下一页</button>
+        </div>
+      </section>
+
+      <section id="transactionsPanel" class="panel hidden">
+        <div class="toolbar">
+          <div>
+            <strong>用户流水</strong>
+            <div id="transactionMeta" class="subtle">加载中</div>
+          </div>
+          <form id="transactionSearchForm" class="search">
+            <input id="transactionKeyword" placeholder="搜索手机号、昵称、操作或备注" />
+            <button class="btn secondary" type="submit">搜索</button>
+            <button id="transactionRefreshBtn" class="btn" type="button">刷新</button>
+          </form>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>用户昵称</th>
+                <th>手机号</th>
+                <th>时间</th>
+                <th>消耗额度</th>
+                <th>额度变化</th>
+                <th>操作</th>
+                <th>账号状态</th>
+                <th>备注</th>
+              </tr>
+            </thead>
+            <tbody id="transactionRows"></tbody>
+          </table>
+        </div>
+        <div id="emptyTransactions" class="empty hidden">暂无流水</div>
+        <div class="pager">
+          <button id="transactionPrevBtn" class="btn secondary" type="button">上一页</button>
+          <button id="transactionNextBtn" class="btn secondary" type="button">下一页</button>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const state = {
+        token: localStorage.getItem("redMagicAdminToken") || "",
+        activeTab: "users",
+        page: 1,
+        pageSize: 10,
+        total: 0,
+        keyword: "",
+        transactionPage: 1,
+        transactionTotal: 0,
+        transactionKeyword: "",
+      };
+
+      const $ = (id) => document.getElementById(id);
+
+      function formatDate(value) {
+        if (!value) return "-";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleString("zh-CN", { hour12: false });
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "-")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function statusBadge(status) {
+        const active = Number(status) === 1;
+        return `<span class="badge ${active ? "" : "deleted"}">${active ? "正常" : "已注销"}</span>`;
+      }
+
+      function amountHtml(value) {
+        const amount = Number(value || 0);
+        const cls = amount < 0 ? "amount negative" : "amount";
+        const text = amount > 0 ? `+${amount}` : String(amount);
+        return `<span class="${cls}">${text}</span>`;
+      }
+
+      function setMessage(text) {
+        $("loginMessage").textContent = text || "";
+      }
+
+      function showAdmin(show) {
+        $("loginView").classList.toggle("hidden", show);
+        $("adminView").classList.toggle("hidden", !show);
+      }
+
+      async function api(path, options = {}) {
+        const headers = {
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+        };
+        if (state.token) headers.Authorization = `Bearer ${state.token}`;
+        const response = await fetch(path, { ...options, headers });
+        const body = await response.json();
+        if (body.code !== 200) throw new Error(body.message || "请求失败");
+        return body.data;
+      }
+
+      async function login(event) {
+        event.preventDefault();
+        $("loginBtn").disabled = true;
+        setMessage("");
+        try {
+          const data = await api("/api/admin/login", {
+            method: "POST",
+            body: JSON.stringify({
+              username: $("username").value.trim(),
+              password: $("password").value,
+            }),
+          });
+          state.token = data.token;
+          localStorage.setItem("redMagicAdminToken", state.token);
+          showAdmin(true);
+          await loadAll();
+        } catch (err) {
+          setMessage(err.message);
+        } finally {
+          $("loginBtn").disabled = false;
+        }
+      }
+
+      function logout() {
+        state.token = "";
+        localStorage.removeItem("redMagicAdminToken");
+        showAdmin(false);
+      }
+
+      async function loadOverview() {
+        const data = await api("/api/admin/overview");
+        $("statUsers").textContent = data.users;
+        $("statDeletedUsers").textContent = data.deletedUsers;
+        $("statTodayUsers").textContent = data.todayUsers;
+        $("statBalance").textContent = data.totalBalance;
+        $("statAdded").textContent = data.addedPoints;
+      }
+
+      async function loadUsers() {
+        const params = new URLSearchParams({
+          page: String(state.page),
+          pageSize: String(state.pageSize),
+          keyword: state.keyword,
+        });
+        const data = await api(`/api/admin/users?${params}`);
+        state.total = data.total;
+        const tbody = $("userRows");
+        tbody.innerHTML = "";
+        data.list.forEach((user) => {
+          const active = Number(user.status) === 1;
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${user.id}</td>
+            <td>${escapeHtml(user.phone)}</td>
+            <td>${escapeHtml(user.nickname)}</td>
+            <td>${statusBadge(user.status)}</td>
+            <td><strong>${user.balance}</strong></td>
+            <td>${formatDate(user.createdAt)}</td>
+            <td>${formatDate(user.deletedAt)}</td>
+            <td><button class="btn" type="button" data-user-id="${user.id}" ${active ? "" : "disabled"}>${active ? "加积分" : "已注销"}</button></td>
+          `;
+          tbody.appendChild(tr);
+        });
+        $("emptyRows").classList.toggle("hidden", data.list.length > 0);
+        $("tableMeta").textContent = `共 ${data.total} 个用户，第 ${data.page} 页`;
+        $("prevBtn").disabled = state.page <= 1;
+        $("nextBtn").disabled = state.page * state.pageSize >= state.total;
+      }
+
+      async function loadTransactions() {
+        const params = new URLSearchParams({
+          page: String(state.transactionPage),
+          pageSize: String(state.pageSize),
+          keyword: state.transactionKeyword,
+        });
+        const data = await api(`/api/admin/user-transactions?${params}`);
+        state.transactionTotal = data.total;
+        const tbody = $("transactionRows");
+        tbody.innerHTML = "";
+        data.list.forEach((item) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${escapeHtml(item.nickname || `用户${String(item.userId || "").padStart(4, "0")}`)}</td>
+            <td>${escapeHtml(item.phone)}</td>
+            <td>${formatDate(item.createdAt)}</td>
+            <td><strong>${item.consumedQuota || 0}</strong></td>
+            <td>${amountHtml(item.amount)}</td>
+            <td>${escapeHtml(item.operation)}</td>
+            <td>${statusBadge(item.status)}</td>
+            <td>${escapeHtml(item.remark)}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+        $("emptyTransactions").classList.toggle("hidden", data.list.length > 0);
+        $("transactionMeta").textContent = `共 ${data.total} 条流水，第 ${data.page} 页`;
+        $("transactionPrevBtn").disabled = state.transactionPage <= 1;
+        $("transactionNextBtn").disabled = state.transactionPage * state.pageSize >= state.transactionTotal;
+      }
+
+      async function loadAll() {
+        await loadOverview();
+        if (state.activeTab === "users") await loadUsers();
+        if (state.activeTab === "transactions") await loadTransactions();
+      }
+
+      function switchTab(tab) {
+        state.activeTab = tab;
+        document.querySelectorAll(".tab").forEach((button) => {
+          button.classList.toggle("active", button.dataset.tab === tab);
+        });
+        $("usersPanel").classList.toggle("hidden", tab !== "users");
+        $("transactionsPanel").classList.toggle("hidden", tab !== "transactions");
+        loadAll().catch((err) => alert(err.message));
+      }
+
+      async function addPoints(userId) {
+        const count = window.prompt("请输入要增加的积分数量", "100");
+        if (!count) return;
+        const remark = window.prompt("备注", "管理员加积分") || "管理员加积分";
+        await api(`/api/admin/users/${userId}/add-points`, {
+          method: "POST",
+          body: JSON.stringify({ count: Number(count), remark }),
+        });
+        await loadAll();
+      }
+
+      $("loginForm").addEventListener("submit", login);
+      $("logoutBtn").addEventListener("click", logout);
+      $("refreshBtn").addEventListener("click", () => loadAll().catch((err) => alert(err.message)));
+      $("transactionRefreshBtn").addEventListener("click", () => loadAll().catch((err) => alert(err.message)));
+      $("searchForm").addEventListener("submit", (event) => {
+        event.preventDefault();
+        state.keyword = $("keyword").value.trim();
+        state.page = 1;
+        loadUsers().catch((err) => alert(err.message));
+      });
+      $("transactionSearchForm").addEventListener("submit", (event) => {
+        event.preventDefault();
+        state.transactionKeyword = $("transactionKeyword").value.trim();
+        state.transactionPage = 1;
+        loadTransactions().catch((err) => alert(err.message));
+      });
+      $("prevBtn").addEventListener("click", () => {
+        state.page = Math.max(1, state.page - 1);
+        loadUsers().catch((err) => alert(err.message));
+      });
+      $("nextBtn").addEventListener("click", () => {
+        state.page += 1;
+        loadUsers().catch((err) => alert(err.message));
+      });
+      $("transactionPrevBtn").addEventListener("click", () => {
+        state.transactionPage = Math.max(1, state.transactionPage - 1);
+        loadTransactions().catch((err) => alert(err.message));
+      });
+      $("transactionNextBtn").addEventListener("click", () => {
+        state.transactionPage += 1;
+        loadTransactions().catch((err) => alert(err.message));
+      });
+      $("userRows").addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-user-id]");
+        if (!button || button.disabled) return;
+        addPoints(button.dataset.userId).catch((err) => alert(err.message));
+      });
+      document.querySelectorAll(".tab").forEach((button) => {
+        button.addEventListener("click", () => switchTab(button.dataset.tab));
+      });
+
+      if (state.token) {
+        showAdmin(true);
+        loadAll().catch(() => logout());
+      }
+    </script>
+  </body>
+</html>

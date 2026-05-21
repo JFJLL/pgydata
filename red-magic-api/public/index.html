@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Σ.magiorix - 桌面端下载</title>
+    <link rel="icon" href="/assets/magiorix-logo.png" />
+    <style>
+      :root {
+        font-family:
+          Inter,
+          "Microsoft YaHei",
+          "PingFang SC",
+          Arial,
+          sans-serif;
+        color: #20151a;
+        background: #fff7f5;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 16% 12%, rgba(255, 48, 48, 0.18), transparent 28%),
+          radial-gradient(circle at 88% 20%, rgba(255, 118, 85, 0.18), transparent 24%),
+          linear-gradient(180deg, #fff7f5 0%, #fff 52%, #fff3f0 100%);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .page {
+        width: min(1160px, calc(100vw - 40px));
+        margin: 0 auto;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 22px 0;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 900;
+      }
+
+      .brand img {
+        width: 40px;
+        height: 40px;
+        border-radius: 9px;
+        box-shadow: 0 12px 28px rgba(255, 48, 48, 0.22);
+      }
+
+      .tabs {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px;
+        border: 1px solid rgba(255, 48, 48, 0.18);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.64);
+      }
+
+      .tab {
+        min-width: 82px;
+        height: 36px;
+        border: 0;
+        border-radius: 6px;
+        padding: 0 16px;
+        color: #6b4e4a;
+        background: transparent;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .tab.active {
+        color: #fff;
+        background: #ff3030;
+        box-shadow: 0 10px 22px rgba(255, 48, 48, 0.22);
+      }
+
+      .view[hidden] {
+        display: none;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(360px, 0.86fr);
+        gap: 44px;
+        align-items: center;
+        min-height: calc(100vh - 96px);
+        padding: 34px 0 74px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 30px;
+        border: 1px solid rgba(255, 48, 48, 0.24);
+        border-radius: 999px;
+        padding: 0 12px;
+        color: #c01818;
+        background: rgba(255, 255, 255, 0.7);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .pulse {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #ff3030;
+        box-shadow: 0 0 0 0 rgba(255, 48, 48, 0.5);
+        animation: pulse 1.8s infinite;
+      }
+
+      h1 {
+        margin: 22px 0 16px;
+        max-width: 760px;
+        font-size: clamp(44px, 7vw, 82px);
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      .hero-copy {
+        max-width: 660px;
+        color: #6b4e4a;
+        font-size: 18px;
+        line-height: 1.7;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 14px;
+        margin-top: 30px;
+      }
+
+      .download {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 186px;
+        height: 52px;
+        border: 0;
+        border-radius: 8px;
+        padding: 0 24px;
+        color: #fff;
+        background: #ff3030;
+        font-weight: 900;
+        cursor: pointer;
+        box-shadow: 0 18px 36px rgba(255, 48, 48, 0.28);
+        transition:
+          transform 0.2s ease,
+          box-shadow 0.2s ease,
+          background 0.2s ease;
+      }
+
+      .download:hover {
+        background: #df2323;
+        transform: translateY(-2px);
+        box-shadow: 0 24px 46px rgba(255, 48, 48, 0.34);
+      }
+
+      .ghost {
+        display: inline-flex;
+        align-items: center;
+        height: 52px;
+        border: 1px solid #f0c7bf;
+        border-radius: 8px;
+        padding: 0 18px;
+        color: #723a34;
+        background: rgba(255, 255, 255, 0.62);
+        font-weight: 800;
+      }
+
+      .meta {
+        margin-top: 12px;
+        color: #8a6a65;
+        font-size: 13px;
+      }
+
+      .preview {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 520px;
+      }
+
+      .screenshot {
+        display: block;
+        width: min(620px, 100%);
+        aspect-ratio: 2001 / 1140;
+        object-fit: cover;
+        object-position: center;
+        border: 1px solid rgba(124, 45, 38, 0.18);
+        border-radius: 8px;
+        box-shadow: 0 30px 80px rgba(123, 42, 42, 0.16);
+        transform: rotate(-1.5deg);
+        transition: transform 0.25s ease;
+      }
+
+      .preview:hover .screenshot {
+        transform: rotate(0deg) translateY(-4px);
+      }
+
+      .features {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        padding: 0 0 64px;
+      }
+
+      .feature {
+        min-height: 138px;
+        border: 1px solid #f0d6d1;
+        border-radius: 8px;
+        padding: 20px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .feature strong {
+        display: block;
+        margin-bottom: 10px;
+        font-size: 17px;
+      }
+
+      .feature p {
+        margin: 0;
+        color: #6b4e4a;
+        line-height: 1.65;
+      }
+
+      .guide {
+        padding: 62px 0 84px;
+      }
+
+      .guide-head {
+        max-width: 760px;
+        margin-bottom: 28px;
+      }
+
+      .guide-head h1 {
+        margin-top: 0;
+      }
+
+      .guide-shots {
+        display: grid;
+        gap: 18px;
+        margin: 0 0 24px;
+      }
+
+      .guide-shot {
+        margin: 0;
+        border: 1px solid rgba(124, 45, 38, 0.16);
+        border-radius: 8px;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.72);
+        box-shadow: 0 22px 58px rgba(123, 42, 42, 0.1);
+      }
+
+      .guide-shot img {
+        display: block;
+        width: 100%;
+        border-radius: 6px;
+        height: auto;
+      }
+
+      .guide-shot figcaption {
+        padding: 12px 4px 2px;
+        color: #6b4e4a;
+        font-weight: 800;
+      }
+
+      .guide-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .guide-card {
+        min-height: 230px;
+        border: 1px solid #f0d6d1;
+        border-radius: 8px;
+        padding: 22px;
+        background: rgba(255, 255, 255, 0.76);
+        box-shadow: 0 20px 46px rgba(123, 42, 42, 0.08);
+      }
+
+      .guide-index {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        margin-bottom: 18px;
+        border-radius: 8px;
+        color: #fff;
+        background: #ff3030;
+        font-weight: 900;
+      }
+
+      .guide-card strong {
+        display: block;
+        margin-bottom: 12px;
+        font-size: 20px;
+      }
+
+      .guide-card p {
+        margin: 0;
+        color: #6b4e4a;
+        line-height: 1.75;
+      }
+
+      @keyframes pulse {
+        70% {
+          box-shadow: 0 0 0 10px rgba(255, 48, 48, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(255, 48, 48, 0);
+        }
+      }
+
+      @media (max-width: 860px) {
+        .nav {
+          align-items: flex-start;
+          gap: 16px;
+          flex-direction: column;
+        }
+
+        .hero {
+          grid-template-columns: 1fr;
+          min-height: auto;
+          padding-top: 18px;
+        }
+
+        .preview {
+          min-height: auto;
+        }
+
+        .features {
+          grid-template-columns: 1fr;
+        }
+
+        .guide-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <nav class="nav">
+        <a class="brand" href="/">
+          <img src="/assets/magiorix-logo.png" alt="Σ.magiorix" />
+          <span>Σ.magiorix</span>
+        </a>
+        <div class="tabs" role="tablist" aria-label="页面导航">
+          <button class="tab active" type="button" role="tab" aria-selected="true" aria-controls="homeView" data-tab="home">首页</button>
+          <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="guideView" data-tab="guide">使用说明</button>
+        </div>
+      </nav>
+
+      <div id="homeView" class="view" role="tabpanel">
+        <section class="hero">
+          <div>
+            <div class="eyebrow"><span class="pulse"></span> Windows 桌面端</div>
+            <h1>Σ.magiorix</h1>
+            <p class="hero-copy">
+              面向小红书蒲公英与抖音星图的数据采集工具。安装后在本地电脑运行，导入模板或手动输入链接即可生成可整理、可导出的 Excel 结果。
+            </p>
+            <div class="actions">
+              <a id="downloadBtn" class="download" href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/EmagicDataCrawler-Setup.exe">下载安装包</a>
+            </div>
+            <div id="downloadMeta" class="meta">正在读取最新安装包信息...</div>
+          </div>
+
+          <div class="preview">
+            <img class="screenshot" src="/assets/software-screenshot.png" alt="Σ.magiorix 软件界面截图" />
+          </div>
+        </section>
+
+        <section id="features" class="features">
+          <article class="feature">
+            <strong>本地运行</strong>
+            <p>采集任务在用户电脑上执行，适合需要稳定处理 Excel 链接和本地导出结果的团队。</p>
+          </article>
+          <article class="feature">
+            <strong>模板导出</strong>
+            <p>按平台字段选择导出内容，保存常用模板后可复用，减少重复配置。</p>
+          </article>
+        </section>
+      </div>
+
+      <section id="guideView" class="view guide" role="tabpanel" hidden>
+        <div class="guide-head">
+          <div class="eyebrow"><span class="pulse"></span> 使用说明</div>
+          <h1>开始采集</h1>
+          <p class="hero-copy">登录后先完成蒲公英授权，再选择 Excel 文件上传或直接输入 UID 开始采集。</p>
+        </div>
+        <div class="guide-shots">
+          <figure class="guide-shot">
+            <img src="/assets/guide-login.png" alt="新用户刚登录后的蒲公英采集界面截图" />
+            <figcaption>1. 新用户刚登录后，先点击右上角“浏览器授权”。</figcaption>
+          </figure>
+          <figure class="guide-shot">
+            <img src="/assets/guide-authorizing.png" alt="点击浏览器授权后的授权中界面截图" />
+            <figcaption>2. 点击授权后会打开蒲公英页面，等待授权完成。</figcaption>
+          </figure>
+          <figure class="guide-shot">
+            <img src="/assets/software-screenshot.png" alt="授权完成后的蒲公英采集界面截图" />
+            <figcaption>3. 显示“已授权”后，可以上传 Excel 或输入 UID 开始采集。</figcaption>
+          </figure>
+        </div>
+        <div class="guide-grid">
+          <article class="guide-card">
+            <span class="guide-index">1</span>
+            <strong>授权蒲公英</strong>
+            <p>进入软件后先完成蒲公英授权，授权状态显示为“已授权”后再创建采集任务。</p>
+          </article>
+          <article class="guide-card">
+            <span class="guide-index">2</span>
+            <strong>导入采集对象</strong>
+            <p>可以上传 Excel 文件批量导入，也可以在手动输入框中逐行输入小红书或蒲公英主页链接、24 位 UID。</p>
+          </article>
+          <article class="guide-card">
+            <span class="guide-index">3</span>
+            <strong>开始采集</strong>
+            <p>确认采集对象无误后点击开始采集，任务完成后在软件中查看并导出 Excel 结果。</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const tabs = Array.from(document.querySelectorAll(".tab"));
+      const views = {
+        home: document.getElementById("homeView"),
+        guide: document.getElementById("guideView"),
+      };
+      const meta = document.getElementById("downloadMeta");
+      const btn = document.getElementById("downloadBtn");
+
+      function activateTab(name) {
+        tabs.forEach((tab) => {
+          const active = tab.dataset.tab === name;
+          tab.classList.toggle("active", active);
+          tab.setAttribute("aria-selected", String(active));
+        });
+        Object.entries(views).forEach(([key, view]) => {
+          view.hidden = key !== name;
+        });
+      }
+
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => activateTab(tab.dataset.tab));
+      });
+
+      function formatSize(bytes) {
+        const size = Number(bytes || 0);
+        if (size < 1024) return `${size} B`;
+        if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+        return `${(size / 1024 / 1024).toFixed(1)} MB`;
+      }
+
+      fetch("/api/desktop-download/latest")
+        .then((response) => response.json())
+        .then((body) => {
+          if (body.code !== 200) throw new Error("desktop download metadata unavailable");
+          const data = body.data;
+          btn.href = data.downloadUrl || btn.href;
+          meta.textContent = `最新版本 ${data.version} · ${formatSize(data.size)}`;
+        })
+        .catch(() => {
+          meta.textContent = "最新安装包已发布";
+        });
+    </script>
+  </body>
+</html>
