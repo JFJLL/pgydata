@@ -30,9 +30,10 @@ main = replaceOnce(
   "window minimum size",
 );
 
-main = replaceOnce(
-  main,
-  `function Fr() {
+if (!main.includes("a.width - 160")) {
+  main = replaceOnce(
+    main,
+    `function Fr() {
   const { workAreaSize: a } = Gi.getPrimaryDisplay(), e = a.width, t = a.height, n = [
     { minW: 3e3, minH: 1700, width: 2200, height: 1400 },
     { minW: 2200, minH: 1300, width: 1760, height: 1100 },
@@ -47,16 +48,18 @@ main = replaceOnce(
     height: Math.max(nn, t - 80)
   };
 }`,
-  `function Fr() {
+    `function Fr() {
   const { workAreaSize: a } = Gi.getPrimaryDisplay(), e = Math.max(tn, Math.min(1280, a.width - 160)), t = Math.max(nn, Math.min(820, a.height - 140));
   return { width: e, height: t };
 }`,
-  "default window size",
-);
+    "default window size",
+  );
+}
 
-main = replaceOnce(
-  main,
-  `function jr(a) {
+if (!main.includes("Number(e.width)")) {
+  main = replaceOnce(
+    main,
+    `function jr(a) {
   let e;
   try {
     e = JSON.parse(a);
@@ -69,7 +72,7 @@ main = replaceOnce(
   const s = { width: t, height: n };
   return typeof e.x == "number" && typeof e.y == "number" && (s.x = e.x, s.y = e.y), s;
 }`,
-  `function jr(a) {
+    `function jr(a) {
   let e;
   try {
     e = JSON.parse(a);
@@ -82,8 +85,9 @@ main = replaceOnce(
   const s = Gi.getPrimaryDisplay().workArea, i = Math.max(tn, Math.min(t, Math.max(tn, s.width - 120))), o = Math.max(nn, Math.min(n, Math.max(nn, s.height - 120))), r = { width: i, height: o };
   return typeof e.x == "number" && typeof e.y == "number" && (r.x = Math.max(s.x, Math.min(e.x, s.x + s.width - i)), r.y = Math.max(s.y, Math.min(e.y, s.y + s.height - o))), r;
 }`,
-  "restore window state clamp",
-);
+    "restore window state clamp",
+  );
+}
 
 if (!main.includes("s.__pgyLastLoginState")) {
   main = replaceOnce(
@@ -94,9 +98,10 @@ if (!main.includes("s.__pgyLastLoginState")) {
   );
 }
 
-main = replaceOnce(
-  main,
-  `    const [i, o] = s.getPosition(), [r, c] = s.getSize(), u = i + r / 2, l = o + c / 2;
+if (!main.includes("s.__pgyLastLoginState")) {
+  main = replaceOnce(
+    main,
+    `    const [i, o] = s.getPosition(), [r, c] = s.getSize(), u = i + r / 2, l = o + c / 2;
     if (n) {
       const p = ro(), d = p ?? co();
       s.setResizable(!0), s.setMinimumSize(tn, nn), s.setSize(d.width, d.height), p && p.x !== void 0 && p.y !== void 0 ? s.setPosition(p.x, p.y) : s.setPosition(
@@ -106,7 +111,7 @@ main = replaceOnce(
     } else
       s.setResizable(!0), s.setMinimumSize(725, 486), s.setSize(900, 640), s.setPosition(Math.round(u - 900 / 2), Math.round(l - 640 / 2));
     s.isVisible() || s.show();`,
-  `    const i = !!n;
+    `    const i = !!n;
     if (s.isMinimized()) {
       s.__pgyLastLoginState = i;
       return;
@@ -122,8 +127,9 @@ main = replaceOnce(
     } else
       s.setResizable(!0), s.setMinimumSize(725, 486), s.setSize(900, 640), s.setPosition(Math.round(p - 900 / 2), Math.round(d - 640 / 2));
     s.isMinimized() || s.isVisible() || s.show();`,
-  "login-state geometry only once",
-);
+    "login-state geometry only once",
+  );
+}
 
 main = insertAfterOnce(
   main,
@@ -155,6 +161,11 @@ main = insertAfterOnce(
     }
   }).join(" ");
 }
+function pgyMainLogFilePath() {
+  const a = Oe(ye.getPath("userData"), "logs");
+  Sr(a, { recursive: !0 });
+  return Oe(a, \`pgydata-main-\${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.log\`);
+}
 function pgyWriteMainLog(a, e = []) {
   const t = e.length ? \`\${a} \${pgyFormatLogExtra(e)}\` : a;
   if (!ye.isPackaged) {
@@ -162,7 +173,7 @@ function pgyWriteMainLog(a, e = []) {
     return;
   }
   try {
-    Sr(ye.getPath("userData"), { recursive: !0 }), Kt.appendFileSync(Oe(ye.getPath("userData"), "pgydata-main.log"), \`\${t}\\n\`, "utf8");
+    Kt.appendFileSync(pgyMainLogFilePath(), \`\${t}\\n\`, "utf8");
   } catch {
   }
 }`,
@@ -195,15 +206,17 @@ if (!main.includes("minimizable: !0")) {
   );
 }
 
-main = replaceOnce(
-  main,
-  `fullscreenable: !1,
+if (!main.includes("movable: !0")) {
+  main = replaceOnce(
+    main,
+    `fullscreenable: !1,
     show: !1,`,
-  `fullscreenable: !1,
+    `fullscreenable: !1,
     movable: !0,
     show: !1,`,
-  "main window movable",
-);
+    "main window movable",
+  );
+}
 
 main = replaceOnce(
   main,
@@ -263,24 +276,26 @@ if (xhsDirectStartIndex !== -1) {
 
 main = main.replace("ge.registerPlugin(new df()), ", "");
 
-main = replaceOnce(
-  main,
-  `function Qr(a) {
+if (!main.includes("F.removeAllListeners(Lt.ready)")) {
+  main = replaceOnce(
+    main,
+    `function Qr(a) {
   F.on(Lt.ready, () => {
     Rs.info("启动页已准备就绪");
   }), F.on(Lt.retry, () => {
     Rs.info("用户请求重试"), a();
   });
 }`,
-  `function Qr(a) {
+    `function Qr(a) {
   F.removeAllListeners(Lt.ready), F.removeAllListeners(Lt.retry), F.on(Lt.ready, () => {
     Rs.info("启动页已准备就绪");
   }), F.on(Lt.retry, () => {
     Rs.info("用户请求重试"), a();
   });
 }`,
-  "splash retry handler",
-);
+    "splash retry handler",
+  );
+}
 
 main = insertAfterOnce(
   main,
@@ -329,51 +344,62 @@ function pgyVerifyAssets(a) {
   "asset integrity helpers",
 );
 
-main = replaceOnce(
-  main,
-  'Ee.info("加载前端资源:", t), Z.loadFile(t);',
-  `Ee.info("加载前端资源:", t), Z.loadFile(t).catch((n) => {
+if (!main.includes("Z.loadFile(t).catch")) {
+  main = replaceOnce(
+    main,
+    'Ee.info("加载前端资源:", t), Z.loadFile(t);',
+    `Ee.info("加载前端资源:", t), Z.loadFile(t).catch((n) => {
       Ee.error("加载前端资源失败:", n), Xr(\`加载前端资源失败：\${pgyAssetErrorMessage(n)}\`);
     });`,
-  "loadFile handling",
-);
+    "loadFile handling",
+  );
+}
 
-main = replaceOnce(
-  main,
-  'Ee.error(`页面加载失败: ${n} ${s} URL: ${i}`), Rn(), Z && !Z.isDestroyed() && !Z.isVisible() && Z.show();',
-  'Ee.error(`页面加载失败: ${n} ${s} URL: ${i}`), Xr(`加载前端资源失败：${n} ${s} ${i || ""}`);',
-  "did-fail-load handling",
-);
+if (!main.includes('Xr(`加载前端资源失败：${n} ${s} ${i || ""}`)')) {
+  main = replaceOnce(
+    main,
+    'Ee.error(`页面加载失败: ${n} ${s} URL: ${i}`), Rn(), Z && !Z.isDestroyed() && !Z.isVisible() && Z.show();',
+    'Ee.error(`页面加载失败: ${n} ${s} URL: ${i}`), Xr(`加载前端资源失败：${n} ${s} ${i || ""}`);',
+    "did-fail-load handling",
+  );
+}
 
-main = replaceOnce(
-  main,
-  'Z && !Z.isDestroyed() && !Z.isVisible() && (Ee.warn("主窗口 10 秒内未显示，强制显示（渲染进程可能未调用 setLoginState）"), Z.show(), Rn());',
-  'Z && !Z.isDestroyed() && !Z.isVisible() && !Z.isMinimized() && (Ee.warn("主窗口 10 秒内未显示，强制显示（渲染进程可能未调用 setLoginState）"), Z.show(), Rn());',
-  "do not reshow minimized main window",
-);
+if (!main.includes("!Z.isMinimized() && (Ee.warn(\"主窗口 10 秒内未显示")) {
+  main = replaceOnce(
+    main,
+    'Z && !Z.isDestroyed() && !Z.isVisible() && (Ee.warn("主窗口 10 秒内未显示，强制显示（渲染进程可能未调用 setLoginState）"), Z.show(), Rn());',
+    'Z && !Z.isDestroyed() && !Z.isVisible() && !Z.isMinimized() && (Ee.warn("主窗口 10 秒内未显示，强制显示（渲染进程可能未调用 setLoginState）"), Z.show(), Rn());',
+    "do not reshow minimized main window",
+  );
+}
 
-main = replaceOnce(
-  main,
-  'kt(n) || Sr(n, { recursive: !0 }), await Er(Cr(e), kr({ path: n }));',
-  `kt(n) && Kt.rmSync(n, { recursive: !0, force: !0 }), Sr(n, { recursive: !0 }), await Er(Cr(e), kr({ path: n }));
+if (!main.includes('throw new Error("资源解压失败：缺少 index.html")')) {
+  main = replaceOnce(
+    main,
+    'kt(n) || Sr(n, { recursive: !0 }), await Er(Cr(e), kr({ path: n }));',
+    `kt(n) && Kt.rmSync(n, { recursive: !0, force: !0 }), Sr(n, { recursive: !0 }), await Er(Cr(e), kr({ path: n }));
     if (!kt(Oe(n, "index.html")))
       throw new Error("资源解压失败：缺少 index.html");
     if (!kt(Oe(n, "integrity-manifest.json")))
       throw new Error("资源解压失败：缺少 integrity-manifest.json");
     pgyVerifyAssets(n);`,
-  "applyAssets verification",
-);
+    "applyAssets verification",
+  );
+}
 
-main = replaceOnce(
-  main,
-  'jt("正在解压资源包..."), zt(85), await Ae.applyAssets(e, a.version), jt("更新完成"), zt(100), Yr(), Ga(Ae.getCurrentAssetsPath());',
-  'jt("正在解压资源包..."), zt(85), await Ae.applyAssets(e, a.version), jt("正在校验资源完整性..."), zt(95), pgyVerifyAssets(Ae.getCurrentAssetsPath()), jt("正在加载前端资源..."), zt(100), Yr(), Ga(Ae.getCurrentAssetsPath());',
-  "download startup verification",
-);
+if (!main.includes('pgyVerifyAssets(Ae.getCurrentAssetsPath())')) {
+  main = replaceOnce(
+    main,
+    'jt("正在解压资源包..."), zt(85), await Ae.applyAssets(e, a.version), jt("更新完成"), zt(100), Yr(), Ga(Ae.getCurrentAssetsPath());',
+    'jt("正在解压资源包..."), zt(85), await Ae.applyAssets(e, a.version), jt("正在校验资源完整性..."), zt(95), pgyVerifyAssets(Ae.getCurrentAssetsPath()), jt("正在加载前端资源..."), zt(100), Yr(), Ga(Ae.getCurrentAssetsPath());',
+    "download startup verification",
+  );
+}
 
-main = replaceOnce(
-  main,
-  `async function Vi() {
+if (!main.includes("ee || await Jr()")) {
+  main = replaceOnce(
+    main,
+    `async function Vi() {
   if (Ee.debug("startApp 执行"), Xt) {
     Ga(Oe(yr, "../dist"));
     return;
@@ -383,7 +409,7 @@ main = replaceOnce(
     Wi();
   }), await Wi());
 }`,
-  `async function Vi() {
+    `async function Vi() {
   if (Ee.debug("startApp 执行"), Xt) {
     Ga(Oe(yr, "../dist"));
     return;
@@ -403,8 +429,9 @@ main = replaceOnce(
   else
     Ee.info("无本地资源，显示启动页下载"), jt("未找到本地资源，准备下载..."), zt(20), await Wi();
 }`,
-  "startup flow",
-);
+    "startup flow",
+  );
+}
 
 const pgyChartRootLegacy = `function pgyChartRoot() {
   const a = "D:\\\\download\\\\pic-vec\\\\pgydata\\\\pic";
@@ -455,7 +482,7 @@ else if (main.includes(`function pgyChartRoot() {
     return Sr(e, { recursive: !0 }), e;
   }
 }`, pgyChartRootInstall);
-else if (!main.includes(pgyChartRootInstall))
+else if (!main.includes(pgyChartRootInstall) && !main.includes('const a = Oe(Ja(ye.getPath("exe")), "pic");'))
   throw new Error("Missing patch target: pgy chart output under install path");
 
 main = main.replace(
@@ -575,6 +602,60 @@ main = replaceOnce(
   'return Ve.utils.book_append_sheet(s, n, "Sheet1"), Ve.writeFile(s, t), a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, a.headers ?? [], a.data ?? []), $i.info(`Excel 已导出: ${t}`), { success: !0, filePath: t };',
   'return Ve.utils.book_append_sheet(s, n, "Sheet1"), Ve.writeFile(s, t), a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, a.headers ?? [], i), $i.info(`Excel 已导出: ${t}`), { success: !0, filePath: t };',
   "excel export embeds images from original data",
+);
+
+if (!main.includes("桌面端启动")) {
+  main = replaceOnce(
+    main,
+    `ye.whenReady().then(() => {
+  fh(), Vi(), ye.on("activate", () => {
+    Dt.getAllWindows().length === 0 && Vi();
+  });
+});`,
+    `process.on("unhandledRejection", (a) => {
+  Ee.error("未处理的 Promise 异常:", a);
+});
+process.on("uncaughtException", (a) => {
+  Ee.error("未捕获异常:", a);
+});
+ye.whenReady().then(() => {
+  Ee.info("桌面端启动", {
+    platform: process.platform,
+    arch: process.arch,
+    packaged: ye.isPackaged,
+    version: ye.getVersion(),
+    userData: ye.getPath("userData"),
+    resourcesPath: process.resourcesPath
+  }), fh(), Vi(), ye.on("activate", () => {
+    Dt.getAllWindows().length === 0 && Vi();
+  });
+});`,
+    "desktop startup logging",
+  );
+}
+
+main = replaceOnce(
+  main,
+  `ye.on("window-all-closed", () => {
+  process.platform !== "darwin" && ye.quit();
+});`,
+  `ye.on("window-all-closed", () => {
+  Ee.info("所有窗口已关闭");
+  process.platform !== "darwin" && ye.quit();
+});`,
+  "window closed logging",
+);
+
+main = replaceOnce(
+  main,
+  `ye.on("before-quit", () => {
+  Rn(), lh(), yf();
+});`,
+  `ye.on("before-quit", () => {
+  Ee.info("应用准备退出");
+  Rn(), lh(), yf();
+});`,
+  "before quit logging",
 );
 
 fs.writeFileSync(mainPath, main);

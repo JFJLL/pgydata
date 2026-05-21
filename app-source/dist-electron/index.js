@@ -119,6 +119,11 @@ function pgyFormatLogExtra(a) {
     }
   }).join(" ");
 }
+function pgyMainLogFilePath() {
+  const a = Oe(ye.getPath("userData"), "logs");
+  Sr(a, { recursive: !0 });
+  return Oe(a, `pgydata-main-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.log`);
+}
 function pgyWriteMainLog(a, e = []) {
   const t = e.length ? `${a} ${pgyFormatLogExtra(e)}` : a;
   if (!ye.isPackaged) {
@@ -126,7 +131,7 @@ function pgyWriteMainLog(a, e = []) {
     return;
   }
   try {
-    Sr(ye.getPath("userData"), { recursive: !0 }), Kt.appendFileSync(Oe(ye.getPath("userData"), "pgydata-main.log"), `${t}
+    Kt.appendFileSync(pgyMainLogFilePath(), `${t}
 `, "utf8");
   } catch {
   }
@@ -23400,14 +23405,29 @@ function fh() {
     getPlugins: () => bf()
   });
 }
+process.on("unhandledRejection", (a) => {
+  Ee.error("未处理的 Promise 异常:", a);
+});
+process.on("uncaughtException", (a) => {
+  Ee.error("未捕获异常:", a);
+});
 ye.whenReady().then(() => {
-  fh(), Vi(), ye.on("activate", () => {
+  Ee.info("桌面端启动", {
+    platform: process.platform,
+    arch: process.arch,
+    packaged: ye.isPackaged,
+    version: ye.getVersion(),
+    userData: ye.getPath("userData"),
+    resourcesPath: process.resourcesPath
+  }), fh(), Vi(), ye.on("activate", () => {
     Dt.getAllWindows().length === 0 && Vi();
   });
 });
 ye.on("window-all-closed", () => {
+  Ee.info("所有窗口已关闭");
   process.platform !== "darwin" && ye.quit();
 });
 ye.on("before-quit", () => {
+  Ee.info("应用准备退出");
   Rn(), lh(), yf();
 });

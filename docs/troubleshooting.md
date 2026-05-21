@@ -1,5 +1,23 @@
 # 故障排查
 
+## 桌面端日志
+
+桌面端主进程日志默认写到用户数据目录：
+
+```text
+Windows: %APPDATA%\pygdata-desktop\logs\pgydata-main-YYYY-MM-DD.log
+macOS: ~/Library/Application Support/pygdata-desktop/logs/pgydata-main-YYYY-MM-DD.log
+```
+
+常见事件：
+
+- `桌面端启动`：记录平台、架构、版本、`userData` 和 `resourcesPath`。
+- `加载前端资源失败`：通常和资源包、完整性校验、路径有关。
+- `本地资源校验失败`：通常是 `integrity-manifest.json` 或资源文件被改动。
+- `渲染进程崩溃`：前端页面崩溃。
+- `未处理的 Promise 异常` / `未捕获异常`：主进程未捕获错误。
+- `应用准备退出`：应用开始退出。
+
 ## 后端日志
 
 后端 `red-magic-api` 默认把日志写到：
@@ -28,6 +46,7 @@ LOG_DIR=./logs
 
 - 问题发生时间。
 - 操作步骤。
+- 桌面端对应日期的 `pgydata-main-YYYY-MM-DD.log`。
 - 对应日期的 `server-YYYY-MM-DD.log`。
 - 如果是安装失败，提供 `%TEMP%\PYGdata-install.log`。
 
