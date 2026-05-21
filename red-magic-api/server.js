@@ -13,6 +13,7 @@ const BASE_URL = (process.env.BASE_URL || "https://xhs.red-magic.cn").replace(/\
 const DEFAULT_GIFT_BALANCE = Number(process.env.DEFAULT_GIFT_BALANCE || 100);
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "red-magic-api.sqlite");
+const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, "logs");
 const ASSET_VERSION = "1.1.1";
 const INSTALLER_FILE_NAME = "EmagicDataCrawler-Setup.exe";
 const INSTALLER_DOWNLOAD_URL = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/EmagicDataCrawler-Setup.exe";
@@ -22,10 +23,63 @@ const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const adminSessions = new Map();
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(LOG_DIR, { recursive: true });
 fs.mkdirSync(path.join(__dirname, "public", "assets", "desktop", ASSET_VERSION), { recursive: true });
 fs.mkdirSync(path.join(__dirname, "public", "downloads"), { recursive: true });
 
 const db = new sqlite3.Database(DB_PATH);
+
+function logFilePath(date = new Date()) {
+  return path.join(LOG_DIR, `server-${date.toISOString().slice(0, 10)}.log`);
+}
+
+function normalizeLogValue(value) {
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+    };
+  }
+  if (value === undefined) return null;
+  return value;
+}
+
+function writeLog(level, event, details = {}) {
+  const entry = {
+    time: nowIso(),
+    level,
+    event,
+    ...Object.fromEntries(
+      Object.entries(details).map(([key, value]) => [key, normalizeLogValue(value)]),
+    ),
+  };
+  const line = `${JSON.stringify(entry)}\n`;
+  fs.promises.appendFile(logFilePath(), line, "utf8").catch((err) => {
+    console.error("Failed to write log:", err);
+  });
+}
+
+function logInfo(event, details = {}) {
+  writeLog("info", event, details);
+}
+
+function logWarn(event, details = {}) {
+  writeLog("warn", event, details);
+}
+
+function logError(event, details = {}) {
+  writeLog("error", event, details);
+}
+
+function requestLogInfo(req) {
+  return {
+    method: req.method,
+    path: req.path,
+    ip: req.ip,
+    userAgent: req.get("user-agent") || "",
+  };
+}
 
 function dbRun(sql, params = []) {
   return new Promise((resolve, reject) => {
@@ -421,6 +475,26 @@ app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, satoken, Authorization");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   if (req.method === "OPTIONS") return res.sendStatus(204);
+  return next();
+});
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+  res.on("finish", () => {
+    const durationMs = Date.now() - startedAt;
+    if (res.statusCode >= 400) {
+      logWarn("http_request_failed", {
+        ...requestLogInfo(req),
+        statusCode: res.statusCode,
+        durationMs,
+      });
+    } else if (durationMs >= 2000) {
+      logInfo("http_request_slow", {
+        ...requestLogInfo(req),
+        statusCode: res.statusCode,
+        durationMs,
+      });
+    }
+  });
   return next();
 });
 app.use("/assets", express.static(path.join(__dirname, "public", "assets")));
@@ -898,6 +972,10 @@ app.post("/api/admin/login", asyncHandler(async (req, res) => {
   const password = String(req.body.password || "");
 
   if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
+    logWarn("admin_login_failed", {
+      username,
+      ...requestLogInfo(req),
+    });
     return fail(res, 400, "管理员账号或密码错误");
   }
 
@@ -905,6 +983,10 @@ app.post("/api/admin/login", asyncHandler(async (req, res) => {
   adminSessions.set(token, {
     username,
     expiresAt: Date.now() + ADMIN_SESSION_TTL_MS,
+  });
+  logInfo("admin_login_success", {
+    username,
+    ...requestLogInfo(req),
   });
 
   return success(res, {
@@ -1003,6 +1085,13 @@ app.post("/api/admin/users/:id/add-points", adminRequired, asyncHandler(async (r
       [req.admin.username, userId, count, nextBalance, remark, createdAt],
     );
     await dbRun("COMMIT");
+    logInfo("admin_add_points", {
+      adminUsername: req.admin.username,
+      userId,
+      delta: count,
+      balanceAfter: nextBalance,
+      ...requestLogInfo(req),
+    });
 
     return success(res, {
       userId,
@@ -1263,11 +1352,16 @@ app.get("/api/statistics/admin-dashboard", authRequired, asyncHandler(async (req
 }));
 
 app.use((req, res) => {
+  logWarn("route_not_found", requestLogInfo(req));
   return fail(res, 404, "接口不存在");
 });
 
 app.use((err, req, res, next) => {
   console.error(err);
+  logError("request_error", {
+    ...requestLogInfo(req),
+    error: err,
+  });
   return res.status(500).json({
     code: 500,
     message: "服务器内部错误",
@@ -1278,10 +1372,31 @@ app.use((err, req, res, next) => {
 initDb()
   .then(() => {
     app.listen(PORT, () => {
+      logInfo("server_started", {
+        port: PORT,
+        baseUrl: BASE_URL,
+        dbPath: DB_PATH,
+        logDir: LOG_DIR,
+        nodeEnv: process.env.NODE_ENV || "development",
+      });
       console.log(`red-magic-api listening on http://127.0.0.1:${PORT}`);
     });
   })
   .catch((err) => {
     console.error("Failed to initialize database:", err);
+    logError("database_init_failed", { error: err });
     process.exit(1);
   });
+
+process.on("unhandledRejection", (reason) => {
+  logError("unhandled_rejection", {
+    error: reason instanceof Error ? reason : new Error(String(reason)),
+  });
+  console.error("Unhandled rejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  logError("uncaught_exception", { error: err });
+  console.error("Uncaught exception:", err);
+  process.exit(1);
+});

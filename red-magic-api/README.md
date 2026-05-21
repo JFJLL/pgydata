@@ -67,6 +67,7 @@ BASE_URL=https://xhs.red-magic.cn
 DEFAULT_GIFT_BALANCE=100
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=redmagic2026
+LOG_DIR=./logs
 ```
 
 SQLite 数据库会自动创建到：
@@ -74,6 +75,14 @@ SQLite 数据库会自动创建到：
 ```text
 data/red-magic-api.sqlite
 ```
+
+运行日志默认写入：
+
+```text
+logs/server-YYYY-MM-DD.log
+```
+
+日志会记录启动、请求错误、管理员登录和加积分等排查信息，不会主动记录密码或登录 token。
 
 启动时会自动创建表并初始化默认树苗套餐。
 
