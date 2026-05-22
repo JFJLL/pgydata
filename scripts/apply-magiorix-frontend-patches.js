@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const projectRoot = path.resolve(__dirname, "..");
-const assetVersion = "1.0.0";
+const assetVersion = "1.1.0";
 const assetsRoot = path.join(projectRoot, "assets", assetVersion);
 const assetsDir = path.join(assetsRoot, "assets");
 const legacyChineseName = ["易美", "数据抓取"].join("");
@@ -283,6 +283,8 @@ replaceOnce(
   'o.jsxs(O1,{onClick:f,sx:{color:"error.main",fontWeight:700},children:[o.jsx(u1,{children:o.jsx(B,{icon:"solar:logout-2-bold-duotone",width:20,height:20})}),o.jsx(Ye,{children:"退出登录"})]})',
   "avatar menu logout label",
 );
+
+replaceAllIfExists(mainBundle, '"1.0.0"', `"${assetVersion}"`);
 
 for (const entry of fs.readdirSync(assetsDir)) {
   if (!/\.(js|css|html|svg)$/i.test(entry)) continue;

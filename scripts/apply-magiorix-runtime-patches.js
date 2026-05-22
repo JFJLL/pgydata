@@ -5,8 +5,12 @@ const projectRoot = path.resolve(__dirname, "..");
 const mainPath = path.join(projectRoot, "app-source", "dist-electron", "index.js");
 
 function replaceOnce(source, from, to, label) {
+  const fromCrLf = from.replace(/\n/g, "\r\n");
+  const toCrLf = to.replace(/\n/g, "\r\n");
   if (!source.includes(from)) {
+    if (source.includes(fromCrLf)) return source.replace(fromCrLf, toCrLf);
     if (source.includes(to)) return source;
+    if (source.includes(toCrLf)) return source;
     throw new Error(`Missing patch target: ${label}`);
   }
   return source.replace(from, to);
