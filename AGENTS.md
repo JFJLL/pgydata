@@ -6,7 +6,7 @@
 
 - 项目名称：`magiorix`
 - 桌面端包名：`magiorix-desktop`
-- 当前 Windows 正式版本：`1.1.0`
+- 当前 Windows 正式版本：`1.1.1`
 - 主分支：`master`
 - GitHub 仓库：`git@github.com:JFJLL/pgydata.git`
 - Windows 安装包使用 NSIS 构建。
@@ -27,7 +27,20 @@
 - Electron 运行时补丁脚本：`scripts/apply-magiorix-runtime-patches.js`
 - 当前统一使用的 logo 源文件：`D:\download\pic-vec\pgydata\red-magic-api\public\emagic-logo.png`
 
-## 当前 1.1.0 版本记录
+## 当前 1.1.1 版本记录
+
+- 新增功能：抖音“星图主页采集”支持手动输入星图/抖音主页链接。
+- 修复：授权状态监听返回并使用取消监听函数，避免长时间使用时累计 `scraper:auth:status-changed` 监听器。
+- 修复：采集任务日志增加平台、任务类型、进度和结果统计，抖音星图采集会写入主进程日志。
+- 官网/帮助页：使用说明新增“小红书 / 抖音星图 / Mac 说明”子 tab，并加入抖音星图流程截图。
+- 当前 Windows 安装包：
+  - `D:\download\pic-vec\pgydata\desktop-versions\windows\1.1.1\magiorix-desktop-1.1.1-windows.exe`
+  - SHA256：`1FF9841D1DAB2A09A4327A4972EF0CE78BB0D66F73DED3D01A6B01C399106B5B`
+- 当前前端资源包：
+  - `D:\download\pic-vec\pgydata\desktop-versions\windows\1.1.1\magiorix-desktop-1.1.1-assets.zip`
+  - SHA256：`188B06A60769846C77960FAB4DB18F2C8D0118ECF47D19D4C054183438B8C542`
+
+## 1.1.0 版本记录
 
 - 已合并的功能分支 / worktree：`codex/starmap-menu`
 - 新增功能：左侧菜单新增“抖音”，并提供“星图主页采集”入口。

@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const projectRoot = path.resolve(__dirname, "..");
-const assetVersion = "1.1.0";
+const assetVersion = "1.1.1";
 const assetsRoot = path.join(projectRoot, "assets", assetVersion);
 const assetsDir = path.join(assetsRoot, "assets");
 const legacyChineseName = ["易美", "数据抓取"].join("");
@@ -41,6 +41,8 @@ const mainBundle = path.join(assetsDir, "index-B09sHfUO.js");
 const exportTemplateBundle = path.join(assetsDir, "index-CiEqCfGB.js");
 const exportFieldSelectorBundle = path.join(assetsDir, "index-IS4kgrUy.js");
 const pgyTaskPanelBundle = path.join(assetsDir, "PgyTaskPanel-B4ZGEmDG.js");
+const starmapTaskPanelBundle = path.join(assetsDir, "index-Ct9D5phI.js");
+const douyinTaskPanelBundle = path.join(assetsDir, "index-D1aMO0QN.js");
 const contactLinkBundle = path.join(assetsDir, "ContactLink-WXibGCB4.js");
 const feishuQrSource = "D:\\download\\feishu_down\\飞书20260521-115131.png";
 const feishuQrAssetName = "feishu-group-qr.png";
@@ -212,6 +214,22 @@ replaceAllIfExists(
   pgyTaskPanelBundle,
   'background:t||n?"#F4F6F8":"#FFFFFF",color:"inherit"',
   'background:t||n?"var(--mui-palette-action-disabledBackground)":"var(--mui-palette-background-paper)",color:"var(--mui-palette-text-primary)"',
+);
+
+replaceAllIfExists(
+  pgyTaskPanelBundle,
+  'o.useEffect(()=>{D.auth.onStatusChanged(r=>{r.pluginId===d&&(t(d,r.status),r.status==="authorized"&&i(d))})},[t,i])',
+  'o.useEffect(()=>D.auth.onStatusChanged(r=>{r.pluginId===d&&(t(d,r.status),r.status==="authorized"&&i(d))}),[t,i])',
+);
+replaceAllIfExists(
+  starmapTaskPanelBundle,
+  'a.useEffect(()=>{P.auth.onStatusChanged(r=>{r.pluginId===d&&(n(d,r.status),r.status==="authorized"&&i(d))})},[n,i])',
+  'a.useEffect(()=>P.auth.onStatusChanged(r=>{r.pluginId===d&&(n(d,r.status),r.status==="authorized"&&i(d))}),[n,i])',
+);
+replaceAllIfExists(
+  douyinTaskPanelBundle,
+  'i.useEffect(()=>{C.auth.onStatusChanged(o=>{o.pluginId===l&&(t(l,o.status),o.status==="authorized"&&c(l))})},[t,c])',
+  'i.useEffect(()=>C.auth.onStatusChanged(o=>{o.pluginId===l&&(t(l,o.status),o.status==="authorized"&&c(l))}),[t,c])',
 );
 
 replaceOnce(

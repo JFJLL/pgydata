@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$version = "1.1.0"
+$version = "1.1.1"
 $platform = "windows"
 $appId = "magiorix-desktop"
 $sourceAppDir = Join-Path $projectRoot "runtime\magiorix-desktop"

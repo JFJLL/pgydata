@@ -1,6 +1,6 @@
 provider: generic
-url: https://your-cdn.com/releases/
+url: https://redmagic.oss-cn-beijing.aliyuncs.com/exe/
 channel: latest
-updaterCacheDirName: 'emagic-data-crawler-updater'
+updaterCacheDirName: 'magiorix-desktop-updater'
 publisherName:
   - 'Developer ID Application: Wuhan Gaozhen Technology Co., Ltd. (XZU5LRXJ34)'

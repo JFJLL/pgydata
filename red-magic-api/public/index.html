@@ -260,6 +260,41 @@
         margin-top: 0;
       }
 
+      .guide-tabs {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0 0 22px;
+        padding: 5px;
+        border: 1px solid rgba(255, 48, 48, 0.18);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.68);
+      }
+
+      .guide-subtab {
+        min-width: 96px;
+        height: 36px;
+        border: 0;
+        border-radius: 6px;
+        padding: 0 16px;
+        color: #6b4e4a;
+        background: transparent;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .guide-subtab.active {
+        color: #fff;
+        background: #ff3030;
+        box-shadow: 0 10px 22px rgba(255, 48, 48, 0.2);
+      }
+
+      .guide-panel[hidden] {
+        display: none;
+      }
+
       .guide-shots {
         display: grid;
         gap: 18px;
@@ -280,6 +315,20 @@
         width: 100%;
         border-radius: 6px;
         height: auto;
+      }
+
+      .guide-shot.missing-image img {
+        display: none;
+      }
+
+      .guide-shot.missing-image::before {
+        content: "";
+        display: block;
+        min-height: 280px;
+        border-radius: 6px;
+        background:
+          linear-gradient(135deg, rgba(255, 48, 48, 0.08), rgba(255, 255, 255, 0.88)),
+          repeating-linear-gradient(45deg, rgba(240, 199, 191, 0.48) 0, rgba(240, 199, 191, 0.48) 1px, transparent 1px, transparent 12px);
       }
 
       .guide-shot figcaption {
@@ -328,6 +377,15 @@
         line-height: 1.75;
       }
 
+      .guide-placeholder {
+        border: 1px dashed #f0c7bf;
+        border-radius: 8px;
+        padding: 28px;
+        color: #6b4e4a;
+        background: rgba(255, 255, 255, 0.68);
+        font-weight: 800;
+      }
+
       @keyframes pulse {
         70% {
           box-shadow: 0 0 0 10px rgba(255, 48, 48, 0);
@@ -342,6 +400,12 @@
           align-items: flex-start;
           gap: 16px;
           flex-direction: column;
+        }
+
+        .guide-tabs {
+          display: grid;
+          width: 100%;
+          grid-template-columns: 1fr;
         }
 
         .hero {
@@ -386,7 +450,7 @@
               面向小红书蒲公英与抖音星图的数据采集工具。安装后在本地电脑运行，导入模板或手动输入链接即可生成可整理、可导出的 Excel 结果。
             </p>
             <div class="actions">
-              <a id="downloadBtn" class="download" href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.0-windows.exe">下载安装包</a>
+              <a id="downloadBtn" class="download" href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.1-windows.exe">下载安装包</a>
             </div>
             <div id="downloadMeta" class="meta">正在读取最新安装包信息...</div>
           </div>
@@ -412,38 +476,85 @@
         <div class="guide-head">
           <div class="eyebrow"><span class="pulse"></span> 使用说明</div>
           <h1>开始采集</h1>
-          <p class="hero-copy">登录后先完成蒲公英授权，再选择 Excel 文件上传或直接输入 UID 开始采集。</p>
+          <p class="hero-copy">按平台选择对应流程，先完成授权，再导入模板或手动输入链接开始采集。</p>
         </div>
-        <div class="guide-shots">
-          <figure class="guide-shot">
-            <img src="/assets/guide-login.png" alt="新用户刚登录后的蒲公英采集界面截图" />
-            <figcaption>1. 新用户刚登录后，先点击右上角“浏览器授权”。</figcaption>
-          </figure>
-          <figure class="guide-shot">
-            <img src="/assets/guide-authorizing.png" alt="点击浏览器授权后的授权中界面截图" />
-            <figcaption>2. 点击授权后会打开蒲公英页面，等待授权完成。</figcaption>
-          </figure>
-          <figure class="guide-shot">
-            <img src="/assets/software-screenshot.png" alt="授权完成后的蒲公英采集界面截图" />
-            <figcaption>3. 显示“已授权”后，可以上传 Excel 或输入 UID 开始采集。</figcaption>
-          </figure>
+
+        <div class="guide-tabs" role="tablist" aria-label="使用说明分类">
+          <button class="guide-subtab active" type="button" role="tab" aria-selected="true" aria-controls="xhsGuide" data-guide-tab="xhs">小红书</button>
+          <button class="guide-subtab" type="button" role="tab" aria-selected="false" aria-controls="douyinGuide" data-guide-tab="douyin">抖音星图</button>
+          <button class="guide-subtab" type="button" role="tab" aria-selected="false" aria-controls="macGuide" data-guide-tab="mac">Mac 说明</button>
         </div>
-        <div class="guide-grid">
-          <article class="guide-card">
-            <span class="guide-index">1</span>
-            <strong>授权蒲公英</strong>
-            <p>进入软件后先完成蒲公英授权，授权状态显示为“已授权”后再创建采集任务。</p>
-          </article>
-          <article class="guide-card">
-            <span class="guide-index">2</span>
-            <strong>导入采集对象</strong>
-            <p>可以上传 Excel 文件批量导入，也可以在手动输入框中逐行输入小红书或蒲公英主页链接、24 位 UID。</p>
-          </article>
-          <article class="guide-card">
-            <span class="guide-index">3</span>
-            <strong>开始采集</strong>
-            <p>确认采集对象无误后点击开始采集，任务完成后在软件中查看并导出 Excel 结果。</p>
-          </article>
+
+        <div id="xhsGuide" class="guide-panel" role="tabpanel">
+          <div class="guide-shots">
+            <figure class="guide-shot">
+              <img src="/assets/guide-login.png" alt="新用户刚登录后的蒲公英采集界面截图" />
+              <figcaption>1. 新用户刚登录后，先点击右上角“浏览器授权”。</figcaption>
+            </figure>
+            <figure class="guide-shot">
+              <img src="/assets/guide-authorizing.png" alt="点击浏览器授权后的授权中界面截图" />
+              <figcaption>2. 点击授权后会打开蒲公英页面，等待授权完成。</figcaption>
+            </figure>
+            <figure class="guide-shot">
+              <img src="/assets/software-screenshot.png" alt="授权完成后的蒲公英采集界面截图" />
+              <figcaption>3. 显示“已授权”后，可以上传 Excel 或输入 UID 开始采集。</figcaption>
+            </figure>
+          </div>
+          <div class="guide-grid">
+            <article class="guide-card">
+              <span class="guide-index">1</span>
+              <strong>授权蒲公英</strong>
+              <p>进入软件后先完成蒲公英授权，授权状态显示为“已授权”后再创建采集任务。</p>
+            </article>
+            <article class="guide-card">
+              <span class="guide-index">2</span>
+              <strong>导入采集对象</strong>
+              <p>可以上传 Excel 文件批量导入，也可以在手动输入框中逐行输入小红书或蒲公英主页链接、24 位 UID。</p>
+            </article>
+            <article class="guide-card">
+              <span class="guide-index">3</span>
+              <strong>开始采集</strong>
+              <p>确认采集对象无误后点击开始采集，任务完成后在软件中查看并导出 Excel 结果。</p>
+            </article>
+          </div>
+        </div>
+
+        <div id="douyinGuide" class="guide-panel" role="tabpanel" hidden>
+          <div class="guide-shots">
+            <figure class="guide-shot">
+              <img src="/assets/guide-douyin-starmap-login.png" alt="抖音星图主页采集授权入口截图" />
+              <figcaption>1. 点击左侧“抖音”，进入“星图主页采集”，再点击右上角“授权登录”。</figcaption>
+            </figure>
+            <figure class="guide-shot">
+              <img src="/assets/guide-douyin-starmap-authorizing.png" alt="巨量星图授权登录窗口截图" />
+              <figcaption>2. 软件会打开巨量星图页面，在弹出的窗口中完成星图账号登录和授权。</figcaption>
+            </figure>
+            <figure class="guide-shot">
+              <img src="/assets/guide-douyin-starmap-authorized.png" alt="抖音星图主页采集已授权截图" />
+              <figcaption>3. 显示“已授权”后，上传模板或输入星图/抖音主页链接开始采集。</figcaption>
+            </figure>
+          </div>
+          <div class="guide-grid">
+            <article class="guide-card">
+              <span class="guide-index">1</span>
+              <strong>进入抖音星图</strong>
+              <p>在软件左侧选择“抖音”，打开“星图主页采集”，确认当前页面是星图主页采集入口。</p>
+            </article>
+            <article class="guide-card">
+              <span class="guide-index">2</span>
+              <strong>完成星图授权</strong>
+              <p>点击右上角“授权登录”，在巨量星图窗口中登录账号，回到软件后等待状态变为“已授权”。</p>
+            </article>
+            <article class="guide-card">
+              <span class="guide-index">3</span>
+              <strong>导入星图链接</strong>
+              <p>按模板上传 Excel，或在输入框中逐行粘贴星图主页、抖音主页等可识别链接后开始采集。</p>
+            </article>
+          </div>
+        </div>
+
+        <div id="macGuide" class="guide-panel" role="tabpanel" hidden>
+          <div class="guide-placeholder">Mac 版使用说明待补充。</div>
         </div>
       </section>
     </main>
@@ -453,6 +564,12 @@
       const views = {
         home: document.getElementById("homeView"),
         guide: document.getElementById("guideView"),
+      };
+      const guideTabs = Array.from(document.querySelectorAll(".guide-subtab"));
+      const guidePanels = {
+        xhs: document.getElementById("xhsGuide"),
+        douyin: document.getElementById("douyinGuide"),
+        mac: document.getElementById("macGuide"),
       };
       const meta = document.getElementById("downloadMeta");
       const btn = document.getElementById("downloadBtn");
@@ -472,6 +589,27 @@
         tab.addEventListener("click", () => activateTab(tab.dataset.tab));
       });
 
+      function activateGuideTab(name) {
+        guideTabs.forEach((tab) => {
+          const active = tab.dataset.guideTab === name;
+          tab.classList.toggle("active", active);
+          tab.setAttribute("aria-selected", String(active));
+        });
+        Object.entries(guidePanels).forEach(([key, panel]) => {
+          panel.hidden = key !== name;
+        });
+      }
+
+      guideTabs.forEach((tab) => {
+        tab.addEventListener("click", () => activateGuideTab(tab.dataset.guideTab));
+      });
+
+      document.querySelectorAll(".guide-shot img").forEach((image) => {
+        image.addEventListener("error", () => {
+          image.closest(".guide-shot")?.classList.add("missing-image");
+        });
+      });
+
       fetch("/api/desktop-download/latest")
         .then((response) => response.json())
         .then((body) => {
@@ -481,7 +619,7 @@
           meta.textContent = `最新版本 ${data.version}`;
         })
         .catch(() => {
-          meta.textContent = "最新版本 1.1.0";
+          meta.textContent = "最新版本 1.1.1";
         });
     </script>
   </body>

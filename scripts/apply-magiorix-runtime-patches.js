@@ -3,6 +3,7 @@ const path = require("path");
 
 const projectRoot = path.resolve(__dirname, "..");
 const mainPath = path.join(projectRoot, "app-source", "dist-electron", "index.js");
+const preloadPath = path.join(projectRoot, "app-source", "dist-electron", "preload.mjs");
 
 function replaceOnce(source, from, to, label) {
   const fromCrLf = from.replace(/\n/g, "\r\n");
@@ -23,9 +24,103 @@ function insertAfterOnce(source, marker, insert, already, label) {
 }
 
 let main = fs.readFileSync(mainPath, "utf8");
+let preload = fs.readFileSync(preloadPath, "utf8");
 
 const legacyHost = `https://${"api"}.red-magic.cn`;
 main = main.split(legacyHost).join("https://xhs.red-magic.cn");
+
+preload = replaceOnce(
+  preload,
+  "onStatusChanged:e=>{r.ipcRenderer.on(s.auth.statusChanged,(n,a)=>{e(a)})}",
+  "onStatusChanged:e=>{const n=(a,t)=>e(t);return r.ipcRenderer.on(s.auth.statusChanged,n),()=>r.ipcRenderer.removeListener(s.auth.statusChanged,n)}",
+  "scraper auth status listener cleanup",
+);
+
+if (!main.includes("采集任务启动 plugin=")) {
+  main = replaceOnce(
+    main,
+    'const { taskId: t, pluginId: n, taskType: s, urls: i, fileName: o } = e, r = e.fields && e.fields.length > 0 ? e.fields : null, c = e.accountSource ?? "personal", u = this.plugins.get(n);',
+    'const { taskId: t, pluginId: n, taskType: s, urls: i, fileName: o } = e, r = e.fields && e.fields.length > 0 ? e.fields : null, c = e.accountSource ?? "personal", u = this.plugins.get(n);\n    ue.info(`[task=${t}] 采集任务启动 plugin=${n} taskType=${s} accountSource=${c} total=${i.length} file=${o}`);',
+    "scraper task start logging",
+  );
+  main = replaceOnce(
+    main,
+    `const p = \`scrape-\${t}\`, d = this.scrapeWindowManager.createWindow(p, {
+      url: u.baseUrl,
+      show: !1,
+      partition: u.sessionPartition
+    });`,
+    `const p = \`scrape-\${t}\`, d = this.scrapeWindowManager.createWindow(p, {
+      url: u.baseUrl,
+      show: !1,
+      partition: u.sessionPartition
+    });
+    ue.info(\`[task=\${t}] 隐藏采集窗口已创建 plugin=\${n} baseUrl=\${u.baseUrl} partition=\${u.sessionPartition ?? "(默认)"}\`);`,
+    "scraper hidden window logging",
+  );
+  main = replaceOnce(
+    main,
+    `      this.sendToRenderer(W.task.progress, {
+        taskId: t,
+        current: l.current,
+        total: l.total,
+        percent: Math.max(0, Math.round(m / l.total * 100))
+      });
+      try {`,
+    `      this.sendToRenderer(W.task.progress, {
+        taskId: t,
+        current: l.current,
+        total: l.total,
+        percent: Math.max(0, Math.round(m / l.total * 100))
+      });
+      ue.info(\`[task=\${t}] 开始采集第 \${m + 1}/\${i.length} 条 plugin=\${n} taskType=\${s} url=\${String(f).slice(0, 180)}\`);
+      try {`,
+    "scraper item start logging",
+  );
+  main = replaceOnce(
+    main,
+    `          errorCode: y.errorCode,
+          errorDetails: y.errorDetails
+        });
+      } catch (v) {`,
+    `          errorCode: y.errorCode,
+          errorDetails: y.errorDetails
+        });
+        ue.info(\`[task=\${t}] 完成采集第 \${m + 1}/\${i.length} 条 plugin=\${n} status=\${y.status} errorCode=\${y.errorCode ?? "NONE"} success=\${l.successCount} error=\${l.errorCount}\`);
+      } catch (v) {
+        ue.error(\`[task=\${t}] 采集第 \${m + 1}/\${i.length} 条异常 plugin=\${n} url=\${String(f).slice(0, 180)}\`, v);`,
+    "scraper item result logging",
+  );
+  main = replaceOnce(
+    main,
+    `    this.scrapeWindowManager.closeWindow(p);
+    const h = Date.now() - l.startTime;
+    l.cancelled ? this.sendToRenderer(W.task.complete, {`,
+    `    this.scrapeWindowManager.closeWindow(p);
+    const h = Date.now() - l.startTime;
+    ue.info(\`[task=\${t}] 采集任务结束 plugin=\${n} taskType=\${s} cancelled=\${l.cancelled} success=\${l.successCount} error=\${l.errorCount} durationMs=\${h}\`);
+    l.cancelled ? this.sendToRenderer(W.task.complete, {`,
+    "scraper task complete logging",
+  );
+  main = replaceOnce(
+    main,
+    't && (t.cancelled = !0, t.paused && t.pauseResolver && t.pauseResolver(), ue.info(`任务已取消: ${e}`));',
+    't && (t.cancelled = !0, t.paused && t.pauseResolver && t.pauseResolver(), ue.info(`任务已取消: ${e}, plugin=${t.pluginId}, taskType=${t.taskType}, current=${t.current}/${t.total}`));',
+    "scraper cancel logging",
+  );
+  main = replaceOnce(
+    main,
+    't && !t.paused && !t.cancelled && (t.paused = !0, ue.info(`任务已暂停: ${e}`), this.sendToRenderer(W.task.paused, {',
+    't && !t.paused && !t.cancelled && (t.paused = !0, ue.info(`任务已暂停: ${e}, plugin=${t.pluginId}, taskType=${t.taskType}, current=${t.current}/${t.total}`), this.sendToRenderer(W.task.paused, {',
+    "scraper pause logging",
+  );
+  main = replaceOnce(
+    main,
+    't && t.paused && (t.paused = !1, t.pauseResolver && (t.pauseResolver(), t.pauseResolver = void 0), ue.info(`任务已继续: ${e}`), this.sendToRenderer(W.task.paused, {',
+    't && t.paused && (t.paused = !1, t.pauseResolver && (t.pauseResolver(), t.pauseResolver = void 0), ue.info(`任务已继续: ${e}, plugin=${t.pluginId}, taskType=${t.taskType}, current=${t.current}/${t.total}`), this.sendToRenderer(W.task.paused, {',
+    "scraper resume logging",
+  );
+}
 
 main = replaceOnce(
   main,
@@ -693,4 +788,5 @@ main = replaceOnce(
 );
 
 fs.writeFileSync(mainPath, main);
+fs.writeFileSync(preloadPath, preload);
 console.log("Applied magiorix runtime patches.");

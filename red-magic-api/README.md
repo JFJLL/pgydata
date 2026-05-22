@@ -151,13 +151,13 @@ sudo certbot renew --dry-run
 桌面资源包必须放到：
 
 ```text
-public/assets/desktop/1.0.0/assets.zip
+public/assets/desktop/1.1.1/assets.zip
 ```
 
 部署后应能通过这个地址访问：
 
 ```text
-https://xhs.red-magic.cn/assets/desktop/1.0.0/assets.zip
+https://xhs.red-magic.cn/assets/desktop/1.1.1/assets.zip
 ```
 
 接口 `GET /api/frontend-assets/latest/desktop` 会自动读取这个文件并计算 `size` 和 `sha256`。

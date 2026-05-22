@@ -16621,6 +16621,7 @@ class Xd {
   /** 启动采集任务 */
   async startTask(e) {
     const { taskId: t, pluginId: n, taskType: s, urls: i, fileName: o } = e, r = e.fields && e.fields.length > 0 ? e.fields : null, c = e.accountSource ?? "personal", u = this.plugins.get(n);
+    ue.info(`[task=${t}] 采集任务启动 plugin=${n} taskType=${s} accountSource=${c} total=${i.length} file=${o}`);
     if (!u) {
       this.sendToRenderer(W.task.error, {
         taskId: t,
@@ -16670,6 +16671,7 @@ class Xd {
       show: !1,
       partition: u.sessionPartition
     });
+    ue.info(`[task=${t}] 隐藏采集窗口已创建 plugin=${n} baseUrl=${u.baseUrl} partition=${u.sessionPartition ?? "(默认)"}`);
     await Promise.race([
       new Promise((m) => {
         const f = () => m();
@@ -16688,6 +16690,7 @@ class Xd {
         total: l.total,
         percent: Math.max(0, Math.round(m / l.total * 100))
       });
+      ue.info(`[task=${t}] 开始采集第 ${m + 1}/${i.length} 条 plugin=${n} taskType=${s} url=${String(f).slice(0, 180)}`);
       try {
         let v = !1;
         const y = await pgyTimeout(u.scrapeItem(f, s, {
@@ -16719,7 +16722,9 @@ class Xd {
           errorCode: y.errorCode,
           errorDetails: y.errorDetails
         });
+        ue.info(`[task=${t}] 完成采集第 ${m + 1}/${i.length} 条 plugin=${n} status=${y.status} errorCode=${y.errorCode ?? "NONE"} success=${l.successCount} error=${l.errorCount}`);
       } catch (v) {
+        ue.error(`[task=${t}] 采集第 ${m + 1}/${i.length} 条异常 plugin=${n} url=${String(f).slice(0, 180)}`, v);
         l.errorCount++, this.sendToRenderer(W.task.itemResult, {
           taskId: t,
           index: m,
@@ -16739,6 +16744,7 @@ class Xd {
     }
     this.scrapeWindowManager.closeWindow(p);
     const h = Date.now() - l.startTime;
+    ue.info(`[task=${t}] 采集任务结束 plugin=${n} taskType=${s} cancelled=${l.cancelled} success=${l.successCount} error=${l.errorCount} durationMs=${h}`);
     l.cancelled ? this.sendToRenderer(W.task.complete, {
       taskId: t,
       successCount: l.successCount,
@@ -16948,12 +16954,12 @@ class Xd {
   /** 取消任务 */
   cancelTask(e) {
     const t = this.runningTasks.get(e);
-    t && (t.cancelled = !0, t.paused && t.pauseResolver && t.pauseResolver(), ue.info(`任务已取消: ${e}`));
+    t && (t.cancelled = !0, t.paused && t.pauseResolver && t.pauseResolver(), ue.info(`任务已取消: ${e}, plugin=${t.pluginId}, taskType=${t.taskType}, current=${t.current}/${t.total}`));
   }
   /** 暂停任务 */
   pauseTask(e) {
     const t = this.runningTasks.get(e);
-    t && !t.paused && !t.cancelled && (t.paused = !0, ue.info(`任务已暂停: ${e}`), this.sendToRenderer(W.task.paused, {
+    t && !t.paused && !t.cancelled && (t.paused = !0, ue.info(`任务已暂停: ${e}, plugin=${t.pluginId}, taskType=${t.taskType}, current=${t.current}/${t.total}`), this.sendToRenderer(W.task.paused, {
       taskId: e,
       paused: !0
     }));
@@ -16961,7 +16967,7 @@ class Xd {
   /** 继续任务 */
   resumeTask(e) {
     const t = this.runningTasks.get(e);
-    t && t.paused && (t.paused = !1, t.pauseResolver && (t.pauseResolver(), t.pauseResolver = void 0), ue.info(`任务已继续: ${e}`), this.sendToRenderer(W.task.paused, {
+    t && t.paused && (t.paused = !1, t.pauseResolver && (t.pauseResolver(), t.pauseResolver = void 0), ue.info(`任务已继续: ${e}, plugin=${t.pluginId}, taskType=${t.taskType}, current=${t.current}/${t.total}`), this.sendToRenderer(W.task.paused, {
       taskId: e,
       paused: !1
     }));
