@@ -472,23 +472,16 @@
         tab.addEventListener("click", () => activateTab(tab.dataset.tab));
       });
 
-      function formatSize(bytes) {
-        const size = Number(bytes || 0);
-        if (size < 1024) return `${size} B`;
-        if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-        return `${(size / 1024 / 1024).toFixed(1)} MB`;
-      }
-
       fetch("/api/desktop-download/latest")
         .then((response) => response.json())
         .then((body) => {
           if (body.code !== 200) throw new Error("desktop download metadata unavailable");
           const data = body.data;
           btn.href = data.downloadUrl || btn.href;
-          meta.textContent = `最新版本 ${data.version} · ${formatSize(data.size)}`;
+          meta.textContent = `最新版本 ${data.version}`;
         })
         .catch(() => {
-          meta.textContent = "最新安装包已发布";
+          meta.textContent = "最新版本 1.0.0";
         });
     </script>
   </body>
