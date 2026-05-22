@@ -43,6 +43,7 @@ const exportFieldSelectorBundle = path.join(assetsDir, "index-IS4kgrUy.js");
 const pgyTaskPanelBundle = path.join(assetsDir, "PgyTaskPanel-B4ZGEmDG.js");
 const starmapTaskPanelBundle = path.join(assetsDir, "index-Ct9D5phI.js");
 const douyinTaskPanelBundle = path.join(assetsDir, "index-D1aMO0QN.js");
+const urlValidatorBundle = path.join(assetsDir, "url-validator-00wRYD83.js");
 const contactLinkBundle = path.join(assetsDir, "ContactLink-WXibGCB4.js");
 const feishuQrSource = "D:\\download\\feishu_down\\飞书20260521-115131.png";
 const feishuQrAssetName = "feishu-group-qr.png";
@@ -230,6 +231,62 @@ replaceAllIfExists(
   douyinTaskPanelBundle,
   'i.useEffect(()=>{C.auth.onStatusChanged(o=>{o.pluginId===l&&(t(l,o.status),o.status==="authorized"&&c(l))})},[t,c])',
   'i.useEffect(()=>C.auth.onStatusChanged(o=>{o.pluginId===l&&(t(l,o.status),o.status==="authorized"&&c(l))}),[t,c])',
+);
+
+replaceOnce(
+  pgyTaskPanelBundle,
+  '[manualText,setManualText]=o.useState(""),[manualError,setManualError]=o.useState(""),n=o.useMemo',
+  '[manualText,setManualText]=o.useState(""),[manualError,setManualError]=o.useState(""),manualHint=a==="notebook"?"支持蒲公英笔记详情页 / 小红书笔记长链 / xhslink 分享短链；App 分享文案会自动提取链接":"支持蒲公英博主详情页 / 小红书主页长链 / xhslink 分享短链 / 博主 ID（24-hex）；App 分享文案会自动提取链接",manualPlaceholder=a==="notebook"?"请粘贴蒲公英 / 小红书笔记链接，一行一个\\n例：\\nhttps://pgy.xiaohongshu.com/solar/cooperator/note-detail/6374c3bb000000001f015237\\nhttps://www.xiaohongshu.com/explore/6374c3bb000000001f015237\\nhttps://xhslink.com/m/7jzcIMcuMSp":"请粘贴蒲公英 / 小红书博主主页链接或博主 ID（24 位十六进制），一行一个\\n例：\\nhttps://pgy.xiaohongshu.com/solar/pre-trade/blogger-detail/6374c3bb000000001f015237\\nhttps://www.xiaohongshu.com/user/profile/6374c3bb000000001f015237\\nhttps://xhslink.com/m/7jzcIMcuMSp\\n6374c3bb000000001f015237",n=o.useMemo',
+  "pgy manual input placeholder copy",
+);
+
+replaceOnce(
+  pgyTaskPanelBundle,
+  'children:"手动输入链接"}),e.jsx("textarea",{value:manualText',
+  'children:"手动输入链接"}),e.jsx(p,{variant:"body2",color:"text.secondary",sx:{mb:1},children:manualHint}),e.jsx("textarea",{value:manualText',
+  "pgy manual input support hint",
+);
+
+replaceOnce(
+  pgyTaskPanelBundle,
+  'placeholder:"每行一个小红书/蒲公英主页链接，或 24 位 UID"',
+  'placeholder:manualPlaceholder',
+  "pgy manual input dynamic placeholder",
+);
+
+replaceOnce(
+  starmapTaskPanelBundle,
+  '[manualText,setManualText]=a.useState(""),[manualError,setManualError]=a.useState(""),t=a.useMemo',
+  '[manualText,setManualText]=a.useState(""),[manualError,setManualError]=a.useState(""),manualHint="支持抖音主页长链 / 星图达人主页 / v.douyin 短链 / 抖音 sec_uid；也可点「从 xlsx 导入」批量带入",manualPlaceholder="请粘贴抖音达人主页链接、星图达人主页链接、抖音 sec_uid 或 v.douyin 短链接，一行一个\\n例：\\nhttps://www.douyin.com/user/MS4wLjABAAAAv7iSuu...hqgLP4\\nhttps://www.xingtu.cn/ad/creator/author-homepage/MS4wLjABAAA...hqgLP4/1234567890123456789\\nhttps://v.douyin.com/iABCDEFG/\\nMS4wLjABAAAAv7iSuu...hqgLP4",t=a.useMemo',
+  "starmap manual input placeholder copy",
+);
+
+replaceOnce(
+  starmapTaskPanelBundle,
+  'children:"手动输入链接"}),e.jsx("textarea",{value:manualText',
+  'children:"手动输入链接"}),e.jsx(g,{variant:"body2",color:"text.secondary",sx:{mb:1},children:manualHint}),e.jsx("textarea",{value:manualText',
+  "starmap manual input support hint",
+);
+
+replaceOnce(
+  starmapTaskPanelBundle,
+  'placeholder:"每行一个星图/抖音主页链接"',
+  'placeholder:manualPlaceholder',
+  "starmap manual input dynamic placeholder",
+);
+
+replaceOnce(
+  urlValidatorBundle,
+  'shortLink:/v\\.douyin\\.com/i,starmapBlogger:/xingtu\\.cn\\/ad\\/creator\\/author-homepage\\/[^/?#]+\\/\\d{8,30}/i};',
+  'shortLink:/v\\.douyin\\.com/i,starmapBlogger:/xingtu\\.cn\\/ad\\/creator\\/author-homepage\\/[^/?#]+\\/\\d{8,30}/i,secUid:/^MS4wLjAB[A-Za-z0-9_-]{8,}$/i};',
+  "douyin sec_uid validator pattern",
+);
+
+replaceOnce(
+  urlValidatorBundle,
+  'function nt(e){return I.blogger.test(e)||I.shortLink.test(e)||I.starmapBlogger.test(e)}',
+  'function nt(e){return I.blogger.test(e)||I.shortLink.test(e)||I.starmapBlogger.test(e)||I.secUid.test(e)}',
+  "douyin sec_uid validator",
 );
 
 replaceOnce(
