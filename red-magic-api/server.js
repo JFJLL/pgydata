@@ -229,7 +229,7 @@ function getDefaultClientMenus() {
     {
       id: "xhs",
       name: "小红书",
-      icon: "simple-icons:xiaohongshu",
+      icon: "solar:shop-2-bold-duotone",
       children: [
         {
           id: "collect-pgy-blogger",
@@ -250,7 +250,7 @@ function getDefaultClientMenus() {
     {
       id: "douyin",
       name: "抖音",
-      icon: "simple-icons:tiktok",
+      icon: "solar:play-circle-bold-duotone",
       children: [
         {
           id: "douyin-starmap-blogger",

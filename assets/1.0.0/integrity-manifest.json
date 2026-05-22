@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "algorithm": "sha256",
-  "generatedAt": "2026-05-22T04:10:56.0320857Z",
+  "generatedAt": "2026-05-22T06:15:29.9616793Z",
   "files": [
     {
       "path": "assets/admin-finance-Csc-tqD6.js",
@@ -50,8 +50,8 @@
     },
     {
       "path": "assets/index-B09sHfUO.js",
-      "size": 487966,
-      "sha256": "d05d66ce243a8bbc9a4769f8a65da84123dcbcdc98f94d6d41487cc024a78f53"
+      "size": 487975,
+      "sha256": "65df8a41181dfd6f5122782a96bffc1b6d4357002800161a1244bf748f66cea4"
     },
     {
       "path": "assets/index-b5Geql4X.js",

@@ -177,6 +177,20 @@ replaceOnce(
 
 replaceOnce(
   mainBundle,
+  'width:56,py:1,borderRadius:1.5,cursor:"pointer",mb:.5,WebkitAppRegion:"no-drag"',
+  'width:56,height:56,p:0,borderRadius:1.5,cursor:"pointer",mb:.5,WebkitAppRegion:"no-drag"',
+  "square primary sidebar menu item",
+);
+
+replaceOnce(
+  mainBundle,
+  'o.jsx(B,{icon:l,width:22,height:22})',
+  'o.jsx(B,{icon:l,width:26,height:26})',
+  "primary sidebar menu icon size",
+);
+
+replaceOnce(
+  mainBundle,
   '"wechat-group-qr-D1beIcAI.png"',
   `"${feishuQrAssetName}"`,
   "feishu group qr asset",
