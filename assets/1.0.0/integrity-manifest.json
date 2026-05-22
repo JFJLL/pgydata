@@ -1,7 +1,7 @@
 {
-  "version": "1.1.1",
+  "version": "1.0.0",
   "algorithm": "sha256",
-  "generatedAt": "2026-05-21T11:01:10.7678510Z",
+  "generatedAt": "2026-05-22T03:22:30.7408797Z",
   "files": [
     {
       "path": "assets/admin-finance-Csc-tqD6.js",
@@ -45,18 +45,18 @@
     },
     {
       "path": "assets/index-aLrsE3bx.js",
-      "size": 3597,
-      "sha256": "7f094e04337af629a4f10ae5ce5cdb6dc8d737823ab80300928529b237abeb8a"
+      "size": 3587,
+      "sha256": "b2e6a418348cc6bb1ef58280eaaa3d076cf2fb5cf9f1ceb1dbfcd4828b65497d"
     },
     {
       "path": "assets/index-B09sHfUO.js",
-      "size": 488027,
-      "sha256": "6b0dea6f92cfb32dd7ed448eae9adb7f5c8e17f2a0d6d3f1ed4f5660f3cd7231"
+      "size": 487966,
+      "sha256": "d05d66ce243a8bbc9a4769f8a65da84123dcbcdc98f94d6d41487cc024a78f53"
     },
     {
       "path": "assets/index-b5Geql4X.js",
-      "size": 40234,
-      "sha256": "8f3fb76eb6166171cbadb643e1592c76bd853bbc8013210cabd342d1566110af"
+      "size": 40224,
+      "sha256": "56c0324614ab899808e86f295430e9a758fd389f86e3467fd82cefa9e227af29"
     },
     {
       "path": "assets/index-B9tfq8W9.js",
@@ -90,8 +90,8 @@
     },
     {
       "path": "assets/index-BxZE9bFu.js",
-      "size": 6771,
-      "sha256": "89d6ebfde3492d2261c0b438e68ffce670279e31a30cdd59be1bcc2c833ffd69"
+      "size": 6741,
+      "sha256": "6e6f583d1f7381e8a05b6415a8b4042cee4bb32d07c2c08bd46e8da834afbf4f"
     },
     {
       "path": "assets/index-C0Ke2Ul0.js",
@@ -165,13 +165,13 @@
     },
     {
       "path": "assets/index-DxrlKoUT.js",
-      "size": 60697,
-      "sha256": "18c563922af5b7a963f8f862d31391d76084bee6ba986b0747091133b6db7be1"
+      "size": 60687,
+      "sha256": "66da6a9a745f77d5f9d5213fc1bee2daa709a1164e6c6a2fb3f856df4b5ac0c4"
     },
     {
       "path": "assets/index-G1t-he5X.js",
-      "size": 4092,
-      "sha256": "5fa4966fbb8afda535abc7660046c9fb22779c72e52e92350a1ee2f58b198055"
+      "size": 4072,
+      "sha256": "711c66e1fce0e3b2ee1289b04884e11f4d9403d58f7a9f4cfec24d7b79bfdfab"
     },
     {
       "path": "assets/index-IS4kgrUy.js",
@@ -295,8 +295,8 @@
     },
     {
       "path": "index.html",
-      "size": 649,
-      "sha256": "76d2ffd5eff1dfc9e83e092ed608ab79fbf39ddbcc72ec933225057f504f7f89"
+      "size": 639,
+      "sha256": "df1268eff973aecae88f4144553aa17f4ad53fa96965a62b761a09e99e46a39b"
     }
   ]
 }

@@ -14,9 +14,9 @@ const DEFAULT_GIFT_BALANCE = Number(process.env.DEFAULT_GIFT_BALANCE || 100);
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "red-magic-api.sqlite");
 const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, "logs");
-const ASSET_VERSION = "1.1.1";
-const INSTALLER_FILE_NAME = "EmagicDataCrawler-Setup.exe";
-const INSTALLER_DOWNLOAD_URL = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/EmagicDataCrawler-Setup.exe";
+const ASSET_VERSION = "1.0.0";
+const INSTALLER_FILE_NAME = "magiorix-desktop-1.0.0-windows.exe";
+const INSTALLER_DOWNLOAD_URL = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.0.0-windows.exe";
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "redmagic2026";
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -923,7 +923,7 @@ app.get("/api/frontend-assets/latest/desktop", asyncHandler(async (req, res) => 
   const filePath = path.join(__dirname, "public", "assets", "desktop", ASSET_VERSION, "assets.zip");
   if (!fs.existsSync(filePath)) {
     return fail(res, 404, "资源文件不存在", {
-      expectedPath: "public/assets/desktop/1.1.1/assets.zip",
+      expectedPath: `public/assets/desktop/${ASSET_VERSION}/assets.zip`,
     });
   }
 
@@ -951,7 +951,7 @@ app.get("/api/desktop-download/latest", asyncHandler(async (req, res) => {
   const stat = fs.existsSync(filePath) ? fs.statSync(filePath) : null;
 
   return success(res, {
-    version: "1.0.4",
+    version: "1.0.0",
     fileName: INSTALLER_FILE_NAME,
     downloadUrl: INSTALLER_DOWNLOAD_URL,
     directUrl: INSTALLER_DOWNLOAD_URL,
@@ -963,7 +963,7 @@ app.get("/api/desktop-download/latest", asyncHandler(async (req, res) => {
 app.get("/api/desktop-versions/check", asyncHandler(async (req, res) => {
   return success(res, {
     hasUpdate: false,
-    latestVersion: "1.0.4",
+    latestVersion: "1.0.0",
   });
 }));
 

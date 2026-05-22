@@ -1,2 +1,2 @@
-runtime/@zsdesktop/PYGdata.exe filter=lfs diff=lfs merge=lfs -text
-runtime/@zsdesktop/resources/app.asar filter=lfs diff=lfs merge=lfs -text
+runtime/magiorix-desktop/magiorix.exe filter=lfs diff=lfs merge=lfs -text
+runtime/magiorix-desktop/resources/app.asar filter=lfs diff=lfs merge=lfs -text

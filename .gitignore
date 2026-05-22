@@ -15,16 +15,17 @@ red-magic-api/logs/
 fresh-assets.zip
 red-magic-api.zip
 execute-text.txt
+desktop-versions/
 
 # Keep the desktop resource update package because the server serves it.
-!red-magic-api/public/assets/desktop/1.1.1/assets.zip
+!red-magic-api/public/assets/desktop/1.0.0/assets.zip
 
 # Keep the project-local Electron runtime needed to rebuild the installer.
-!runtime/@zsdesktop/PYGdata.exe
-!runtime/@zsdesktop/resources/
-!runtime/@zsdesktop/resources/**
-!runtime/@zsdesktop/resources/elevate.exe
-!runtime/@zsdesktop/resources/pgy-chart-renderer.exe
+!runtime/magiorix-desktop/magiorix.exe
+!runtime/magiorix-desktop/resources/
+!runtime/magiorix-desktop/resources/**
+!runtime/magiorix-desktop/resources/elevate.exe
+!runtime/magiorix-desktop/resources/pgy-chart-renderer.exe
 
 # Reverse-engineering and temporary work directories
 analysis/

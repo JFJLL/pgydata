@@ -1,6 +1,6 @@
 # red-magic-api
 
-这是一个可直接部署到服务器的最小后端目录，用于兼容易美数据抓取客户端切换到 `https://xhs.red-magic.cn` 后的基础接口。
+这是一个可直接部署到服务器的最小后端目录，用于兼容 magiorix 客户端切换到 `https://xhs.red-magic.cn` 后的基础接口。
 
 技术栈：Node.js + Express + SQLite。无需 Redis、MySQL、Docker。
 
@@ -151,13 +151,13 @@ sudo certbot renew --dry-run
 桌面资源包必须放到：
 
 ```text
-public/assets/desktop/1.1.1/assets.zip
+public/assets/desktop/1.0.0/assets.zip
 ```
 
 部署后应能通过这个地址访问：
 
 ```text
-https://xhs.red-magic.cn/assets/desktop/1.1.1/assets.zip
+https://xhs.red-magic.cn/assets/desktop/1.0.0/assets.zip
 ```
 
 接口 `GET /api/frontend-assets/latest/desktop` 会自动读取这个文件并计算 `size` 和 `sha256`。

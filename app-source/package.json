@@ -1,12 +1,12 @@
 {
-  "name": "emagic-data-crawler",
-  "productName": "易美数据抓取",
-  "version": "1.0.4",
-  "assetsVersion": "1.1.1",
+  "name": "magiorix-desktop",
+  "productName": "magiorix",
+  "version": "1.0.0",
+  "assetsVersion": "1.0.0",
   "description": "Local PGY data collection desktop client",
   "main": "dist-electron/index.js",
   "type": "module",
-  "author": "易美传播 Emagic",
+  "author": "magiorix",
   "license": "MIT",
   "private": true,
   "dependencies": {

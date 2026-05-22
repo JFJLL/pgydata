@@ -1,24 +1,30 @@
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$sourceAppDir = Join-Path $projectRoot "runtime\@zsdesktop"
-$sourceAssetsDir = Join-Path $projectRoot "assets\1.1.1"
+$version = "1.0.0"
+$platform = "windows"
+$appId = "magiorix-desktop"
+$sourceAppDir = Join-Path $projectRoot "runtime\magiorix-desktop"
+$sourceAssetsDir = Join-Path $projectRoot "assets\$version"
 $appSourceDir = Join-Path $projectRoot "app-source"
-$outDir = "D:\download\pic-vec\pgy-data"
-$payloadDir = Join-Path $outDir "payload"
-$installerDir = Join-Path $outDir "installer"
-$setupExe = Join-Path $outDir "EmagicDataCrawler-Setup.exe"
-$version = "1.1.1"
-$appDisplayName = "易美数据抓取"
-$appInstallDirName = "EmagicDataCrawler"
-$shortcutName = "EmagicDataCrawler"
-$sourceExeName = "PYGdata.exe"
+$outDir = Join-Path $projectRoot "desktop-versions\$platform\$version"
+$buildWorkDir = Join-Path $outDir "_build"
+$payloadDir = Join-Path $buildWorkDir "payload"
+$installerDir = Join-Path $buildWorkDir "installer"
+$setupFileName = "$appId-$version-$platform.exe"
+$setupExe = Join-Path $outDir $setupFileName
+$assetsZipFileName = "$appId-$version-assets.zip"
+$appDisplayName = "magiorix"
+$appInstallDirName = "magiorix"
+$shortcutName = "magiorix"
+$sourceExeName = "magiorix.exe"
 $installedExeName = "$appInstallDirName.exe"
 $appIconResource = "app.ico"
-$installLogPath = "%TEMP%\PYGdata-install.log"
-$redMagicAssetsZip = Join-Path $projectRoot "red-magic-api\public\assets\desktop\$version\assets.zip"
-$redMagicInstaller = Join-Path $projectRoot "red-magic-api\public\downloads\EmagicDataCrawler-Setup.exe"
-$outAssetsZip = Join-Path $outDir "assets\desktop\$version\assets.zip"
+$installLogPath = "%TEMP%\magiorix-install.log"
+$outAssetsZip = Join-Path $outDir $assetsZipFileName
+$serverAssetsZip = Join-Path $projectRoot "red-magic-api\public\assets\desktop\$version\assets.zip"
+$setupSha256Path = Join-Path $outDir "$($setupFileName).sha256.txt"
+$releaseInfoPath = Join-Path $outDir "release-info.json"
 
 function Get-FullPath([string]$Path) {
   return [System.IO.Path]::GetFullPath($Path)
@@ -60,8 +66,8 @@ function Find-Rcedit {
   $candidates = @(
     $env:RCEDIT_PATH,
     (Join-Path $projectRoot "tools\rcedit-x64.exe"),
-    (Join-Path $env:TEMP "pgydata-rcedit\node_modules\rcedit\bin\rcedit-x64.exe"),
-    (Join-Path $env:TEMP "pgydata-rcedit\node_modules\rcedit\bin\rcedit.exe")
+    (Join-Path $env:TEMP "magiorix-rcedit\node_modules\rcedit\bin\rcedit-x64.exe"),
+    (Join-Path $env:TEMP "magiorix-rcedit\node_modules\rcedit\bin\rcedit.exe")
   ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 
   foreach ($candidate in $candidates) {
@@ -143,8 +149,7 @@ function New-AssetsZip([string]$AssetsDir, [string]$ZipPath) {
 
 function Sync-AssetsToAppData([string]$AssetsDir) {
   $assetRoots = @(
-    (Join-Path $env:APPDATA "pygdata-desktop\assets"),
-    (Join-Path $env:APPDATA "@zs\desktop\assets")
+    (Join-Path $env:APPDATA "magiorix-desktop\assets")
   )
 
   foreach ($assetRoot in $assetRoots) {
@@ -201,12 +206,11 @@ if (-not $node) {
 }
 
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-Remove-DirectorySafe -Path $payloadDir -Root $outDir
-Remove-DirectorySafe -Path $installerDir -Root $outDir
+Remove-DirectorySafe -Path $buildWorkDir -Root $outDir
 New-Item -ItemType Directory -Force -Path $payloadDir, $installerDir | Out-Null
 
 Write-Output "Applying frontend asset patches..."
-Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "apply-pgydata-frontend-patches.js")) -WorkingDirectory $projectRoot
+Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "apply-magiorix-frontend-patches.js")) -WorkingDirectory $projectRoot
 
 Write-Output "Generating resource integrity manifest..."
 $manifestPath = New-IntegrityManifest -AssetsDir $sourceAssetsDir
@@ -214,12 +218,12 @@ Write-Output "Manifest: $manifestPath"
 
 Write-Output "Rebuilding assets.zip..."
 New-AssetsZip -AssetsDir $sourceAssetsDir -ZipPath $outAssetsZip
-New-Item -ItemType Directory -Force -Path (Split-Path -Parent $redMagicAssetsZip) | Out-Null
-Copy-Item -LiteralPath $outAssetsZip -Destination $redMagicAssetsZip -Force
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $serverAssetsZip) | Out-Null
+Copy-Item -LiteralPath $outAssetsZip -Destination $serverAssetsZip -Force
 
 Write-Output "Packing Electron app.asar from app-source..."
 $asarOut = Join-Path (Join-Path $sourceAppDir "resources") "app.asar"
-Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "apply-pgydata-runtime-patches.js")) -WorkingDirectory $projectRoot
+Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "apply-magiorix-runtime-patches.js")) -WorkingDirectory $projectRoot
 Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "pack-asar.js"), $appSourceDir, $asarOut) -WorkingDirectory $projectRoot
 
 $payloadAppDir = Join-Path $payloadDir "app"
@@ -282,7 +286,7 @@ foreach ($file in @("zh-CN.pak", "en-US.pak")) {
 Copy-Item -Path (Join-Path $sourceAssetsDir "*") -Destination $payloadAssetsVersionDir -Recurse -Force
 
 $iconPath = Join-Path (Join-Path $sourceAppDir "resources") $appIconResource
-$nsiPath = Join-Path $installerDir "PYGdata-Setup.nsi"
+$nsiPath = Join-Path $installerDir "magiorix-Setup.nsi"
 $payloadAppNsis = Escape-NsisPath $payloadAppDir
 $payloadAssetsNsis = Escape-NsisPath $payloadAssetsVersionDir
 $setupExeNsis = Escape-NsisPath $setupExe
@@ -312,16 +316,16 @@ SetCompressor /SOLID lzma
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_LANGUAGE "SimpChinese"
 
-!define APP_REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\PYGdata"
+!define APP_REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\magiorix"
 
 Var InstallLog
 
 Function .onInit
   SetShellVarContext current
-  StrCpy `$InstallLog "`$TEMP\PYGdata-install.log"
+  StrCpy `$InstallLog "`$TEMP\magiorix-install.log"
   Delete "`$InstallLog"
   FileOpen `$0 "`$InstallLog" w
-  FileWrite `$0 "PYGdata installer log$\r$\n"
+  FileWrite `$0 "magiorix installer log$\r$\n"
   FileClose `$0
 FunctionEnd
 
@@ -375,36 +379,23 @@ Section "Install"
   !insertmacro Step "3/7 复制主程序"
   File /r "$payloadAppNsis\*.*"
   !insertmacro CheckErrors "复制主程序失败，请确认安装目录可写且程序未在运行：`$INSTDIR"
-  FileOpen `$0 "`$INSTDIR\.pgydata-install" w
+  FileOpen `$0 "`$INSTDIR\.magiorix-install" w
   FileWrite `$0 "installedAt=installed$\r$\n"
   FileClose `$0
 
-  !insertmacro Step "4/7 写入前端资源：`$APPDATA\pygdata-desktop\assets\$version"
-  RMDir /r "`$APPDATA\pygdata-desktop\assets\$version"
-  CreateDirectory "`$APPDATA\pygdata-desktop\assets\$version"
-  SetOutPath "`$APPDATA\pygdata-desktop\assets\$version"
+  !insertmacro Step "4/7 写入前端资源：`$APPDATA\magiorix-desktop\assets\$version"
+  RMDir /r "`$APPDATA\magiorix-desktop\assets\$version"
+  CreateDirectory "`$APPDATA\magiorix-desktop\assets\$version"
+  SetOutPath "`$APPDATA\magiorix-desktop\assets\$version"
   File /r "$payloadAssetsNsis\*.*"
-  !insertmacro CheckErrors "写入前端资源失败：`$APPDATA\pygdata-desktop\assets\$version"
-  FileOpen `$0 "`$APPDATA\pygdata-desktop\assets\version.json" w
-  FileWrite `$0 "{$\"version$\":$\"$version$\",$\"appliedAt$\":$\"installed$\"}"
-  FileClose `$0
-
-  !insertmacro Step "4/7 写入兼容前端资源：`$APPDATA\@zs\desktop\assets\$version"
-  RMDir /r "`$APPDATA\@zs\desktop\assets\$version"
-  CreateDirectory "`$APPDATA\@zs\desktop\assets\$version"
-  SetOutPath "`$APPDATA\@zs\desktop\assets\$version"
-  File /r "$payloadAssetsNsis\*.*"
-  !insertmacro CheckErrors "写入兼容前端资源失败：`$APPDATA\@zs\desktop\assets\$version"
-  FileOpen `$0 "`$APPDATA\@zs\desktop\assets\version.json" w
+  !insertmacro CheckErrors "写入前端资源失败：`$APPDATA\magiorix-desktop\assets\$version"
+  FileOpen `$0 "`$APPDATA\magiorix-desktop\assets\version.json" w
   FileWrite `$0 "{$\"version$\":$\"$version$\",$\"appliedAt$\":$\"installed$\"}"
   FileClose `$0
 
   !insertmacro Step "5/7 生成资源 manifest/校验文件"
-  IfFileExists "`$APPDATA\pygdata-desktop\assets\$version\integrity-manifest.json" +3 0
-    Push "资源完整性校验文件缺失：`$APPDATA\pygdata-desktop\assets\$version\integrity-manifest.json"
-    Call FailInstall
-  IfFileExists "`$APPDATA\@zs\desktop\assets\$version\integrity-manifest.json" +3 0
-    Push "兼容资源完整性校验文件缺失：`$APPDATA\@zs\desktop\assets\$version\integrity-manifest.json"
+  IfFileExists "`$APPDATA\magiorix-desktop\assets\$version\integrity-manifest.json" +3 0
+    Push "资源完整性校验文件缺失：`$APPDATA\magiorix-desktop\assets\$version\integrity-manifest.json"
     Call FailInstall
 
   !insertmacro Step "6/7 创建开始菜单快捷方式"
@@ -454,8 +445,6 @@ if (-not (Test-Path -LiteralPath $setupExe)) {
   throw "Setup exe was not created: $setupExe"
 }
 
-New-Item -ItemType Directory -Force -Path (Split-Path -Parent $redMagicInstaller) | Out-Null
-Copy-Item -LiteralPath $setupExe -Destination $redMagicInstaller -Force
 Sync-AssetsToAppData -AssetsDir $sourceAssetsDir
 
 $setupItem = Get-Item -LiteralPath $setupExe
@@ -463,12 +452,33 @@ $setupHash = (Get-FileHash -LiteralPath $setupExe -Algorithm SHA256).Hash
 $assetsItem = Get-Item -LiteralPath $outAssetsZip
 $assetsHash = (Get-FileHash -LiteralPath $outAssetsZip -Algorithm SHA256).Hash
 
+Set-Content -LiteralPath $setupSha256Path -Value "$setupHash  $setupFileName" -Encoding ASCII
+$releaseInfo = [ordered]@{
+  appId = $appId
+  version = $version
+  platform = $platform
+  installer = [ordered]@{
+    fileName = $setupFileName
+    size = $setupItem.Length
+    sha256 = $setupHash
+  }
+  assets = [ordered]@{
+    fileName = $assetsZipFileName
+    size = $assetsItem.Length
+    sha256 = $assetsHash
+  }
+  generatedAt = (Get-Date).ToUniversalTime().ToString("o")
+} | ConvertTo-Json -Depth 5
+Set-Content -LiteralPath $releaseInfoPath -Value $releaseInfo -Encoding UTF8
+Remove-DirectorySafe -Path $buildWorkDir -Root $outDir
+
 Write-Output "Created installer: $setupExe"
 Write-Output "Installer size: $($setupItem.Length)"
 Write-Output "Installer SHA256: $setupHash"
 Write-Output "Created assets zip: $outAssetsZip"
 Write-Output "Assets zip size: $($assetsItem.Length)"
 Write-Output "Assets zip SHA256: $assetsHash"
-Write-Output "Synced server assets zip: $redMagicAssetsZip"
-Write-Output "Synced server installer: $redMagicInstaller"
+Write-Output "Synced server assets zip: $serverAssetsZip"
+Write-Output "Created SHA256 file: $setupSha256Path"
+Write-Output "Created release info: $releaseInfoPath"
 Write-Output "Install log path: $installLogPath"

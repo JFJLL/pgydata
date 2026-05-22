@@ -5,8 +5,8 @@
 桌面端主进程日志默认写到用户数据目录：
 
 ```text
-Windows: %APPDATA%\pygdata-desktop\logs\pgydata-main-YYYY-MM-DD.log
-macOS: ~/Library/Application Support/pygdata-desktop/logs/pgydata-main-YYYY-MM-DD.log
+Windows: %APPDATA%\magiorix-desktop\logs\magiorix-main-YYYY-MM-DD.log
+macOS: ~/Library/Application Support/magiorix-desktop/logs/magiorix-main-YYYY-MM-DD.log
 ```
 
 常见事件：
@@ -46,8 +46,8 @@ LOG_DIR=./logs
 
 - 问题发生时间。
 - 操作步骤。
-- 桌面端对应日期的 `pgydata-main-YYYY-MM-DD.log`。
+- 桌面端对应日期的 `magiorix-main-YYYY-MM-DD.log`。
 - 对应日期的 `server-YYYY-MM-DD.log`。
-- 如果是安装失败，提供 `%TEMP%\PYGdata-install.log`。
+- 如果是安装失败，提供 `%TEMP%\magiorix-install.log`。
 
 不要发送 `.env`、SQLite 数据库、真实 Cookie、token 或账号密码。

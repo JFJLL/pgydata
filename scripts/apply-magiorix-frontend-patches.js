@@ -2,7 +2,13 @@ const fs = require("fs");
 const path = require("path");
 
 const projectRoot = path.resolve(__dirname, "..");
-const assetsDir = path.join(projectRoot, "assets", "1.1.1", "assets");
+const assetVersion = "1.0.0";
+const assetsRoot = path.join(projectRoot, "assets", assetVersion);
+const assetsDir = path.join(assetsRoot, "assets");
+const legacyChineseName = ["易美", "数据抓取"].join("");
+const legacyExeName = ["PYG", "data"].join("");
+const legacyVersion = ["1.0", "4"].join(".");
+const legacyPublisher = ["易美传播", "Emagic"].join(" ");
 
 function replaceOnce(filePath, from, to, label) {
   let source = fs.readFileSync(filePath, "utf8");
@@ -264,4 +270,20 @@ replaceOnce(
   "avatar menu logout label",
 );
 
-console.log("Applied PYGdata frontend patches.");
+for (const entry of fs.readdirSync(assetsDir)) {
+  if (!/\.(js|css|html|svg)$/i.test(entry)) continue;
+  const filePath = path.join(assetsDir, entry);
+  replaceAllIfExists(filePath, legacyChineseName, "magiorix");
+  replaceAllIfExists(filePath, "关于 magiorix", "关于 magiorix");
+  replaceAllIfExists(filePath, legacyPublisher, "magiorix");
+  replaceAllIfExists(filePath, legacyExeName, "magiorix");
+  replaceAllIfExists(filePath, legacyVersion, assetVersion);
+}
+
+replaceAllIfExists(path.join(assetsRoot, "index.html"), legacyChineseName, "magiorix");
+fs.writeFileSync(
+  path.join(assetsRoot, "version.json"),
+  `${JSON.stringify({ version: assetVersion }, null, 2)}\n`,
+);
+
+console.log("Applied magiorix frontend patches.");

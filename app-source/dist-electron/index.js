@@ -19,9 +19,9 @@ import ao, { randomBytes as so } from "crypto";
 import io from "http2";
 import Pr from "assert";
 import $r from "tty";
-const pgyUserDataDir = Oe(ye.getPath("appData"), "pygdata-desktop");
+const pgyUserDataDir = Oe(ye.getPath("appData"), "magiorix-desktop");
 try {
-  ye.setName("PYGdata"), ye.setPath("userData", pgyUserDataDir);
+  ye.setName("magiorix"), ye.setPath("userData", pgyUserDataDir);
 } catch {
 }
 import Dr from "os";
@@ -122,7 +122,7 @@ function pgyFormatLogExtra(a) {
 function pgyMainLogFilePath() {
   const a = Oe(ye.getPath("userData"), "logs");
   Sr(a, { recursive: !0 });
-  return Oe(a, `pgydata-main-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.log`);
+  return Oe(a, `magiorix-main-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.log`);
 }
 function pgyWriteMainLog(a, e = []) {
   const t = e.length ? `${a} ${pgyFormatLogExtra(e)}` : a;
@@ -15472,7 +15472,7 @@ const {
   formToJSON: Qh,
   getAdapter: Zh,
   mergeConfig: eg
-} = ce, Ie = Y("Updater"), _d = lo, Sa = Xi.join(ye.getPath("temp"), "zs-updates");
+} = ce, Ie = Y("Updater"), _d = lo, Sa = Xi.join(ye.getPath("temp"), "magiorix-updates");
 let ve = null, ot = null;
 function Sd() {
   switch (process.platform) {
@@ -23283,7 +23283,7 @@ Ee.info(`应用启动 — 模式: ${Xt ? "开发" : "生产"}, isPackaged: ${ye.
 let Z = null;
 function logRendererDiagnostic(...a) {
   try {
-    const e = Oe(ye.getPath("userData"), "pygdata-renderer-diagnostic.log"), t = a.map((n) => typeof n == "string" ? n : JSON.stringify(n)).join(" ");
+    const e = Oe(ye.getPath("userData"), "magiorix-renderer-diagnostic.log"), t = a.map((n) => typeof n == "string" ? n : JSON.stringify(n)).join(" ");
     Kt.appendFileSync(e, `[${/* @__PURE__ */ new Date().toISOString()}] ${t}
 `);
   } catch {

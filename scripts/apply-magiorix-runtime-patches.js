@@ -134,9 +134,9 @@ if (!main.includes("s.__pgyLastLoginState")) {
 main = insertAfterOnce(
   main,
   'import $r from "tty";',
-  `const pgyUserDataDir = Oe(ye.getPath("appData"), "pygdata-desktop");
+`const pgyUserDataDir = Oe(ye.getPath("appData"), "magiorix-desktop");
 try {
-  ye.setName("PYGdata"), ye.setPath("userData", pgyUserDataDir);
+  ye.setName("magiorix"), ye.setPath("userData", pgyUserDataDir);
 } catch {
 }`,
   "const pgyUserDataDir =",
@@ -164,7 +164,7 @@ main = insertAfterOnce(
 function pgyMainLogFilePath() {
   const a = Oe(ye.getPath("userData"), "logs");
   Sr(a, { recursive: !0 });
-  return Oe(a, \`pgydata-main-\${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.log\`);
+return Oe(a, \`magiorix-main-\${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.log\`);
 }
 function pgyWriteMainLog(a, e = []) {
   const t = e.length ? \`\${a} \${pgyFormatLogExtra(e)}\` : a;
@@ -659,4 +659,4 @@ main = replaceOnce(
 );
 
 fs.writeFileSync(mainPath, main);
-console.log("Applied PYGdata runtime patches.");
+console.log("Applied magiorix runtime patches.");
