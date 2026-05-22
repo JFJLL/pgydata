@@ -227,9 +227,9 @@ function toExportTemplate(row) {
 function getDefaultClientMenus() {
   return [
     {
-      id: "collect",
-      name: "采集",
-      icon: "solar:cloud-upload-bold-duotone",
+      id: "xhs",
+      name: "小红书",
+      icon: "simple-icons:xiaohongshu",
       children: [
         {
           id: "collect-pgy-blogger",
@@ -244,6 +244,20 @@ function getDefaultClientMenus() {
           icon: "solar:document-text-bold-duotone",
           path: "/database/xhs/pgy-blog",
           component: "pages/database/xhs/pgy-blog/index.tsx",
+        },
+      ],
+    },
+    {
+      id: "douyin",
+      name: "抖音",
+      icon: "simple-icons:tiktok",
+      children: [
+        {
+          id: "douyin-starmap-blogger",
+          name: "星图主页采集",
+          icon: "solar:user-id-bold-duotone",
+          path: "/database/starmap/blogger",
+          component: "pages/database/starmap/blogger/index.tsx",
         },
       ],
     },
