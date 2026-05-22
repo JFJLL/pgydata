@@ -35,10 +35,10 @@
 - 官网/帮助页：使用说明新增“小红书 / 抖音星图 / Mac 说明”子 tab，并加入抖音星图流程截图。
 - 当前 Windows 安装包：
   - `D:\download\pic-vec\pgydata\desktop-versions\windows\1.1.1\magiorix-desktop-1.1.1-windows.exe`
-  - SHA256：`0E984DC68B96427BA9C73C713B4C7969E7CBBF0CF78E409D4D0DE8B48A75C795`
+  - SHA256：`28BC6C9B109D57CD8CAFDFC4FDD7707EF5E262CA7B51D6B95CC607B632240F91`
 - 当前前端资源包：
   - `D:\download\pic-vec\pgydata\desktop-versions\windows\1.1.1\magiorix-desktop-1.1.1-assets.zip`
-  - SHA256：`6B28EBAE0C913370129FD73CA45C28EE47172C47AF232088CA9CFA93D8DD9A71`
+  - SHA256：`05780ED3D406A9DA9F322765A09226DFD1FADD3E6D6BE8265DC2D87A8331747A`
 
 ## 1.1.0 版本记录
 
