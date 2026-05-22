@@ -665,5 +665,28 @@ main = replaceOnce(
   "before quit logging",
 );
 
+main = replaceOnce(
+  main,
+  `}), uh(dt), t.start(), pt.info("采集调度器已初始化");`,
+  `}), uh(dt), pt.info("采集调度器云端同步已关闭");`,
+  "disable scheduler cloud sync startup",
+);
+
+main = replaceOnce(
+  main,
+  `async (e, t) => (Le.get().setAuth(t.baseUrl, t.token), await a.scheduler.recoverInterruptedRunsOnce(), await a.scheduler.forceSync().catch((n) => {
+      pt.warn("setAuth 后立即同步失败:", n);
+    }), { ok: !0 })`,
+  `async (e, t) => (Le.get().setAuth(t.baseUrl, t.token), { ok: !0, disabled: !0 })`,
+  "disable scheduler set-auth sync",
+);
+
+main = replaceOnce(
+  main,
+  `), F.handle(Ne.status, () => a.scheduler.getStatus());`,
+  `), F.handle(Ne.status, () => ({ registeredTasks: [], activeRuns: [], disabled: !0 }));`,
+  "disable scheduler status",
+);
+
 fs.writeFileSync(mainPath, main);
 console.log("Applied magiorix runtime patches.");

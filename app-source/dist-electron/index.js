@@ -23249,7 +23249,7 @@ function ch(a) {
     }
     const n = a.getMainWindow();
     n && !n.isDestroyed() && n.webContents.send(Ne.authExpired);
-  }), uh(dt), t.start(), pt.info("采集调度器已初始化");
+  }), uh(dt), pt.info("采集调度器云端同步已关闭");
 }
 function lh() {
   dt && (pt.info("销毁采集调度器"), Le.get().setAuthExpiredHandler(null), dt.scheduler.stop(), dt.dispatcher.dispose(), ph(), dt = null);
@@ -23257,9 +23257,7 @@ function lh() {
 function uh(a) {
   F.handle(
     vr,
-    async (e, t) => (Le.get().setAuth(t.baseUrl, t.token), await a.scheduler.recoverInterruptedRunsOnce(), await a.scheduler.forceSync().catch((n) => {
-      pt.warn("setAuth 后立即同步失败:", n);
-    }), { ok: !0 })
+    async (e, t) => (Le.get().setAuth(t.baseUrl, t.token), { ok: !0, disabled: !0 })
   ), F.handle(
     Ne.runNow,
     async (e, t) => {
@@ -23280,7 +23278,7 @@ function uh(a) {
       }
       return { ok: !1, error: "需要 runId 或 taskId" };
     }
-  ), F.handle(Ne.status, () => a.scheduler.getStatus());
+  ), F.handle(Ne.status, () => ({ registeredTasks: [], activeRuns: [], disabled: !0 }));
 }
 function ph() {
   F.removeHandler(vr), F.removeHandler(Ne.runNow), F.removeHandler(Ne.cancelRunning), F.removeHandler(Ne.status);
