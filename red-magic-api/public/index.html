@@ -180,6 +180,8 @@
       .ghost {
         display: inline-flex;
         align-items: center;
+        justify-content: center;
+        min-width: 168px;
         height: 52px;
         border: 1px solid #f0c7bf;
         border-radius: 8px;
@@ -187,6 +189,16 @@
         color: #723a34;
         background: rgba(255, 255, 255, 0.62);
         font-weight: 800;
+        transition:
+          transform 0.2s ease,
+          border-color 0.2s ease,
+          background 0.2s ease;
+      }
+
+      .ghost:hover {
+        border-color: rgba(255, 48, 48, 0.42);
+        background: rgba(255, 255, 255, 0.86);
+        transform: translateY(-2px);
       }
 
       .meta {
@@ -444,15 +456,16 @@
       <div id="homeView" class="view" role="tabpanel">
         <section class="hero">
           <div>
-            <div class="eyebrow"><span class="pulse"></span> Windows 桌面端</div>
+            <div class="eyebrow"><span class="pulse"></span> Windows / Mac 桌面端</div>
             <h1>Σ.magiorix</h1>
             <p class="hero-copy">
-              面向小红书蒲公英与抖音星图的数据采集工具。安装后在本地电脑运行，导入模板或手动输入链接即可生成可整理、可导出的 Excel 结果。
+              面向小红书蒲公英与抖音星图的数据采集工具。Windows 版可正式安装使用，Mac 版当前提供同事试用包。
             </p>
             <div class="actions">
-              <a id="downloadBtn" class="download" href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.1-windows.exe">下载安装包</a>
+              <a id="windowsDownloadBtn" class="download" href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.1-windows.exe">下载 Windows 版</a>
+              <a id="macDownloadBtn" class="ghost" href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.0.0-mac.zip">下载 Mac 试用版</a>
             </div>
-            <div id="downloadMeta" class="meta">正在读取最新安装包信息...</div>
+            <div id="downloadMeta" class="meta">正在读取 Windows 最新版本 · Mac 试用版 1.0.0</div>
           </div>
 
           <div class="preview">
@@ -554,7 +567,11 @@
         </div>
 
         <div id="macGuide" class="guide-panel" role="tabpanel" hidden>
-          <div class="guide-placeholder">Mac 版使用说明待补充。</div>
+          <div class="guide-placeholder">
+            Mac 版使用说明待补充。当前可先下载
+            <a href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.0.0-mac.zip">Mac 试用版安装包</a>
+            供同事测试。
+          </div>
         </div>
       </section>
     </main>
@@ -572,7 +589,7 @@
         mac: document.getElementById("macGuide"),
       };
       const meta = document.getElementById("downloadMeta");
-      const btn = document.getElementById("downloadBtn");
+      const windowsBtn = document.getElementById("windowsDownloadBtn");
 
       function activateTab(name) {
         tabs.forEach((tab) => {
@@ -615,11 +632,11 @@
         .then((body) => {
           if (body.code !== 200) throw new Error("desktop download metadata unavailable");
           const data = body.data;
-          btn.href = data.downloadUrl || btn.href;
-          meta.textContent = `最新版本 ${data.version}`;
+          windowsBtn.href = data.downloadUrl || windowsBtn.href;
+          meta.textContent = `Windows 最新版本 ${data.version} · Mac 试用版 1.0.0`;
         })
         .catch(() => {
-          meta.textContent = "最新版本 1.1.1";
+          meta.textContent = "Windows 最新版本 1.1.1 · Mac 试用版 1.0.0";
         });
     </script>
   </body>
