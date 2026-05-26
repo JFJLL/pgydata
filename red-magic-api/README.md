@@ -1,6 +1,6 @@
 # red-magic-api
 
-这是一个可直接部署到服务器的最小后端目录，用于兼容 magiorix 客户端切换到 `https://xhs.red-magic.cn` 后的基础接口。
+这是一个可直接部署到服务器的最小后端目录，用于兼容 magiorix 客户端切换到 `https://magiorix.red-magic.cn` 后的基础接口。
 
 技术栈：Node.js + Express + SQLite。无需 Redis、MySQL、Docker。
 
@@ -63,7 +63,7 @@ pm2 startup
 
 ```env
 PORT=3050
-BASE_URL=https://xhs.red-magic.cn
+BASE_URL=https://magiorix.red-magic.cn
 DEFAULT_GIFT_BALANCE=100
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=redmagic2026
@@ -91,7 +91,7 @@ logs/server-YYYY-MM-DD.log
 后端内置了一个独立管理页：
 
 ```text
-https://xhs.red-magic.cn/admin
+https://magiorix.red-magic.cn/admin
 ```
 
 管理员账号和密码由 `.env` 配置：
@@ -108,12 +108,12 @@ ADMIN_PASSWORD=请改成强密码
 参考 `deploy-nginx.conf.example`，复制到服务器 Nginx 配置目录，例如：
 
 ```bash
-sudo cp deploy-nginx.conf.example /etc/nginx/conf.d/xhs.red-magic.cn.conf
+sudo cp deploy-nginx.conf.example /etc/nginx/conf.d/magiorix.red-magic.cn.conf
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-配置会把 `xhs.red-magic.cn` 的全部请求代理到：
+配置会把 `magiorix.red-magic.cn` 的全部请求代理到：
 
 ```text
 http://127.0.0.1:3050
@@ -140,7 +140,7 @@ Express 已经挂载：
 
 ```bash
 sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d xhs.red-magic.cn
+sudo certbot --nginx -d magiorix.red-magic.cn
 sudo certbot renew --dry-run
 ```
 
@@ -157,7 +157,7 @@ public/assets/desktop/1.1.1/assets.zip
 部署后应能通过这个地址访问：
 
 ```text
-https://xhs.red-magic.cn/assets/desktop/1.1.1/assets.zip
+https://magiorix.red-magic.cn/assets/desktop/1.1.1/assets.zip
 ```
 
 接口 `GET /api/frontend-assets/latest/desktop` 会自动读取这个文件并计算 `size` 和 `sha256`。

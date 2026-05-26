@@ -22,7 +22,7 @@ magiorix 项目工作目录
 - 内容可以是整行 Cookie、JSON 对象 Cookie/cookie 字段，或 [{name,value}] Cookie 数组
 
 当前改动：
-- 客户端服务器地址改为 https://xhs.red-magic.cn
+- 客户端服务器地址改为 https://magiorix.red-magic.cn
 - 手机号注册/登录不再依赖验证码
 - 登录后默认进入蒲公英博主采集页面
 - 后端提供 /admin 管理后台，可给用户加积分

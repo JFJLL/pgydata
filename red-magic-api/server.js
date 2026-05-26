@@ -9,7 +9,7 @@ const sqlite3 = require("sqlite3").verbose();
 
 const app = express();
 const PORT = Number(process.env.PORT || 3050);
-const BASE_URL = (process.env.BASE_URL || "https://xhs.red-magic.cn").replace(/\/$/, "");
+const BASE_URL = (process.env.BASE_URL || "https://magiorix.red-magic.cn").replace(/\/$/, "");
 const DEFAULT_GIFT_BALANCE = Number(process.env.DEFAULT_GIFT_BALANCE || 100);
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "red-magic-api.sqlite");

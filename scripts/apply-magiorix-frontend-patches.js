@@ -9,6 +9,8 @@ const legacyChineseName = ["易美", "数据抓取"].join("");
 const legacyExeName = ["PYG", "data"].join("");
 const legacyVersion = ["1.0", "4"].join(".");
 const legacyPublisher = ["易美传播", "Emagic"].join(" ");
+const serverBaseUrl = "https://magiorix.red-magic.cn";
+const previousServerBaseUrl = ["https://xhs", "red-magic.cn"].join(".");
 
 function replaceOnce(filePath, from, to, label) {
   let source = fs.readFileSync(filePath, "utf8");
@@ -360,6 +362,7 @@ replaceOnce(
 );
 
 replaceAllIfExists(mainBundle, '"1.0.0"', `"${assetVersion}"`);
+replaceAllIfExists(mainBundle, previousServerBaseUrl, serverBaseUrl);
 
 for (const entry of fs.readdirSync(assetsDir)) {
   if (!/\.(js|css|html|svg)$/i.test(entry)) continue;

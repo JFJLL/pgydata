@@ -27,7 +27,7 @@ let main = fs.readFileSync(mainPath, "utf8");
 let preload = fs.readFileSync(preloadPath, "utf8");
 
 const legacyHost = `https://${"api"}.red-magic.cn`;
-main = main.split(legacyHost).join("https://xhs.red-magic.cn");
+main = main.split(legacyHost).join("https://magiorix.red-magic.cn");
 
 preload = replaceOnce(
   preload,

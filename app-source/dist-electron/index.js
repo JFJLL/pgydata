@@ -341,7 +341,7 @@ function Qr(a) {
     Rs.info("用户请求重试"), a();
   });
 }
-const lo = "https://xhs.red-magic.cn";
+const lo = "https://magiorix.red-magic.cn";
 function uo(a, e, t, n = 5) {
   (a.startsWith("https") ? eo : to)(a, (i) => {
     if (i.statusCode && i.statusCode >= 300 && i.statusCode < 400 && i.headers.location) {

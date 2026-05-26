@@ -1,7 +1,7 @@
 {
   "name": "red-magic-api",
   "version": "1.1.1",
-  "description": "Minimal Express + SQLite backend for xhs.red-magic.cn compatibility.",
+  "description": "Minimal Express + SQLite backend for magiorix.red-magic.cn compatibility.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
