@@ -398,6 +398,29 @@
         font-weight: 800;
       }
 
+      .guide-placeholder h3 {
+        margin: 0 0 18px;
+        color: #1f1513;
+        font-size: 22px;
+      }
+
+      .guide-placeholder p {
+        margin: 18px 0 8px;
+        color: #1f1513;
+      }
+
+      .guide-placeholder ol,
+      .guide-placeholder ul {
+        margin: 0;
+        padding-left: 22px;
+        font-weight: 700;
+        line-height: 1.9;
+      }
+
+      .guide-placeholder li + li {
+        margin-top: 8px;
+      }
+
       @keyframes pulse {
         70% {
           box-shadow: 0 0 0 10px rgba(255, 48, 48, 0);
@@ -463,7 +486,7 @@
             </p>
             <div class="actions">
               <a id="windowsDownloadBtn" class="download" href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.1-windows.exe">下载 Windows 版</a>
-              <a id="macDownloadBtn" class="ghost" href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.0.0-mac.zip">下载 Mac 试用版</a>
+              <a id="macDownloadBtn" class="ghost" href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.0.0-mac.dmg">下载 Mac 试用版</a>
             </div>
             <div id="downloadMeta" class="meta">正在读取 Windows 最新版本 · Mac 试用版 1.0.0</div>
           </div>
@@ -568,9 +591,21 @@
 
         <div id="macGuide" class="guide-panel" role="tabpanel" hidden>
           <div class="guide-placeholder">
-            Mac 版使用说明待补充。当前可先下载
-            <a href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.0.0-mac.zip">Mac 试用版安装包</a>
-            供同事测试。
+            <h3>Mac 试用版安装说明</h3>
+            <ol>
+              <li>下载 <a href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.0.0-mac.dmg">magiorix.dmg</a> 后，双击打开安装包。</li>
+              <li>在打开的窗口中，双击 first-open.command。</li>
+              <li>如果系统提示“Apple 无法验证 first-open.command 是否包含恶意软件”，请打开：系统设置 -> 隐私与安全性。</li>
+              <li>在页面下方找到关于 first-open.command 被阻止的提示，点击“仍要打开”。</li>
+              <li>回到安装包窗口，再次双击 first-open.command。</li>
+              <li>脚本会自动将软件安装到“应用程序”目录，并启动 magiorix。</li>
+            </ol>
+            <p>补充说明：</p>
+            <ul>
+              <li>这是内部测试版，首次打开需要手动允许一次。</li>
+              <li>安装完成后，之后可直接从“应用程序”中打开 magiorix。</li>
+              <li>如果系统仍然拦截，请确认是在“隐私与安全性”中点击了“仍要打开”。</li>
+            </ul>
           </div>
         </div>
       </section>
