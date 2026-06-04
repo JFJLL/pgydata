@@ -1,14 +1,14 @@
 # 1. 强制 HTTP 跳 HTTPS
 server {
     listen 80;
-    server_name magiorix.red-magic.cn;
+    server_name magiorix.red-magic.cn xhs.red-magic.cn;
     return 301 https://$host$request_uri;
 }
 
 # 2. HTTPS 核心服务
 server {
     listen 443 ssl;
-    server_name magiorix.red-magic.cn;
+    server_name magiorix.red-magic.cn xhs.red-magic.cn;
 
     # 复用通配符证书
     ssl_certificate     /etc/nginx/ssl/red-magic.cn/fullchain.pem;

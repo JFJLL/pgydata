@@ -18111,6 +18111,18 @@ function pgyTopPercentRows(a, e = 7) {
     value: pgyPct(t.percent)
   })).filter((t) => t.name && t.value > 0).sort((t, n) => n.value - t.value).slice(0, e) : [];
 }
+function pgyAgeSortValue(a) {
+  const e = String(a ?? "").trim(), t = e.match(/\d+(?:\.\d+)?/);
+  if (!t) return Number.MAX_SAFE_INTEGER;
+  const n = Number(t[0]);
+  return /[<≤]/.test(e) || /以下|以内/.test(e) ? n - 0.5 : n;
+}
+function pgyAgeRows(a) {
+  return Array.isArray(a) ? a.map((t) => ({
+    name: String(t.group ?? t.name ?? ""),
+    value: pgyPct(t.percent)
+  })).filter((t) => t.name && t.value > 0).sort((t, n) => pgyAgeSortValue(t.name) - pgyAgeSortValue(n.name)) : [];
+}
 function pgyBarChartSvg(a, e) {
   const t = 640, n = 520, s = 138, i = 34, o = 72, r = 44, c = Math.max(1, ...a.map((m) => m.value)), u = Math.max(34, (n - i - r) / Math.max(1, a.length)), l = t - s - o, p = a.map((m, f) => {
     const g = i + f * u + u * 0.24, v = Math.max(2, m.value / c * l), y = g + u * 0.24;
@@ -18150,7 +18162,7 @@ async function buildPgyBloggerChartFields(a, e, t, n) {
     o.length && i.push({ field: "fansCityChart", type: "bar", title: "粉丝城市分布", rows: o, output: pgyChartFile("city", a, "city") });
   }
   if (pgyHasSelectedField(n, PYG_CHART_FIELDS.age)) {
-    const o = pgyTopPercentRows(e.ages, 8);
+    const o = pgyAgeRows(e.ages);
     o.length && i.push({ field: "fansAgeChart", type: "bar", title: "粉丝年龄分布", rows: o, output: pgyChartFile("age", a, "age") });
   }
   if (pgyHasSelectedField(n, PYG_CHART_FIELDS.gender)) {

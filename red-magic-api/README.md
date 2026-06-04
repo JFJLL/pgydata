@@ -2,6 +2,8 @@
 
 这是一个可直接部署到服务器的最小后端目录，用于兼容 magiorix 客户端切换到 `https://magiorix.red-magic.cn` 后的基础接口。
 
+当前部署建议同时保留 `https://xhs.red-magic.cn` 入口，供尚未同步 Windows 域名修改的 mac 客户端继续使用；两个域名都代理到同一个 Node 服务。
+
 技术栈：Node.js + Express + SQLite。无需 Redis、MySQL、Docker。
 
 ## 本地启动
@@ -113,7 +115,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-配置会把 `magiorix.red-magic.cn` 的全部请求代理到：
+配置会把 `magiorix.red-magic.cn` 和 `xhs.red-magic.cn` 的全部请求代理到：
 
 ```text
 http://127.0.0.1:3050
@@ -140,11 +142,11 @@ Express 已经挂载：
 
 ```bash
 sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d magiorix.red-magic.cn
+sudo certbot --nginx -d magiorix.red-magic.cn -d xhs.red-magic.cn
 sudo certbot renew --dry-run
 ```
 
-如果你使用的是通配符证书，把证书文件放到示例配置中的路径即可。
+如果你使用的是通配符证书，把证书文件放到示例配置中的路径即可。证书必须覆盖 `magiorix.red-magic.cn` 和 `xhs.red-magic.cn`。
 
 ## assets.zip 放置位置
 
@@ -158,6 +160,12 @@ public/assets/desktop/1.1.1/assets.zip
 
 ```text
 https://magiorix.red-magic.cn/assets/desktop/1.1.1/assets.zip
+```
+
+兼容期内旧域名也应能访问同一资源：
+
+```text
+https://xhs.red-magic.cn/assets/desktop/1.1.1/assets.zip
 ```
 
 接口 `GET /api/frontend-assets/latest/desktop` 会自动读取这个文件并计算 `size` 和 `sha256`。
