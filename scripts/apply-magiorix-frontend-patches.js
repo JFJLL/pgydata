@@ -474,6 +474,22 @@ for (const entry of fs.readdirSync(assetsDir)) {
 }
 
 replaceAllIfExists(path.join(assetsRoot, "index.html"), legacyChineseName, "magiorix");
+
+const assistantSource = path.join(__dirname, "magiorix-ops-assistant.js");
+const assistantFileName = "magiorix-ops-assistant.js";
+const assistantTarget = path.join(assetsRoot, assistantFileName);
+fs.copyFileSync(assistantSource, assistantTarget);
+
+const indexPath = path.join(assetsRoot, "index.html");
+let indexHtml = fs.readFileSync(indexPath, "utf8");
+if (!indexHtml.includes(assistantFileName)) {
+  indexHtml = indexHtml.replace(
+    "</body>",
+    `    <script src="./${assistantFileName}"></script>\n  </body>`,
+  );
+  fs.writeFileSync(indexPath, indexHtml);
+}
+
 fs.writeFileSync(
   path.join(assetsRoot, "version.json"),
   `${JSON.stringify({ version: assetVersion }, null, 2)}\n`,

@@ -16629,6 +16629,15 @@ class Xd {
       });
       return;
     }
+    if (!Array.isArray(i) || i.length === 0) {
+      this.sendToRenderer(W.task.error, {
+        taskId: t,
+        message: "没有可采集的链接",
+        errorCategory: "invalid-input",
+        errorCategoryLabel: "链接无效"
+      });
+      return;
+    }
     const existingTask = Array.from(this.runningTasks.values()).find((m) => m.pluginId === n && !m.cancelled);
     if (existingTask) {
       this.sendToRenderer(W.task.error, {
@@ -16651,9 +16660,39 @@ class Xd {
       startTime: Date.now(),
       cancelled: !1,
       paused: !1,
-      accountSource: c
+      accountSource: c,
+      pace: this.getPersonalTaskPace(e)
     };
-    if (this.runningTasks.set(t, l), c === "enterprise") {
+    if (this.runningTasks.set(t, l), c !== "enterprise") {
+      try {
+        const m = await this.withTimeout(
+          u.checkAuth(),
+          Wd,
+          `授权检测超时: ${n}`
+        );
+        if (!m.authorized) {
+          this.sendToRenderer(W.task.error, {
+            taskId: t,
+            message: `${u.name} 授权不可用，请重新授权后再开始采集`,
+            errorCategory: "auth",
+            errorCategoryLabel: "授权不可用"
+          });
+          return;
+        }
+      } catch (m) {
+        this.sendToRenderer(W.task.error, {
+          taskId: t,
+          message: m instanceof Error ? m.message : String(m),
+          errorCategory: "auth",
+          errorCategoryLabel: "授权检测失败"
+        });
+        return;
+      } finally {
+        this.runningTasks.has(t) && c !== "enterprise" && l.current === 0 && l.successCount === 0 && l.errorCount === 0 && this.runningTasks.delete(t);
+      }
+      this.runningTasks.set(t, l);
+    }
+    if (c === "enterprise") {
       try {
         await this.runEnterpriseTask(l, u, e.pacePolicyId ?? null);
       } catch (m) {
@@ -16713,6 +16752,7 @@ class Xd {
           }
           y.status = "error", y.data = null, y.errorMessage = "安全验证超时或用户取消验证";
         }
+        const b = this.classifyFailure(y.errorCode, y.errorMessage, y.errorDetails);
         y.status === "success" ? l.successCount++ : l.errorCount++, this.sendToRenderer(W.task.itemResult, {
           taskId: t,
           index: m,
@@ -16720,10 +16760,13 @@ class Xd {
           data: y.data,
           errorMessage: y.errorMessage,
           errorCode: y.errorCode,
-          errorDetails: y.errorDetails
+          errorDetails: y.errorDetails,
+          errorCategory: b.code,
+          errorCategoryLabel: b.label
         });
         ue.info(`[task=${t}] 完成采集第 ${m + 1}/${i.length} 条 plugin=${n} status=${y.status} errorCode=${y.errorCode ?? "NONE"} success=${l.successCount} error=${l.errorCount}`);
       } catch (v) {
+        const y = this.classifyFailure("UNKNOWN_ERROR", v instanceof Error ? v.message : String(v));
         ue.error(`[task=${t}] 采集第 ${m + 1}/${i.length} 条异常 plugin=${n} url=${String(f).slice(0, 180)}`, v);
         l.errorCount++, this.sendToRenderer(W.task.itemResult, {
           taskId: t,
@@ -16731,7 +16774,9 @@ class Xd {
           status: "error",
           data: null,
           errorMessage: v instanceof Error ? v.message : String(v),
-          errorCode: "UNKNOWN_ERROR"
+          errorCode: "UNKNOWN_ERROR",
+          errorCategory: y.code,
+          errorCategoryLabel: y.label
         });
       }
       const g = Math.round(l.current / l.total * 100);
@@ -16740,7 +16785,20 @@ class Xd {
         current: l.current,
         total: l.total,
         percent: g
-      }), m < i.length - 1 && !l.cancelled && await this.delay(_i);
+      });
+      if (m < i.length - 1 && !l.cancelled) {
+        const v = l.pace, y = v.batchSize > 0 && (m + 1) % v.batchSize === 0, b = y ? v.batchRestMs : v.itemDelayMs;
+        y && this.sendToRenderer(W.task.progress, {
+          taskId: t,
+          current: l.current,
+          total: l.total,
+          percent: g,
+          batchResting: !0,
+          batchRestMs: b,
+          paceMode: v.mode
+        });
+        b > 0 && await this.delay(b);
+      }
     }
     this.scrapeWindowManager.closeWindow(p);
     const h = Date.now() - l.startTime;
@@ -16990,6 +17048,37 @@ class Xd {
   sendToRenderer(e, t) {
     const n = this.getMainWindow();
     n && !n.isDestroyed() && n.webContents.send(e, t);
+  }
+  getPersonalTaskPace(e) {
+    const t = {
+      stable: { itemDelayMs: 5e3, batchSize: 20, batchRestMs: 12e4 },
+      balanced: { itemDelayMs: 2500, batchSize: 50, batchRestMs: 6e4 },
+      fast: { itemDelayMs: 800, batchSize: 100, batchRestMs: 15e3 }
+    }, n = typeof e.paceMode == "string" && t[e.paceMode] ? e.paceMode : "balanced", s = t[n], i = Number(e.batchSize), o = Number(e.batchRestMs), r = Number(e.itemDelayMs);
+    return {
+      mode: n,
+      itemDelayMs: Number.isFinite(r) && r >= 0 ? Math.max(0, Math.floor(r)) : s.itemDelayMs,
+      batchSize: Number.isFinite(i) && i > 0 ? Math.max(1, Math.floor(i)) : s.batchSize,
+      batchRestMs: Number.isFinite(o) && o >= 0 ? Math.max(0, Math.floor(o)) : s.batchRestMs
+    };
+  }
+  classifyFailure(e, t = "", n = null) {
+    const s = String(e || "").toUpperCase(), i = `${s} ${String(t || "")} ${JSON.stringify(n || {})}`.toLowerCase();
+    if (s.includes("INVALID") || i.includes("链接") && i.includes("无效"))
+      return { code: "invalid-input", label: "链接无效" };
+    if (s.includes("NOT_FOUND") || i.includes("不存在") || i.includes("未找到"))
+      return { code: "not-found", label: "目标不存在" };
+    if (s.includes("AUTH") || s.includes("UNAUTHORIZED") || i.includes("401") || i.includes("登录") || i.includes("授权"))
+      return { code: "auth", label: "授权失效" };
+    if (s.includes("CAPTCHA") || i.includes("验证码") || i.includes("verify") || i.includes("安全验证"))
+      return { code: "captcha", label: "验证码/安全验证" };
+    if (s.includes("TIMEOUT") || i.includes("timeout") || i.includes("超时"))
+      return { code: "timeout", label: "网络或平台超时" };
+    if (s.includes("RISK") || i.includes("风控") || i.includes("risk") || i.includes("461") || i.includes("2155") || i.includes("2154"))
+      return { code: "risk", label: "平台风控" };
+    if (s.includes("UNSUPPORTED"))
+      return { code: "unsupported", label: "暂不支持" };
+    return { code: "unknown", label: "未知错误" };
   }
   delay(e) {
     return new Promise((t) => setTimeout(t, e));
