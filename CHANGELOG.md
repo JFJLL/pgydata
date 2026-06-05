@@ -8,15 +8,16 @@
 - 调度优化：企业采集节奏合并策略补齐 `scrapesPerDay`，任务启动前看到的剩余额度与实际运行口径保持一致。
 - 新增：普通采集启动前由主进程执行授权可用性检查，授权不可用时直接给出“授权不可用 / 授权检测失败”分类。
 - 新增：采集助手面板，支持蒲公英、星图、抖音授权状态检测、采集日志查看、失败项归类和失败项一键重跑。
+- 优化：采集助手不再显示在登录页；右下角原任务小球与采集助手合并为一个入口，展开后按“采集助手 / 当前任务 / 历史记录”三 tab 展示。
 - 新增：普通采集支持稳定 / 均衡 / 快速三档节奏，按批次自动休息，减少大批量任务连续请求压力。
 - 新增：普通采集失败结果增加分类字段，覆盖链接无效、目标不存在、授权失效、验证码/安全验证、平台风控、超时和未知错误。
 - 发布脚本：同步生成 `1.1.2` 前端资源目录、完整性清单、`assets.zip` 和 Windows 安装包。
 - Windows 安装包：
   - 路径：`D:\download\pic-vec\pgydata\desktop-versions\windows\1.1.2\magiorix-desktop-1.1.2-windows.exe`
-  - SHA256：`80AD8C8C8418F9228F2C2DA3926097D088BA5D4D209BDC1A2E6A7BF1E221FD45`
+  - SHA256：`03AD0584C6D2E3EF1CF118964DC5B2BCBB7BCD68FE82DF0E54003C0B661EDEA3`
 - 前端资源包：
   - 路径：`D:\download\pic-vec\pgydata\desktop-versions\windows\1.1.2\magiorix-desktop-1.1.2-assets.zip`
-  - SHA256：`8776B3B6CC3C2D63C89F22AED87922D824109B402B5F77E96CE20C70D19A607F`
+  - SHA256：`2DB3FF832FE2B71280D6F8B1BF21BEE558297E38E15C81864EB0F731A863C4D8`
 
 ## 1.1.1
 
