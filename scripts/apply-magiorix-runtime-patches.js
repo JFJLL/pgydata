@@ -17,6 +17,11 @@ function replaceOnce(source, from, to, label) {
   return source.replace(from, to);
 }
 
+function replaceAllIfExists(source, from, to) {
+  if (!source.includes(from)) return source;
+  return source.split(from).join(to);
+}
+
 function insertAfterOnce(source, marker, insert, already, label) {
   if (source.includes(already)) return source;
   if (!source.includes(marker)) throw new Error(`Missing patch marker: ${label}`);
@@ -1166,6 +1171,12 @@ main = replaceOnce(
   `), F.handle(Ne.status, () => a.scheduler.getStatus());`,
   `), F.handle(Ne.status, () => ({ registeredTasks: [], activeRuns: [], disabled: !0 }));`,
   "disable scheduler status",
+);
+
+main = replaceAllIfExists(
+  main,
+  'const { taskId: t, pluginId: n, taskType: s, urls: i, fileName: o } = e, r = e.fields && e.fields.length > 0 ? e.fields : null, c = e.accountSource ?? "personal", u = this.plugins.get(n);',
+  'const { taskId: t, pluginId: n, taskType: s, urls: i, fileName: o } = e, r = e.fields && e.fields.length > 0 ? e.fields : null, c = "personal", u = this.plugins.get(n);',
 );
 
 fs.writeFileSync(mainPath, main);

@@ -9,7 +9,6 @@
   const PLUGINS = [
     { id: "pgy", label: "蒲公英" },
     { id: "starmap", label: "星图" },
-    { id: "douyin", label: "抖音" },
   ];
 
   const state = loadState();
@@ -72,6 +71,18 @@
 
   function errorMessage(error) {
     return error instanceof Error ? error.message : String(error || "");
+  }
+
+  function isDarkTheme() {
+    const candidates = [document.documentElement, document.body].filter(Boolean);
+    if (candidates.some((node) => /dark/i.test(`${node.dataset?.theme || ""} ${node.dataset?.colorScheme || ""} ${node.className || ""}`))) {
+      return true;
+    }
+    const bg = getComputedStyle(document.body || document.documentElement).backgroundColor || "";
+    const match = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+    if (!match) return false;
+    const [, r, g, b] = match.map(Number);
+    return r * 0.299 + g * 0.587 + b * 0.114 < 96;
   }
 
   function escapeHtml(value) {
@@ -153,10 +164,6 @@
       return;
     }
     try {
-      if (payload.accountSource === "enterprise") {
-        log("info", "企业账号池任务将由主进程检查可用账号和额度");
-        return;
-      }
       const result = await window.bridge.scraper.auth.check(payload.pluginId);
       runtime.auth.set(payload.pluginId, result?.authorized ? "authorized" : "unauthorized");
       log(result?.authorized ? "success" : "warn", `${pluginLabel(payload.pluginId)}授权${result?.authorized ? "可用" : "不可用"}`);
@@ -289,33 +296,35 @@
       const style = document.createElement("style");
       style.setAttribute("data-moa-style", "true");
       style.textContent = `
-      #magiorix-ops-assistant{position:fixed;right:24px;bottom:24px;z-index:1600;font:13px/1.5 "Microsoft YaHei",system-ui,sans-serif;color:#17202a;--moa-red:#ff2a3b;--moa-ink:#17202a;--moa-muted:#7b8794;--moa-line:rgba(145,158,171,.22)}
+      #magiorix-ops-assistant{position:fixed;right:24px;bottom:24px;z-index:1600;font:13px/1.5 "Microsoft YaHei",system-ui,sans-serif;color:var(--moa-ink);--moa-red:#ff2a3b;--moa-ink:var(--mui-palette-text-primary,#17202a);--moa-muted:var(--mui-palette-text-secondary,#7b8794);--moa-line:var(--mui-palette-divider,rgba(145,158,171,.22));--moa-bg:var(--mui-palette-background-paper,#fff);--moa-soft:var(--mui-palette-background-default,#fbfcfd);--moa-hover:var(--mui-palette-action-hover,#f2f4f7);--moa-shadow:rgba(23,32,42,.2)}
+      #magiorix-ops-assistant.moa-dark{--moa-ink:#f3f6f8;--moa-muted:#9aa6b2;--moa-line:rgba(145,158,171,.24);--moa-bg:#151c24;--moa-soft:#10161d;--moa-hover:rgba(145,158,171,.12);--moa-shadow:rgba(0,0,0,.48)}
       #magiorix-ops-assistant button,#magiorix-ops-assistant select{font:inherit}
-      .moa-toggle{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,42,59,.18);border-radius:999px;padding:10px 16px;background:#fff;color:var(--moa-ink);box-shadow:0 14px 34px rgba(23,32,42,.16);cursor:pointer;font-weight:700;transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}
-      .moa-toggle:hover{transform:translateY(-1px);box-shadow:0 18px 42px rgba(23,32,42,.2);border-color:rgba(255,42,59,.38)}
+      .moa-toggle{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,42,59,.22);border-radius:999px;padding:10px 16px;background:var(--moa-bg);color:var(--moa-ink);box-shadow:0 14px 34px var(--moa-shadow);cursor:pointer;font-weight:700;transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}
+      .moa-toggle:hover{transform:translateY(-1px);box-shadow:0 18px 42px var(--moa-shadow);border-color:rgba(255,42,59,.42)}
       .moa-panel.open + .moa-toggle{display:none}
       .moa-toggle-icon{width:24px;height:24px;border-radius:8px;background:var(--moa-red);display:inline-flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 8px 18px rgba(255,42,59,.28)}
-      .moa-panel{display:none;width:440px;max-width:calc(100vw - 32px);height:min(640px,calc(100vh - 96px));overflow:hidden;background:#fff;border:1px solid var(--moa-line);border-radius:10px;box-shadow:0 22px 58px rgba(23,32,42,.2)}
+      .moa-panel{display:none;width:440px;max-width:calc(100vw - 32px);height:min(640px,calc(100vh - 96px));overflow:hidden;background:var(--moa-bg);border:1px solid var(--moa-line);border-radius:10px;box-shadow:0 22px 58px var(--moa-shadow)}
       .moa-panel.open{display:block}
       .moa-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--moa-line)}
       .moa-head-title{font-weight:800;font-size:15px;display:flex;align-items:center;gap:8px}
-      .moa-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:10px 12px;border-bottom:1px solid var(--moa-line);background:#fbfcfd}
-      .moa-tab{border:0;background:transparent;border-radius:8px;padding:8px 8px;color:#637381;cursor:pointer;font-weight:700}
-      .moa-tab.active{background:#fff;color:var(--moa-red);box-shadow:0 1px 6px rgba(23,32,42,.08)}
+      .moa-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:10px 12px;border-bottom:1px solid var(--moa-line);background:var(--moa-soft)}
+      .moa-tab{border:0;background:transparent;border-radius:8px;padding:8px 8px;color:var(--moa-muted);cursor:pointer;font-weight:700}
+      .moa-tab.active{background:var(--moa-bg);color:var(--moa-red);box-shadow:0 1px 6px var(--moa-shadow)}
       .moa-body{padding:12px;overflow:auto;height:calc(100% - 104px)}
       .moa-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
-      .moa-card{border:1px solid var(--moa-line);border-radius:8px;padding:12px;margin-bottom:10px;background:#fff}
-      .moa-card.soft{background:#fbfcfd}
-      .moa-title{font-size:12px;color:#637381;margin-bottom:7px;font-weight:700}
-      .moa-btn{border:1px solid rgba(145,158,171,.28);background:#fff;border-radius:7px;padding:6px 10px;cursor:pointer;color:var(--moa-ink)}
+      .moa-card{border:1px solid var(--moa-line);border-radius:8px;padding:12px;margin-bottom:10px;background:var(--moa-bg)}
+      .moa-card.soft{background:var(--moa-soft)}
+      .moa-title{font-size:12px;color:var(--moa-muted);margin-bottom:7px;font-weight:700}
+      .moa-btn{border:1px solid var(--moa-line);background:var(--moa-bg);border-radius:7px;padding:6px 10px;cursor:pointer;color:var(--moa-ink)}
       .moa-btn.primary{background:var(--moa-red);color:#fff;border-color:var(--moa-red);box-shadow:0 8px 18px rgba(255,42,59,.18)}
       .moa-btn:disabled{opacity:.45;cursor:not-allowed}
-      .moa-pill{display:inline-flex;align-items:center;border-radius:999px;padding:3px 9px;background:#f2f4f7;color:#344054;font-size:12px}
+      .moa-pill{display:inline-flex;align-items:center;border-radius:999px;padding:3px 9px;background:var(--moa-hover);color:var(--moa-ink);font-size:12px}
       .moa-pill.red{background:#fff1f3;color:var(--moa-red)}
-      .moa-select{border:1px solid rgba(145,158,171,.32);border-radius:7px;padding:6px 10px;background:#fff}
+      #magiorix-ops-assistant.moa-dark .moa-pill.red{background:rgba(255,42,59,.16)}
+      .moa-select{border:1px solid var(--moa-line);border-radius:7px;padding:6px 10px;background:var(--moa-bg);color:var(--moa-ink)}
       .moa-log,.moa-history{border-top:1px solid var(--moa-line);padding:9px 0}
       .moa-log:first-child,.moa-history:first-child{border-top:0}
-      .moa-log-time,.moa-sub{font-size:11px;color:#8a96a3}
+      .moa-log-time,.moa-sub{font-size:11px;color:var(--moa-muted)}
       .moa-log.error{color:#b42318}.moa-log.warn{color:#b54708}.moa-log.success{color:#067647}
       .moa-fail{font-size:12px;border-top:1px dashed var(--moa-line);padding:7px 0}
     `;
@@ -341,6 +350,7 @@
     `;
     document.body.appendChild(root);
     runtime.root = root;
+    runtime.root.classList.toggle("moa-dark", isDarkTheme());
     runtime.panel = root.querySelector(".moa-panel");
     runtime.tabs = root.querySelector("[data-tabs]");
     runtime.assistantBox = root.querySelector('[data-tab-panel="assistant"]');
@@ -365,6 +375,7 @@
       return;
     }
     if (!ensureUi()) return;
+    runtime.root.classList.toggle("moa-dark", isDarkTheme());
     runtime.panel.classList.toggle("open", state.open);
     renderTabs();
     renderAssistant();

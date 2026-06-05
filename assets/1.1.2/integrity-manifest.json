@@ -1,7 +1,7 @@
 {
   "version": "1.1.2",
   "algorithm": "sha256",
-  "generatedAt": "2026-06-05T04:27:13.0520545Z",
+  "generatedAt": "2026-06-05T07:04:01.7950308Z",
   "files": [
     {
       "path": "assets/admin-finance-Csc-tqD6.js",
@@ -135,8 +135,8 @@
     },
     {
       "path": "assets/index-Ct9D5phI.js",
-      "size": 17987,
-      "sha256": "eff0eaccb0f694666be364f9b913a05f7d2e805c765919d8d4566abb2b7fe3d6"
+      "size": 19093,
+      "sha256": "846c6951b99ac6cbe8f20ab65cf4a91e88c2015283a14b3d32e8446b0ac8e4ab"
     },
     {
       "path": "assets/index-Cvnr-Fb8.js",
@@ -220,8 +220,8 @@
     },
     {
       "path": "assets/PgyTaskPanel-B4ZGEmDG.js",
-      "size": 18872,
-      "sha256": "040ae6c805afa92aab5ecf22d9781e51938686a36aa39c0b69c03c6b6f8c2e7c"
+      "size": 18797,
+      "sha256": "8b174adf5126035a0a1ecbb9a1d1276d9127069074a40271ddf3ed5657e2a7c7"
     },
     {
       "path": "assets/PlatformPolicyService-DphwwuV1.js",
@@ -300,8 +300,8 @@
     },
     {
       "path": "magiorix-ops-assistant.js",
-      "size": 22413,
-      "sha256": "2d4ddcc416fd45882d9de59e93db31b851bfcfc7eabd699b0d3dc82daabb4654"
+      "size": 23605,
+      "sha256": "b482ca05f9f3d77d59bcd2b4a5adedff57ad0caac2af6b402fbe78fc7a83ff4d"
     }
   ]
 }

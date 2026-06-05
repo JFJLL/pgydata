@@ -334,11 +334,10 @@ replaceOnce(
   "starmap manual input placeholder copy",
 );
 
-replaceOnce(
+replaceAllIfExists(
   starmapTaskPanelBundle,
   'children:"手动输入链接"}),e.jsx("textarea",{value:manualText',
   'children:"手动输入链接"}),e.jsx(g,{variant:"body2",color:"text.secondary",sx:{mb:1},children:manualHint}),e.jsx("textarea",{value:manualText',
-  "starmap manual input support hint",
 );
 
 replaceOnce(
@@ -347,6 +346,50 @@ replaceOnce(
   'placeholder:manualPlaceholder',
   "starmap manual input dynamic placeholder",
 );
+
+replaceOnce(
+  starmapTaskPanelBundle,
+  'V=a.useCallback(async s=>{const c=new FileReader;c.onload=async u=>{var se;if(!((se=u.target)!=null&&se.result))return;const N=new Uint8Array(u.target.result),B=Ye(N,{type:"array"}),Se=B.Sheets[B.SheetNames[0]],Z=Xe.sheet_to_json(Se,{header:1}),Ie=Z.length,ee=Z.slice(1).map(k=>Array.isArray(k)?k[0]:k).filter(k=>typeof k=="string"&&k.trim().length>0).map(k=>k.trim());if(ee.length===0)return;const te=et(ee),F=te.validUrls;if(F.length>0&&!await C(F.length)){T(F.length),D(!0);return}const Ae={file:s,urls:F,totalRows:Ie,invalidUrls:te.invalidUrls,selectedFields:null},ne=F.length>0?He(d,o):null;E(Ae),ne?($(ne),G(!0)):O(!0)},c.readAsArrayBuffer(s)},[C,o])',
+  'V=a.useCallback(async s=>{const c=new FileReader;c.onerror=()=>setManualError("xlsx 读取失败");c.onload=async u=>{var se;if(!((se=u.target)!=null&&se.result))return;try{const N=new Uint8Array(u.target.result),B=Ye(N,{type:"array"}),Se=B.Sheets[B.SheetNames[0]],Z=Xe.sheet_to_json(Se,{header:1}),ee=Z.slice(1).map(k=>Array.isArray(k)?k[0]:k).filter(k=>typeof k=="string"&&k.trim().length>0).map(k=>k.trim());if(ee.length===0){setManualError("xlsx 未读取到可导入内容");return}setManualText(k=>{const N=k.replace(/\\s+$/,""),B=ee.join("\\n");return N?`${N}\\n${B}`:B}),setManualError("")}catch(N){setManualError("xlsx 解析失败")}},c.readAsArrayBuffer(s)},[])',
+  "starmap xlsx import fills manual input",
+);
+
+replaceOnce(
+  starmapTaskPanelBundle,
+  'sx:{border:"2px dashed",borderColor:n?"grey.300":q?"primary.dark":"divider"',
+  'sx:{display:"none",border:"2px dashed",borderColor:n?"grey.300":q?"primary.dark":"divider"',
+  "starmap hide separate xlsx upload area",
+);
+
+replaceOnce(
+  starmapTaskPanelBundle,
+  'e.jsxs(z,{sx:{mt:2,p:2,border:"1px solid",borderColor:"divider",borderRadius:2,bgcolor:"background.paper"},children:[e.jsx(g,{variant:"subtitle2",fontWeight:600,sx:{mb:1},children:"手动输入链接"}),e.jsx(g,{variant:"body2",color:"text.secondary",sx:{mb:1},children:manualHint}),e.jsx("textarea",{value:manualText,onChange:s=>{setManualText(s.target.value),manualError&&setManualError("")},disabled:n||!!t,placeholder:manualPlaceholder,style:{width:"100%",minHeight:120,resize:"vertical",boxSizing:"border-box",border:"1px solid rgba(145,158,171,0.32)",borderRadius:8,padding:"10px 12px",fontFamily:"inherit",fontSize:14,lineHeight:1.6,outline:"none",background:n||t?"var(--mui-palette-action-disabledBackground)":"var(--mui-palette-background-paper)",color:"var(--mui-palette-text-primary)"}}),manualError&&e.jsx(_,{severity:"warning",sx:{mt:1},children:manualError}),e.jsx(w,{variant:"contained",size:"small",disabled:n||!!t,onClick:manualStart,startIcon:e.jsx(p,{icon:"solar:play-bold",width:18}),sx:{mt:1.5,borderRadius:2,textTransform:"none",fontWeight:600},children:"开始采集"})]})',
+  'e.jsxs(z,{onDrop:ye,onDragOver:ke,onDragLeave:we,sx:{mt:2,p:3,border:"2px solid",borderColor:q?"#8E33FF":"divider",borderRadius:3,bgcolor:q?"action.hover":"background.paper",position:"relative",transition:"all .2s ease",boxShadow:q?"0 0 0 2px rgba(142,51,255,.16)":"none"},children:[e.jsxs(j,{direction:"row",alignItems:"center",justifyContent:"space-between",spacing:1,sx:{mb:1.5},children:[e.jsx(g,{variant:"body2",color:"text.secondary",children:manualHint}),q&&e.jsx(J,{size:"small",color:"primary",label:"释放以导入 xlsx",sx:{fontWeight:700}})]}),e.jsxs(z,{sx:{position:"relative"},children:[e.jsx("textarea",{value:manualText,onChange:s=>{setManualText(s.target.value),manualError&&setManualError("")},disabled:n||!!t,placeholder:manualPlaceholder,style:{width:"100%",minHeight:300,resize:"vertical",boxSizing:"border-box",border:"2px solid #8E33FF",borderRadius:10,padding:"18px 20px",fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",fontSize:15,lineHeight:1.65,outline:"none",background:n||t?"var(--mui-palette-action-disabledBackground)":"linear-gradient(135deg, rgba(142,51,255,.06), rgba(51,102,255,.04))",color:"var(--mui-palette-text-primary)"}}),e.jsxs(g,{variant:"caption",sx:{position:"absolute",right:12,bottom:10,color:"text.secondary",bgcolor:"background.paper",px:.5,pointerEvents:"none"},children:[manualText.split("\\n").map(s=>s.trim()).filter(Boolean).length," / 1000"]})]}),manualError&&e.jsx(_,{severity:"warning",sx:{mt:1},children:manualError}),e.jsxs(j,{direction:"row",alignItems:"center",spacing:1.5,sx:{mt:1.5},children:[e.jsx(w,{variant:"outlined",size:"small",disabled:n||!!t,onClick:be,startIcon:e.jsx(p,{icon:"solar:file-bold-duotone",width:18}),sx:{borderRadius:2,textTransform:"none",fontWeight:700},children:"从 xlsx 导入"}),e.jsx(g,{variant:"caption",color:"text.secondary",children:"也可把 xlsx 文件直接拖到输入框中"}),e.jsx(z,{sx:{flexGrow:1}}),e.jsx(w,{variant:"contained",size:"medium",disabled:n||!!t||manualText.trim().length===0,onClick:manualStart,startIcon:e.jsx(p,{icon:"solar:play-bold",width:18}),sx:{borderRadius:2,textTransform:"none",fontWeight:700,px:3,boxShadow:"0 10px 24px rgba(142,51,255,.28)",background:"linear-gradient(135deg,#8E33FF,#3366FF)"},children:"开始采集"})]})]})',
+  "starmap single input xlsx import layout",
+);
+
+replaceAllIfExists(
+  pgyTaskPanelBundle,
+  'const{isEnterprise:l}=Je(),{isAuthorized:r,isChecking:h}=rn()',
+  'const l=!1,{isAuthorized:r,isChecking:h}=rn()',
+);
+
+replaceAllIfExists(
+  starmapTaskPanelBundle,
+  'const{isEnterprise:l}=Je(),{isAuthorized:r,isChecking:h}=ot()',
+  'const l=!1,{isAuthorized:r,isChecking:h}=ot()',
+);
+
+for (const taskPanelBundle of [pgyTaskPanelBundle, starmapTaskPanelBundle]) {
+  replaceAllIfExists(taskPanelBundle, "企业账号池", "账号池");
+  replaceAllIfExists(taskPanelBundle, "企业达人库 → 授权账号", "本机授权");
+  replaceAllIfExists(taskPanelBundle, "isEnterprise", "isInternalModeDisabled");
+  replaceAllIfExists(taskPanelBundle, 'I=l==="enterprise"', "I=!1");
+  replaceAllIfExists(taskPanelBundle, 'l?"enterprise":"personal"', '"personal"');
+  replaceAllIfExists(taskPanelBundle, 'm==="enterprise"', "!1");
+  replaceAllIfExists(taskPanelBundle, 'l&&m==="enterprise"', "!1");
+  replaceAllIfExists(taskPanelBundle, 'value:"enterprise"', 'value:"disabled"');
+}
 
 replaceOnce(
   urlValidatorBundle,

@@ -16625,7 +16625,7 @@ class Xd {
   }
   /** 启动采集任务 */
   async startTask(e) {
-    const { taskId: t, pluginId: n, taskType: s, urls: i, fileName: o } = e, r = e.fields && e.fields.length > 0 ? e.fields : null, c = e.accountSource ?? "personal", u = this.plugins.get(n);
+    const { taskId: t, pluginId: n, taskType: s, urls: i, fileName: o } = e, r = e.fields && e.fields.length > 0 ? e.fields : null, c = "personal", u = this.plugins.get(n);
     ue.info(`[task=${t}] 采集任务启动 plugin=${n} taskType=${s} accountSource=${c} total=${i.length} file=${o}`);
     if (!u) {
       this.sendToRenderer(W.task.error, {
