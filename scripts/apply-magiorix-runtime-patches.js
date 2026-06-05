@@ -122,6 +122,82 @@ if (!main.includes("采集任务启动 plugin=")) {
   );
 }
 
+if (!main.includes("日额度已满或本班次已满")) {
+  main = replaceOnce(
+    main,
+    `      const l = this.mergeEnterprisePolicy(c, u), p = Date.now(), d = r.filter((v) => {
+        const y = v.cooldownUntil ? new Date(v.cooldownUntil).getTime() : 0, b = v.shiftRestUntil ? new Date(v.shiftRestUntil).getTime() : 0, S = l.shiftSize - (v.currentShiftCount ?? 0);
+        return y <= p && b <= p && S > 0;
+      });
+      if (d.length === 0)
+        throw new Error(
+          \`企业账号池暂无可用账号（共 \${r.length} 个，全部在班次休息、冷却或本班次已满）\`
+        );`,
+    `      const l = this.mergeEnterprisePolicy(c, u), p = Date.now(), d = r.filter((v) => {
+        const y = v.cooldownUntil ? new Date(v.cooldownUntil).getTime() : 0, b = v.shiftRestUntil ? new Date(v.shiftRestUntil).getTime() : 0, S = l.shiftSize - (v.currentShiftCount ?? 0), x = l.scrapesPerDay == null ? Number.POSITIVE_INFINITY : l.scrapesPerDay - (v.usedToday ?? 0);
+        return y <= p && b <= p && S > 0 && x > 0;
+      });
+      if (d.length === 0)
+        throw new Error(
+          \`企业账号池暂无可用账号（共 \${r.length} 个，全部在班次休息、冷却、日额度已满或本班次已满）\`
+        );`,
+    "enterprise account pool daily budget availability",
+  );
+}
+
+if (!main.includes("scrapesPerDay: s, shiftSize: o, shiftRestMinutes: c")) {
+  main = replaceOnce(
+    main,
+    `  mergeEnterprisePolicy(e, t) {
+    const n = Math.max(
+      (t == null ? void 0 : t.minIntervalMs) ?? e.minIntervalMs,
+      _i
+    ), s = (t == null ? void 0 : t.shiftSize) ?? e.shiftSize, i = Math.max(1, Math.floor(s * ((t == null ? void 0 : t.shiftSizeFactor) ?? 1))), o = (t == null ? void 0 : t.shiftRestMinutes) ?? e.shiftRestMinutes, r = Math.max(0, o * ((t == null ? void 0 : t.restFactor) ?? 1));
+    return { minIntervalMs: n, shiftSize: i, shiftRestMinutes: r };
+  }`,
+    `  mergeEnterprisePolicy(e, t) {
+    const n = Math.max(
+      (t == null ? void 0 : t.minIntervalMs) ?? e.minIntervalMs,
+      _i
+    ), s = (t == null ? void 0 : t.scrapesPerDay) ?? e.scrapesPerDay, i = (t == null ? void 0 : t.shiftSize) ?? e.shiftSize, o = Math.max(1, Math.floor(i * ((t == null ? void 0 : t.shiftSizeFactor) ?? 1))), r = (t == null ? void 0 : t.shiftRestMinutes) ?? e.shiftRestMinutes, c = Math.max(0, r * ((t == null ? void 0 : t.restFactor) ?? 1));
+    return { minIntervalMs: n, scrapesPerDay: s, shiftSize: o, shiftRestMinutes: c };
+  }`,
+    "enterprise policy merges daily budget",
+  );
+}
+
+if (!main.includes("this.filterAvailableAccounts(l, u)")) {
+  main = replaceOnce(
+    main,
+    `      const m = this.filterAvailableAccounts(l);
+      if (m.length === 0) {`,
+    `      const m = this.filterAvailableAccounts(l, u);
+      if (m.length === 0) {`,
+    "dispatcher passes active policy to account availability filter",
+  );
+}
+
+if (!main.includes("未达日/班次上限")) {
+  main = replaceOnce(
+    main,
+    `  /** 过滤可用账号（ACTIVE、cooldown/班次休息已过期） */
+  filterAvailableAccounts(e) {
+    const t = Date.now();
+    return e.filter(
+      (n) => n.status === "ACTIVE" && (!n.cooldownUntil || new Date(n.cooldownUntil).getTime() <= t) && (!n.shiftRestUntil || new Date(n.shiftRestUntil).getTime() <= t)
+    );
+  }`,
+    `  /** 过滤可用账号（ACTIVE、cooldown/班次休息已过期、未达日/班次上限） */
+  filterAvailableAccounts(e, t) {
+    const n = Date.now();
+    return e.filter(
+      (s) => s.status === "ACTIVE" && (!s.cooldownUntil || new Date(s.cooldownUntil).getTime() <= n) && (!s.shiftRestUntil || new Date(s.shiftRestUntil).getTime() <= n) && ((t == null ? void 0 : t.scrapesPerDay) == null || (s.usedToday ?? 0) < t.scrapesPerDay) && ((t == null ? void 0 : t.shiftSize) == null || (s.currentShiftCount ?? 0) < t.shiftSize)
+    );
+  }`,
+    "dispatcher account availability respects daily and shift caps",
+  );
+}
+
 main = replaceOnce(
   main,
   'const oo = Y("WindowState"), La = Oe(ye.getPath("userData"), "main-window-state.json"), Ur = 500, tn = 1024, nn = 768;',

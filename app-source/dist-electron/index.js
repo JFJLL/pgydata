@@ -16790,12 +16790,12 @@ class Xd {
       if (!c)
         throw new Error(`未找到平台 ${o} 的限速策略`);
       const l = this.mergeEnterprisePolicy(c, u), p = Date.now(), d = r.filter((v) => {
-        const y = v.cooldownUntil ? new Date(v.cooldownUntil).getTime() : 0, b = v.shiftRestUntil ? new Date(v.shiftRestUntil).getTime() : 0, S = l.shiftSize - (v.currentShiftCount ?? 0);
-        return y <= p && b <= p && S > 0;
+        const y = v.cooldownUntil ? new Date(v.cooldownUntil).getTime() : 0, b = v.shiftRestUntil ? new Date(v.shiftRestUntil).getTime() : 0, S = l.shiftSize - (v.currentShiftCount ?? 0), x = l.scrapesPerDay == null ? Number.POSITIVE_INFINITY : l.scrapesPerDay - (v.usedToday ?? 0);
+        return y <= p && b <= p && S > 0 && x > 0;
       });
       if (d.length === 0)
         throw new Error(
-          `企业账号池暂无可用账号（共 ${r.length} 个，全部在班次休息、冷却或本班次已满）`
+          `企业账号池暂无可用账号（共 ${r.length} 个，全部在班次休息、冷却、日额度已满或本班次已满）`
         );
       d.sort((v, y) => {
         const b = v.lastShiftEndedAt ? new Date(v.lastShiftEndedAt).getTime() : 0, S = y.lastShiftEndedAt ? new Date(y.lastShiftEndedAt).getTime() : 0;
@@ -16948,8 +16948,8 @@ class Xd {
     const n = Math.max(
       (t == null ? void 0 : t.minIntervalMs) ?? e.minIntervalMs,
       _i
-    ), s = (t == null ? void 0 : t.shiftSize) ?? e.shiftSize, i = Math.max(1, Math.floor(s * ((t == null ? void 0 : t.shiftSizeFactor) ?? 1))), o = (t == null ? void 0 : t.shiftRestMinutes) ?? e.shiftRestMinutes, r = Math.max(0, o * ((t == null ? void 0 : t.restFactor) ?? 1));
-    return { minIntervalMs: n, shiftSize: i, shiftRestMinutes: r };
+    ), s = (t == null ? void 0 : t.scrapesPerDay) ?? e.scrapesPerDay, i = (t == null ? void 0 : t.shiftSize) ?? e.shiftSize, o = Math.max(1, Math.floor(i * ((t == null ? void 0 : t.shiftSizeFactor) ?? 1))), r = (t == null ? void 0 : t.shiftRestMinutes) ?? e.shiftRestMinutes, c = Math.max(0, r * ((t == null ? void 0 : t.restFactor) ?? 1));
+    return { minIntervalMs: n, scrapesPerDay: s, shiftSize: o, shiftRestMinutes: c };
   }
   /** 取消任务 */
   cancelTask(e) {
@@ -22302,7 +22302,7 @@ const Bn = class Bn {
         ), this.notifyProgress(t);
         return;
       }
-      const m = this.filterAvailableAccounts(l);
+      const m = this.filterAvailableAccounts(l, u);
       if (m.length === 0) {
         if (h >= Mi) {
           t.pauseReason = t.pauseReason ?? "ALL_ACCOUNTS_UNAVAILABLE", t.errorLog.push(
@@ -22698,11 +22698,11 @@ const Bn = class Bn {
     );
     t <= 0 || (e.total = Math.max(t, e.current), e.totalFromBackend = !0);
   }
-  /** 过滤可用账号（ACTIVE、cooldown/班次休息已过期） */
-  filterAvailableAccounts(e) {
-    const t = Date.now();
+  /** 过滤可用账号（ACTIVE、cooldown/班次休息已过期、未达日/班次上限） */
+  filterAvailableAccounts(e, t) {
+    const n = Date.now();
     return e.filter(
-      (n) => n.status === "ACTIVE" && (!n.cooldownUntil || new Date(n.cooldownUntil).getTime() <= t) && (!n.shiftRestUntil || new Date(n.shiftRestUntil).getTime() <= t)
+      (s) => s.status === "ACTIVE" && (!s.cooldownUntil || new Date(s.cooldownUntil).getTime() <= n) && (!s.shiftRestUntil || new Date(s.shiftRestUntil).getTime() <= n) && ((t == null ? void 0 : t.scrapesPerDay) == null || (s.usedToday ?? 0) < t.scrapesPerDay) && ((t == null ? void 0 : t.shiftSize) == null || (s.currentShiftCount ?? 0) < t.shiftSize)
     );
   }
   findPluginForPlatform(e, t) {

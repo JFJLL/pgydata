@@ -153,19 +153,19 @@ sudo certbot renew --dry-run
 桌面资源包必须放到：
 
 ```text
-public/assets/desktop/1.1.1/assets.zip
+public/assets/desktop/1.1.2/assets.zip
 ```
 
 部署后应能通过这个地址访问：
 
 ```text
-https://magiorix.red-magic.cn/assets/desktop/1.1.1/assets.zip
+https://magiorix.red-magic.cn/assets/desktop/1.1.2/assets.zip
 ```
 
 兼容期内旧域名也应能访问同一资源：
 
 ```text
-https://xhs.red-magic.cn/assets/desktop/1.1.1/assets.zip
+https://xhs.red-magic.cn/assets/desktop/1.1.2/assets.zip
 ```
 
 接口 `GET /api/frontend-assets/latest/desktop` 会自动读取这个文件并计算 `size` 和 `sha256`。

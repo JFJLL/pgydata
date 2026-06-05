@@ -2,6 +2,18 @@
 
 本文件保存版本历史、发布记录、安装包路径与校验信息，不放长期维护规则。
 
+## 1.1.2
+
+- 调度优化：企业任务在挑选可用账号时，除登录状态、冷却和班次休息外，也会同时判断日额度与当前班次额度，减少无效切号和启动后立刻暂停。
+- 调度优化：企业采集节奏合并策略补齐 `scrapesPerDay`，任务启动前看到的剩余额度与实际运行口径保持一致。
+- 发布脚本：同步生成 `1.1.2` 前端资源目录、完整性清单、`assets.zip` 和 Windows 安装包。
+- Windows 安装包：
+  - 路径：`D:\download\pic-vec\pgydata\desktop-versions\windows\1.1.2\magiorix-desktop-1.1.2-windows.exe`
+  - SHA256：`D0A6CED672A097F3CC22ABCDA8EB3019E2386AC69D1782409D53E800B94213A4`
+- 前端资源包：
+  - 路径：`D:\download\pic-vec\pgydata\desktop-versions\windows\1.1.2\magiorix-desktop-1.1.2-assets.zip`
+  - SHA256：`73B994282A9F44F0AFD1EB5B318A2CE26851FF0238D66D58BB86A6972ED31A49`
+
 ## 1.1.1
 
 - 新增功能：抖音“星图主页采集”支持手动输入星图/抖音主页链接。

@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const projectRoot = path.resolve(__dirname, "..");
-const assetVersion = "1.1.1";
+const assetVersion = "1.1.2";
 const assetsRoot = path.join(projectRoot, "assets", assetVersion);
 const assetsDir = path.join(assetsRoot, "assets");
 const legacyChineseName = ["易美", "数据抓取"].join("");
