@@ -15508,6 +15508,11 @@ async function cr() {
   try {
     const a = ye.getVersion(), e = Sd();
     Ie.info(`检查更新 — 当前版本: ${a}, 平台: ${e}`);
+    if (e !== "windows") {
+      Ie.info(`跳过桌面更新检查：${e} 当前未参与 Windows 更新通道`);
+      ve.webContents.send(qe.updateNotAvailable);
+      return;
+    }
     const n = (await ce.get(`${_d}/api/desktop-versions/check`, {
       params: {
         currentVersion: a,
@@ -15524,7 +15529,7 @@ async function cr() {
     Ie.info("发现新版本:", s.version), ve.webContents.send(qe.updateAvailable, {
       version: s.version,
       updateLog: s.updateLog,
-      forceUpdate: s.forceUpdate,
+      forceUpdate: false,
       fileSize: s.fileSize,
       fileName: s.fileName,
       downloadUrl: s.downloadUrl,

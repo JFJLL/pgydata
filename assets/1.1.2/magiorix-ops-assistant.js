@@ -23,6 +23,8 @@
     historyBox: null,
     tabs: null,
     bound: false,
+    deferRender: false,
+    pendingRender: false,
   };
 
   function loadState() {
@@ -102,6 +104,13 @@
     state.logs = state.logs.slice(-160);
     saveState();
     render();
+  }
+
+  function flushDeferredRender() {
+    runtime.deferRender = false;
+    if (!runtime.pendingRender) return;
+    runtime.pendingRender = false;
+    render({ force: true });
   }
 
   function getTask(id) {
@@ -261,27 +270,12 @@
     render();
   }
 
-  function hideLegacyTaskBall() {
-    const marker = document.getElementById("waterGradient") || document.getElementById("ballClip");
-    if (!marker) return;
-    let node = marker;
-    for (let i = 0; node && i < 10; i += 1) {
-      const style = window.getComputedStyle(node);
-      const width = parseFloat(style.width || "0");
-      const height = parseFloat(style.height || "0");
-      if (style.position === "fixed" && width >= 48 && width <= 120 && height >= 48 && height <= 120) {
-        node.style.display = "none";
-        node.setAttribute("data-moa-hidden-legacy-task-ball", "true");
-        return;
-      }
-      node = node.parentElement;
-    }
-  }
-
   function removeUi() {
     runtime.root?.remove();
     runtime.root = null;
     runtime.panel = null;
+    runtime.deferRender = false;
+    runtime.pendingRender = false;
   }
 
   function ensureUi() {
@@ -301,14 +295,14 @@
       .moa-toggle:hover{transform:translateY(-1px);box-shadow:0 18px 42px rgba(23,32,42,.2);border-color:rgba(255,42,59,.38)}
       .moa-panel.open + .moa-toggle{display:none}
       .moa-toggle-icon{width:24px;height:24px;border-radius:8px;background:var(--moa-red);display:inline-flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 8px 18px rgba(255,42,59,.28)}
-      .moa-panel{display:none;width:440px;max-width:calc(100vw - 32px);max-height:min(720px,calc(100vh - 96px));overflow:hidden;background:#fff;border:1px solid var(--moa-line);border-radius:10px;box-shadow:0 22px 58px rgba(23,32,42,.2)}
+      .moa-panel{display:none;width:440px;max-width:calc(100vw - 32px);height:min(640px,calc(100vh - 96px));overflow:hidden;background:#fff;border:1px solid var(--moa-line);border-radius:10px;box-shadow:0 22px 58px rgba(23,32,42,.2)}
       .moa-panel.open{display:block}
       .moa-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--moa-line)}
       .moa-head-title{font-weight:800;font-size:15px;display:flex;align-items:center;gap:8px}
       .moa-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:10px 12px;border-bottom:1px solid var(--moa-line);background:#fbfcfd}
       .moa-tab{border:0;background:transparent;border-radius:8px;padding:8px 8px;color:#637381;cursor:pointer;font-weight:700}
       .moa-tab.active{background:#fff;color:var(--moa-red);box-shadow:0 1px 6px rgba(23,32,42,.08)}
-      .moa-body{padding:12px;overflow:auto;max-height:calc(min(720px,calc(100vh - 96px)) - 104px)}
+      .moa-body{padding:12px;overflow:auto;height:calc(100% - 104px)}
       .moa-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
       .moa-card{border:1px solid var(--moa-line);border-radius:8px;padding:12px;margin-bottom:10px;background:#fff}
       .moa-card.soft{background:#fbfcfd}
@@ -365,9 +359,12 @@
     return true;
   }
 
-  function render() {
+  function render(options = {}) {
+    if (!options.force && runtime.deferRender) {
+      runtime.pendingRender = true;
+      return;
+    }
     if (!ensureUi()) return;
-    hideLegacyTaskBall();
     runtime.panel.classList.toggle("open", state.open);
     renderTabs();
     renderAssistant();
@@ -422,11 +419,22 @@
     runtime.assistantBox.querySelectorAll("[data-auth]").forEach((button) => {
       button.addEventListener("click", () => checkAuth(button.getAttribute("data-auth")));
     });
-    runtime.assistantBox.querySelector("[data-pace]").addEventListener("change", (event) => {
+    const paceSelect = runtime.assistantBox.querySelector("[data-pace]");
+    paceSelect.addEventListener("pointerdown", () => {
+      runtime.deferRender = true;
+    });
+    paceSelect.addEventListener("focus", () => {
+      runtime.deferRender = true;
+    });
+    paceSelect.addEventListener("blur", () => {
+      setTimeout(flushDeferredRender, 120);
+    });
+    paceSelect.addEventListener("change", (event) => {
+      runtime.deferRender = false;
       state.paceMode = event.target.value;
       log("info", `采集节奏已切换为${PACE[state.paceMode].label}`);
       saveState();
-      render();
+      render({ force: true });
     });
   }
 
@@ -495,9 +503,8 @@
     setInterval(() => {
       if (isLoginView()) {
         removeUi();
-      } else {
+      } else if (!runtime.root || !document.body.contains(runtime.root)) {
         render();
-        hideLegacyTaskBall();
       }
     }, 1000);
   }

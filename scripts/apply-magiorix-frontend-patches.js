@@ -31,6 +31,19 @@ function replaceAllIfExists(filePath, from, to) {
   return true;
 }
 
+function replaceAnyOnce(filePath, fromList, to, label) {
+  let source = fs.readFileSync(filePath, "utf8");
+  for (const from of fromList) {
+    if (source.includes(from)) {
+      source = source.replace(from, to);
+      fs.writeFileSync(filePath, source);
+      return true;
+    }
+  }
+  if (source.includes(to)) return false;
+  throw new Error(`Missing frontend patch target: ${label}`);
+}
+
 function removeIfExists(filePath) {
   if (fs.existsSync(filePath)) {
     fs.rmSync(filePath, { force: true });
@@ -409,9 +422,47 @@ replaceAllIfExists(mainBundle, previousServerBaseUrl, serverBaseUrl);
 
 replaceOnce(
   mainBundle,
-  'const{autoNotify:a,_isManualCheck:n}=t(),l=r.forceUpdate||!n&&a;e({checkStatus:"available",updateInfo:r,error:"",dialogOpen:l,_isManualCheck:!1})',
-  'const{autoNotify:a,_isManualCheck:n}=t(),l=r.forceUpdate||n||!n&&a;e({checkStatus:"available",updateInfo:r,error:"",dialogOpen:l,_isManualCheck:!1})',
-  "manual desktop update check opens dialog",
+  "function Rs(){const e=Ge(y=>y.togglePanel)",
+  "function Rs(){return null;const e=Ge(y=>y.togglePanel)",
+  "disable legacy task ball",
+);
+
+replaceAnyOnce(
+  mainBundle,
+  [
+    'const{autoNotify:a,_isManualCheck:n}=t(),l=r.forceUpdate||!n&&a;e({checkStatus:"available",updateInfo:r,error:"",dialogOpen:l,_isManualCheck:!1})',
+    'const{autoNotify:a,_isManualCheck:n}=t(),l=r.forceUpdate||n||!n&&a;e({checkStatus:"available",updateInfo:r,error:"",dialogOpen:l,_isManualCheck:!1})',
+  ],
+  'const{autoNotify:a,_isManualCheck:n}=t(),l=n||!n&&a;e({checkStatus:"available",updateInfo:{...r,forceUpdate:!1},error:"",dialogOpen:l,_isManualCheck:!1})',
+  "desktop update treats forced updates as dismissible",
+);
+
+replaceOnce(
+  mainBundle,
+  'closeDialog:()=>{const{updateInfo:r}=t();r!=null&&r.forceUpdate||e({dialogOpen:!1})}',
+  'closeDialog:()=>e({dialogOpen:!1})',
+  "desktop update dialog can always close",
+);
+
+replaceOnce(
+  mainBundle,
+  'disableEscapeKeyDown:t==null?void 0:t.forceUpdate',
+  'disableEscapeKeyDown:!1',
+  "desktop update dialog escape can close",
+);
+
+replaceOnce(
+  mainBundle,
+  '(t==null?void 0:t.forceUpdate)&&o.jsx(oe,{severity:"warning",sx:{mb:2},children:"这是一个强制更新，您必须更新才能继续使用应用"})',
+  '!1&&o.jsx(oe,{severity:"warning",sx:{mb:2},children:"这是一个强制更新，您必须更新才能继续使用应用"})',
+  "hide forced update warning",
+);
+
+replaceOnce(
+  mainBundle,
+  '!(t!=null&&t.forceUpdate)&&!c&&!d&&o.jsx($,{onClick:b,children:"稍后提醒"})',
+  '!c&&!d&&o.jsx($,{onClick:b,children:"稍后提醒"})',
+  "always show later reminder for desktop update",
 );
 
 replaceOnce(

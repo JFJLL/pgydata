@@ -17,7 +17,7 @@ const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, "logs");
 const ASSET_VERSION = "1.1.2";
 const INSTALLER_FILE_NAME = "magiorix-desktop-1.1.2-windows.exe";
 const INSTALLER_DOWNLOAD_URL = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.2-windows.exe";
-const INSTALLER_SHA256 = (process.env.INSTALLER_SHA256 || "03AD0584C6D2E3EF1CF118964DC5B2BCBB7BCD68FE82DF0E54003C0B661EDEA3").trim();
+const INSTALLER_SHA256 = (process.env.INSTALLER_SHA256 || "73ECD1E6094112A4C44E0281952762A06474895A7F4FCD376FB1115362620227").trim();
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "redmagic2026";
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -1066,6 +1066,14 @@ app.get("/api/desktop-download/latest", asyncHandler(async (req, res) => {
 app.get("/api/desktop-versions/check", asyncHandler(async (req, res) => {
   const currentVersion = String(req.query.currentVersion || "0.0.0").trim();
   const platform = String(req.query.platform || "windows").trim();
+  if (platform !== "windows") {
+    return success(res, {
+      hasUpdate: false,
+      latestVersion: ASSET_VERSION,
+      version: ASSET_VERSION,
+      platform,
+    });
+  }
   const hasUpdate = compareVersions(ASSET_VERSION, currentVersion) > 0;
   if (!hasUpdate) {
     return success(res, {

@@ -1066,6 +1066,41 @@ main = replaceOnce(
   "disable scheduler cloud sync startup",
 );
 
+if (!main.includes("跳过桌面更新检查")) {
+  main = replaceOnce(
+    main,
+    `    const a = ye.getVersion(), e = Sd();
+    Ie.info(\`检查更新 — 当前版本: \${a}, 平台: \${e}\`);
+    const n = (await ce.get(\`\${_d}/api/desktop-versions/check\`, {
+      params: {
+        currentVersion: a,
+        platform: e
+      }
+    })).data;`,
+    `    const a = ye.getVersion(), e = Sd();
+    Ie.info(\`检查更新 — 当前版本: \${a}, 平台: \${e}\`);
+    if (e !== "windows") {
+      Ie.info(\`跳过桌面更新检查：\${e} 当前未参与 Windows 更新通道\`);
+      ve.webContents.send(qe.updateNotAvailable);
+      return;
+    }
+    const n = (await ce.get(\`\${_d}/api/desktop-versions/check\`, {
+      params: {
+        currentVersion: a,
+        platform: e
+      }
+    })).data;`,
+    "skip non-windows desktop update checks",
+  );
+}
+
+main = replaceOnce(
+  main,
+  `      forceUpdate: s.forceUpdate,`,
+  `      forceUpdate: false,`,
+  "desktop update is never forced",
+);
+
 if (!main.includes('(await Cd(n)).toLowerCase() !== String(t || "").toLowerCase().replace(/^sha256:/, "")')) {
   main = replaceOnce(
     main,
