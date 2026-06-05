@@ -12,15 +12,16 @@
 - 优化：采集助手固定面板高度，切换 tab 不再改变面板高度；采集节奏下拉框展开时不再被自动刷新打断。
 - 优化：彻底禁用旧圆形任务小球入口，登录后不再闪现。
 - 优化：桌面更新提醒不再强制，Windows 更新弹窗可关闭；macOS 暂不参与 Windows 更新通道。
+- 优化：蒲公英采集页面改为单输入框模式，xlsx 导入或拖拽后会把第一列内容填入输入框，开始采集统一按输入框内容执行。
 - 新增：普通采集支持稳定 / 均衡 / 快速三档节奏，按批次自动休息，减少大批量任务连续请求压力。
 - 新增：普通采集失败结果增加分类字段，覆盖链接无效、目标不存在、授权失效、验证码/安全验证、平台风控、超时和未知错误。
 - 发布脚本：同步生成 `1.1.2` 前端资源目录、完整性清单、`assets.zip` 和 Windows 安装包。
 - Windows 安装包：
   - 路径：`D:\download\pic-vec\pgydata\desktop-versions\windows\1.1.2\magiorix-desktop-1.1.2-windows.exe`
-  - SHA256：`73ECD1E6094112A4C44E0281952762A06474895A7F4FCD376FB1115362620227`
+  - SHA256：`8E203CBC880C61BDF7BEEED612C50F8E63BB02CAAADB4D2C12BAC7C9F220824E`
 - 前端资源包：
   - 路径：`D:\download\pic-vec\pgydata\desktop-versions\windows\1.1.2\magiorix-desktop-1.1.2-assets.zip`
-  - SHA256：`5E8FC9DCDD5E2BAC779017037931E258D212EC8B0F371FB0ACBACCD987BFF6AA`
+  - SHA256：`9B99E6EF6A42876C0B5BC8688119BB198846B8C8F3B30EA684667A310EFDC2A0`
 
 ## 1.1.1
 

@@ -290,18 +290,41 @@ replaceOnce(
   "pgy notebook manual input note id copy",
 );
 
-replaceOnce(
-  pgyTaskPanelBundle,
-  'children:"手动输入链接"}),e.jsx("textarea",{value:manualText',
-  'children:"手动输入链接"}),e.jsx(p,{variant:"body2",color:"text.secondary",sx:{mb:1},children:manualHint}),e.jsx("textarea",{value:manualText',
-  "pgy manual input support hint",
-);
+if (!fs.readFileSync(pgyTaskPanelBundle, "utf8").includes("释放以导入 xlsx")) {
+  replaceOnce(
+    pgyTaskPanelBundle,
+    'children:"手动输入链接"}),e.jsx("textarea",{value:manualText',
+    'children:"手动输入链接"}),e.jsx(p,{variant:"body2",color:"text.secondary",sx:{mb:1},children:manualHint}),e.jsx("textarea",{value:manualText',
+    "pgy manual input support hint",
+  );
+}
 
 replaceOnce(
   pgyTaskPanelBundle,
   'placeholder:"每行一个小红书/蒲公英主页链接，或 24 位 UID"',
   'placeholder:manualPlaceholder',
   "pgy manual input dynamic placeholder",
+);
+
+replaceOnce(
+  pgyTaskPanelBundle,
+  'Q=o.useCallback(async s=>{const c=new FileReader;c.onload=async u=>{var se;if(!((se=u.target)!=null&&se.result))return;const M=new Uint8Array(u.target.result),_=Qe(M,{type:"array"}),Se=_.Sheets[_.SheetNames[0]],Z=Ve.sheet_to_json(Se,{header:1}),Ie=Z.length,ee=Z.slice(1).map(w=>Array.isArray(w)?w[0]:w).filter(w=>typeof w=="string"&&w.trim().length>0).map(w=>w.trim());if(ee.length===0)return;const ne=Ze(ee,a),F=ne.validUrls;const ze={file:s,urls:F,totalRows:Ie,invalidUrls:ne.invalidUrls,selectedFields:null},te=F.length>0?qe(d,a):null;W(ze),te?(H(te),G(!0)):O(!0)},c.readAsArrayBuffer(s)},[C,a])',
+  'Q=o.useCallback(async s=>{const c=new FileReader;c.onerror=()=>setManualError("xlsx 读取失败");c.onload=async u=>{var se;if(!((se=u.target)!=null&&se.result))return;try{const M=new Uint8Array(u.target.result),_=Qe(M,{type:"array"}),Se=_.Sheets[_.SheetNames[0]],Z=Ve.sheet_to_json(Se,{header:1}),ee=Z.slice(1).map(w=>Array.isArray(w)?w[0]:w).filter(w=>typeof w=="string"&&w.trim().length>0).map(w=>w.trim());if(ee.length===0){setManualError("xlsx 未读取到可导入内容");return}setManualText(w=>{const M=w.replace(/\\s+$/,""),_=ee.join("\\n");return M?`${M}\\n${_}`:_}),setManualError("")}catch(M){setManualError("xlsx 解析失败")}},c.readAsArrayBuffer(s)},[])',
+  "pgy xlsx import fills manual input",
+);
+
+replaceOnce(
+  pgyTaskPanelBundle,
+  'sx:{border:"2px dashed",borderColor:t?"grey.300":K?"primary.dark":"divider"',
+  'sx:{display:"none",border:"2px dashed",borderColor:t?"grey.300":K?"primary.dark":"divider"',
+  "pgy hide separate xlsx upload area",
+);
+
+replaceOnce(
+  pgyTaskPanelBundle,
+  'e.jsxs(A,{sx:{mt:2,p:2,border:"1px solid",borderColor:"divider",borderRadius:2,bgcolor:"background.paper"},children:[e.jsx(p,{variant:"subtitle2",fontWeight:600,sx:{mb:1},children:"手动输入链接"}),e.jsx(p,{variant:"body2",color:"text.secondary",sx:{mb:1},children:manualHint}),e.jsx("textarea",{value:manualText,onChange:s=>{setManualText(s.target.value),manualError&&setManualError("")},disabled:t||!!n,placeholder:manualPlaceholder,style:{width:"100%",minHeight:120,resize:"vertical",boxSizing:"border-box",border:"1px solid rgba(145,158,171,0.32)",borderRadius:8,padding:"10px 12px",fontFamily:"inherit",fontSize:14,lineHeight:1.6,outline:"none",background:t||n?"var(--mui-palette-action-disabledBackground)":"var(--mui-palette-background-paper)",color:"var(--mui-palette-text-primary)"}}),manualError&&e.jsx(B,{severity:"warning",sx:{mt:1},children:manualError}),e.jsx(y,{variant:"contained",size:"small",disabled:t||!!n,onClick:manualStart,startIcon:e.jsx(g,{icon:"solar:play-bold",width:18}),sx:{mt:1.5,borderRadius:2,textTransform:"none",fontWeight:600},children:"开始采集"})]})',
+  'e.jsxs(A,{onDrop:ke,onDragOver:we,onDragLeave:ye,sx:{mt:2,p:3,border:"2px solid",borderColor:K?"#8E33FF":"divider",borderRadius:3,bgcolor:K?"action.hover":"background.paper",position:"relative",transition:"all .2s ease",boxShadow:K?"0 0 0 2px rgba(142,51,255,.16)":"none"},children:[e.jsxs(j,{direction:"row",alignItems:"center",justifyContent:"space-between",spacing:1,sx:{mb:1.5},children:[e.jsx(p,{variant:"body2",color:"text.secondary",children:manualHint}),K&&e.jsx(J,{size:"small",color:"primary",label:"释放以导入 xlsx",sx:{fontWeight:700}})]}),e.jsxs(A,{sx:{position:"relative"},children:[e.jsx("textarea",{value:manualText,onChange:s=>{setManualText(s.target.value),manualError&&setManualError("")},disabled:t||!!n,placeholder:manualPlaceholder,style:{width:"100%",minHeight:300,resize:"vertical",boxSizing:"border-box",border:"2px solid #8E33FF",borderRadius:10,padding:"18px 20px",fontFamily:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",fontSize:15,lineHeight:1.65,outline:"none",background:t||n?"var(--mui-palette-action-disabledBackground)":"linear-gradient(135deg, rgba(142,51,255,.06), rgba(51,102,255,.04))",color:"var(--mui-palette-text-primary)"}}),e.jsxs(p,{variant:"caption",sx:{position:"absolute",right:12,bottom:10,color:"text.secondary",bgcolor:"background.paper",px:.5,pointerEvents:"none"},children:[manualText.split("\\n").map(s=>s.trim()).filter(Boolean).length," / 1000"]})]}),manualError&&e.jsx(B,{severity:"warning",sx:{mt:1},children:manualError}),e.jsxs(j,{direction:"row",alignItems:"center",spacing:1.5,sx:{mt:1.5},children:[e.jsx(y,{variant:"outlined",size:"small",disabled:t||!!n,onClick:be,startIcon:e.jsx(g,{icon:"solar:file-bold-duotone",width:18}),sx:{borderRadius:2,textTransform:"none",fontWeight:700},children:"从 xlsx 导入"}),e.jsx(p,{variant:"caption",color:"text.secondary",children:"也可把 xlsx 文件直接拖到输入框中"}),e.jsx(A,{sx:{flexGrow:1}}),e.jsx(y,{variant:"contained",size:"medium",disabled:t||!!n||manualText.trim().length===0,onClick:manualStart,startIcon:e.jsx(g,{icon:"solar:play-bold",width:18}),sx:{borderRadius:2,textTransform:"none",fontWeight:700,px:3,boxShadow:"0 10px 24px rgba(142,51,255,.28)",background:"linear-gradient(135deg,#8E33FF,#3366FF)"},children:"开始采集"})]})]})',
+  "pgy single input xlsx import layout",
 );
 
 replaceOnce(

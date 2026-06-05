@@ -1,7 +1,7 @@
 {
   "version": "1.1.2",
   "algorithm": "sha256",
-  "generatedAt": "2026-06-05T04:04:36.3944415Z",
+  "generatedAt": "2026-06-05T04:27:13.0520545Z",
   "files": [
     {
       "path": "assets/admin-finance-Csc-tqD6.js",
@@ -220,8 +220,8 @@
     },
     {
       "path": "assets/PgyTaskPanel-B4ZGEmDG.js",
-      "size": 17601,
-      "sha256": "c7c0e826b030ffe69bf2090b260d6ea9b6f0bdbda3a83e15aca261a32b66b636"
+      "size": 18872,
+      "sha256": "040ae6c805afa92aab5ecf22d9781e51938686a36aa39c0b69c03c6b6f8c2e7c"
     },
     {
       "path": "assets/PlatformPolicyService-DphwwuV1.js",
