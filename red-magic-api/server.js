@@ -17,6 +17,7 @@ const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, "logs");
 const ASSET_VERSION = "1.1.1";
 const INSTALLER_FILE_NAME = "magiorix-desktop-1.1.1-windows.exe";
 const INSTALLER_DOWNLOAD_URL = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.1-windows.exe";
+const INSTALLER_SHA256 = (process.env.INSTALLER_SHA256 || "EAD208C7027602A52613E7F27C828DB3FC52ED035B530E326769D8FB4B8474EB").trim();
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "redmagic2026";
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -149,6 +150,21 @@ function parsePageParams(query) {
   };
 }
 
+function compareVersions(a, b) {
+  const left = String(a || "0").split(".").map((item) => Number.parseInt(item, 10) || 0);
+  const right = String(b || "0").split(".").map((item) => Number.parseInt(item, 10) || 0);
+  const length = Math.max(left.length, right.length);
+  for (let i = 0; i < length; i += 1) {
+    const diff = (left[i] || 0) - (right[i] || 0);
+    if (diff !== 0) return diff > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+function normalizeSha256(value) {
+  return String(value || "").trim().toLowerCase().replace(/^sha256:/, "");
+}
+
 async function ensureColumn(table, column, definition) {
   const columns = await dbAll(`PRAGMA table_info(${table})`);
   if (!columns.some((item) => item.name === column)) {
@@ -165,6 +181,56 @@ function parseJsonArray(value, fallback = []) {
   } catch {
     return fallback;
   }
+}
+
+function safeJsonParse(value, fallback = null) {
+  if (value && typeof value === "object") return value;
+  if (typeof value !== "string" || !value.trim()) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function truncateString(value, maxLength) {
+  const text = String(value ?? "");
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function normalizeConsumeDetail(body = {}) {
+  const raw = body.detail || body.details || body.taskDetail || null;
+  if (!raw || typeof raw !== "object") {
+    return { detailType: "", detailSummary: "", detailJson: "" };
+  }
+  const inputType = ["manual", "xlsx"].includes(raw.inputType) ? raw.inputType : "";
+  const pluginId = truncateString(raw.pluginId || "", 64);
+  const taskType = truncateString(raw.taskType || "", 64);
+  const fileName = truncateString(raw.fileName || "", 180);
+  const sourceRows = Array.isArray(raw.sourceRows) ? raw.sourceRows : [];
+  const urls = Array.isArray(raw.urls) ? raw.urls : [];
+  const rows = sourceRows.length > 0 ? sourceRows : urls;
+  const normalizedRows = rows.slice(0, 2000).map((item) => truncateString(item, 1000));
+  const detail = {
+    inputType,
+    pluginId,
+    taskType,
+    fileName,
+    totalRows: Number(raw.totalRows || rows.length || urls.length || 0),
+    validCount: Number(raw.validCount || urls.length || 0),
+    rows: normalizedRows,
+    truncated: rows.length > normalizedRows.length,
+  };
+  const label = inputType === "manual" ? "手动输入" : inputType === "xlsx" ? "xlsx上传" : "任务提交";
+  const detailSummary = truncateString(
+    `${label}${fileName ? `：${fileName}` : ""}，${detail.validCount || normalizedRows.length} 条`,
+    240,
+  );
+  return {
+    detailType: inputType,
+    detailSummary,
+    detailJson: truncateString(JSON.stringify(detail), 200000),
+  };
 }
 
 function startOfDay(date = new Date()) {
@@ -283,6 +349,7 @@ async function initDb() {
   `);
   await ensureColumn("users", "email", "TEXT");
   await ensureColumn("users", "deleted_at", "TEXT");
+  await ensureColumn("users", "last_active_at", "TEXT");
 
   await dbRun(`
     CREATE TABLE IF NOT EXISTS user_tokens (
@@ -323,10 +390,16 @@ async function initDb() {
       count INTEGER NOT NULL,
       balance_after INTEGER NOT NULL,
       remark TEXT,
+      detail_type TEXT,
+      detail_summary TEXT,
+      detail_json TEXT,
       created_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
+  await ensureColumn("consume_records", "detail_type", "TEXT");
+  await ensureColumn("consume_records", "detail_summary", "TEXT");
+  await ensureColumn("consume_records", "detail_json", "TEXT");
 
   await dbRun(`
     CREATE TABLE IF NOT EXISTS recharge_orders (
@@ -665,7 +738,7 @@ app.post("/api/auth/delete-account", authRequired, asyncHandler(async (req, res)
 
 function normalizeTemplatePlatform(platform) {
   const value = String(platform || "").trim();
-  return ["starmap", "pgy", "douyin"].includes(value) ? value : "";
+  return ["starmap", "pgy", "pgy-blogger", "pgy-notebook", "douyin"].includes(value) ? value : "";
 }
 
 function normalizeTemplatePayload(body, partial = false) {
@@ -837,6 +910,7 @@ app.get("/api/shumiao/check-balance", authRequired, asyncHandler(async (req, res
 app.post("/api/shumiao/consume", authRequired, asyncHandler(async (req, res) => {
   const count = parsePositiveAmount(req.body.count ?? req.body.amount ?? req.body.quantity);
   if (!count) return fail(res, 400, "扣费数量不能为空");
+  const detail = normalizeConsumeDetail(req.body);
 
   await dbRun("BEGIN IMMEDIATE TRANSACTION");
   try {
@@ -854,9 +928,23 @@ app.post("/api/shumiao/consume", authRequired, asyncHandler(async (req, res) => 
       [nextBalance, createdAt, req.user.id],
     );
     await dbRun(
-      `INSERT INTO consume_records (user_id, count, balance_after, remark, created_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [req.user.id, count, nextBalance, req.body.remark || "", createdAt],
+      `UPDATE users SET last_active_at = ?, updated_at = ? WHERE id = ?`,
+      [createdAt, createdAt, req.user.id],
+    );
+    await dbRun(
+      `INSERT INTO consume_records
+        (user_id, count, balance_after, remark, detail_type, detail_summary, detail_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.user.id,
+        count,
+        nextBalance,
+        req.body.remark || "",
+        detail.detailType,
+        detail.detailSummary,
+        detail.detailJson,
+        createdAt,
+      ],
     );
     await dbRun("COMMIT");
     return success(res, { balance: nextBalance });
@@ -970,14 +1058,35 @@ app.get("/api/desktop-download/latest", asyncHandler(async (req, res) => {
     downloadUrl: INSTALLER_DOWNLOAD_URL,
     directUrl: INSTALLER_DOWNLOAD_URL,
     size: stat ? stat.size : 0,
+    checksum: normalizeSha256(INSTALLER_SHA256),
     releaseDate: stat ? stat.mtime.toISOString() : null,
   });
 }));
 
 app.get("/api/desktop-versions/check", asyncHandler(async (req, res) => {
+  const currentVersion = String(req.query.currentVersion || "0.0.0").trim();
+  const platform = String(req.query.platform || "windows").trim();
+  const hasUpdate = compareVersions(ASSET_VERSION, currentVersion) > 0;
+  if (!hasUpdate) {
+    return success(res, {
+      hasUpdate: false,
+      latestVersion: ASSET_VERSION,
+      version: ASSET_VERSION,
+    });
+  }
+  const checksum = normalizeSha256(INSTALLER_SHA256);
+  if (!checksum) return fail(res, 500, "安装包校验值未配置");
   return success(res, {
-    hasUpdate: false,
+    hasUpdate: true,
     latestVersion: ASSET_VERSION,
+    version: ASSET_VERSION,
+    platform,
+    fileName: INSTALLER_FILE_NAME,
+    downloadUrl: INSTALLER_DOWNLOAD_URL,
+    checksum,
+    fileSize: 0,
+    forceUpdate: false,
+    updateLog: `magiorix ${ASSET_VERSION} 更新`,
   });
 }));
 
@@ -1048,6 +1157,7 @@ app.get("/api/admin/users", adminRequired, asyncHandler(async (req, res) => {
        u.nickname,
        u.status,
        u.deleted_at AS deletedAt,
+       u.last_active_at AS lastActiveAt,
        u.created_at AS createdAt,
        u.updated_at AS updatedAt,
        COALESCE(a.balance, 0) AS balance
@@ -1167,10 +1277,13 @@ app.get("/api/admin/user-transactions", adminRequired, asyncHandler(async (req, 
       u.status,
       tx.createdAt,
       tx.amount,
-      CASE WHEN tx.type = 'consume' THEN ABS(tx.amount) ELSE 0 END AS consumedQuota,
+      ABS(tx.amount) AS consumedQuota,
       tx.balanceAfter,
       tx.operation,
-      tx.remark
+      tx.remark,
+      tx.detailType,
+      tx.detailSummary,
+      tx.detailJson
     FROM (
       SELECT
         'consume-' || id AS id,
@@ -1180,30 +1293,11 @@ app.get("/api/admin/user-transactions", adminRequired, asyncHandler(async (req, 
         -count AS amount,
         balance_after AS balanceAfter,
         '采集消耗' AS operation,
-        COALESCE(remark, '') AS remark
+        COALESCE(remark, '') AS remark,
+        COALESCE(detail_type, '') AS detailType,
+        COALESCE(detail_summary, '') AS detailSummary,
+        COALESCE(detail_json, '') AS detailJson
       FROM consume_records
-      UNION ALL
-      SELECT
-        'adjust-' || id AS id,
-        'adjustment' AS type,
-        user_id AS userId,
-        created_at AS createdAt,
-        delta AS amount,
-        balance_after AS balanceAfter,
-        '后台加分' AS operation,
-        COALESCE(remark, '') AS remark
-      FROM admin_balance_adjustments
-      UNION ALL
-      SELECT
-        'recharge-' || order_no AS id,
-        'recharge' AS type,
-        user_id AS userId,
-        updated_at AS createdAt,
-        total_count AS amount,
-        NULL AS balanceAfter,
-        CASE WHEN status = 1 THEN '用户充值' ELSE '充值下单' END AS operation,
-        package_id AS remark
-      FROM recharge_orders
     ) tx
     LEFT JOIN users u ON u.id = tx.userId
   `;
@@ -1218,13 +1312,17 @@ app.get("/api/admin/user-transactions", adminRequired, asyncHandler(async (req, 
   );
 
   return success(res, {
-    list: rows.map((row) => ({
-      ...row,
-      amount: Number(row.amount || 0),
-      consumedQuota: Number(row.consumedQuota || 0),
-      balanceAfter: row.balanceAfter === null ? null : Number(row.balanceAfter || 0),
-      status: Number(row.status ?? 1),
-    })),
+    list: rows.map((row) => {
+      const { detailJson, ...rest } = row;
+      return {
+        ...rest,
+        amount: Number(row.amount || 0),
+        consumedQuota: Number(row.consumedQuota || 0),
+        balanceAfter: row.balanceAfter === null ? null : Number(row.balanceAfter || 0),
+        status: Number(row.status ?? 1),
+        detail: safeJsonParse(detailJson, null),
+      };
+    }),
     total: Number(total.count || 0),
     page,
     pageSize,

@@ -1,7 +1,7 @@
 {
   "version": "1.1.1",
   "algorithm": "sha256",
-  "generatedAt": "2026-05-29T09:48:58.4288773Z",
+  "generatedAt": "2026-06-04T11:09:41.5085757Z",
   "files": [
     {
       "path": "assets/admin-finance-Csc-tqD6.js",
@@ -50,8 +50,8 @@
     },
     {
       "path": "assets/index-B09sHfUO.js",
-      "size": 487990,
-      "sha256": "8df2c246ff07799a0bbc2fef3bcda59d31b32848cbf78c9a729063b5afb1370e"
+      "size": 488036,
+      "sha256": "c3fe4d18028fa35e259d1449b6f9ea52f72dd358a28ae27d7397dbb2ff03ba34"
     },
     {
       "path": "assets/index-b5Geql4X.js",
@@ -115,8 +115,8 @@
     },
     {
       "path": "assets/index-CiEqCfGB.js",
-      "size": 5808,
-      "sha256": "281dd27faf634a61583abb362a931b17d59efbef4ee79c31fa3f63619e68ec1e"
+      "size": 5882,
+      "sha256": "4c2373a6ec7bb9beff3ba04655c7581ec4ce69649de3d10071d531a53ef20026"
     },
     {
       "path": "assets/index-CNtqW3CV.js",
@@ -220,8 +220,8 @@
     },
     {
       "path": "assets/PgyTaskPanel-B4ZGEmDG.js",
-      "size": 17515,
-      "sha256": "0c29d7dc299937827ddd8da4f5c052cf293184dfac45dfe81e9e69bf0c8edec0"
+      "size": 17601,
+      "sha256": "c7c0e826b030ffe69bf2090b260d6ea9b6f0bdbda3a83e15aca261a32b66b636"
     },
     {
       "path": "assets/PlatformPolicyService-DphwwuV1.js",
@@ -265,8 +265,8 @@
     },
     {
       "path": "assets/url-validator-00wRYD83.js",
-      "size": 10425,
-      "sha256": "84a5b8ee4e2d974cd24a62aa78baaa8d75fe196e0e9299320d43ffea3fbe4fb3"
+      "size": 10510,
+      "sha256": "c6d4a4d41602745959333de6d0c709a6d6b677c5d9d0fa6b43070345e8df2163"
     },
     {
       "path": "assets/use-enabled-platforms-BQtycakb.js",

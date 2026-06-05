@@ -771,6 +771,57 @@ main = replaceOnce(
   "disable scheduler cloud sync startup",
 );
 
+if (!main.includes('(await Cd(n)).toLowerCase() !== String(t || "").toLowerCase().replace(/^sha256:/, "")')) {
+  main = replaceOnce(
+    main,
+    `    }), s.data.pipe(r), await new Promise((u, l) => {
+      r.on("finish", () => u()), r.on("error", l);
+    }), Ie.info("下载完成"), Ie.info("校验文件完整性..."), await Cd(n) !== t)
+      throw new Error("文件校验失败，请重新下载");`,
+    `    }), s.data.pipe(r), await new Promise((u, l) => {
+      r.on("finish", () => u()), r.on("error", l);
+    }), Ie.info("下载完成"), Ie.info("校验文件完整性..."), (await Cd(n)).toLowerCase() !== String(t || "").toLowerCase().replace(/^sha256:/, ""))
+      throw new Error("文件校验失败，请重新下载");`,
+    "case-insensitive installer checksum",
+  );
+}
+
+main = replaceOnce(
+  main,
+  `    Ie.info("校验通过"), ve.webContents.send(qe.updateDownloaded, {
+      filePath: n
+    });
+  } catch (n) {`,
+  `    Ie.info("校验通过"), ve.webContents.send(qe.updateDownloaded, {
+      filePath: n
+    }), setTimeout(() => Ed(), 1200);
+  } catch (n) {`,
+  "auto install after update download",
+);
+
+main = replaceOnce(
+  main,
+  `  Ie.info("安装更新:", ot);
+  const a = process.platform;
+  a === "win32" ? (Tr(ot, [], {
+    detached: !0,
+    stdio: "ignore"
+  }).unref(), ye.quit()) : (a === "darwin" || a === "linux") && (Ji.openPath(ot), ve == null || ve.webContents.send(qe.manualInstall, {
+    filePath: ot
+  }));
+}`,
+  `  Ie.info("安装更新:", ot);
+  const a = process.platform, e = Ja(ye.getPath("exe"));
+  a === "win32" ? (Tr(ot, ["/S", \`/D=\${e}\`], {
+    detached: !0,
+    stdio: "ignore"
+  }).unref(), ye.quit()) : (a === "darwin" || a === "linux") && (Ji.openPath(ot), ve == null || ve.webContents.send(qe.manualInstall, {
+    filePath: ot
+  }));
+}`,
+  "silent installer in current install dir",
+);
+
 main = replaceOnce(
   main,
   `async (e, t) => (Le.get().setAuth(t.baseUrl, t.token), await a.scheduler.recoverInterruptedRunsOnce(), await a.scheduler.forceSync().catch((n) => {

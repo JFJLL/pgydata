@@ -15562,11 +15562,11 @@ async function Ad(a, e, t) {
       });
     }), s.data.pipe(r), await new Promise((u, l) => {
       r.on("finish", () => u()), r.on("error", l);
-    }), Ie.info("下载完成"), Ie.info("校验文件完整性..."), await Cd(n) !== t)
+    }), Ie.info("下载完成"), Ie.info("校验文件完整性..."), (await Cd(n)).toLowerCase() !== String(t || "").toLowerCase().replace(/^sha256:/, ""))
       throw new Error("文件校验失败，请重新下载");
     Ie.info("校验通过"), ve.webContents.send(qe.updateDownloaded, {
       filePath: n
-    });
+    }), setTimeout(() => Ed(), 1200);
   } catch (n) {
     Ie.error("下载更新失败:", n);
     const s = n instanceof Error ? n.message : "下载更新失败";
@@ -15579,8 +15579,8 @@ function Ed() {
     return;
   }
   Ie.info("安装更新:", ot);
-  const a = process.platform;
-  a === "win32" ? (Tr(ot, [], {
+  const a = process.platform, e = Ja(ye.getPath("exe"));
+  a === "win32" ? (Tr(ot, ["/S", `/D=${e}`], {
     detached: !0,
     stdio: "ignore"
   }).unref(), ye.quit()) : (a === "darwin" || a === "linux") && (Ji.openPath(ot), ve == null || ve.webContents.send(qe.manualInstall, {

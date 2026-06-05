@@ -281,6 +281,63 @@
         padding: 14px 16px;
       }
 
+      .link-btn {
+        border: 0;
+        background: transparent;
+        color: #c01818;
+        cursor: pointer;
+        font-weight: 800;
+        padding: 0;
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: rgba(17, 24, 39, 0.32);
+        z-index: 20;
+      }
+
+      .modal {
+        width: min(760px, calc(100vw - 48px));
+        max-height: min(760px, calc(100vh - 48px));
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 24px 72px rgba(17, 24, 39, 0.24);
+        overflow: hidden;
+      }
+
+      .modal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 18px;
+        border-bottom: 1px solid #f0e7e4;
+      }
+
+      .modal-body {
+        padding: 16px 18px;
+        overflow: auto;
+      }
+
+      .detail-list {
+        margin: 12px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .detail-list li {
+        padding: 10px 0;
+        border-bottom: 1px solid #f0e7e4;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+
       @media (max-width: 980px) {
         .stats {
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -359,7 +416,7 @@
 
       <div class="tabs">
         <button class="tab active" type="button" data-tab="users">用户列表</button>
-        <button class="tab" type="button" data-tab="transactions">用户流水</button>
+        <button class="tab" type="button" data-tab="transactions">消耗流水</button>
       </div>
 
       <section id="usersPanel" class="panel">
@@ -383,6 +440,7 @@
                 <th>昵称</th>
                 <th>状态</th>
                 <th>积分余额</th>
+                <th>最后活跃</th>
                 <th>注册时间</th>
                 <th>注销时间</th>
                 <th>操作</th>
@@ -401,7 +459,7 @@
       <section id="transactionsPanel" class="panel hidden">
         <div class="toolbar">
           <div>
-            <strong>用户流水</strong>
+            <strong>消耗流水</strong>
             <div id="transactionMeta" class="subtle">加载中</div>
           </div>
           <form id="transactionSearchForm" class="search">
@@ -417,11 +475,12 @@
                 <th>用户昵称</th>
                 <th>手机号</th>
                 <th>时间</th>
-                <th>消耗额度</th>
-                <th>额度变化</th>
-                <th>操作</th>
+                <th>本次消耗</th>
+                <th>扣后余额</th>
+                <th>来源</th>
                 <th>账号状态</th>
                 <th>备注</th>
+                <th>详情</th>
               </tr>
             </thead>
             <tbody id="transactionRows"></tbody>
@@ -435,6 +494,19 @@
       </section>
     </main>
 
+    <div id="detailModal" class="modal-backdrop hidden">
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+        <div class="modal-head">
+          <div>
+            <strong id="detailTitle">流水详情</strong>
+            <div id="detailSummary" class="subtle"></div>
+          </div>
+          <button id="detailCloseBtn" class="btn secondary" type="button">关闭</button>
+        </div>
+        <div id="detailBody" class="modal-body"></div>
+      </section>
+    </div>
+
     <script>
       const state = {
         token: localStorage.getItem("redMagicAdminToken") || "",
@@ -446,6 +518,7 @@
         transactionPage: 1,
         transactionTotal: 0,
         transactionKeyword: "",
+        transactions: [],
       };
 
       const $ = (id) => document.getElementById(id);
@@ -556,6 +629,7 @@
             <td>${escapeHtml(user.nickname)}</td>
             <td>${statusBadge(user.status)}</td>
             <td><strong>${user.balance}</strong></td>
+            <td>${formatDate(user.lastActiveAt)}</td>
             <td>${formatDate(user.createdAt)}</td>
             <td>${formatDate(user.deletedAt)}</td>
             <td><button class="btn" type="button" data-user-id="${user.id}" ${active ? "" : "disabled"}>${active ? "加积分" : "已注销"}</button></td>
@@ -576,19 +650,22 @@
         });
         const data = await api(`/api/admin/user-transactions?${params}`);
         state.transactionTotal = data.total;
+        state.transactions = data.list;
         const tbody = $("transactionRows");
         tbody.innerHTML = "";
-        data.list.forEach((item) => {
+        data.list.forEach((item, index) => {
           const tr = document.createElement("tr");
+          const hasDetail = item.detail && Array.isArray(item.detail.rows) && item.detail.rows.length > 0;
           tr.innerHTML = `
             <td>${escapeHtml(item.nickname || `用户${String(item.userId || "").padStart(4, "0")}`)}</td>
             <td>${escapeHtml(item.phone)}</td>
             <td>${formatDate(item.createdAt)}</td>
             <td><strong>${item.consumedQuota || 0}</strong></td>
-            <td>${amountHtml(item.amount)}</td>
-            <td>${escapeHtml(item.operation)}</td>
+            <td>${item.balanceAfter ?? "-"}</td>
+            <td>${escapeHtml(item.detailType === "manual" ? "手动输入" : item.detailType === "xlsx" ? "xlsx上传" : item.operation)}</td>
             <td>${statusBadge(item.status)}</td>
-            <td>${escapeHtml(item.remark)}</td>
+            <td>${escapeHtml(item.detailSummary || item.remark)}</td>
+            <td>${hasDetail ? `<button class="link-btn" type="button" data-transaction-index="${index}">查看</button>` : "-"}</td>
           `;
           tbody.appendChild(tr);
         });
@@ -625,6 +702,32 @@
         await loadAll();
       }
 
+      function showTransactionDetail(index) {
+        const item = state.transactions[Number(index)];
+        if (!item || !item.detail) return;
+        const detail = item.detail;
+        $("detailSummary").textContent = `${item.nickname || item.phone || "用户"} · ${formatDate(item.createdAt)} · 消耗 ${item.consumedQuota || 0}`;
+        const rows = Array.isArray(detail.rows) ? detail.rows : [];
+        const meta = [
+          `来源：${detail.inputType === "manual" ? "手动输入" : detail.inputType === "xlsx" ? "xlsx上传" : "未知"}`,
+          detail.fileName ? `文件：${detail.fileName}` : "",
+          `有效条数：${detail.validCount ?? rows.length}`,
+          detail.truncated ? "内容过长，已截断显示" : "",
+        ].filter(Boolean);
+        $("detailBody").innerHTML = `
+          <div class="subtle">${escapeHtml(meta.join(" · "))}</div>
+          <ul class="detail-list">
+            ${rows.length > 0 ? rows.map((row) => `<li>${escapeHtml(row)}</li>`).join("") : "<li>暂无提交内容</li>"}
+          </ul>
+        `;
+        $("detailModal").classList.remove("hidden");
+      }
+
+      function hideTransactionDetail() {
+        $("detailModal").classList.add("hidden");
+        $("detailBody").innerHTML = "";
+      }
+
       $("loginForm").addEventListener("submit", login);
       $("logoutBtn").addEventListener("click", logout);
       $("refreshBtn").addEventListener("click", () => loadAll().catch((err) => alert(err.message)));
@@ -656,6 +759,15 @@
       $("transactionNextBtn").addEventListener("click", () => {
         state.transactionPage += 1;
         loadTransactions().catch((err) => alert(err.message));
+      });
+      $("transactionRows").addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-transaction-index]");
+        if (!button) return;
+        showTransactionDetail(button.dataset.transactionIndex);
+      });
+      $("detailCloseBtn").addEventListener("click", hideTransactionDetail);
+      $("detailModal").addEventListener("click", (event) => {
+        if (event.target.id === "detailModal") hideTransactionDetail();
       });
       $("userRows").addEventListener("click", (event) => {
         const button = event.target.closest("button[data-user-id]");

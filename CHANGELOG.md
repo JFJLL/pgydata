@@ -7,13 +7,15 @@
 - 新增功能：抖音“星图主页采集”支持手动输入星图/抖音主页链接。
 - 修复：授权状态监听返回并使用取消监听函数，避免长时间使用时累计 `scraper:auth:status-changed` 监听器。
 - 修复：采集任务日志增加平台、任务类型、进度和结果统计，抖音星图采集会写入主进程日志。
+- 修复：蒲公英采集字段模板按博主采集、笔记采集拆分，避免跨任务模板字段被自动过滤。
+- 修复：小红书笔记采集手动输入支持直接填写 24 位笔记 ID。
 - 官网/帮助页：使用说明新增“小红书 / 抖音星图 / Mac 说明”子 tab，并加入抖音星图流程截图。
 - Windows 安装包：
   - 路径：`D:\download\pic-vec\pgydata\desktop-versions\windows\1.1.1\magiorix-desktop-1.1.1-windows.exe`
-  - SHA256：`28BC6C9B109D57CD8CAFDFC4FDD7707EF5E262CA7B51D6B95CC607B632240F91`
+  - SHA256：`EAD208C7027602A52613E7F27C828DB3FC52ED035B530E326769D8FB4B8474EB`
 - 前端资源包：
   - 路径：`D:\download\pic-vec\pgydata\desktop-versions\windows\1.1.1\magiorix-desktop-1.1.1-assets.zip`
-  - SHA256：`05780ED3D406A9DA9F322765A09226DFD1FADD3E6D6BE8265DC2D87A8331747A`
+  - SHA256：`7A293106E13A9FF6A636AA5ED7236A2E16A872F4BCD55A2AE06A0D23B286AC14`
 
 ## 1.1.0
 
