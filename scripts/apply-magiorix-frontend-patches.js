@@ -404,7 +404,64 @@ replaceOnce(
 );
 
 replaceAllIfExists(mainBundle, '"1.0.0"', `"${assetVersion}"`);
+replaceAllIfExists(mainBundle, '"1.1.0"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, previousServerBaseUrl, serverBaseUrl);
+
+replaceOnce(
+  mainBundle,
+  'const{autoNotify:a,_isManualCheck:n}=t(),l=r.forceUpdate||!n&&a;e({checkStatus:"available",updateInfo:r,error:"",dialogOpen:l,_isManualCheck:!1})',
+  'const{autoNotify:a,_isManualCheck:n}=t(),l=r.forceUpdate||n||!n&&a;e({checkStatus:"available",updateInfo:r,error:"",dialogOpen:l,_isManualCheck:!1})',
+  "manual desktop update check opens dialog",
+);
+
+replaceOnce(
+  mainBundle,
+  'function js(){const[e,t]=m.useState(null),{checkStatus:r,downloadStatus:a,updateInfo:n,progress:l,error:s,autoNotify:i,setAutoNotify:d,startDownload:c,installUpdate:u,openDialog:f}=it();m.useEffect(()=>{var h;(h=window.bridge)==null||h.assets.getLocalVersion().then(g=>t(g))},[]);',
+  'function js(){const[e,t]=m.useState(null),[h,g]=m.useState(""),[y,S]=m.useState(!1),{checkStatus:r,downloadStatus:a,updateInfo:n,progress:l,error:s,autoNotify:i,setAutoNotify:d,startDownload:c,installUpdate:u,openDialog:f,checkForUpdates:b}=it();m.useEffect(()=>{var P;(P=window.bridge)==null||P.assets.getLocalVersion().then(A=>t(A))},[]);m.useEffect(()=>{y&&r==="not-available"&&(g("已是最新"),S(!1));y&&r==="available"&&S(!1);y&&r==="error"&&(g("检查更新失败"),S(!1))},[r,y]);',
+  "about page manual update toast state",
+);
+
+replaceOnce(
+  mainBundle,
+  'const b=()=>{a==="downloaded"?u():c()},C=()=>a==="downloading"?`下载中 ${(l==null?void 0:l.percent)??0}%`:"安装并重启";',
+  'const P=()=>{S(!0),b()},A=()=>g(""),C=()=>{a==="downloaded"?u():c()},V=()=>a==="downloading"?`下载中 ${(l==null?void 0:l.percent)??0}%`:"安装并重启";',
+  "about page manual update handlers",
+);
+
+replaceOnce(
+  mainBundle,
+  'children:C()}),o.jsx($,{variant:"outlined",size:"small",onClick:f,children:"查看更新日志"})',
+  'children:V()}),o.jsx($,{variant:"outlined",size:"small",onClick:f,children:"查看更新日志"})',
+  "about page update action label rename",
+);
+
+replaceOnce(
+  mainBundle,
+  'variant:"contained",size:"small",onClick:b,disabled:a==="downloading",startIcon:a==="downloading"?o.jsx(de,{size:16,color:"inherit"}):o.jsx(B,{icon:"solar:restart-bold",width:18,height:18}),children:V()',
+  'variant:"contained",size:"small",onClick:C,disabled:a==="downloading",startIcon:a==="downloading"?o.jsx(de,{size:16,color:"inherit"}):o.jsx(B,{icon:"solar:restart-bold",width:18,height:18}),children:V()',
+  "about page available update button starts download",
+);
+
+replaceOnce(
+  mainBundle,
+  'o.jsx(x,{sx:{display:"flex",alignItems:"center",justifyContent:"space-between",mb:.5},children:o.jsx(Or,{control:o.jsx(zr,{checked:i,onChange:h=>d(h.target.checked),size:"small"}),label:o.jsx(w,{variant:"body2",children:"新版本发布时提醒我"})})})',
+  'o.jsxs(x,{sx:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:2,mb:.5},children:[o.jsx(Or,{control:o.jsx(zr,{checked:i,onChange:H=>d(H.target.checked),size:"small"}),label:o.jsx(w,{variant:"body2",children:"新版本发布时提醒我"})}),o.jsx($,{variant:"outlined",size:"small",onClick:P,disabled:r==="checking",startIcon:r==="checking"?o.jsx(de,{size:16,color:"inherit"}):o.jsx(B,{icon:"solar:refresh-bold",width:16,height:16}),sx:{flexShrink:0,textTransform:"none"},children:r==="checking"?"检查中...":"检查更新"})]})',
+  "about page manual check update button",
+);
+
+replaceOnce(
+  mainBundle,
+  'o.jsxs(w,{variant:"body2",color:"text.secondary",children:["Copyright © ",new Date().getFullYear()," magiorix. All rights reserved."]})]})]})}function Ms(){',
+  'o.jsxs(w,{variant:"body2",color:"text.secondary",children:["Copyright © ",new Date().getFullYear()," magiorix. All rights reserved."]})]}),o.jsx(_1,{open:!!h,autoHideDuration:3e3,onClose:A,message:h})]})}function Ms(){',
+  "about page latest-version snackbar",
+);
+
+replaceOnce(
+  mainBundle,
+  'const[r,a]=m.useState("appearance"),n=se(),{checkForUpdates:l,checkStatus:s}=it();return m.useEffect(()=>{e&&l()},[e,l]),o.jsxs(ue',
+  'const[r,a]=m.useState("appearance"),n=se(),{checkStatus:s}=it();return o.jsxs(ue',
+  "settings dialog no longer auto-checks updates",
+);
 
 for (const entry of fs.readdirSync(assetsDir)) {
   if (!/\.(js|css|html|svg)$/i.test(entry)) continue;
