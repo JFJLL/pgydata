@@ -1,7 +1,7 @@
 {
   "version": "1.1.2",
   "algorithm": "sha256",
-  "generatedAt": "2026-06-11T06:04:40.9946185Z",
+  "generatedAt": "2026-06-11T06:17:26.0964098Z",
   "files": [
     {
       "path": "assets/admin-finance-Csc-tqD6.js",
@@ -300,8 +300,8 @@
     },
     {
       "path": "magiorix-ops-assistant.js",
-      "size": 31879,
-      "sha256": "d865f50717ce82f9639038d8122b22717d1924ed9a333a9dd1c73aa2364a6254"
+      "size": 31968,
+      "sha256": "78300bad946953aab8d31723e1cb0d2b1d585585869c4e7bb432282737483e92"
     }
   ]
 }

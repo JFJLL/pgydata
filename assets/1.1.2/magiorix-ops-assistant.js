@@ -410,7 +410,8 @@
 
   function getAssistantLeft() {
     if (window.innerWidth <= 760) return 16;
-    const fallbackSidebarRight = window.innerWidth >= 1180 ? 408 : 320;
+    const fallbackSidebarRight = window.innerWidth >= 1180 ? 432 : 320;
+    const maxSidebarRight = window.innerWidth >= 1180 ? 456 : 360;
     const selectors = [
       "aside",
       "nav",
@@ -440,9 +441,9 @@
       if (!/(小红书|蒲公英|抖音|星图|博主|笔记|采集)/.test(text)) return;
       reservedRight = Math.max(reservedRight, rect.right);
     });
-    reservedRight = Math.max(reservedRight, fallbackSidebarRight);
+    reservedRight = Math.min(Math.max(reservedRight, fallbackSidebarRight), maxSidebarRight);
     const panelWidth = state.open ? Math.min(440, window.innerWidth - 32) : 164;
-    const preferredLeft = Math.max(24, Math.ceil(reservedRight + 16));
+    const preferredLeft = Math.max(24, Math.ceil(reservedRight));
     const maxLeft = Math.max(16, window.innerWidth - panelWidth - 16);
     return Math.min(preferredLeft, maxLeft);
   }
