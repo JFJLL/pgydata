@@ -410,40 +410,8 @@
 
   function getAssistantLeft() {
     if (window.innerWidth <= 760) return 16;
-    const fallbackSidebarRight = window.innerWidth >= 1180 ? 432 : 320;
-    const maxSidebarRight = window.innerWidth >= 1180 ? 456 : 360;
-    const selectors = [
-      "aside",
-      "nav",
-      '[class*="Sidebar"]',
-      '[class*="sidebar"]',
-      '[class*="Sider"]',
-      '[class*="sider"]',
-      '[class*="menu"]',
-      '[class*="Menu"]',
-    ].join(",");
-    let reservedRight = 0;
-    document.querySelectorAll(selectors).forEach((node) => {
-      if (runtime.root?.contains(node)) return;
-      const rect = node.getBoundingClientRect();
-      const style = getComputedStyle(node);
-      if (style.display === "none" || style.visibility === "hidden") return;
-      if (rect.left > 8 || rect.width < 48 || rect.width > 380 || rect.height < window.innerHeight * 0.45) return;
-      reservedRight = Math.max(reservedRight, rect.right);
-    });
-    document.querySelectorAll("body *").forEach((node) => {
-      if (runtime.root?.contains(node)) return;
-      const rect = node.getBoundingClientRect();
-      if (rect.left > 140 || rect.right < 180 || rect.right > 460 || rect.height < 80 || rect.height > window.innerHeight) return;
-      const style = getComputedStyle(node);
-      if (style.display === "none" || style.visibility === "hidden" || style.position === "fixed") return;
-      const text = (node.textContent || "").slice(0, 120);
-      if (!/(小红书|蒲公英|抖音|星图|博主|笔记|采集)/.test(text)) return;
-      reservedRight = Math.max(reservedRight, rect.right);
-    });
-    reservedRight = Math.min(Math.max(reservedRight, fallbackSidebarRight), maxSidebarRight);
     const panelWidth = state.open ? Math.min(440, window.innerWidth - 32) : 164;
-    const preferredLeft = Math.max(24, Math.ceil(reservedRight));
+    const preferredLeft = window.innerWidth >= 1180 ? 440 : 320;
     const maxLeft = Math.max(16, window.innerWidth - panelWidth - 16);
     return Math.min(preferredLeft, maxLeft);
   }
