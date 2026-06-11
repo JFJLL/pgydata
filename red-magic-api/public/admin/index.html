@@ -362,7 +362,7 @@
         <div class="mark">RM</div>
         <div>
           <h1>管理员登录</h1>
-          <div class="subtle">登录后可查看用户、加积分和用户流水</div>
+          <div class="subtle">登录后可查看用户、加减积分和用户流水</div>
         </div>
       </div>
       <form id="loginForm">
@@ -409,7 +409,7 @@
           <div id="statBalance" class="value">0</div>
         </article>
         <article class="card">
-          <div class="subtle">后台累计加分</div>
+          <div class="subtle">后台净调整</div>
           <div id="statAdded" class="value">0</div>
         </article>
       </section>
@@ -632,7 +632,7 @@
             <td>${formatDate(user.lastActiveAt)}</td>
             <td>${formatDate(user.createdAt)}</td>
             <td>${formatDate(user.deletedAt)}</td>
-            <td><button class="btn" type="button" data-user-id="${user.id}" ${active ? "" : "disabled"}>${active ? "加积分" : "已注销"}</button></td>
+            <td><button class="btn" type="button" data-user-id="${user.id}" ${active ? "" : "disabled"}>${active ? "加减积分" : "已注销"}</button></td>
           `;
           tbody.appendChild(tr);
         });
@@ -691,13 +691,18 @@
         loadAll().catch((err) => alert(err.message));
       }
 
-      async function addPoints(userId) {
-        const count = window.prompt("请输入要增加的积分数量", "100");
-        if (!count) return;
-        const remark = window.prompt("备注", "管理员加积分") || "管理员加积分";
+      async function adjustPoints(userId) {
+        const raw = window.prompt("请输入积分调整数量：正数加积分，负数扣积分", "100");
+        if (!raw) return;
+        const delta = Number(raw);
+        if (!Number.isFinite(delta) || delta === 0) {
+          alert("请输入非 0 数字，正数为加积分，负数为扣积分");
+          return;
+        }
+        const remark = window.prompt("备注", delta < 0 ? "管理员扣积分" : "管理员加积分") || (delta < 0 ? "管理员扣积分" : "管理员加积分");
         await api(`/api/admin/users/${userId}/add-points`, {
           method: "POST",
-          body: JSON.stringify({ count: Number(count), remark }),
+          body: JSON.stringify({ delta, remark }),
         });
         await loadAll();
       }
@@ -772,7 +777,7 @@
       $("userRows").addEventListener("click", (event) => {
         const button = event.target.closest("button[data-user-id]");
         if (!button || button.disabled) return;
-        addPoints(button.dataset.userId).catch((err) => alert(err.message));
+        adjustPoints(button.dataset.userId).catch((err) => alert(err.message));
       });
       document.querySelectorAll(".tab").forEach((button) => {
         button.addEventListener("click", () => switchTab(button.dataset.tab));

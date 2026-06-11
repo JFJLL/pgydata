@@ -117,6 +117,128 @@
     render();
   }
 
+  function upsertTaskSuccessLog(task, event) {
+    const taskId = event.taskId || task.id;
+    const now = new Date().toLocaleString("zh-CN", { hour12: false });
+    const existing = state.logs.find((entry) => entry.type === "success-summary" && entry.taskId === taskId);
+    const details = [
+      `任务ID：${taskId}`,
+      `平台：${pluginLabel(task.payload?.pluginId)}`,
+      `文件：${task.payload?.fileName || "手动输入"}`,
+      `进度：${task.success}/${task.total || "未知"}`,
+      `最近成功：第 ${(event.index ?? 0) + 1} 条`,
+      "判断：软件已收到采集成功回调，单条采集链路正常。",
+    ].join("；");
+
+    if (existing) {
+      existing.time = now;
+      existing.level = "success";
+      existing.message = `采集成功：已合并 ${task.success} 条`;
+      existing.details = details;
+    } else {
+      state.logs.push({
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        time: now,
+        level: "success",
+        message: `采集成功：已合并 ${task.success} 条`,
+        details,
+        type: "success-summary",
+        taskId,
+      });
+    }
+    state.logs = state.logs.slice(-160);
+    saveState();
+    render();
+  }
+
+  function diagnoseFailure(category, event) {
+    const text = `${event?.errorCode || ""} ${event?.errorMessage || ""}`.toLowerCase();
+    if (["auth", "captcha", "risk"].includes(category.code)) {
+      return "倾向蒲公英平台或账号状态问题：登录授权、验证码、安全验证或风控需要在平台页面处理。";
+    }
+    if (category.code === "timeout") {
+      return "倾向网络或蒲公英平台响应问题：先重试，若连续出现且网页登录也慢，优先按平台问题处理。";
+    }
+    if (["invalid-input", "not-found"].includes(category.code)) {
+      return "倾向输入数据或平台返回问题：检查链接是否有效、目标是否存在或是否有访问权限。";
+    }
+    if (text.includes("bridge") || text.includes("script") || text.includes("undefined") || text.includes("exception")) {
+      return "倾向软件问题：复制日志给开发者排查。";
+    }
+    return "暂不能确定来源：需要结合错误码、链接和发生步骤判断。";
+  }
+
+  function logFailure(event, task, category, url) {
+    const details = [
+      `任务ID：${event.taskId || task.id}`,
+      `平台：${pluginLabel(task.payload?.pluginId || event.platform || event.pluginId)}`,
+      `文件：${task.payload?.fileName || "手动输入"}`,
+      `位置：第 ${Number.isFinite(Number(event.index)) ? Number(event.index) + 1 : "未知"} 条`,
+      event.errorCode ? `错误码：${event.errorCode}` : "",
+      event.errorMessage ? `错误信息：${event.errorMessage}` : "",
+      url ? `链接：${url}` : "",
+      `判断：${diagnoseFailure(category, event)}`,
+    ].filter(Boolean).join("；");
+    log("error", `采集失败：${category.label}`, details);
+  }
+
+  function buildCopyableLogs() {
+    const currentTask = runtime.tasks.get(state.lastTaskId);
+    const lines = [
+      "magiorix 采集助手日志",
+      `导出时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`,
+      `页面地址：${location.href}`,
+      `浏览器：${navigator.userAgent}`,
+      `采集节奏：${PACE[state.paceMode]?.label || state.paceMode}`,
+      "",
+      "当前任务",
+      currentTask
+        ? [
+            `任务ID：${currentTask.id}`,
+            `平台：${pluginLabel(currentTask.payload?.pluginId)}`,
+            `文件：${currentTask.payload?.fileName || "手动输入"}`,
+            `进度：${currentTask.current}/${currentTask.total}`,
+            `成功：${currentTask.success}`,
+            `失败：${currentTask.failed.length}`,
+            `开始时间：${new Date(currentTask.startedAt).toLocaleString("zh-CN", { hour12: false })}`,
+          ].join("\n")
+        : "暂无当前任务",
+      "",
+      "历史任务",
+      ...(state.history.length
+        ? state.history.slice(0, 10).map((item) => `${item.finishedAt} | ${pluginLabel(item.pluginId)} | ${item.fileName} | 成功 ${item.success} | 失败 ${item.failed} | ${Math.round((item.duration || 0) / 1000)} 秒`)
+        : ["暂无历史任务"]),
+      "",
+      "事件日志",
+      ...(state.logs.length
+        ? state.logs.slice(-80).map((entry) => `${entry.time} | ${entry.level} | ${entry.message}${entry.details ? ` | ${entry.details}` : ""}`)
+        : ["暂无日志"]),
+    ];
+    return lines.join("\n");
+  }
+
+  async function copyLogs() {
+    const text = buildCopyableLogs();
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+      log("info", "日志已复制，可直接粘贴给开发者");
+    } catch (error) {
+      log("warn", "复制日志失败，请手动选中日志复制", errorMessage(error));
+    }
+  }
+
   function flushDeferredRender() {
     runtime.deferRender = false;
     if (!runtime.pendingRender) return;
@@ -225,11 +347,11 @@
       const url = item.payload?.urls?.[event.index] || "";
       if (event.status === "success") {
         item.success += 1;
-        log("success", `采集成功：第 ${(event.index ?? 0) + 1} 条`);
+        upsertTaskSuccessLog(item, event);
       } else {
         const category = classifyFailure(event);
         item.failed.push({ url, index: event.index, category, message: event.errorMessage || "" });
-        log("error", `采集失败：${category.label}`, event.errorMessage || url);
+        logFailure(event, item, category, url);
       }
       render();
     });
@@ -296,7 +418,7 @@
       const style = document.createElement("style");
       style.setAttribute("data-moa-style", "true");
       style.textContent = `
-      #magiorix-ops-assistant{position:fixed;right:24px;bottom:24px;z-index:1600;font:13px/1.5 "Microsoft YaHei",system-ui,sans-serif;color:var(--moa-ink);--moa-red:#ff2a3b;--moa-ink:var(--mui-palette-text-primary,#17202a);--moa-muted:var(--mui-palette-text-secondary,#7b8794);--moa-line:var(--mui-palette-divider,rgba(145,158,171,.22));--moa-bg:var(--mui-palette-background-paper,#fff);--moa-soft:var(--mui-palette-background-default,#fbfcfd);--moa-hover:var(--mui-palette-action-hover,#f2f4f7);--moa-shadow:rgba(23,32,42,.2)}
+      #magiorix-ops-assistant{position:fixed;left:24px;bottom:24px;z-index:1600;font:13px/1.5 "Microsoft YaHei",system-ui,sans-serif;color:var(--moa-ink);--moa-red:#ff2a3b;--moa-ink:var(--mui-palette-text-primary,#17202a);--moa-muted:var(--mui-palette-text-secondary,#7b8794);--moa-line:var(--mui-palette-divider,rgba(145,158,171,.22));--moa-bg:var(--mui-palette-background-paper,#fff);--moa-soft:var(--mui-palette-background-default,#fbfcfd);--moa-hover:var(--mui-palette-action-hover,#f2f4f7);--moa-shadow:rgba(23,32,42,.2)}
       #magiorix-ops-assistant.moa-dark{--moa-ink:#f3f6f8;--moa-muted:#9aa6b2;--moa-line:rgba(145,158,171,.24);--moa-bg:#151c24;--moa-soft:#10161d;--moa-hover:rgba(145,158,171,.12);--moa-shadow:rgba(0,0,0,.48)}
       #magiorix-ops-assistant button,#magiorix-ops-assistant select{font:inherit}
       .moa-toggle{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,42,59,.22);border-radius:999px;padding:10px 16px;background:var(--moa-bg);color:var(--moa-ink);box-shadow:0 14px 34px var(--moa-shadow);cursor:pointer;font-weight:700;transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}
@@ -484,7 +606,10 @@
       </div>
       <div class="moa-card">
         <div class="moa-title">事件日志</div>
-        <button class="moa-btn" data-clear style="margin-bottom:8px">清空日志</button>
+        <div class="moa-row">
+          <button class="moa-btn" data-copy>复制日志</button>
+          <button class="moa-btn" data-clear>清空日志</button>
+        </div>
         ${state.logs.slice().reverse().map((entry) => `
           <div class="moa-log ${entry.level}">
             <div class="moa-log-time">${entry.time}</div>
@@ -494,6 +619,9 @@
         `).join("") || '<div class="moa-sub">暂无日志</div>'}
       </div>
     `;
+    runtime.historyBox.querySelector("[data-copy]").addEventListener("click", () => {
+      copyLogs();
+    });
     runtime.historyBox.querySelector("[data-clear]").addEventListener("click", () => {
       state.logs = [];
       saveState();

@@ -141,6 +141,13 @@ function parsePositiveAmount(value) {
   return Math.floor(n);
 }
 
+function parseAdjustmentAmount(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n === 0) return null;
+  const amount = n > 0 ? Math.floor(n) : Math.ceil(n);
+  return amount === 0 ? null : amount;
+}
+
 function parsePageParams(query) {
   const rawPage = Number(query.page || 1);
   const rawPageSize = Number(query.pageSize || query.limit || 10);
@@ -1190,21 +1197,26 @@ app.get("/api/admin/users", adminRequired, asyncHandler(async (req, res) => {
 
 app.post("/api/admin/users/:id/add-points", adminRequired, asyncHandler(async (req, res) => {
   const userId = Number(req.params.id);
-  const count = parsePositiveAmount(req.body.count ?? req.body.amount ?? req.body.points);
-  const remark = String(req.body.remark || "管理员加积分").trim();
+  const delta = parseAdjustmentAmount(req.body.delta ?? req.body.count ?? req.body.amount ?? req.body.points);
+  const remark = String(req.body.remark || (delta < 0 ? "管理员扣积分" : "管理员加积分")).trim();
 
   if (!Number.isInteger(userId) || userId <= 0) return fail(res, 400, "用户不存在");
-  if (!count) return fail(res, 400, "加积分数量不能为空");
+  if (!delta) return fail(res, 400, "积分调整数量不能为空，正数为加积分，负数为扣积分");
 
   const user = await dbGet("SELECT id, status FROM users WHERE id = ?", [userId]);
   if (!user) return fail(res, 404, "用户不存在");
-  if (Number(user.status) !== 1) return fail(res, 400, "账号已注销，不能继续加积分");
+  if (Number(user.status) !== 1) return fail(res, 400, "账号已注销，不能继续调整积分");
 
   await dbRun("BEGIN IMMEDIATE TRANSACTION");
   try {
     const account = await ensureAccount(userId, 0);
     const createdAt = nowIso();
-    const nextBalance = Number(account.balance || 0) + count;
+    const currentBalance = Number(account.balance || 0);
+    const nextBalance = currentBalance + delta;
+    if (nextBalance < 0) {
+      await dbRun("ROLLBACK");
+      return fail(res, 400, `积分余额不足，当前余额 ${currentBalance}，不能扣 ${Math.abs(delta)}`);
+    }
 
     await dbRun(
       "UPDATE shumiao_accounts SET balance = ?, updated_at = ? WHERE user_id = ?",
@@ -1214,20 +1226,20 @@ app.post("/api/admin/users/:id/add-points", adminRequired, asyncHandler(async (r
       `INSERT INTO admin_balance_adjustments
         (admin_username, user_id, delta, balance_after, remark, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [req.admin.username, userId, count, nextBalance, remark, createdAt],
+      [req.admin.username, userId, delta, nextBalance, remark, createdAt],
     );
     await dbRun("COMMIT");
-    logInfo("admin_add_points", {
+    logInfo("admin_adjust_points", {
       adminUsername: req.admin.username,
       userId,
-      delta: count,
+      delta,
       balanceAfter: nextBalance,
       ...requestLogInfo(req),
     });
 
     return success(res, {
       userId,
-      delta: count,
+      delta,
       balance: nextBalance,
     });
   } catch (err) {
