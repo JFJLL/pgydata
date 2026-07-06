@@ -14,10 +14,10 @@ const DEFAULT_GIFT_BALANCE = Number(process.env.DEFAULT_GIFT_BALANCE || 100);
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "red-magic-api.sqlite");
 const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, "logs");
-const ASSET_VERSION = "1.1.2";
-const INSTALLER_FILE_NAME = "magiorix-desktop-1.1.2-windows.exe";
-const INSTALLER_DOWNLOAD_URL = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.2-windows.exe";
-const INSTALLER_SHA256 = (process.env.INSTALLER_SHA256 || "8E203CBC880C61BDF7BEEED612C50F8E63BB02CAAADB4D2C12BAC7C9F220824E").trim();
+const ASSET_VERSION = "1.1.3";
+const INSTALLER_FILE_NAME = "magiorix-desktop-1.1.3-windows.exe";
+const INSTALLER_DOWNLOAD_URL = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.3-windows.exe";
+const INSTALLER_SHA256 = (process.env.INSTALLER_SHA256 || "A04523F870E227A39A7D4EAC13ACFF0FB05B362640FBF7F7826348C9E20F8685").trim();
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "redmagic2026";
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -910,6 +910,8 @@ app.get("/api/shumiao/check-balance", authRequired, asyncHandler(async (req, res
   const balance = Number(account.balance || 0);
   return success(res, {
     balance,
+    required: count,
+    shortage: Math.max(0, count - balance),
     sufficient: balance >= count,
   });
 }));
@@ -925,7 +927,11 @@ app.post("/api/shumiao/consume", authRequired, asyncHandler(async (req, res) => 
     const balance = Number(account.balance || 0);
     if (balance < count) {
       await dbRun("ROLLBACK");
-      return fail(res, 400, "树苗余额不足");
+      return fail(res, 400, `树苗余额不足：当前 ${balance}，本次需要 ${count}，还差 ${count - balance}`, {
+        balance,
+        required: count,
+        shortage: count - balance,
+      });
     }
 
     const nextBalance = balance - count;

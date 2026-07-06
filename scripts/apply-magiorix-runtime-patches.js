@@ -340,6 +340,75 @@ if (!main.includes('errorCategoryLabel: y.label')) {
   );
 }
 
+if (!main.includes("consumeShumiaoForTask(e)")) {
+  main = replaceOnce(
+    main,
+    `  async getPacePolicy(e) {
+    return (await this.request(
+      "GET",
+      \`/api/pace-policies/\${encodeURIComponent(e)}\`
+    )).data ?? null;
+  }
+  /**
+   * 批量扣减账号配额（usedToday / usedThisHour）。
+`,
+    `  async getPacePolicy(e) {
+    return (await this.request(
+      "GET",
+      \`/api/pace-policies/\${encodeURIComponent(e)}\`
+    )).data ?? null;
+  }
+  async consumeShumiaoForTask(e) {
+    const t = Array.isArray(e.urls) ? e.urls.length : 0;
+    if (t <= 0)
+      throw new Error("没有可计费的采集链接");
+    if (!this.isAuthenticated())
+      throw new Error("未登录，无法判定积分余额");
+    const n = {
+      inputType: e.inputType || (String(e.fileName || "").includes("手动输入") ? "manual" : "xlsx"),
+      pluginId: e.pluginId,
+      taskType: e.taskType,
+      fileName: e.fileName,
+      totalRows: e.totalRows ?? t,
+      validCount: t,
+      urls: e.urls
+    }, s = await this.request("POST", "/api/shumiao/consume", {
+      count: t,
+      remark: \`采集任务扣减 \${t} 树苗\`,
+      detail: n
+    });
+    return Number(s.data?.balance ?? 0);
+  }
+  /**
+   * 批量扣减账号配额（usedToday / usedThisHour）。
+`,
+    "scheduler api consume shumiao before personal task",
+  );
+
+  main = replaceOnce(
+    main,
+    `      this.runningTasks.set(t, l);
+    }
+    if (c === "enterprise") {`,
+    `      this.runningTasks.set(t, l);
+      try {
+        const m = await Le.get().consumeShumiaoForTask(e);
+        ue.info(\`[task=\${t}] 积分扣减完成 count=\${i.length} balance=\${m}\`);
+      } catch (m) {
+        this.runningTasks.delete(t), ue.warn(\`[task=\${t}] 积分判定失败，任务未启动:\`, m), this.sendToRenderer(W.task.error, {
+          taskId: t,
+          message: m instanceof Error ? m.message : String(m),
+          errorCategory: "balance",
+          errorCategoryLabel: "积分不足"
+        });
+        return;
+      }
+    }
+    if (c === "enterprise") {`,
+    "personal task consumes shumiao before scraping window",
+  );
+}
+
 if (!main.includes("batchResting: !0")) {
   main = replaceOnce(
     main,
