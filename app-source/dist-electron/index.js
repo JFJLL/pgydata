@@ -16276,26 +16276,35 @@ const W = {
       `/api/pace-policies/${encodeURIComponent(e)}`
     )).data ?? null;
   }
-  async consumeShumiaoForTask(e) {
+  async checkShumiaoBalanceForTask(e) {
     const t = Array.isArray(e.urls) ? e.urls.length : 0;
     if (t <= 0)
       throw new Error("没有可计费的采集链接");
     if (!this.isAuthenticated())
       throw new Error("未登录，无法判定积分余额");
-    const n = {
+    const n = await this.request("GET", `/api/shumiao/check-balance?count=${encodeURIComponent(String(t))}`), s = Number(n.data?.balance ?? 0), i = Number(n.data?.required ?? t), o = Number(n.data?.shortage ?? Math.max(0, i - s));
+    if (!n.data?.sufficient)
+      throw new Error(`树苗余额不足：当前 ${s}，本次需要 ${i}，还差 ${o}`);
+    return s;
+  }
+  async consumeShumiaoForItem(e, t) {
+    if (!this.isAuthenticated())
+      throw new Error("未登录，无法扣减积分");
+    const n = Array.isArray(e.urls) ? e.urls[t] : null, s = {
       inputType: e.inputType || (String(e.fileName || "").includes("手动输入") ? "manual" : "xlsx"),
       pluginId: e.pluginId,
       taskType: e.taskType,
       fileName: e.fileName,
-      totalRows: e.totalRows ?? t,
-      validCount: t,
-      urls: e.urls
-    }, s = await this.request("POST", "/api/shumiao/consume", {
-      count: t,
-      remark: `采集任务扣减 ${t} 树苗`,
-      detail: n
+      totalRows: e.totalRows ?? (Array.isArray(e.urls) ? e.urls.length : 0),
+      validCount: Array.isArray(e.urls) ? e.urls.length : 0,
+      itemIndex: t + 1,
+      url: n
+    }, i = await this.request("POST", "/api/shumiao/consume", {
+      count: 1,
+      remark: `采集成功扣减 1 树苗`,
+      detail: s
     });
-    return Number(s.data?.balance ?? 0);
+    return Number(i.data?.balance ?? 0);
   }
   /**
    * 批量扣减账号配额（usedToday / usedThisHour）。
@@ -16718,8 +16727,8 @@ class Xd {
       }
       this.runningTasks.set(t, l);
       try {
-        const m = await Le.get().consumeShumiaoForTask(e);
-        ue.info(`[task=${t}] 积分扣减完成 count=${i.length} balance=${m}`);
+        const m = await Le.get().checkShumiaoBalanceForTask(e);
+        ue.info(`[task=${t}] 积分余额校验通过 count=${i.length} balance=${m}`);
       } catch (m) {
         this.runningTasks.delete(t), ue.warn(`[task=${t}] 积分判定失败，任务未启动:`, m), this.sendToRenderer(W.task.error, {
           taskId: t,
@@ -16790,6 +16799,14 @@ class Xd {
           }
           y.status = "error", y.data = null, y.errorMessage = "安全验证超时或用户取消验证";
         }
+        let S = !1;
+        if (y.status === "success")
+          try {
+            const x = await Le.get().consumeShumiaoForItem(e, m);
+            ue.info(`[task=${t}] 单条积分扣减完成 index=${m + 1} balance=${x}`);
+          } catch (x) {
+            S = !0, y.status = "error", y.data = null, y.errorMessage = x instanceof Error ? x.message : String(x), y.errorCode = "SHUMIAO_CONSUME_FAILED";
+          }
         const b = this.classifyFailure(y.errorCode, y.errorMessage, y.errorDetails);
         y.status === "success" ? l.successCount++ : l.errorCount++, this.sendToRenderer(W.task.itemResult, {
           taskId: t,
@@ -16803,6 +16820,15 @@ class Xd {
           errorCategoryLabel: b.label
         });
         ue.info(`[task=${t}] 完成采集第 ${m + 1}/${i.length} 条 plugin=${n} status=${y.status} errorCode=${y.errorCode ?? "NONE"} success=${l.successCount} error=${l.errorCount}`);
+        if (S) {
+          this.sendToRenderer(W.task.error, {
+            taskId: t,
+            message: y.errorMessage || "积分扣减失败，采集已停止",
+            errorCategory: "balance",
+            errorCategoryLabel: "积分不足"
+          });
+          break;
+        }
       } catch (v) {
         const y = this.classifyFailure("UNKNOWN_ERROR", v instanceof Error ? v.message : String(v));
         ue.error(`[task=${t}] 采集第 ${m + 1}/${i.length} 条异常 plugin=${n} url=${String(f).slice(0, 180)}`, v);

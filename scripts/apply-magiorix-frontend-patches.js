@@ -419,11 +419,42 @@ replaceOnce(
   "task panel remove task selector",
 );
 
+replaceAnyOnce(
+  pgyTaskPanelBundle,
+  [
+    'const Y=o.useCallback((s,c,u)=>{const M=Xe(),_={kind:"plugin",id:M,pluginId:d,taskType:a,status:"running",fileName:s.name,urls:c,results:[],errorCount:0,current:0,total:c.length,percent:0,createdAt:Date.now(),duration:0,fields:u,accountSource:l};m(_),D.task.start({taskId:M,pluginId:d,taskType:a,urls:c,fileName:s.name,fields:u,accountSource:l,pacePolicyId:I&&x||null})},[a,m,l,I,x])',
+    'const Y=o.useCallback(async(s,c,u)=>{if(l!=="enterprise"){const M=Number.isFinite(Number(b))?Number(b):0,_=await C(c.length);if(!_){setManualError(`树苗余额不足：当前 ${M}，本次需要 ${c.length}，还差 ${Math.max(0,c.length-M)}。请先充值后再开始采集。`);return}}const M=Xe(),_={kind:"plugin",id:M,pluginId:d,taskType:a,status:"running",fileName:s.name,urls:c,results:[],errorCount:0,current:0,total:c.length,percent:0,createdAt:Date.now(),duration:0,fields:u,accountSource:l};m(_),D.task.start({taskId:M,pluginId:d,taskType:a,urls:c,fileName:s.name,fields:u,accountSource:l,pacePolicyId:I&&x||null})},[a,m,l,I,x,b,C])',
+  ],
+  'const Y=o.useCallback(async(s,c,u)=>{if(l!=="enterprise"){const _=await C(c.length),M=Number.isFinite(Number($e.getState().balance))?Number($e.getState().balance):0;if(!_){setManualError(`树苗余额不足：当前 ${M}，本次需要 ${c.length}，还差 ${Math.max(0,c.length-M)}。请先充值后再开始采集。`);return}}const M=Xe(),_={kind:"plugin",id:M,pluginId:d,taskType:a,status:"running",fileName:s.name,urls:c,results:[],errorCount:0,current:0,total:c.length,percent:0,createdAt:Date.now(),duration:0,fields:u,accountSource:l};m(_),D.task.start({taskId:M,pluginId:d,taskType:a,urls:c,fileName:s.name,fields:u,accountSource:l,pacePolicyId:I&&x||null})},[a,m,l,I,x,C])',
+  "task panel blocks start when shumiao balance is insufficient",
+);
+
 replaceOnce(
   pgyTaskPanelBundle,
   'e.jsx(J,{icon:u?e.jsx(g,{icon:"solar:check-circle-bold",width:16}):c?e.jsx(g,{icon:"solar:pause-bold",width:16}):e.jsx(g,{icon:"svg-spinners:pulse-3",width:16}),label:u?"已完成":c?"已暂停":"采集中",color:u?"success":c?"warning":"primary",size:"small",sx:{position:"absolute",top:12,right:12,fontWeight:600}})',
   'e.jsxs(j,{direction:"row",spacing:.75,alignItems:"center",sx:{position:"absolute",top:12,right:12},children:[e.jsx(J,{icon:u?e.jsx(g,{icon:"solar:check-circle-bold",width:16}):c?e.jsx(g,{icon:"solar:pause-bold",width:16}):e.jsx(g,{icon:"svg-spinners:pulse-3",width:16}),label:u?"已完成":c?"已暂停":"采集中",color:u?"success":c?"warning":"primary",size:"small",sx:{fontWeight:600}}),u&&e.jsx(y,{variant:"text",color:"inherit",size:"small",onClick:()=>removeTask(n.id),sx:{minWidth:28,width:28,height:28,p:0,borderRadius:"50%",color:"text.secondary"},children:e.jsx(g,{icon:"solar:close-circle-bold",width:18})})]})',
   "task panel completed close button",
+);
+
+replaceOnce(
+  mainBundle,
+  'checkBalance:async r=>{if(Se.getState().organization)return!0;const{balance:a}=t();if(a>=r)return!0;try{const n=await _l(r);return e({balance:Number.isFinite(Number(n==null?void 0:n.balance))?Number(n.balance):0}),!!(n!=null&&n.sufficient)}catch(n){return console.error("检查余额失败:",n),!1}}',
+  'checkBalance:async r=>{if(Se.getState().organization)return!0;try{const a=await _l(r);return e({balance:Number.isFinite(Number(a==null?void 0:a.balance))?Number(a.balance):0}),!!(a!=null&&a.sufficient)}catch(a){return console.error("检查余额失败:",a),!1}}',
+  "shumiao balance check always verifies server before starting collection",
+);
+
+replaceOnce(
+  mainBundle,
+  'const l=n.results.filter(s=>s.status==="success").length;if(l>0){const s=n.pluginId==="pgy"?"pgy_scrape":"starmap_scrape";Tl({count:l,consumeType:s,refType:"scraper_task",refId:r,remark:`${n.fileName} 采集成功 ${l} 条`}).then(i=>{Z2.getState().setBalance((i==null?void 0:i.balanceAfter)??(i==null?void 0:i.balance))}).catch(i=>{console.error("薯苗扣费失败:",i)})}',
+  'Z2.getState().fetchBalance().catch(s=>{console.error("刷新树苗余额失败:",s)})',
+  "plugin task completion refreshes shumiao balance without duplicate charge",
+);
+
+replaceOnce(
+  mainBundle,
+  'g=we.task.onError(A=>{l(A.taskId,A.message)})',
+  'g=we.task.onError(A=>{l(A.taskId,A.message),t({message:A.message||"采集任务启动失败",severity:A.errorCategory==="balance"?"warning":"error"})})',
+  "plugin task error shows user-facing toast",
 );
 
 replaceOnce(

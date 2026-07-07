@@ -28,6 +28,7 @@ desktop-versions/
 !runtime/magiorix-desktop/resources/pgy-chart-renderer.exe
 
 # Reverse-engineering and temporary work directories
+.codegraph/
 analysis/
 /resources/
 patched-output/
