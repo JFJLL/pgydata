@@ -450,6 +450,46 @@ if (!main.includes("consumeShumiaoForItem(e, m)")) {
         });
         ue.info(\`[task=\${t}] 完成采集第 \${m + 1}/\${i.length} 条 plugin=\${n} status=\${y.status} errorCode=\${y.errorCode ?? "NONE"} success=\${l.successCount} error=\${l.errorCount}\`);
 `,
+    `        let S = !1, C = null;
+        if (y.status === "success")
+          try {
+            const x = await Le.get().consumeShumiaoForItem(e, m);
+            C = x;
+            ue.info(\`[task=\${t}] 单条积分扣减完成 index=\${m + 1} balance=\${x}\`);
+          } catch (x) {
+            S = !0, y.status = "error", y.data = null, y.errorMessage = x instanceof Error ? x.message : String(x), y.errorCode = "SHUMIAO_CONSUME_FAILED";
+          }
+        const b = this.classifyFailure(y.errorCode, y.errorMessage, y.errorDetails);
+        y.status === "success" ? l.successCount++ : l.errorCount++, this.sendToRenderer(W.task.itemResult, {
+          taskId: t,
+          index: m,
+          status: y.status,
+          data: y.data,
+          errorMessage: y.errorMessage,
+          errorCode: y.errorCode,
+          errorDetails: y.errorDetails,
+          balanceAfter: C,
+          errorCategory: b.code,
+          errorCategoryLabel: b.label
+        });
+        ue.info(\`[task=\${t}] 完成采集第 \${m + 1}/\${i.length} 条 plugin=\${n} status=\${y.status} errorCode=\${y.errorCode ?? "NONE"} success=\${l.successCount} error=\${l.errorCount}\`);
+        if (S) {
+          this.sendToRenderer(W.task.error, {
+            taskId: t,
+            message: y.errorMessage || "积分扣减失败，采集已停止",
+            errorCategory: "balance",
+            errorCategoryLabel: "积分不足"
+          });
+          break;
+        }
+`,
+    "personal task consumes one shumiao before emitting success result",
+  );
+}
+
+if (!main.includes("balanceAfter: C")) {
+  main = replaceOnce(
+    main,
     `        let S = !1;
         if (y.status === "success")
           try {
@@ -469,19 +509,30 @@ if (!main.includes("consumeShumiaoForItem(e, m)")) {
           errorDetails: y.errorDetails,
           errorCategory: b.code,
           errorCategoryLabel: b.label
-        });
-        ue.info(\`[task=\${t}] 完成采集第 \${m + 1}/\${i.length} 条 plugin=\${n} status=\${y.status} errorCode=\${y.errorCode ?? "NONE"} success=\${l.successCount} error=\${l.errorCount}\`);
-        if (S) {
-          this.sendToRenderer(W.task.error, {
-            taskId: t,
-            message: y.errorMessage || "积分扣减失败，采集已停止",
-            errorCategory: "balance",
-            errorCategoryLabel: "积分不足"
-          });
-          break;
-        }
-`,
-    "personal task consumes one shumiao before emitting success result",
+        });`,
+    `        let S = !1, C = null;
+        if (y.status === "success")
+          try {
+            const x = await Le.get().consumeShumiaoForItem(e, m);
+            C = x;
+            ue.info(\`[task=\${t}] 单条积分扣减完成 index=\${m + 1} balance=\${x}\`);
+          } catch (x) {
+            S = !0, y.status = "error", y.data = null, y.errorMessage = x instanceof Error ? x.message : String(x), y.errorCode = "SHUMIAO_CONSUME_FAILED";
+          }
+        const b = this.classifyFailure(y.errorCode, y.errorMessage, y.errorDetails);
+        y.status === "success" ? l.successCount++ : l.errorCount++, this.sendToRenderer(W.task.itemResult, {
+          taskId: t,
+          index: m,
+          status: y.status,
+          data: y.data,
+          errorMessage: y.errorMessage,
+          errorCode: y.errorCode,
+          errorDetails: y.errorDetails,
+          balanceAfter: C,
+          errorCategory: b.code,
+          errorCategoryLabel: b.label
+        });`,
+    "personal task result returns shumiao balance after item consume",
   );
 }
 
@@ -1132,6 +1183,16 @@ main = replaceOnce(
   'typeof i[o] == "string" && i[o] && kt(i[o]) && (i[o] = "");',
   'typeof i[o] == "string" && i[o] && kt(i[o]) && (i[o] = "__PGY_IMAGE_CELL_BLANK__");',
   "pgy image path blank sentinel",
+);
+
+main = insertAfterOnce(
+  main,
+  'async function ff(a) {',
+  `  const pausedTask = typeof (a == null ? void 0 : a.taskId) == "string" ? ge == null ? void 0 : ge.runningTasks.get(a.taskId) : null;
+  if (pausedTask != null && pausedTask.paused)
+    throw new Error("任务已暂停，请继续采集或等待任务完成后再下载结果");`,
+  "pausedTask",
+  "block export while plugin task is paused",
 );
 
 main = replaceOnce(

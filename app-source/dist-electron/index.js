@@ -16799,10 +16799,11 @@ class Xd {
           }
           y.status = "error", y.data = null, y.errorMessage = "安全验证超时或用户取消验证";
         }
-        let S = !1;
+        let S = !1, C = null;
         if (y.status === "success")
           try {
             const x = await Le.get().consumeShumiaoForItem(e, m);
+            C = x;
             ue.info(`[task=${t}] 单条积分扣减完成 index=${m + 1} balance=${x}`);
           } catch (x) {
             S = !0, y.status = "error", y.data = null, y.errorMessage = x instanceof Error ? x.message : String(x), y.errorCode = "SHUMIAO_CONSUME_FAILED";
@@ -16816,6 +16817,7 @@ class Xd {
           errorMessage: y.errorMessage,
           errorCode: y.errorCode,
           errorDetails: y.errorDetails,
+          balanceAfter: C,
           errorCategory: b.code,
           errorCategoryLabel: b.label
         });
@@ -21417,6 +21419,9 @@ async function pgyEmbedImagesInWorkbook(a, e, t) {
   s.file("[Content_Types].xml", pgyAddContentTypes(await s.file("[Content_Types].xml").async("string"))), s.file("xl/worksheets/sheet1.xml", pgyPatchSheetXml(i, u, n)), s.file("xl/worksheets/_rels/sheet1.xml.rels", pgySheetRelXml(r, u)), s.file("xl/drawings/drawing1.xml", pgyDrawingXml(n)), s.file("xl/drawings/_rels/drawing1.xml.rels", pgyDrawingRelXml(n)), Zi(a, await s.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
 }
 async function ff(a) {
+  const pausedTask = typeof (a == null ? void 0 : a.taskId) == "string" ? ge == null ? void 0 : ge.runningTasks.get(a.taskId) : null;
+  if (pausedTask != null && pausedTask.paused)
+    throw new Error("任务已暂停，请继续采集或等待任务完成后再下载结果");
   const { canceled: e, filePath: t } = await Ki.showSaveDialog({
     defaultPath: a.fileName,
     filters: [{ name: "Excel", extensions: ["xlsx"] }]

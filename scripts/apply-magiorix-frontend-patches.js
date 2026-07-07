@@ -437,10 +437,87 @@ replaceOnce(
 );
 
 replaceOnce(
+  pgyTaskPanelBundle,
+  'X=o.useCallback(async()=>{n&&await S.triggerExport({pluginId:d,taskType:a,fileName:n.fileName,results:n.results})},[n,a,S])',
+  'X=o.useCallback(async()=>{n&&await S.triggerExport({taskId:n.id,pluginId:d,taskType:a,fileName:n.fileName,results:n.results})},[n,a,S])',
+  "pgy export passes task id",
+);
+
+replaceOnce(
+  starmapTaskPanelBundle,
+  'X=a.useCallback(async()=>{t&&await S.triggerExport({pluginId:d,taskType:t.taskType,fileName:t.fileName,results:t.results})},[t,S])',
+  'X=a.useCallback(async()=>{t&&await S.triggerExport({taskId:t.id,pluginId:d,taskType:t.taskType,fileName:t.fileName,results:t.results})},[t,S])',
+  "starmap export passes task id",
+);
+
+replaceOnce(
+  douyinTaskPanelBundle,
+  'H=i.useCallback(async()=>{n&&await I.triggerExport({pluginId:l,taskType:n.taskType,fileName:n.fileName,results:n.results})},[n,I])',
+  'H=i.useCallback(async()=>{n&&await I.triggerExport({taskId:n.id,pluginId:l,taskType:n.taskType,fileName:n.fileName,results:n.results})},[n,I])',
+  "douyin export passes task id",
+);
+
+replaceAllIfExists(pgyTaskPanelBundle, '!1&&!1&&N>0&&', '!1&&N>0&&');
+replaceAllIfExists(starmapTaskPanelBundle, '!1&&!1&&M>0&&', '!1&&M>0&&');
+replaceAllIfExists(douyinTaskPanelBundle, '!1&&!1&&F>0&&', '!1&&F>0&&');
+
+replaceOnce(
+  pgyTaskPanelBundle,
+  'children:"继续"}),N>0&&e.jsx(y,{variant:"outlined",color:"success",size:"small",onClick:X,startIcon:e.jsx(g,{icon:"solar:download-bold",width:16}),sx:{borderRadius:2,textTransform:"none",fontWeight:600},children:"下载已采集"})',
+  'children:"继续"}),!1&&N>0&&e.jsx(y,{variant:"outlined",color:"success",size:"small",onClick:X,startIcon:e.jsx(g,{icon:"solar:download-bold",width:16}),sx:{borderRadius:2,textTransform:"none",fontWeight:600},children:"下载已采集"})',
+  "pgy paused task hides partial export",
+);
+replaceAllIfExists(pgyTaskPanelBundle, '!1&&!1&&N>0&&', '!1&&N>0&&');
+
+replaceOnce(
+  starmapTaskPanelBundle,
+  'children:"继续"}),M>0&&e.jsx(w,{variant:"outlined",color:"success",size:"small",onClick:X,startIcon:e.jsx(p,{icon:"solar:download-bold",width:16}),sx:{borderRadius:2,textTransform:"none",fontWeight:600},children:"下载已采集"})',
+  'children:"继续"}),!1&&M>0&&e.jsx(w,{variant:"outlined",color:"success",size:"small",onClick:X,startIcon:e.jsx(p,{icon:"solar:download-bold",width:16}),sx:{borderRadius:2,textTransform:"none",fontWeight:600},children:"下载已采集"})',
+  "starmap paused task hides partial export",
+);
+replaceAllIfExists(starmapTaskPanelBundle, '!1&&!1&&M>0&&', '!1&&M>0&&');
+
+replaceOnce(
+  douyinTaskPanelBundle,
+  'children:"继续"}),F>0&&e.jsx(b,{variant:"outlined",color:"success",size:"small",onClick:H,startIcon:e.jsx(f,{icon:"solar:download-bold",width:16}),sx:{borderRadius:2,textTransform:"none",fontWeight:600},children:"下载已采集"})',
+  'children:"继续"}),!1&&F>0&&e.jsx(b,{variant:"outlined",color:"success",size:"small",onClick:H,startIcon:e.jsx(f,{icon:"solar:download-bold",width:16}),sx:{borderRadius:2,textTransform:"none",fontWeight:600},children:"下载已采集"})',
+  "douyin paused task hides partial export",
+);
+replaceAllIfExists(douyinTaskPanelBundle, '!1&&!1&&F>0&&', '!1&&F>0&&');
+
+replaceOnce(
   mainBundle,
   'checkBalance:async r=>{if(Se.getState().organization)return!0;const{balance:a}=t();if(a>=r)return!0;try{const n=await _l(r);return e({balance:Number.isFinite(Number(n==null?void 0:n.balance))?Number(n.balance):0}),!!(n!=null&&n.sufficient)}catch(n){return console.error("检查余额失败:",n),!1}}',
   'checkBalance:async r=>{if(Se.getState().organization)return!0;try{const a=await _l(r);return e({balance:Number.isFinite(Number(a==null?void 0:a.balance))?Number(a.balance):0}),!!(a!=null&&a.sufficient)}catch(a){return console.error("检查余额失败:",a),!1}}',
   "shumiao balance check always verifies server before starting collection",
+);
+
+replaceOnce(
+  mainBundle,
+  'await we.export.toExcel({mode:"two-row",headers:n,data:t,fileName:r});return',
+  'await we.export.toExcel({taskId:e.taskId,mode:"two-row",headers:n,data:t,fileName:r});return',
+  "pgy default export passes task id",
+);
+
+replaceOnce(
+  mainBundle,
+  'await we.export.toExcel({mode:"single-row",data:a,fileName:r})',
+  'await we.export.toExcel({taskId:e.taskId,mode:"single-row",data:a,fileName:r})',
+  "single row export passes task id",
+);
+
+replaceOnce(
+  mainBundle,
+  'await we.export.toExcel({mode:"two-row",headers:n.slice(),data:r,fileName:mr(e)})',
+  'await we.export.toExcel({taskId:e.taskId,mode:"two-row",headers:n.slice(),data:r,fileName:mr(e)})',
+  "template export passes task id",
+);
+
+replaceOnce(
+  mainBundle,
+  'const b=we.task.onItemResult(A=>{a(A.taskId,{status:A.status,data:A.data,errorMessage:A.errorMessage})}),',
+  'const b=we.task.onItemResult(A=>{a(A.taskId,{status:A.status,data:A.data,errorMessage:A.errorMessage}),A.status==="success"&&Number.isFinite(Number(A.balanceAfter))&&Z2.getState().setBalance(A.balanceAfter)}),',
+  "item success updates shumiao balance display",
 );
 
 replaceOnce(
