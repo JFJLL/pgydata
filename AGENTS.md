@@ -67,3 +67,21 @@
 - [`docs/release_process.md`](D:\download\pic-vec\pgydata\docs\release_process.md)：版本升级、Windows 打包、发布与验证流程。
 - [`docs/deploy.md`](D:\download\pic-vec\pgydata\docs\deploy.md)：服务器目录、部署同步、接口检查、重启要求。
 - [`docs/test_checklist.md`](D:\download\pic-vec\pgydata\docs\test_checklist.md)：发布前测试与验收清单。
+
+## Verification contract
+
+- `verification-policy.json` defines change risk and required verification lanes.
+- After any runtime behavior change, run `$verify-change` or `pwsh -NoProfile -File scripts/verify-change.ps1`.
+- Completion requires `.verification/receipt.json` with `status: pass` and a fingerprint matching the current diff.
+- Do not skip failing tests, weaken assertions, or edit the receipt by hand.
+- Browser testing is intentionally excluded from this project's verification policy; UI changes still follow the configured static, unit, build, smoke, integration, and review lanes.
+- Independent reviewers provide evidence and reproduction; the same reviewer does not approve its own fix.
+- R3 work includes production-like smoke and rollback/recovery checks before release.
+
+### Canonical commands
+
+```powershell
+pwsh -NoProfile -File scripts/verify-change.ps1 -PlanOnly
+pwsh -NoProfile -File scripts/verify-change.ps1
+pwsh -NoProfile -File scripts/verify-change.ps1 -CheckReceipt
+```

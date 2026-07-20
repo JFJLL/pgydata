@@ -2,7 +2,11 @@ const fs = require("fs");
 const path = require("path");
 
 const projectRoot = path.resolve(__dirname, "..");
-const assetVersion = "1.1.3";
+const packageConfig = JSON.parse(fs.readFileSync(path.join(projectRoot, "app-source", "package.json"), "utf8"));
+const assetVersion = String(packageConfig.assetsVersion || "").trim();
+if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(assetVersion)) {
+  throw new Error(`Invalid assetsVersion in app-source/package.json: ${assetVersion || "(empty)"}`);
+}
 const assetsRoot = path.join(projectRoot, "assets", assetVersion);
 const assetsDir = path.join(assetsRoot, "assets");
 const legacyChineseName = ["易美", "数据抓取"].join("");
@@ -594,6 +598,7 @@ replaceAllIfExists(mainBundle, '"1.0.0"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, '"1.1.0"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, '"1.1.1"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, '"1.1.2"', `"${assetVersion}"`);
+replaceAllIfExists(mainBundle, '"1.1.3"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, previousServerBaseUrl, serverBaseUrl);
 
 replaceOnce(

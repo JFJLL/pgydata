@@ -458,7 +458,8 @@ class Ae {
    */
   static async downloadAssets(e, t) {
     return new Promise((n, s) => {
-      const i = Oe(ye.getPath("temp"), `assets-${e.version}.zip`);
+      const i = Oe(ye.getPath("temp"), `assets-${e.version}.zip`), pgyAssetPartPath = `${i}.part-${process.pid}`;
+      kt(pgyAssetPartPath) && Rr(pgyAssetPartPath);
       K.info("下载资源包:", e.downloadUrl), uo(
         e.downloadUrl,
         (o) => {
@@ -470,13 +471,28 @@ class Ae {
           }
           const r = parseInt(o.headers["content-length"] || "0", 10);
           let c = 0;
-          const u = Ar(i);
+          const u = Ar(pgyAssetPartPath);
           o.on("data", (l) => {
             c += l.length;
             const p = r > 0 ? c / r * 100 : 0;
             t(p);
           }), o.pipe(u), u.on("finish", () => {
-            u.close(), K.info(`下载完成，文件大小: ${c} bytes`), n(i);
+            u.close(async (l) => {
+              if (l) {
+                s(l);
+                return;
+              }
+              try {
+                const pgyAssetExpectedChecksum = String(e.checksum || "").trim().toLowerCase().replace(/^sha256:/, "");
+                if (!/^[a-f0-9]{64}$/.test(pgyAssetExpectedChecksum))
+                  throw new Error("资源包校验值无效，请联系管理员");
+                if ((await Cd(pgyAssetPartPath)).toLowerCase() !== pgyAssetExpectedChecksum)
+                  throw new Error("资源包校验失败，请重新下载");
+                kt(i) && Rr(i), Kt.renameSync(pgyAssetPartPath, i), K.info(`下载完成，文件大小: ${c} bytes`), n(i);
+              } catch (pgyAssetDownloadError) {
+                kt(pgyAssetPartPath) && Rr(pgyAssetPartPath), s(pgyAssetDownloadError);
+              }
+            });
           }), u.on("error", (l) => {
             s(l);
           });
@@ -491,18 +507,36 @@ class Ae {
    * 解压并应用资源包
    */
   static async applyAssets(e, t) {
-    const n = Oe($n, t);
-    kt(n) && Kt.rmSync(n, { recursive: !0, force: !0 }), Sr(n, { recursive: !0 }), await Er(Cr(e), kr({ path: n }));
-    if (!kt(Oe(n, "index.html")))
-      throw new Error("资源解压失败：缺少 index.html");
-    if (!kt(Oe(n, "integrity-manifest.json")))
-      throw new Error("资源解压失败：缺少 integrity-manifest.json");
-    pgyVerifyAssets(n);
-    const s = {
-      version: t,
-      appliedAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    Zi(Xn, JSON.stringify(s, null, 2)), kt(e) && Rr(e);
+    const n = Oe($n, t), s = `${n}.partial-${process.pid}`;
+    kt(s) && Kt.rmSync(s, { recursive: !0, force: !0 }), Sr(s, { recursive: !0 });
+    try {
+      await Er(Cr(e), kr({ path: s }));
+      if (!kt(Oe(s, "index.html")))
+        throw new Error("资源解压失败：缺少 index.html");
+      if (!kt(Oe(s, "integrity-manifest.json")))
+        throw new Error("资源解压失败：缺少 integrity-manifest.json");
+      pgyVerifyAssets(s);
+      let i = !1;
+      if (kt(n))
+        try {
+          pgyVerifyAssets(n), i = !0;
+        } catch {
+          Kt.rmSync(n, { recursive: !0, force: !0 });
+        }
+      i ? Kt.rmSync(s, { recursive: !0, force: !0 }) : Kt.renameSync(s, n);
+      const o = {
+        version: t,
+        appliedAt: (/* @__PURE__ */ new Date()).toISOString()
+      }, r = `${Xn}.tmp-${process.pid}`, pgyVersionPointerBackup = `${Xn}.previous-${process.pid}`;
+      Zi(r, JSON.stringify(o, null, 2)), kt(pgyVersionPointerBackup) && Rr(pgyVersionPointerBackup), kt(Xn) && Kt.renameSync(Xn, pgyVersionPointerBackup);
+      try {
+        Kt.renameSync(r, Xn), kt(pgyVersionPointerBackup) && Rr(pgyVersionPointerBackup), kt(e) && Rr(e);
+      } catch (i) {
+        throw kt(r) && Rr(r), kt(pgyVersionPointerBackup) && Kt.renameSync(pgyVersionPointerBackup, Xn), i;
+      }
+    } catch (i) {
+      throw kt(s) && Kt.rmSync(s, { recursive: !0, force: !0 }), i;
+    }
   }
   /**
    * 获取当前资源路径
@@ -568,6 +602,10 @@ class Ae {
    * 检查并下载更新（窗口激活时调用）
    */
   static async checkAndDownloadUpdate() {
+    if (pgyDesktopUpdateActive) {
+      K.info("桌面安装包更新已就绪，跳过前端资源写入");
+      return;
+    }
     if (this.isDownloading) {
       K.debug("正在下载中，跳过");
       return;
@@ -15480,7 +15518,7 @@ const {
   getAdapter: Zh,
   mergeConfig: eg
 } = ce, Ie = Y("Updater"), _d = lo, Sa = Xi.join(ye.getPath("temp"), "magiorix-updates");
-let ve = null, ot = null;
+let ve = null, ot = null, pgyDesktopUpdateActive = !1;
 function Sd() {
   switch (process.platform) {
     case "win32":
@@ -15523,10 +15561,10 @@ async function cr() {
       throw new Error(n.message || "检查更新失败");
     const s = n.data;
     if (!s.hasUpdate) {
-      Ie.info("当前已是最新版本"), ve.webContents.send(qe.updateNotAvailable);
+      pgyDesktopUpdateActive = !1, Ie.info("当前已是最新版本"), ve.webContents.send(qe.updateNotAvailable);
       return;
     }
-    Ie.info("发现新版本:", s.version), ve.webContents.send(qe.updateAvailable, {
+    pgyDesktopUpdateActive = !0, Ie.info("发现新版本:", s.version), ve.webContents.send(qe.updateAvailable, {
       version: s.version,
       updateLog: s.updateLog,
       forceUpdate: false,
@@ -15536,7 +15574,7 @@ async function cr() {
       checksum: s.checksum
     });
   } catch (a) {
-    Ie.error("检查更新失败:", a);
+    pgyDesktopUpdateActive = !1, Ie.error("检查更新失败:", a);
     const e = a instanceof Error ? a.message : "检查更新失败";
     ve == null || ve.webContents.send(qe.updateError, e);
   }
@@ -15546,17 +15584,18 @@ async function Ad(a, e, t) {
     Ie.error("主窗口未设置");
     return;
   }
+  let pgyInstallerPartPath = null;
   try {
     Kt.existsSync(Sa) || Kt.mkdirSync(Sa, { recursive: !0 });
     const n = Xi.join(Sa, e);
-    ot = n, Ie.info(`下载更新: ${a}`), Ie.debug(`保存路径: ${n}`);
+    pgyInstallerPartPath = `${n}.part-${process.pid}`, Kt.existsSync(pgyInstallerPartPath) && Kt.rmSync(pgyInstallerPartPath, { force: !0 }), ot = n, Ie.info(`下载更新: ${a}`), Ie.debug(`保存路径: ${n}`);
     const s = await ce({
       method: "get",
       url: a,
       responseType: "stream"
     }), i = parseInt(s.headers["content-length"] || "0", 10);
     let o = 0;
-    const r = Kt.createWriteStream(n);
+    const r = Kt.createWriteStream(pgyInstallerPartPath);
     if (s.data.on("data", (u) => {
       o += u.length;
       const l = i > 0 ? o / i * 100 : 0;
@@ -15567,13 +15606,13 @@ async function Ad(a, e, t) {
       });
     }), s.data.pipe(r), await new Promise((u, l) => {
       r.on("finish", () => u()), r.on("error", l);
-    }), Ie.info("下载完成"), Ie.info("校验文件完整性..."), (await Cd(n)).toLowerCase() !== String(t || "").toLowerCase().replace(/^sha256:/, ""))
+    }), Ie.info("下载完成"), Ie.info("校验文件完整性..."), (await Cd(pgyInstallerPartPath)).toLowerCase() !== String(t || "").toLowerCase().replace(/^sha256:/, ""))
       throw new Error("文件校验失败，请重新下载");
-    Ie.info("校验通过"), ve.webContents.send(qe.updateDownloaded, {
+    Kt.existsSync(n) && Kt.rmSync(n, { force: !0 }), Kt.renameSync(pgyInstallerPartPath, n), Ie.info("校验通过"), ve.webContents.send(qe.updateDownloaded, {
       filePath: n
     }), setTimeout(() => Ed(), 1200);
   } catch (n) {
-    Ie.error("下载更新失败:", n);
+    pgyInstallerPartPath && Kt.existsSync(pgyInstallerPartPath) && Kt.rmSync(pgyInstallerPartPath, { force: !0 }), Ie.error("下载更新失败:", n);
     const s = n instanceof Error ? n.message : "下载更新失败";
     ve == null || ve.webContents.send(qe.updateError, s);
   }
@@ -23502,7 +23541,7 @@ function Ga(a) {
     });
   }
   return Z.once("ready-to-show", () => {
-    Rd(Z), Xt || Ae.setupWindowFocusListener(Z), Xt || cr(), setTimeout(() => {
+    Rd(Z), Xt || cr().finally(() => Ae.setupWindowFocusListener(Z)), setTimeout(() => {
       Z && !Z.isDestroyed() && !Z.isVisible() && !Z.isMinimized() && (Ee.warn("主窗口 10 秒内未显示，强制显示（渲染进程可能未调用 setLoginState）"), Z.show(), Rn());
     }, 1e4);
   }), Z.once("show", () => {
@@ -23572,7 +23611,7 @@ async function Vi() {
   Ee.info(`资源检查 — assetsPath: ${a}, hasLocalAssets: ${e}`);
   if (e)
     try {
-      jt("正在校验资源完整性..."), zt(45), pgyVerifyAssets(a), jt("正在加载前端资源..."), zt(90), Yr(), Ga(a), mh();
+      jt("正在校验资源完整性..."), zt(45), pgyVerifyAssets(a), jt("正在加载前端资源..."), zt(90), Yr(), Ga(a);
     } catch (t) {
       const n = pgyAssetErrorMessage(t);
       Ee.error("本地资源校验失败:", t), Xr(n.includes("资源被修改或损坏") ? n : `资源被修改或损坏：${n}`);
@@ -23592,7 +23631,12 @@ process.on("unhandledRejection", (a) => {
 process.on("uncaughtException", (a) => {
   Ee.error("未捕获异常:", a);
 });
-ye.whenReady().then(() => {
+const pgyHasSingleInstanceLock = ye.requestSingleInstanceLock();
+if (pgyHasSingleInstanceLock) {
+  ye.on("second-instance", () => {
+    Z && !Z.isDestroyed() && (Z.isMinimized() && Z.restore(), Z.show(), Z.focus());
+  });
+  ye.whenReady().then(() => {
   Ee.info("桌面端启动", {
     platform: process.platform,
     arch: process.arch,
@@ -23603,7 +23647,10 @@ ye.whenReady().then(() => {
   }), fh(), Vi(), ye.on("activate", () => {
     Dt.getAllWindows().length === 0 && Vi();
   });
-});
+  });
+} else {
+  ye.quit();
+}
 ye.on("window-all-closed", () => {
   Ee.info("所有窗口已关闭");
   process.platform !== "darwin" && ye.quit();

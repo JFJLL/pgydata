@@ -28,6 +28,10 @@ red-magic-api/
 │   │   ├── magiorix-logo.png
 │   │   └── software-screenshot.png
 │   ├── emagic-logo.png
+│   ├── releases/
+│   │   └── windows/
+│   │       ├── <version>.json
+│   │       └── latest.json
 │   └── index.html
 ├── package.json
 ├── package-lock.json
@@ -47,6 +51,8 @@ red-magic-api/
 - `/home/red/work/moneyboost/red-magic-api/server.js`
 - `/home/red/work/moneyboost/red-magic-api/public/index.html`
 - `/home/red/work/moneyboost/red-magic-api/public/assets/desktop/<version>/assets.zip`
+- `/home/red/work/moneyboost/red-magic-api/public/releases/windows/<version>.json`
+- `/home/red/work/moneyboost/red-magic-api/public/releases/windows/latest.json`（必须最后同步）
 
 如果静态图片有变化，也同步：
 
@@ -63,6 +69,7 @@ https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-<version>-wind
 ## 部署后动作
 
 - 重启服务：`pm2 restart red-magic-api`
+- `latest.json` 必须在安装包、资源包和版本 manifest 全部在线且 SHA 校验通过后再同步。
 - 确认接口返回的版本、地址、校验信息都已更新。
 - 打开下载页确认展示正常。
 
@@ -76,6 +83,8 @@ https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-<version>-wind
   - 返回桌面端前端资源包版本、下载地址、校验信息。
 - `/api/desktop-versions/check`
   - 返回桌面端更新检测结果。
+
+三个接口统一读取 `public/releases/windows/latest.json`。文件不存在时保留 1.1.3 旧常量兼容；新版本正式发布必须提供 manifest。
 
 下载页故意不显示安装包大小，因为安装包正式放在 OSS，不一定存在于服务器本地文件系统。
 

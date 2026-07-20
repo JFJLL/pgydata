@@ -7,13 +7,18 @@
 - [ ] 能成功执行 `scripts/build-magiorix-windows-installer.ps1`。
 - [ ] `desktop-versions/windows/<version>/` 下生成了 `.exe`、`assets.zip`、`.sha256.txt`、`release-info.json`。
 - [ ] `red-magic-api/public/assets/desktop/<version>/assets.zip` 已同步更新。
-- [ ] `.exe` 和 `assets.zip` 的 SHA256 已记录到 `CHANGELOG.md`。
+- [ ] `<version>.json` 与 `latest.json` 通过 schema 校验，且 latest 最后更新。
+- [ ] `.exe` 和 `assets.zip` 的 SHA256 与 `release-info.json` 一致。
 
 ## 2. 安装与运行
 
 - [ ] 新 `.exe` 可正常安装。
 - [ ] 安装完成后应用可正常启动。
 - [ ] 已安装环境重新覆盖安装后，运行时行为仍正常。
+- [ ] 软件仍在运行时触发升级，安装器会等待旧进程退出后再写文件。
+- [ ] 同时触发桌面更新和资源更新时只有一个写入者。
+- [ ] 下载中断或资源校验失败后，旧版 `version.json` 和旧资源仍可启动。
+- [ ] 中文用户名和带空格安装路径升级正常。
 - [ ] 未出现旧 `app.asar` 导致的旧日志或旧界面行为。
 
 ## 3. 版本与下载接口
@@ -23,6 +28,8 @@
 - [ ] `/api/desktop-versions/check` 返回结果符合当前版本预期。
 - [ ] OSS 上的 Windows 安装包链接可下载。
 - [ ] 服务器上的 `assets.zip` 链接可下载。
+- [ ] 本地安装包 SHA = release-info SHA = 远端安装包 SHA = latest 接口 SHA。
+- [ ] 错误 SHA、错误大小或远端文件缺失时 Promote 失败且旧 latest 不变。
 
 ## 4. 下载页与展示
 
@@ -49,3 +56,5 @@
 - [ ] 已阅读 `docs/release_process.md` 并按流程完成发布。
 - [ ] 已阅读 `docs/deploy.md` 并确认没有覆盖数据库、`.env`、日志和备份文件。
 - [ ] 如需推送，已确认工作区状态、版本提交和发布提交都正确。
+- [ ] `pwsh -NoProfile -File scripts/verify-change.ps1` 生成当前 diff 对应的通过回执。
+- [ ] Hook 和 CI 未启用；本次后台发布链路不要求浏览器测试。

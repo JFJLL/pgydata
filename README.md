@@ -62,12 +62,11 @@ npm start
 rtk pwsh -NoProfile -Command '& "D:\download\pic-vec\pgydata\scripts\build-magiorix-windows-installer.ps1"'
 ```
 
-脚本会自动完成：
+脚本只负责生成候选产物：
 
 - 应用前端资源补丁。
 - 生成 `assets/<version>/integrity-manifest.json`。
 - 生成 `desktop-versions/windows/<version>/magiorix-desktop-<version>-assets.zip`。
-- 同步资源包到 `red-magic-api/public/assets/desktop/<version>/assets.zip`。
 - 应用 Electron runtime 补丁。
 - 重新打包 `runtime/magiorix-desktop/resources/app.asar`。
 - 生成 Windows 安装包、`.sha256.txt` 和 `release-info.json`。
@@ -89,7 +88,23 @@ Windows 安装包发布到 OSS：
 https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-<version>-windows.exe
 ```
 
-如果只是同版本覆盖安装包，且服务端返回的版本号和下载地址不变，通常只需要重新上传同名 `.exe`。已安装用户不会自动感知同版本覆盖，需要重新下载安装。
+已正式发布的版本禁止覆盖同名安装包或资源包。发布前确需重建候选产物时使用 `-OverwriteCandidate`；版本一旦出现在正式版本 manifest 中，后续修复必须升级 patch 版本。
+
+发布分两步执行：
+
+```powershell
+# 1. 校验本地产物，准备 assets.zip 和不可变版本 manifest
+rtk pwsh -NoProfile -File scripts/publish-magiorix-windows-release.ps1 -Stage Prepare
+
+# 2. 上传安装包、同步资源和版本 manifest 后，验证远端内容并生成 latest.json
+rtk pwsh -NoProfile -File scripts/publish-magiorix-windows-release.ps1 -Stage Promote
+```
+
+`latest.json` 必须最后同步到服务器。部署完成后运行：
+
+```powershell
+rtk pwsh -NoProfile -File scripts/verify-magiorix-windows-release.ps1 -ManifestPath red-magic-api/public/releases/windows/latest.json
+```
 
 如果升级版本号，需要同步检查并更新：
 
@@ -129,6 +144,16 @@ pm2 restart red-magic-api
 - 不重新引入旧品牌或旧项目命名：`zs`、`@zsdesktop`、`PYGdata`、旧 Emagic/PYG 命名等。
 - 涉及发布、部署、数据库、密钥、登录鉴权时，先确认影响面再操作。
 
+## 变更验证
+
+项目已接入风险路由验证系统，默认不启用 Hook 和 CI。本项目当前发布链路不要求浏览器测试。
+
+```powershell
+rtk pwsh -NoProfile -File scripts/verify-change.ps1 -PlanOnly
+rtk pwsh -NoProfile -File scripts/verify-change.ps1
+rtk pwsh -NoProfile -File scripts/verify-change.ps1 -CheckReceipt
+```
+
 ## 常用文档
 
 - [CHANGELOG.md](CHANGELOG.md)：版本历史、发布记录、安装包路径、SHA256。
@@ -136,4 +161,3 @@ pm2 restart red-magic-api
 - [docs/deploy.md](docs/deploy.md)：服务器目录、同步边界、接口检查、重启要求。
 - [docs/test_checklist.md](docs/test_checklist.md)：发布前测试与验收清单。
 - [docs/troubleshooting.md](docs/troubleshooting.md)：桌面端和后端日志排查。
-

@@ -2,6 +2,14 @@
 
 本文件保存版本历史、发布记录、安装包路径与校验信息，不放长期维护规则。
 
+## 1.1.4 (Unreleased)
+
+- 发布流程：构建版本统一读取 `app-source/package.json`，候选产物不再自动改写本机 AppData 或服务端资源目录。
+- 发布流程：新增不可变版本 manifest、远端安装包/资源包 SHA256 验证和 `latest.json` 最后晋升脚本。
+- 桌面更新：增加单实例、桌面安装包优先级、资源 `.part` 下载和校验后原子切换。
+- Windows 安装器：写文件前等待旧版 `magiorix.exe` 退出，并细化资源目录清理错误。
+- 测试：接入风险路由验证系统；Hook、CI 和浏览器测试保持关闭。
+
 ## 1.1.3
 
 - 修复：普通采集在创建采集窗口前由主进程按有效链接数量校验树苗余额；余额不足时任务不会启动，并提示当前余额、本次需要数量和差额。
@@ -14,7 +22,7 @@
 - 发布脚本：同步生成 `1.1.3` 前端资源目录、完整性清单、`assets.zip` 和 Windows 安装包。
 - Windows 安装包：
   - 路径：`D:\download\pic-vec\pgydata\desktop-versions\windows\1.1.3\magiorix-desktop-1.1.3-windows.exe`
-  - SHA256：`81D23866E03D1229CF2CEA40D4E708C0BB6C3F44D0E7FE4959FF67EC888DCEDD`
+  - SHA256：`C874C2166E7C0EBBC2AD427028FB3060441D9A20D33239077B30F3887C5E16BA`
 - 前端资源包：
   - 路径：`D:\download\pic-vec\pgydata\desktop-versions\windows\1.1.3\magiorix-desktop-1.1.3-assets.zip`
   - SHA256：`4E25B29C9459CDA8E4B26F590212108DC87F231674B603D223B42F86550A2EDC`

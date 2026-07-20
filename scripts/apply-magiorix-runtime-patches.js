@@ -1305,6 +1305,227 @@ if (!main.includes("跳过桌面更新检查")) {
   );
 }
 
+if (!main.includes("pgyDesktopUpdateActive")) {
+  main = replaceOnce(
+    main,
+    "let ve = null, ot = null;",
+    "let ve = null, ot = null, pgyDesktopUpdateActive = !1;",
+    "desktop update coordination state",
+  );
+  main = replaceOnce(
+    main,
+    `  static async checkAndDownloadUpdate() {
+    if (this.isDownloading) {`,
+    `  static async checkAndDownloadUpdate() {
+    if (pgyDesktopUpdateActive) {
+      K.info("桌面安装包更新已就绪，跳过前端资源写入");
+      return;
+    }
+    if (this.isDownloading) {`,
+    "desktop update priority over assets",
+  );
+  main = replaceOnce(
+    main,
+    `    if (!s.hasUpdate) {
+      Ie.info("当前已是最新版本"), ve.webContents.send(qe.updateNotAvailable);`,
+    `    if (!s.hasUpdate) {
+      pgyDesktopUpdateActive = !1, Ie.info("当前已是最新版本"), ve.webContents.send(qe.updateNotAvailable);`,
+    "clear desktop update state",
+  );
+  main = replaceOnce(
+    main,
+    `    Ie.info("发现新版本:", s.version), ve.webContents.send(qe.updateAvailable, {`,
+    `    pgyDesktopUpdateActive = !0, Ie.info("发现新版本:", s.version), ve.webContents.send(qe.updateAvailable, {`,
+    "activate desktop update state",
+  );
+  main = replaceOnce(
+    main,
+    `  } catch (a) {
+    Ie.error("检查更新失败:", a);`,
+    `  } catch (a) {
+    pgyDesktopUpdateActive = !1, Ie.error("检查更新失败:", a);`,
+    "release desktop state after check failure",
+  );
+  main = replaceOnce(
+    main,
+    `    Rd(Z), Xt || Ae.setupWindowFocusListener(Z), Xt || cr(), setTimeout(() => {`,
+    `    Rd(Z), Xt || cr().finally(() => Ae.setupWindowFocusListener(Z)), setTimeout(() => {`,
+    "sequence desktop and asset update checks",
+  );
+}
+
+if (!main.includes("pgyHasSingleInstanceLock")) {
+  main = replaceOnce(
+    main,
+    `ye.whenReady().then(() => {`,
+    `const pgyHasSingleInstanceLock = ye.requestSingleInstanceLock();
+if (pgyHasSingleInstanceLock) {
+  ye.on("second-instance", () => {
+    Z && !Z.isDestroyed() && (Z.isMinimized() && Z.restore(), Z.show(), Z.focus());
+  });
+  ye.whenReady().then(() => {`,
+    "single desktop instance start",
+  );
+  main = replaceOnce(
+    main,
+    `  });
+});
+ye.on("window-all-closed", () => {`,
+    `  });
+  });
+} else {
+  ye.quit();
+}
+ye.on("window-all-closed", () => {`,
+    "single desktop instance end",
+  );
+}
+
+main = replaceAllIfExists(
+  main,
+  'jt("正在校验资源完整性..."), zt(45), pgyVerifyAssets(a), jt("正在加载前端资源..."), zt(90), Yr(), Ga(a), mh();',
+  'jt("正在校验资源完整性..."), zt(45), pgyVerifyAssets(a), jt("正在加载前端资源..."), zt(90), Yr(), Ga(a);',
+);
+
+if (!main.includes('.partial-${process.pid}')) {
+  main = replaceOnce(
+    main,
+    `  static async applyAssets(e, t) {
+    const n = Oe($n, t);
+    kt(n) && Kt.rmSync(n, { recursive: !0, force: !0 }), Sr(n, { recursive: !0 }), await Er(Cr(e), kr({ path: n }));
+    if (!kt(Oe(n, "index.html")))
+      throw new Error("资源解压失败：缺少 index.html");
+    if (!kt(Oe(n, "integrity-manifest.json")))
+      throw new Error("资源解压失败：缺少 integrity-manifest.json");
+    pgyVerifyAssets(n);
+    const s = {
+      version: t,
+      appliedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    Zi(Xn, JSON.stringify(s, null, 2)), kt(e) && Rr(e);
+  }`,
+    `  static async applyAssets(e, t) {
+    const n = Oe($n, t), s = \`\${n}.partial-\${process.pid}\`;
+    kt(s) && Kt.rmSync(s, { recursive: !0, force: !0 }), Sr(s, { recursive: !0 });
+    try {
+      await Er(Cr(e), kr({ path: s }));
+      if (!kt(Oe(s, "index.html")))
+        throw new Error("资源解压失败：缺少 index.html");
+      if (!kt(Oe(s, "integrity-manifest.json")))
+        throw new Error("资源解压失败：缺少 integrity-manifest.json");
+      pgyVerifyAssets(s);
+      let i = !1;
+      if (kt(n))
+        try {
+          pgyVerifyAssets(n), i = !0;
+        } catch {
+          Kt.rmSync(n, { recursive: !0, force: !0 });
+        }
+      i ? Kt.rmSync(s, { recursive: !0, force: !0 }) : Kt.renameSync(s, n);
+      const o = {
+        version: t,
+        appliedAt: (/* @__PURE__ */ new Date()).toISOString()
+      }, r = \`\${Xn}.tmp-\${process.pid}\`, pgyVersionPointerBackup = \`\${Xn}.previous-\${process.pid}\`;
+      Zi(r, JSON.stringify(o, null, 2)), kt(pgyVersionPointerBackup) && Rr(pgyVersionPointerBackup), kt(Xn) && Kt.renameSync(Xn, pgyVersionPointerBackup);
+      try {
+        Kt.renameSync(r, Xn), kt(pgyVersionPointerBackup) && Rr(pgyVersionPointerBackup), kt(e) && Rr(e);
+      } catch (i) {
+        throw kt(r) && Rr(r), kt(pgyVersionPointerBackup) && Kt.renameSync(pgyVersionPointerBackup, Xn), i;
+      }
+    } catch (i) {
+      throw kt(s) && Kt.rmSync(s, { recursive: !0, force: !0 }), i;
+    }
+  }`,
+    "atomic asset apply",
+  );
+}
+
+if (!main.includes("pgyVersionPointerBackup")) {
+  main = replaceOnce(
+    main,
+    `      }, r = \`\${Xn}.tmp-\${process.pid}\`;
+      Zi(r, JSON.stringify(o, null, 2)), Kt.renameSync(r, Xn), kt(e) && Rr(e);`,
+    `      }, r = \`\${Xn}.tmp-\${process.pid}\`, pgyVersionPointerBackup = \`\${Xn}.previous-\${process.pid}\`;
+      Zi(r, JSON.stringify(o, null, 2)), kt(pgyVersionPointerBackup) && Rr(pgyVersionPointerBackup), kt(Xn) && Kt.renameSync(Xn, pgyVersionPointerBackup);
+      try {
+        Kt.renameSync(r, Xn), kt(pgyVersionPointerBackup) && Rr(pgyVersionPointerBackup), kt(e) && Rr(e);
+      } catch (i) {
+        throw kt(r) && Rr(r), kt(pgyVersionPointerBackup) && Kt.renameSync(pgyVersionPointerBackup, Xn), i;
+      }`,
+    "atomic asset version pointer",
+  );
+}
+
+if (!main.includes('pgyAssetPartPath = `${i}.part-${process.pid}`')) {
+  main = replaceOnce(
+    main,
+    'const i = Oe(ye.getPath("temp"), `assets-${e.version}.zip`);',
+    'const i = Oe(ye.getPath("temp"), `assets-${e.version}.zip`), pgyAssetPartPath = `${i}.part-${process.pid}`;\n      kt(pgyAssetPartPath) && Rr(pgyAssetPartPath);',
+    "asset partial download path",
+  );
+  main = replaceOnce(
+    main,
+    'const u = Ar(i);',
+    'const u = Ar(pgyAssetPartPath);',
+    "write asset partial download",
+  );
+  main = replaceOnce(
+    main,
+    `          }), o.pipe(u), u.on("finish", () => {
+            u.close(), K.info(\`下载完成，文件大小: \${c} bytes\`), n(i);
+          }), u.on("error", (l) => {`,
+    `          }), o.pipe(u), u.on("finish", () => {
+            u.close(async (l) => {
+              if (l) {
+                s(l);
+                return;
+              }
+              try {
+                const pgyAssetExpectedChecksum = String(e.checksum || "").trim().toLowerCase().replace(/^sha256:/, "");
+                if (!/^[a-f0-9]{64}$/.test(pgyAssetExpectedChecksum))
+                  throw new Error("资源包校验值无效，请联系管理员");
+                if ((await Cd(pgyAssetPartPath)).toLowerCase() !== pgyAssetExpectedChecksum)
+                  throw new Error("资源包校验失败，请重新下载");
+                kt(i) && Rr(i), Kt.renameSync(pgyAssetPartPath, i), K.info(\`下载完成，文件大小: \${c} bytes\`), n(i);
+              } catch (pgyAssetDownloadError) {
+                kt(pgyAssetPartPath) && Rr(pgyAssetPartPath), s(pgyAssetDownloadError);
+              }
+            });
+          }), u.on("error", (l) => {`,
+    "finalize asset partial download",
+  );
+}
+
+if (!main.includes("pgyAssetExpectedChecksum")) {
+  main = replaceOnce(
+    main,
+    `            u.close((l) => {
+              if (l) {
+                s(l);
+                return;
+              }
+              kt(i) && Rr(i), Kt.renameSync(pgyAssetPartPath, i), K.info(\`下载完成，文件大小: \${c} bytes\`), n(i);
+            });`,
+    `            u.close(async (l) => {
+              if (l) {
+                s(l);
+                return;
+              }
+              try {
+                const pgyAssetExpectedChecksum = String(e.checksum || "").trim().toLowerCase().replace(/^sha256:/, "");
+                if (!/^[a-f0-9]{64}$/.test(pgyAssetExpectedChecksum))
+                  throw new Error("资源包校验值无效，请联系管理员");
+                if ((await Cd(pgyAssetPartPath)).toLowerCase() !== pgyAssetExpectedChecksum)
+                  throw new Error("资源包校验失败，请重新下载");
+                kt(i) && Rr(i), Kt.renameSync(pgyAssetPartPath, i), K.info(\`下载完成，文件大小: \${c} bytes\`), n(i);
+              } catch (pgyAssetDownloadError) {
+                kt(pgyAssetPartPath) && Rr(pgyAssetPartPath), s(pgyAssetDownloadError);
+              }
+            });`,
+    "asset archive checksum",
+  );
+}
+
 main = replaceOnce(
   main,
   `      forceUpdate: s.forceUpdate,`,
@@ -1312,7 +1533,7 @@ main = replaceOnce(
   "desktop update is never forced",
 );
 
-if (!main.includes('(await Cd(n)).toLowerCase() !== String(t || "").toLowerCase().replace(/^sha256:/, "")')) {
+if (!main.includes('toLowerCase() !== String(t || "").toLowerCase().replace(/^sha256:/, "")')) {
   main = replaceOnce(
     main,
     `    }), s.data.pipe(r), await new Promise((u, l) => {
@@ -1327,18 +1548,64 @@ if (!main.includes('(await Cd(n)).toLowerCase() !== String(t || "").toLowerCase(
   );
 }
 
-main = replaceOnce(
-  main,
-  `    Ie.info("校验通过"), ve.webContents.send(qe.updateDownloaded, {
+if (!main.includes("setTimeout(() => Ed(), 1200)")) {
+  main = replaceOnce(
+    main,
+    `    Ie.info("校验通过"), ve.webContents.send(qe.updateDownloaded, {
       filePath: n
     });
   } catch (n) {`,
-  `    Ie.info("校验通过"), ve.webContents.send(qe.updateDownloaded, {
+    `    Ie.info("校验通过"), ve.webContents.send(qe.updateDownloaded, {
       filePath: n
     }), setTimeout(() => Ed(), 1200);
   } catch (n) {`,
-  "auto install after update download",
-);
+    "auto install after update download",
+  );
+}
+
+if (!main.includes("pgyInstallerPartPath")) {
+  main = replaceOnce(
+    main,
+    `  try {
+    Kt.existsSync(Sa) || Kt.mkdirSync(Sa, { recursive: !0 });
+    const n = Xi.join(Sa, e);
+    ot = n, Ie.info(\`下载更新: \${a}\`), Ie.debug(\`保存路径: \${n}\`);`,
+    `  let pgyInstallerPartPath = null;
+  try {
+    Kt.existsSync(Sa) || Kt.mkdirSync(Sa, { recursive: !0 });
+    const n = Xi.join(Sa, e);
+    pgyInstallerPartPath = \`\${n}.part-\${process.pid}\`, Kt.existsSync(pgyInstallerPartPath) && Kt.rmSync(pgyInstallerPartPath, { force: !0 }), ot = n, Ie.info(\`下载更新: \${a}\`), Ie.debug(\`保存路径: \${n}\`);`,
+    "installer partial download path",
+  );
+  main = replaceOnce(
+    main,
+    `    const r = Kt.createWriteStream(n);`,
+    `    const r = Kt.createWriteStream(pgyInstallerPartPath);`,
+    "write installer partial download",
+  );
+  main = replaceOnce(
+    main,
+    `(await Cd(n)).toLowerCase() !== String(t || "").toLowerCase().replace(/^sha256:/, ""))`,
+    `(await Cd(pgyInstallerPartPath)).toLowerCase() !== String(t || "").toLowerCase().replace(/^sha256:/, ""))`,
+    "verify installer partial download",
+  );
+  main = replaceOnce(
+    main,
+    `    Ie.info("校验通过"), ve.webContents.send(qe.updateDownloaded, {
+      filePath: n`,
+    `    Kt.existsSync(n) && Kt.rmSync(n, { force: !0 }), Kt.renameSync(pgyInstallerPartPath, n), Ie.info("校验通过"), ve.webContents.send(qe.updateDownloaded, {
+      filePath: n`,
+    "promote installer partial download",
+  );
+  main = replaceOnce(
+    main,
+    `  } catch (n) {
+    Ie.error("下载更新失败:", n);`,
+    `  } catch (n) {
+    pgyInstallerPartPath && Kt.existsSync(pgyInstallerPartPath) && Kt.rmSync(pgyInstallerPartPath, { force: !0 }), Ie.error("下载更新失败:", n);`,
+    "clean installer partial download",
+  );
+}
 
 main = replaceOnce(
   main,

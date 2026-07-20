@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "defaultRisk": "R1",
+  "riskOrder": {
+    "R0": 0,
+    "R1": 1,
+    "R2": 2,
+    "R3": 3
+  },
+  "baseLanes": {
+    "R0": ["static"],
+    "R1": ["static", "unit"],
+    "R2": ["static", "unit", "build"],
+    "R3": ["static", "unit", "build", "smoke"]
+  },
+  "routes": [
+    {
+      "id": "docs-only",
+      "risk": "R0",
+      "patterns": ["(^|/)docs?/", "\\.md$", "\\.txt$"],
+      "addLanes": []
+    },
+    {
+      "id": "user-interface",
+      "risk": "R2",
+      "patterns": ["(^|/)(app|pages|public|components|ui)/", "\\.(tsx|jsx|vue|svelte|css|scss|less)$"],
+      "addLanes": []
+    },
+    {
+      "id": "api-contract",
+      "risk": "R2",
+      "patterns": ["^red-magic-api/(server\\.js|lib/)", "openapi", "schema\\.(json|ya?ml)$"],
+      "addLanes": ["integration"]
+    },
+    {
+      "id": "desktop-update-runtime",
+      "risk": "R3",
+      "patterns": ["^scripts/apply-magiorix-(runtime|frontend)-patches\\.js$", "^scripts/build-magiorix-windows-installer\\.ps1$", "^app-source/dist-electron/", "^assets/[^/]+/", "^runtime/magiorix-desktop/resources/app\\.asar$"],
+      "addLanes": ["integration", "smoke", "agent-review"]
+    },
+    {
+      "id": "release-pipeline",
+      "risk": "R3",
+      "patterns": ["^scripts/(publish|verify)-magiorix-windows-release\\.ps1$", "^red-magic-api/public/releases/windows/", "release-info\\.json$"],
+      "addLanes": ["integration", "smoke", "agent-review"]
+    },
+    {
+      "id": "data-state",
+      "risk": "R3",
+      "patterns": ["(^|/)(db|database|migrations?|repositories|storage)/", "(schema|migration|repository|persistence)"],
+      "addLanes": ["integration", "data", "agent-review"]
+    },
+    {
+      "id": "critical-user-journey",
+      "risk": "R3",
+      "patterns": ["(auth|permission|tenant|credit|billing|payment|cookie|session)"],
+      "addLanes": ["integration", "agent-review"]
+    },
+    {
+      "id": "deployment",
+      "risk": "R3",
+      "patterns": ["(^|/)(deploy|infra|docker|\\.github/workflows)/", "(Dockerfile|nginx)"],
+      "addLanes": ["smoke", "agent-review"]
+    }
+  ],
+  "lanes": {
+    "static": {
+      "kind": "command",
+      "modes": ["local", "ci"],
+      "minExecuted": 3,
+      "commands": [
+        {"id": "diff-check", "program": "git", "args": ["diff", "--check"], "required": true},
+        {"id": "node-static", "program": "node", "args": ["tests/static-checks.mjs"], "required": true},
+        {"id": "powershell-syntax", "program": "pwsh", "args": ["-NoProfile", "-File", "tests/check-powershell-syntax.ps1"], "required": true}
+      ]
+    },
+    "unit": {
+      "kind": "command",
+      "modes": ["local", "ci"],
+      "minExecuted": 1,
+      "commands": [
+        {"id": "node-unit", "program": "node", "args": ["--test", "tests/unit/release-manifest.test.js"], "required": true}
+      ]
+    },
+    "build": {
+      "kind": "command",
+      "modes": ["local"],
+      "minExecuted": 1,
+      "commands": [
+        {"id": "windows-installer", "program": "pwsh", "args": ["-NoProfile", "-File", "scripts/build-magiorix-windows-installer.ps1", "-OverwriteCandidate"], "required": true}
+      ]
+    },
+    "integration": {
+      "kind": "command",
+      "modes": ["local", "ci"],
+      "minExecuted": 2,
+      "commands": [
+        {"id": "node-integration", "program": "node", "args": ["--test", "tests/integration/release-api.test.js", "tests/integration/remote-release-verify.test.js"], "required": true},
+        {"id": "publish-prepare", "program": "pwsh", "args": ["-NoProfile", "-File", "tests/integration/publish-prepare.ps1"], "required": true}
+      ]
+    },
+    "smoke": {
+      "kind": "command",
+      "modes": ["local"],
+      "minExecuted": 1,
+      "commands": [
+        {"id": "release-smoke", "program": "pwsh", "args": ["-NoProfile", "-File", "tests/smoke-release.ps1"], "required": true}
+      ]
+    },
+    "data": {
+      "kind": "command",
+      "modes": ["local", "ci"],
+      "minExecuted": 1,
+      "commands": [
+        {"id": "node-data", "program": "node", "args": ["--test", "tests/data"], "required": false}
+      ]
+    },
+    "agent-review": {
+      "kind": "evidence",
+      "modes": ["local"],
+      "evidenceKey": "agent-review"
+    }
+  }
+}

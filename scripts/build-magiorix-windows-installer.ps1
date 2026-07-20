@@ -1,11 +1,27 @@
+[CmdletBinding()]
+param(
+  [switch]$OverwriteCandidate,
+  [string]$InstallerBaseUrl = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe",
+  [string]$AssetsBaseUrl = "https://magiorix.red-magic.cn/assets/desktop"
+)
+
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$version = "1.1.3"
+$packageConfigPath = Join-Path $projectRoot "app-source\package.json"
+$packageConfig = Get-Content -LiteralPath $packageConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$version = [string]$packageConfig.version
+$assetsVersion = [string]$packageConfig.assetsVersion
+if ($version -notmatch '^\d+\.\d+\.\d+$') {
+  throw "Invalid app version in app-source/package.json: $version"
+}
+if ($assetsVersion -notmatch '^\d+\.\d+\.\d+$') {
+  throw "Invalid assetsVersion in app-source/package.json: $assetsVersion"
+}
 $platform = "windows"
 $appId = "magiorix-desktop"
 $sourceAppDir = Join-Path $projectRoot "runtime\magiorix-desktop"
-$sourceAssetsDir = Join-Path $projectRoot "assets\$version"
+$sourceAssetsDir = Join-Path $projectRoot "assets\$assetsVersion"
 $appSourceDir = Join-Path $projectRoot "app-source"
 $outDir = Join-Path $projectRoot "desktop-versions\$platform\$version"
 $buildWorkDir = Join-Path $outDir "_build"
@@ -13,7 +29,7 @@ $payloadDir = Join-Path $buildWorkDir "payload"
 $installerDir = Join-Path $buildWorkDir "installer"
 $setupFileName = "$appId-$version-$platform.exe"
 $setupExe = Join-Path $outDir $setupFileName
-$assetsZipFileName = "$appId-$version-assets.zip"
+$assetsZipFileName = "$appId-$assetsVersion-assets.zip"
 $appDisplayName = "magiorix"
 $appInstallDirName = "magiorix"
 $shortcutName = "magiorix"
@@ -22,9 +38,11 @@ $installedExeName = "$appInstallDirName.exe"
 $appIconResource = "app.ico"
 $installLogPath = "%TEMP%\magiorix-install.log"
 $outAssetsZip = Join-Path $outDir $assetsZipFileName
-$serverAssetsZip = Join-Path $projectRoot "red-magic-api\public\assets\desktop\$version\assets.zip"
 $setupSha256Path = Join-Path $outDir "$($setupFileName).sha256.txt"
 $releaseInfoPath = Join-Path $outDir "release-info.json"
+$publishedReleaseDir = Join-Path $projectRoot "red-magic-api\public\releases\windows"
+$publishedVersionManifest = Join-Path $publishedReleaseDir "$version.json"
+$publishedLatestManifest = Join-Path $publishedReleaseDir "latest.json"
 
 function Get-FullPath([string]$Path) {
   return [System.IO.Path]::GetFullPath($Path)
@@ -128,14 +146,22 @@ function New-IntegrityManifest([string]$AssetsDir) {
   }
 
   $manifest = [ordered]@{
-    version = $version
+    version = $assetsVersion
     algorithm = "sha256"
-    generatedAt = (Get-Date).ToUniversalTime().ToString("o")
     files = @($entries)
   }
 
   $manifestPath = Join-Path $AssetsDir "integrity-manifest.json"
-  $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+  $manifestJson = $manifest | ConvertTo-Json -Depth 6
+  $currentManifest = if (Test-Path -LiteralPath $manifestPath) {
+    Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8
+  } else {
+    $null
+  }
+  $currentNormalized = if ($null -eq $currentManifest) { "" } else { $currentManifest.Trim() }
+  if ($currentNormalized -ne $manifestJson.Trim()) {
+    Set-Content -LiteralPath $manifestPath -Value $manifestJson -Encoding UTF8
+  }
   return $manifestPath
 }
 
@@ -145,30 +171,6 @@ function New-AssetsZip([string]$AssetsDir, [string]$ZipPath) {
     Remove-Item -LiteralPath $ZipPath -Force
   }
   Compress-Archive -Path (Join-Path $AssetsDir "*") -DestinationPath $ZipPath -CompressionLevel Optimal
-}
-
-function Sync-AssetsToAppData([string]$AssetsDir) {
-  $assetRoots = @(
-    (Join-Path $env:APPDATA "magiorix-desktop\assets")
-  )
-
-  foreach ($assetRoot in $assetRoots) {
-    $target = Join-Path $assetRoot $version
-    try {
-      if (Test-Path -LiteralPath $target) {
-        Remove-Item -LiteralPath $target -Recurse -Force
-      }
-      New-Item -ItemType Directory -Force -Path $assetRoot | Out-Null
-      Copy-Item -LiteralPath $AssetsDir -Destination $assetRoot -Recurse -Force
-      $versionInfo = [ordered]@{
-        version = $version
-        appliedAt = (Get-Date).ToUniversalTime().ToString("o")
-      } | ConvertTo-Json
-      Set-Content -LiteralPath (Join-Path $assetRoot "version.json") -Value $versionInfo -Encoding UTF8
-    } catch {
-      Write-Warning "Skipped syncing assets to $assetRoot because files are in use. Installer and server assets were still generated. Close the app and reinstall to apply local assets. $($_.Exception.Message)"
-    }
-  }
 }
 
 function Invoke-CheckedProcess([string]$FilePath, [string[]]$Arguments, [string]$WorkingDirectory) {
@@ -205,6 +207,21 @@ if (-not $node) {
   throw "node executable not found; cannot patch frontend assets or pack app.asar"
 }
 
+if (Test-Path -LiteralPath $publishedVersionManifest -PathType Leaf) {
+  throw "Version $version already has a published manifest and is immutable. Bump the patch version."
+}
+if (Test-Path -LiteralPath $publishedLatestManifest -PathType Leaf) {
+  $publishedLatest = Get-Content -LiteralPath $publishedLatestManifest -Raw -Encoding UTF8 | ConvertFrom-Json
+  if ([string]$publishedLatest.desktop.version -eq $version) {
+    throw "Version $version is already latest and is immutable. Bump the patch version."
+  }
+}
+if ((Test-Path -LiteralPath $outDir) -and -not $OverwriteCandidate) {
+  $existingCandidate = @($setupExe, $outAssetsZip, $releaseInfoPath) | Where-Object { Test-Path -LiteralPath $_ }
+  if ($existingCandidate.Count -gt 0) {
+    throw "Release candidate already exists for $version. Use -OverwriteCandidate only before this version is published."
+  }
+}
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 Remove-DirectorySafe -Path $buildWorkDir -Root $outDir
 New-Item -ItemType Directory -Force -Path $payloadDir, $installerDir | Out-Null
@@ -218,8 +235,6 @@ Write-Output "Manifest: $manifestPath"
 
 Write-Output "Rebuilding assets.zip..."
 New-AssetsZip -AssetsDir $sourceAssetsDir -ZipPath $outAssetsZip
-New-Item -ItemType Directory -Force -Path (Split-Path -Parent $serverAssetsZip) | Out-Null
-Copy-Item -LiteralPath $outAssetsZip -Destination $serverAssetsZip -Force
 
 Write-Output "Packing Electron app.asar from app-source..."
 $asarOut = Join-Path (Join-Path $sourceAppDir "resources") "app.asar"
@@ -228,7 +243,7 @@ Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRo
 
 $payloadAppDir = Join-Path $payloadDir "app"
 $payloadAssetsRoot = Join-Path $payloadDir "assets"
-$payloadAssetsVersionDir = Join-Path $payloadAssetsRoot $version
+$payloadAssetsVersionDir = Join-Path $payloadAssetsRoot $assetsVersion
 New-Item -ItemType Directory -Force -Path $payloadAppDir, $payloadAssetsVersionDir | Out-Null
 
 $rootFiles = @(
@@ -295,6 +310,8 @@ $iconNsis = Escape-NsisPath $iconPath
 $nsi = @"
 Unicode true
 !include "MUI2.nsh"
+!include "StrFunc.nsh"
+`${Using:StrFunc} StrStr
 
 Name "$appDisplayName"
 OutFile "$setupExeNsis"
@@ -319,6 +336,10 @@ SetCompressor /SOLID lzma
 !define APP_REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\magiorix"
 
 Var InstallLog
+Var AssetsRoot
+Var AssetsTarget
+Var AssetsStage
+Var AssetsBackup
 
 Function .onInit
   SetShellVarContext current
@@ -327,6 +348,9 @@ Function .onInit
   FileOpen `$0 "`$InstallLog" w
   FileWrite `$0 "magiorix installer log$\r$\n"
   FileClose `$0
+  Push "等待旧版 magiorix 进程退出"
+  Call Log
+  Call WaitForMagiorix
 FunctionEnd
 
 Function Log
@@ -336,6 +360,25 @@ Function Log
   FileWrite `$1 "`$0$\r$\n"
   FileClose `$1
   Pop `$0
+FunctionEnd
+
+Function WaitForMagiorix
+  StrCpy `$2 0
+  wait_for_magiorix:
+    nsExec::ExecToStack '"`$SYSDIR\tasklist.exe" /NH /FO CSV /FI "IMAGENAME eq magiorix.exe"'
+    Pop `$0
+    Pop `$1
+    `${StrStr} `$3 `$1 "magiorix.exe"
+    StrCmp `$3 "" magiorix_stopped
+    Sleep 500
+    IntOp `$2 `$2 + 1
+    IntCmp `$2 60 magiorix_timeout wait_for_magiorix magiorix_timeout
+  magiorix_timeout:
+    Push "等待 magiorix.exe 退出超时（30 秒）。请在任务管理器结束进程后重试。"
+    Call FailInstall
+  magiorix_stopped:
+    Push "旧版 magiorix 进程已退出"
+    Call Log
 FunctionEnd
 
 Function FailInstall
@@ -379,24 +422,92 @@ Section "Install"
   !insertmacro Step "3/7 复制主程序"
   File /r "$payloadAppNsis\*.*"
   !insertmacro CheckErrors "复制主程序失败，请确认安装目录可写且程序未在运行：`$INSTDIR"
+  ClearErrors
   FileOpen `$0 "`$INSTDIR\.magiorix-install" w
+  IfErrors 0 +3
+    Push "创建安装标记失败：`$INSTDIR\.magiorix-install"
+    Call FailInstall
   FileWrite `$0 "installedAt=installed$\r$\n"
+  IfErrors 0 +3
+    Push "写入安装标记失败：`$INSTDIR\.magiorix-install"
+    Call FailInstall
   FileClose `$0
+  IfErrors 0 +3
+    Push "关闭安装标记失败：`$INSTDIR\.magiorix-install"
+    Call FailInstall
 
-  !insertmacro Step "4/7 写入前端资源：`$APPDATA\magiorix-desktop\assets\$version"
-  RMDir /r "`$APPDATA\magiorix-desktop\assets\$version"
-  CreateDirectory "`$APPDATA\magiorix-desktop\assets\$version"
-  SetOutPath "`$APPDATA\magiorix-desktop\assets\$version"
+  !insertmacro Step "4/7 暂存前端资源：`$APPDATA\magiorix-desktop\assets\$assetsVersion.installing"
+  StrCpy `$AssetsRoot "`$APPDATA\magiorix-desktop\assets"
+  StrCpy `$AssetsTarget "`$AssetsRoot\$assetsVersion"
+  StrCpy `$AssetsStage "`$AssetsRoot\$assetsVersion.installing"
+  StrCpy `$AssetsBackup "`$AssetsRoot\$assetsVersion.previous"
+  CreateDirectory "`$AssetsRoot"
+  !insertmacro CheckErrors "创建前端资源根目录失败：`$AssetsRoot"
+  ClearErrors
+  RMDir /r "`$AssetsStage"
+  IfErrors 0 +3
+    Push "清理资源暂存目录失败：`$AssetsStage"
+    Call FailInstall
+  CreateDirectory "`$AssetsStage"
+  !insertmacro CheckErrors "创建资源暂存目录失败：`$AssetsStage"
+  SetOutPath "`$AssetsStage"
   File /r "$payloadAssetsNsis\*.*"
-  !insertmacro CheckErrors "写入前端资源失败：`$APPDATA\magiorix-desktop\assets\$version"
-  FileOpen `$0 "`$APPDATA\magiorix-desktop\assets\version.json" w
-  FileWrite `$0 "{$\"version$\":$\"$version$\",$\"appliedAt$\":$\"installed$\"}"
-  FileClose `$0
+  !insertmacro CheckErrors "写入资源暂存目录失败：`$AssetsStage"
 
   !insertmacro Step "5/7 生成资源 manifest/校验文件"
-  IfFileExists "`$APPDATA\magiorix-desktop\assets\$version\integrity-manifest.json" +3 0
-    Push "资源完整性校验文件缺失：`$APPDATA\magiorix-desktop\assets\$version\integrity-manifest.json"
+  IfFileExists "`$AssetsStage\integrity-manifest.json" +3 0
+    Push "资源完整性校验文件缺失：`$AssetsStage\integrity-manifest.json"
     Call FailInstall
+  ClearErrors
+  RMDir /r "`$AssetsBackup"
+  IfErrors 0 +3
+    Push "清理资源回滚目录失败：`$AssetsBackup"
+    Call FailInstall
+  IfFileExists "`$AssetsTarget\*.*" 0 promote_assets
+    ClearErrors
+    Rename "`$AssetsTarget" "`$AssetsBackup"
+    IfErrors 0 promote_assets
+      Push "备份当前资源目录失败，请确认 magiorix 已完全退出：`$AssetsTarget"
+      Call FailInstall
+  promote_assets:
+    ClearErrors
+    Rename "`$AssetsStage" "`$AssetsTarget"
+    IfErrors 0 assets_promoted
+      Rename "`$AssetsBackup" "`$AssetsTarget"
+      Push "启用新资源目录失败，已尝试恢复旧资源：`$AssetsTarget"
+      Call FailInstall
+  assets_promoted:
+    ClearErrors
+    FileOpen `$0 "`$AssetsRoot\version.json.tmp" w
+    IfErrors version_pointer_failed 0
+    FileWrite `$0 "{$\"version$\":$\"$assetsVersion$\",$\"appliedAt$\":$\"installed$\"}"
+    IfErrors version_pointer_failed_close 0
+    FileClose `$0
+    IfErrors version_pointer_failed 0
+    Delete "`$AssetsRoot\version.json.previous"
+    IfFileExists "`$AssetsRoot\version.json" 0 +2
+      Rename "`$AssetsRoot\version.json" "`$AssetsRoot\version.json.previous"
+    ClearErrors
+    Rename "`$AssetsRoot\version.json.tmp" "`$AssetsRoot\version.json"
+    IfErrors version_pointer_failed 0
+    Goto version_pointer_written
+  version_pointer_failed_close:
+    FileClose `$0
+  version_pointer_failed:
+    ClearErrors
+    Delete "`$AssetsRoot\version.json.tmp"
+    Delete "`$AssetsRoot\version.json"
+    IfFileExists "`$AssetsRoot\version.json.previous" 0 +2
+      Rename "`$AssetsRoot\version.json.previous" "`$AssetsRoot\version.json"
+    ClearErrors
+    RMDir /r "`$AssetsTarget"
+    IfFileExists "`$AssetsBackup\*.*" 0 +2
+      Rename "`$AssetsBackup" "`$AssetsTarget"
+    Push "切换资源版本指针失败，已尝试恢复旧资源和版本指针：`$AssetsRoot\version.json"
+    Call FailInstall
+  version_pointer_written:
+    Delete "`$AssetsRoot\version.json.previous"
+    RMDir /r "`$AssetsBackup"
 
   !insertmacro Step "6/7 创建开始菜单快捷方式"
   CreateShortCut "`$SMPROGRAMS\$shortcutName.lnk" "`$INSTDIR\$installedExeName" "" "`$INSTDIR\resources\$appIconResource" 0
@@ -445,8 +556,6 @@ if (-not (Test-Path -LiteralPath $setupExe)) {
   throw "Setup exe was not created: $setupExe"
 }
 
-Sync-AssetsToAppData -AssetsDir $sourceAssetsDir
-
 $setupItem = Get-Item -LiteralPath $setupExe
 $setupHash = (Get-FileHash -LiteralPath $setupExe -Algorithm SHA256).Hash
 $assetsItem = Get-Item -LiteralPath $outAssetsZip
@@ -454,19 +563,23 @@ $assetsHash = (Get-FileHash -LiteralPath $outAssetsZip -Algorithm SHA256).Hash
 
 Set-Content -LiteralPath $setupSha256Path -Value "$setupHash  $setupFileName" -Encoding ASCII
 $releaseInfo = [ordered]@{
-  appId = $appId
-  version = $version
-  platform = $platform
-  installer = [ordered]@{
+  schemaVersion = 1
+  channel = "stable"
+  desktop = [ordered]@{
+    version = $version
     fileName = $setupFileName
+    downloadUrl = "$($InstallerBaseUrl.TrimEnd('/'))/$setupFileName"
     size = $setupItem.Length
     sha256 = $setupHash
   }
   assets = [ordered]@{
+    version = $assetsVersion
     fileName = $assetsZipFileName
+    downloadUrl = "$($AssetsBaseUrl.TrimEnd('/'))/$assetsVersion/assets.zip"
     size = $assetsItem.Length
     sha256 = $assetsHash
   }
+  releaseNotes = @("magiorix $version update")
   generatedAt = (Get-Date).ToUniversalTime().ToString("o")
 } | ConvertTo-Json -Depth 5
 Set-Content -LiteralPath $releaseInfoPath -Value $releaseInfo -Encoding UTF8
@@ -478,7 +591,6 @@ Write-Output "Installer SHA256: $setupHash"
 Write-Output "Created assets zip: $outAssetsZip"
 Write-Output "Assets zip size: $($assetsItem.Length)"
 Write-Output "Assets zip SHA256: $assetsHash"
-Write-Output "Synced server assets zip: $serverAssetsZip"
 Write-Output "Created SHA256 file: $setupSha256Path"
 Write-Output "Created release info: $releaseInfoPath"
 Write-Output "Install log path: $installLogPath"

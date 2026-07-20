@@ -48,3 +48,6 @@ output/
 Thumbs.db
 .vscode/
 .idea/
+.workflow/
+.verification/
+artifacts/verification/

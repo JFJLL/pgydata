@@ -6,6 +6,7 @@ const path = require("path");
 const bcrypt = require("bcryptjs");
 const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
+const { loadReleaseManifest, normalizeSha256 } = require("./lib/release-manifest");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3050);
@@ -17,7 +18,10 @@ const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, "logs");
 const ASSET_VERSION = "1.1.3";
 const INSTALLER_FILE_NAME = "magiorix-desktop-1.1.3-windows.exe";
 const INSTALLER_DOWNLOAD_URL = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.3-windows.exe";
-const INSTALLER_SHA256 = (process.env.INSTALLER_SHA256 || "81D23866E03D1229CF2CEA40D4E708C0BB6C3F44D0E7FE4959FF67EC888DCEDD").trim();
+const INSTALLER_SHA256 = (process.env.INSTALLER_SHA256 || "C874C2166E7C0EBBC2AD427028FB3060441D9A20D33239077B30F3887C5E16BA").trim();
+const RELEASE_MANIFEST_PATH = process.env.RELEASE_MANIFEST_PATH
+  || path.join(__dirname, "public", "releases", "windows", "latest.json");
+const RELEASE_MANIFEST = loadReleaseManifest(RELEASE_MANIFEST_PATH);
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "redmagic2026";
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -166,10 +170,6 @@ function compareVersions(a, b) {
     if (diff !== 0) return diff > 0 ? 1 : -1;
   }
   return 0;
-}
-
-function normalizeSha256(value) {
-  return String(value || "").trim().toLowerCase().replace(/^sha256:/, "");
 }
 
 async function ensureColumn(table, column, definition) {
@@ -1035,10 +1035,24 @@ app.get("/api/shumiao/order/:orderNo", authRequired, asyncHandler(async (req, re
 }));
 
 app.get("/api/frontend-assets/latest/desktop", asyncHandler(async (req, res) => {
-  const filePath = path.join(__dirname, "public", "assets", "desktop", ASSET_VERSION, "assets.zip");
+  const releaseAssets = RELEASE_MANIFEST?.release.assets;
+  const assetVersion = releaseAssets?.version || ASSET_VERSION;
+  const filePath = path.join(__dirname, "public", "assets", "desktop", assetVersion, "assets.zip");
   if (!fs.existsSync(filePath)) {
     return fail(res, 404, "资源文件不存在", {
-      expectedPath: `public/assets/desktop/${ASSET_VERSION}/assets.zip`,
+      expectedPath: `public/assets/desktop/${assetVersion}/assets.zip`,
+    });
+  }
+
+  if (releaseAssets) {
+    return success(res, {
+      version: releaseAssets.version,
+      fileName: releaseAssets.fileName,
+      downloadUrl: releaseAssets.downloadUrl,
+      size: releaseAssets.size,
+      checksum: `sha256:${releaseAssets.sha256}`,
+      releaseDate: RELEASE_MANIFEST.release.generatedAt,
+      releaseNotes: RELEASE_MANIFEST.release.releaseNotes,
     });
   }
 
@@ -1053,6 +1067,7 @@ app.get("/api/frontend-assets/latest/desktop", asyncHandler(async (req, res) => 
 
   return success(res, {
     version: ASSET_VERSION,
+    fileName: "assets.zip",
     downloadUrl: `${BASE_URL}/assets/desktop/${ASSET_VERSION}/assets.zip`,
     size: stat.size,
     checksum: `sha256:${hash.digest("hex")}`,
@@ -1062,52 +1077,56 @@ app.get("/api/frontend-assets/latest/desktop", asyncHandler(async (req, res) => 
 }));
 
 app.get("/api/desktop-download/latest", asyncHandler(async (req, res) => {
-  const filePath = path.join(__dirname, "public", "downloads", INSTALLER_FILE_NAME);
+  const desktopRelease = RELEASE_MANIFEST?.release.desktop;
+  const fileName = desktopRelease?.fileName || INSTALLER_FILE_NAME;
+  const filePath = path.join(__dirname, "public", "downloads", fileName);
   const stat = fs.existsSync(filePath) ? fs.statSync(filePath) : null;
 
   return success(res, {
-    version: ASSET_VERSION,
-    fileName: INSTALLER_FILE_NAME,
-    downloadUrl: INSTALLER_DOWNLOAD_URL,
-    directUrl: INSTALLER_DOWNLOAD_URL,
-    size: stat ? stat.size : 0,
-    checksum: normalizeSha256(INSTALLER_SHA256),
-    releaseDate: stat ? stat.mtime.toISOString() : null,
+    version: desktopRelease?.version || ASSET_VERSION,
+    fileName,
+    downloadUrl: desktopRelease?.downloadUrl || INSTALLER_DOWNLOAD_URL,
+    directUrl: desktopRelease?.downloadUrl || INSTALLER_DOWNLOAD_URL,
+    size: desktopRelease?.size || (stat ? stat.size : 0),
+    checksum: desktopRelease?.sha256 || normalizeSha256(INSTALLER_SHA256),
+    releaseDate: desktopRelease ? RELEASE_MANIFEST.release.generatedAt : (stat ? stat.mtime.toISOString() : null),
   });
 }));
 
 app.get("/api/desktop-versions/check", asyncHandler(async (req, res) => {
   const currentVersion = String(req.query.currentVersion || "0.0.0").trim();
   const platform = String(req.query.platform || "windows").trim();
+  const desktopRelease = RELEASE_MANIFEST?.release.desktop;
+  const latestVersion = desktopRelease?.version || ASSET_VERSION;
   if (platform !== "windows") {
     return success(res, {
       hasUpdate: false,
-      latestVersion: ASSET_VERSION,
-      version: ASSET_VERSION,
+      latestVersion,
+      version: latestVersion,
       platform,
     });
   }
-  const hasUpdate = compareVersions(ASSET_VERSION, currentVersion) > 0;
+  const hasUpdate = compareVersions(latestVersion, currentVersion) > 0;
   if (!hasUpdate) {
     return success(res, {
       hasUpdate: false,
-      latestVersion: ASSET_VERSION,
-      version: ASSET_VERSION,
+      latestVersion,
+      version: latestVersion,
     });
   }
-  const checksum = normalizeSha256(INSTALLER_SHA256);
+  const checksum = desktopRelease?.sha256 || normalizeSha256(INSTALLER_SHA256);
   if (!checksum) return fail(res, 500, "安装包校验值未配置");
   return success(res, {
     hasUpdate: true,
-    latestVersion: ASSET_VERSION,
-    version: ASSET_VERSION,
+    latestVersion,
+    version: latestVersion,
     platform,
-    fileName: INSTALLER_FILE_NAME,
-    downloadUrl: INSTALLER_DOWNLOAD_URL,
+    fileName: desktopRelease?.fileName || INSTALLER_FILE_NAME,
+    downloadUrl: desktopRelease?.downloadUrl || INSTALLER_DOWNLOAD_URL,
     checksum,
-    fileSize: 0,
+    fileSize: desktopRelease?.size || 0,
     forceUpdate: false,
-    updateLog: `magiorix ${ASSET_VERSION} 更新`,
+    updateLog: RELEASE_MANIFEST?.release.releaseNotes.join("\n") || `magiorix ${latestVersion} 更新`,
   });
 }));
 
