@@ -17700,7 +17700,8 @@ const dm = {
   fansCityChart: ["fansCityChart"],
   fansAgeChart: ["fansAgeChart"],
   fansGenderChart: ["fansGenderChart"],
-  fansGrowthTrendChart: ["fansGrowthTrendChart"]
+  fansGrowthTrendChart: ["fansGrowthTrendChart"],
+  dailyNotePerformanceChart: ["dailyNotePerformanceChart"]
 }, mm = {
   profile: [
     "nickname",
@@ -17747,7 +17748,8 @@ const dm = {
     "collectMedian",
     "commentMedian",
     "shareMedian",
-    "interactRate"
+    "interactRate",
+    "dailyNotePerformanceChart"
   ],
   daily90: [
     "noteNumber90",
@@ -17836,7 +17838,8 @@ const PYG_CHART_FIELDS = {
   city: "fansCityChart",
   age: "fansAgeChart",
   gender: "fansGenderChart",
-  trend: "fansGrowthTrendChart"
+  trend: "fansGrowthTrendChart",
+  dailyNotePerformance: "dailyNotePerformanceChart"
 };
 function pgyHasSelectedField(a, e) {
   const t = ur(a);
@@ -18138,6 +18141,77 @@ def trend_points(rows):
             points.append({"date": date, "num": value})
     return points
 
+def format_integer(value):
+    if value is None or value == "":
+        return "-"
+    try:
+        number = float(value)
+        if not math.isfinite(number):
+            return "-"
+        return f"{int(round(number)):,}"
+    except Exception:
+        return "-"
+
+def daily_note_categories(rows):
+    categories = []
+    for row in rows or []:
+        name = str(row.get("contentTag") or "").strip()
+        if not name:
+            continue
+        raw_percent = row.get("percent")
+        try:
+            percent = float(raw_percent)
+            if not math.isfinite(percent):
+                raise ValueError("invalid percent")
+            label = f"{name}（占比{percent:.1f}%）"
+            sort_value = percent
+        except Exception:
+            label = f"{name}（占比-）"
+            sort_value = -1
+        categories.append((sort_value, label))
+    categories.sort(key=lambda item: item[0], reverse=True)
+    visible = [item[1] for item in categories[:3]]
+    if len(categories) > 3:
+        visible.append(f"另有 {len(categories) - 3} 类")
+    return "｜".join(visible) if visible else "-"
+
+def save_daily_note_performance(chart):
+    data = chart.get("data") or {}
+    note_number = data.get("noteNumber")
+    note_value = format_integer(note_number)
+    note_text = f"{note_value}篇" if note_value != "-" else "-"
+    try:
+        has_notes = float(note_number) > 0
+    except Exception:
+        has_notes = False
+    exposure_text = format_integer(data.get("impMedian")) if has_notes else "-"
+    read_text = format_integer(data.get("readMedian")) if has_notes else "-"
+    category_text = daily_note_categories(data.get("noteType"))
+
+    width, height = 760, 300
+    img = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(img)
+    draw.text((28, 18), "日常笔记表现", font=FONT_TITLE, fill="#202124")
+    draw.text((28, 52), "日常笔记｜图文+视频｜近30日｜仅自然流量", font=FONT_SMALL, fill="#6b7280")
+
+    cards = [
+        ((24, 84, 190, 176), "发布笔记", note_text, 126),
+        ((204, 84, 736, 176), "内容类目及占比", category_text, 482),
+        ((24, 190, 372, 280), "曝光中位数", exposure_text, 300),
+        ((388, 190, 736, 280), "阅读中位数", read_text, 300),
+    ]
+    for box, label, value, max_width in cards:
+        rounded_rect(draw, box, 9, "#f7f8fa")
+        draw.text((box[0] + 18, box[1] + 14), label, font=FONT_SMALL, fill="#6b7280")
+        value_font = FONT_TEXT if label == "内容类目及占比" else FONT_TITLE
+        display_value = ellipsize(draw, value, value_font, max_width)
+        draw.text((box[0] + 18, box[1] + 44), display_value, font=value_font, fill="#202124")
+
+    output = chart.get("output")
+    ensure_dir(output)
+    img.save(output, "PNG", optimize=True)
+    return True
+
 def save_trend(chart):
     rows = trend_points(chart.get("rows"))
     if len(rows) < 2:
@@ -18182,7 +18256,7 @@ def save_trend(chart):
     return True
 
 def main():
-    payload = json.load(sys.stdin)
+    payload = json.loads(sys.stdin.buffer.read().decode("utf-8"))
     paths = {}
     errors = {}
     for chart in payload.get("charts") or []:
@@ -18196,6 +18270,8 @@ def main():
                 ok = save_gender(chart)
             elif chart_type == "trend":
                 ok = save_trend(chart)
+            elif chart_type == "daily-note-performance":
+                ok = save_daily_note_performance(chart)
             if ok and field:
                 paths[field] = chart.get("output")
         except Exception as exc:
@@ -18345,7 +18421,23 @@ function pgyTrendChartSvg(a) {
   }).join(""), v = e.map((b, S) => S % 5 === 0 || S === e.length - 1 ? `<text x="${p(S)}" y="${n - 24}" text-anchor="middle" font-size="13" fill="#64748b">${pgyChartEscape(String(b.date).slice(4, 6) + "/" + String(b.date).slice(6, 8))}</text>` : "").join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${t}" height="${n}" viewBox="0 0 ${t} ${n}"><rect width="100%" height="100%" fill="white"/><text x="${s}" y="26" font-size="20" font-weight="700" fill="#111827">粉丝增长趋势</text>${g}<polyline fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="${m}"/>${v}</svg>`;
 }
-async function buildPgyBloggerChartFields(a, e, t, n) {
+function pgyDailyNoteFormatInteger(a) {
+  if (a == null || a === "") return "-";
+  const e = Number(a);
+  return Number.isFinite(e) ? Math.round(e).toLocaleString("en-US") : "-";
+}
+function pgyDailyNoteCategories(a) {
+  const e = Array.isArray(a) ? a.map((t) => {
+    const n = String(t == null ? void 0 : t.contentTag ?? "").trim(), s = t == null ? void 0 : t.percent, i = s != null && String(s).trim() !== "" && Number.isFinite(Number(s));
+    return n ? { name: n, percent: i ? Number(s) : -1 } : null;
+  }).filter(Boolean).sort((t, n) => n.percent - t.percent) : [], t = e.slice(0, 3).map((n) => n.percent >= 0 ? n.name + "（占比" + n.percent.toFixed(1) + "%）" : n.name + "（占比-）");
+  return e.length > 3 && t.push("另有 " + (e.length - 3) + " 类"), t.join("｜") || "-";
+}
+function pgyDailyNotePerformanceSvg(a) {
+  const e = a ?? {}, t = pgyDailyNoteFormatInteger(e.noteNumber), n = t === "-" ? "-" : t + "篇", s = Number(e.noteNumber) > 0, i = s ? pgyDailyNoteFormatInteger(e.impMedian) : "-", o = s ? pgyDailyNoteFormatInteger(e.readMedian) : "-", r = pgyDailyNoteCategories(e.noteType), c = r.length > 35 ? r.slice(0, 34) + "..." : r;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="760" height="300" viewBox="0 0 760 300"><rect width="100%" height="100%" fill="white"/><g font-family="Microsoft YaHei,Arial,sans-serif"><text x="28" y="41" font-size="24" font-weight="700" fill="#202124">日常笔记表现</text><text x="28" y="68" font-size="15" fill="#6b7280">日常笔记｜图文+视频｜近30日｜仅自然流量</text><rect x="24" y="84" width="166" height="92" rx="9" fill="#f7f8fa"/><text x="42" y="113" font-size="15" fill="#6b7280">发布笔记</text><text x="42" y="151" font-size="24" font-weight="700" fill="#202124">${pgyChartEscape(n)}</text><rect x="204" y="84" width="532" height="92" rx="9" fill="#f7f8fa"/><text x="222" y="113" font-size="15" fill="#6b7280">内容类目及占比</text><text x="222" y="151" font-size="20" font-weight="700" fill="#202124">${pgyChartEscape(c)}</text><rect x="24" y="190" width="348" height="90" rx="9" fill="#f7f8fa"/><text x="42" y="219" font-size="15" fill="#6b7280">曝光中位数</text><text x="42" y="258" font-size="24" font-weight="700" fill="#202124">${pgyChartEscape(i)}</text><rect x="388" y="190" width="348" height="90" rx="9" fill="#f7f8fa"/><text x="406" y="219" font-size="15" fill="#6b7280">阅读中位数</text><text x="406" y="258" font-size="24" font-weight="700" fill="#202124">${pgyChartEscape(o)}</text></g></svg>`;
+}
+async function buildPgyBloggerChartFields(a, e, t, n, d) {
   const s = {}, i = [];
   if (pgyHasSelectedField(n, PYG_CHART_FIELDS.province)) {
     const o = pgyTopPercentRows(e.provinces);
@@ -18367,6 +18459,7 @@ async function buildPgyBloggerChartFields(a, e, t, n) {
     const o = Array.isArray(t) ? t.slice(-120) : [];
     o.length >= 2 && i.push({ field: "fansGrowthTrendChart", type: "trend", rows: o, output: pgyChartFile("trend", a, "trend") });
   }
+  pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePerformance) && i.push({ field: "dailyNotePerformanceChart", type: "daily-note-performance", data: d ?? {}, output: pgyChartFile("daily-note", a, "daily-note-performance") });
   if (!i.length) return s;
   try {
     const o = await pgyRenderChartsWithPython(i);
@@ -18379,12 +18472,12 @@ async function buildPgyBloggerChartFields(a, e, t, n) {
   for (const o of i)
     if (!s[o.field]) {
       let r = "";
-      o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "trend" && (r = pgyWriteTrendChartPng(o.rows ?? [], o.output)), r && (s[o.field] = r);
+      o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "trend" ? r = pgyWriteTrendChartPng(o.rows ?? [], o.output) : o.type === "daily-note-performance" && (r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);
     }
   if (Object.keys(s).length)
-    j.info(`[pgy-chart] 已生成 ${Object.keys(s).length}/${i.length} 张粉丝图表`);
+    j.info(`[pgy-chart] 已生成 ${Object.keys(s).length}/${i.length} 张图表`);
   else
-    j.warn(`[pgy-chart] 未生成任何粉丝图表`);
+    j.warn(`[pgy-chart] 未生成任何图表`);
   return s;
 }
 function pgyTimeout(a, e, t) {
@@ -18876,7 +18969,7 @@ class hm {
     let S = 0, C = {};
     for (const Q of b)
       Q.percent > S && (S = Q.percent, C = Q);
-    const _ = p.gender ?? {}, k = p.provinces ?? [], P = p.cities ?? [], T = p.interests ?? [], L = p.devices ?? [], z = s.liveSign, G = s.noteSign, Q = await buildPgyBloggerChartFields(e, p, (((t.fansTrend == null ? void 0 : t.fansTrend.data) ?? {}).list) ?? [], I);
+    const _ = p.gender ?? {}, k = p.provinces ?? [], P = p.cities ?? [], T = p.interests ?? [], L = p.devices ?? [], z = s.liveSign, G = s.noteSign, Q = await buildPgyBloggerChartFields(e, p, (((t.fansTrend == null ? void 0 : t.fansTrend.data) ?? {}).list) ?? [], I, o);
     return {
       platformBloggerId: e,
       nickname: s.name,

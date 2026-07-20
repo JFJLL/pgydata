@@ -95,7 +95,7 @@
       "modes": ["local", "ci"],
       "minExecuted": 2,
       "commands": [
-        {"id": "node-integration", "program": "node", "args": ["--test", "tests/integration/release-api.test.js", "tests/integration/remote-release-verify.test.js"], "required": true},
+        {"id": "node-integration", "program": "node", "args": ["--test", "tests/integration/release-api.test.js", "tests/integration/remote-release-verify.test.js", "tests/integration/pgy-daily-note-chart.test.js"], "required": true},
         {"id": "publish-prepare", "program": "pwsh", "args": ["-NoProfile", "-File", "tests/integration/publish-prepare.ps1"], "required": true}
       ]
     },

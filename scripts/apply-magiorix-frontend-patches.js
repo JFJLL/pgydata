@@ -77,6 +77,34 @@ const directTabLabel = `小红书${"直采"}`;
 
 replaceOnce(
   mainBundle,
+  '{field:"fansGrowthTrendChart",headerName:"粉丝增长趋势图",width:320}],Bs=',
+  '{field:"fansGrowthTrendChart",headerName:"粉丝增长趋势图",width:320},{field:"dailyNotePerformanceChart",headerName:"日常笔记表现图",width:320}],Bs=',
+  "append daily note chart after fan chart columns",
+);
+
+replaceOnce(
+  mainBundle,
+  '{group:"粉丝图表",label:"粉丝增长趋势图",key:"fansGrowthTrendChart"}],fr=',
+  '{group:"粉丝图表",label:"粉丝增长趋势图",key:"fansGrowthTrendChart"},{group:"日常30天",label:"日常笔记表现图",key:"dailyNotePerformanceChart"}],fr=',
+  "add daily note chart to blogger export fields",
+);
+
+replaceOnce(
+  mainBundle,
+  '{key:"shareMedian",label:"中位分享量"}]},{groupKey:"daily-90"',
+  '{key:"shareMedian",label:"中位分享量"},{key:"dailyNotePerformanceChart",label:"日常笔记表现图"}]},{groupKey:"daily-90"',
+  "add optional daily note chart selector",
+);
+
+replaceOnce(
+  urlValidatorBundle,
+  'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart"])',
+  'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart"])',
+  "include daily note chart in duration estimate",
+);
+
+replaceOnce(
+  mainBundle,
   `,"${directRoute}":()=>G(()=>import("./${directChunk}"),__vite__mapDeps([30,1,23,24,20,8]),import.meta.url)`,
   "",
   "remove xhs homepage route",
@@ -599,6 +627,7 @@ replaceAllIfExists(mainBundle, '"1.1.0"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, '"1.1.1"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, '"1.1.2"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, '"1.1.3"', `"${assetVersion}"`);
+replaceAllIfExists(mainBundle, '"1.1.4"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, previousServerBaseUrl, serverBaseUrl);
 
 replaceOnce(

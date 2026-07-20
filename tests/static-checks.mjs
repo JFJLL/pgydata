@@ -33,6 +33,8 @@ assert.match(runtimePatch, /pgyHasSingleInstanceLock/, "runtime patch must enfor
 assert.match(runtimePatch, /pgyDesktopUpdateActive/, "runtime patch must coordinate desktop and asset updates");
 assert.match(runtimePatch, /partial-/, "runtime patch must stage asset updates");
 assert.match(runtimePatch, /pgyAssetExpectedChecksum/, "runtime patch must verify the downloaded asset archive checksum");
+assert.match(runtimePatch, /dailyNotePerformanceChart/, "runtime patch must generate the daily note performance chart");
+assert.match(runtimePatch, /daily-note-performance/, "runtime patch must route the daily note chart renderer");
 
 const verificationPolicy = readFileSync("verification-policy.json", "utf8");
 assert.doesNotMatch(verificationPolicy, /kimi-browser/, "browser testing must remain excluded");
@@ -47,5 +49,21 @@ const aboutBundle = readdirSync(`${assetRoot}/assets`)
   .find((source) => source.includes("关于 magiorix"));
 assert.ok(aboutBundle, "frontend about bundle must exist");
 assert.match(aboutBundle, new RegExp(`"${packageConfig.assetsVersion.replaceAll(".", "\\.")}"`), "about page must show the current version");
+
+const mainBundle = readdirSync(`${assetRoot}/assets`)
+  .filter((file) => file.endsWith(".js"))
+  .map((file) => readFileSync(`${assetRoot}/assets/${file}`, "utf8"))
+  .find((source) => source.includes('field:"dailyNotePerformanceChart"'));
+assert.ok(mainBundle, "frontend must expose the daily note performance chart field");
+assert.match(
+  mainBundle,
+  /fansGrowthTrendChart",headerName:"粉丝增长趋势图",width:320\},\{field:"dailyNotePerformanceChart",headerName:"日常笔记表现图"/,
+  "daily note chart must follow the five fan chart columns",
+);
+assert.match(
+  mainBundle,
+  /key:"dailyNotePerformanceChart",label:"日常笔记表现图"\}\]\},\{groupKey:"daily-90"/,
+  "daily note chart must be optional in the daily-30 selector group",
+);
 
 console.log(`Static checks passed for ${javascriptFiles.length} JavaScript files.`);
