@@ -120,7 +120,7 @@ function Invoke-RendererSmokeTest([string]$RendererPath, [string]$WorkRoot) {
   [Array]::Reverse($bytes, 20, 4)
   $width = [BitConverter]::ToUInt32($bytes, 16)
   $height = [BitConverter]::ToUInt32($bytes, 20)
-  if ($width -ne 760 -or $height -ne 300) {
+  if ($width -ne 808 -or $height -ne 378) {
     throw "PGY daily note chart has unexpected dimensions: ${width}x${height}"
   }
 }

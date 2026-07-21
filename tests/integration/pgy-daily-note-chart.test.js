@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
-const { spawnSync } = require("node:child_process");
+const { execFileSync, spawnSync } = require("node:child_process");
 const { createRequire } = require("node:module");
-const { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
@@ -19,13 +19,13 @@ assert.ok(pythonMatch, "embedded Python chart renderer must be present");
 const pythonSource = pythonMatch[1];
 
 const helperMatch = runtimeSource.match(
-  /function pgyDailyNoteFormatInteger\(a\) \{[\s\S]*?\n\}\nasync function buildPgyBloggerChartFields/,
+  /function pgyDailyNoteFormatInteger\(a\) \{[\s\S]*?\r?\n\}\r?\n(?:\r?\n)?async function buildPgyBloggerChartFields/,
 );
 assert.ok(helperMatch, "daily note JS fallback helpers must be present");
-const helperSource = helperMatch[0].replace(/\nasync function buildPgyBloggerChartFields$/, "");
+const helperSource = helperMatch[0].replace(/\r?\n(?:\r?\n)?async function buildPgyBloggerChartFields$/, "");
 const jsHelpers = new Function(
   "pgyChartEscape",
-  `${helperSource}; return { pgyDailyNoteCategories, pgyDailyNotePerformanceSvg };`,
+  `${helperSource}; return { pgyDailyNoteCategories, pgyDailyNoteEllipsize, pgyDailyNoteTextWidth, pgyDailyNotePerformanceSvg };`,
 )((value) => String(value).replace(/[&<>"']/g, (char) => ({
   "&": "&amp;",
   "<": "&lt;",
@@ -62,25 +62,68 @@ test("daily note category formatting is consistent in Python and JS", () => {
     { contentTag: "中", percent: "20" },
     { contentTag: "次高", percent: "30" },
   ];
+  const longCategories = [
+    { contentTag: "这是一个特别长的出行旅游内容分类名称", percent: "80" },
+    { contentTag: "这是一个同样很长的时尚穿搭内容分类名称", percent: "15" },
+    { contentTag: "这是第三个需要稳定截断的生活方式内容分类", percent: "5" },
+  ];
   assert.equal(jsHelpers.pgyDailyNoteCategories(missing), "美妆（占比-）");
   assert.equal(jsHelpers.pgyDailyNoteCategories([{ contentTag: "美妆", percent: " " }]), "美妆（占比-）");
   assert.equal(
     jsHelpers.pgyDailyNoteCategories(ranked),
     "最高（占比90.0%）｜次高（占比30.0%）｜中（占比20.0%）｜另有 1 类",
   );
+  const longCategoryText = jsHelpers.pgyDailyNoteCategories(longCategories);
+  const jsEllipsized = jsHelpers.pgyDailyNoteEllipsize(longCategoryText);
+  assert.match(jsEllipsized, /\.\.\.$/);
+  assert.ok(jsHelpers.pgyDailyNoteTextWidth(jsEllipsized) <= 535);
 
   const probeSource = pythonSource.replace(
     /if __name__ == "__main__":\r?\n    main\(\)/,
-    'if __name__ == "__main__":\n    sys.stdout.reconfigure(encoding="utf-8")\n    probe = json.loads(sys.stdin.buffer.read().decode("utf-8"))\n    print(json.dumps({"categories": [daily_note_categories(rows) for rows in probe]}, ensure_ascii=False))',
+    'if __name__ == "__main__":\n    sys.stdout.reconfigure(encoding="utf-8")\n    probe = json.loads(sys.stdin.buffer.read().decode("utf-8"))\n    categories = [daily_note_categories(rows) for rows in probe]\n    print(json.dumps({"categories": categories, "ellipsized": [daily_note_ellipsize(value) for value in categories]}, ensure_ascii=False))',
   );
-  const output = JSON.parse(runPython(probeSource, [missing, ranked]));
+  const output = JSON.parse(runPython(probeSource, [missing, ranked, longCategories]));
   assert.deepEqual(output.categories, [
     "美妆（占比-）",
     "最高（占比90.0%）｜次高（占比30.0%）｜中（占比20.0%）｜另有 1 类",
+    longCategoryText,
   ]);
+  assert.equal(output.ellipsized[2], jsEllipsized);
 });
 
-test("Python renderer writes 760 by 300 PNGs for populated and missing data", (t) => {
+test("runtime patch upgrades the legacy daily-note layout and is idempotent", (t) => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "magiorix-runtime-patch-upgrade-"));
+  t.after(() => rmSync(tempDir, { recursive: true, force: true }));
+  const distDir = path.join(tempDir, "app-source", "dist-electron");
+  const toolsDir = path.join(tempDir, "tools");
+  mkdirSync(distDir, { recursive: true });
+  mkdirSync(toolsDir, { recursive: true });
+  writeFileSync(
+    path.join(distDir, "index.js"),
+    execFileSync("git", ["show", "HEAD:app-source/dist-electron/index.js"], { cwd: projectRoot }),
+  );
+  writeFileSync(
+    path.join(distDir, "preload.mjs"),
+    execFileSync("git", ["show", "HEAD:app-source/dist-electron/preload.mjs"], { cwd: projectRoot }),
+  );
+  copyFileSync(path.join(projectRoot, "tools", "pgy_chart_renderer.py"), path.join(toolsDir, "pgy_chart_renderer.py"));
+  copyFileSync(path.join(projectRoot, "tools", "pgy_daily_note_svg.js"), path.join(toolsDir, "pgy_daily_note_svg.js"));
+
+  const patchScript = path.join(projectRoot, "scripts", "apply-magiorix-runtime-patches.js");
+  const env = { ...process.env, MAGIORIX_PATCH_PROJECT_ROOT: tempDir };
+  const firstRun = spawnSync(process.execPath, [patchScript], { cwd: projectRoot, env, encoding: "utf8", windowsHide: true });
+  assert.equal(firstRun.status, 0, firstRun.stderr || firstRun.stdout);
+  const upgraded = readFileSync(path.join(distDir, "index.js"), "utf8");
+  assert.match(upgraded, /width="808" height="378"/);
+  assert.match(upgraded, /function pgyDailyNoteEllipsize/);
+  assert.doesNotMatch(upgraded, /width="760" height="300"[^]*数据表现/);
+
+  const secondRun = spawnSync(process.execPath, [patchScript], { cwd: projectRoot, env, encoding: "utf8", windowsHide: true });
+  assert.equal(secondRun.status, 0, secondRun.stderr || secondRun.stdout);
+  assert.equal(readFileSync(path.join(distDir, "index.js"), "utf8"), upgraded);
+});
+
+test("Python renderer writes 808 by 378 web-layout PNGs for populated and missing data", (t) => {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "magiorix-daily-note-chart-"));
   t.after(() => rmSync(tempDir, { recursive: true, force: true }));
   const samplePath = path.join(tempDir, "sample.png");
@@ -113,9 +156,14 @@ test("Python renderer writes 760 by 300 PNGs for populated and missing data", (t
   assert.deepEqual(result.errors, {});
   assert.equal(result.paths.sample, samplePath);
   assert.equal(result.paths.missing, missingPath);
-  assert.deepEqual(pngSize(samplePath), { width: 760, height: 300 });
-  assert.deepEqual(pngSize(missingPath), { width: 760, height: 300 });
-  assert.match(jsHelpers.pgyDailyNotePerformanceSvg(payload.charts[0].data), /width="760" height="300"/);
+  assert.deepEqual(pngSize(samplePath), { width: 808, height: 378 });
+  assert.deepEqual(pngSize(missingPath), { width: 808, height: 378 });
+  const populatedSvg = jsHelpers.pgyDailyNotePerformanceSvg(payload.charts[0].data);
+  assert.match(populatedSvg, /width="808" height="378"/);
+  assert.match(populatedSvg, />数据表现</);
+  assert.match(populatedSvg, />核心指标</);
+  assert.match(populatedSvg, /fill="#ff2442"/);
+  assert.doesNotMatch(populatedSvg, /互动中位数/);
   assert.match(jsHelpers.pgyDailyNotePerformanceSvg(payload.charts[1].data), />-<\/text>/);
 });
 
@@ -154,7 +202,7 @@ test("bundled chart renderer supports the daily note performance chart", (t) => 
   const result = JSON.parse(process.stdout.trim().split(/\r?\n/).pop());
   assert.deepEqual(result.errors, {});
   assert.equal(result.paths.dailyNotePerformanceChart, outputPath);
-  assert.deepEqual(pngSize(outputPath), { width: 760, height: 300 });
+  assert.deepEqual(pngSize(outputPath), { width: 808, height: 378 });
 });
 
 test("production Excel embedder adds the daily note PNG and drawing anchor", async (t) => {
@@ -207,7 +255,7 @@ test("production Excel embedder adds the daily note PNG and drawing anchor", asy
     windowsHide: true,
   });
   assert.equal(renderProcess.status, 0, renderProcess.stderr || renderProcess.stdout);
-  assert.deepEqual(pngSize(pngPath), { width: 760, height: 300 });
+  assert.deepEqual(pngSize(pngPath), { width: 808, height: 378 });
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
     ["日常30天"],

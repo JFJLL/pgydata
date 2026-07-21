@@ -200,6 +200,20 @@ def daily_note_categories(rows):
     return "｜".join(visible) if visible else "-"
 
 
+def daily_note_text_width(value):
+    return sum(14 if ord(char) > 127 else 7 for char in str(value or ""))
+
+
+def daily_note_ellipsize(value, max_width=535):
+    value = str(value or "")
+    if daily_note_text_width(value) <= max_width:
+        return value
+    suffix = "..."
+    while value and daily_note_text_width(value + suffix) > max_width:
+        value = value[:-1]
+    return (value + suffix) if value else suffix
+
+
 def save_daily_note_performance(chart):
     data = chart.get("data") or {}
     note_number = data.get("noteNumber")
@@ -213,24 +227,78 @@ def save_daily_note_performance(chart):
     read_text = format_integer(data.get("readMedian")) if has_notes else "-"
     category_text = daily_note_categories(data.get("noteType"))
 
-    width, height = 760, 300
+    width, height = 808, 378
     img = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(img)
-    draw.text((28, 18), "日常笔记表现", font=FONT_TITLE, fill="#202124")
-    draw.text((28, 52), "日常笔记｜图文+视频｜近30日｜仅自然流量", font=FONT_SMALL, fill="#6b7280")
+    ui_font = load_font(14)
+    ui_bold_font = load_font(14, True)
+    section_font = load_font(16)
+    metric_font = load_font(20, True)
+    info_font = load_font(9)
 
-    cards = [
-        ((24, 84, 190, 176), "发布笔记", note_text, 126),
-        ((204, 84, 736, 176), "内容类目及占比", category_text, 482),
-        ((24, 190, 372, 280), "曝光中位数", exposure_text, 300),
-        ((388, 190, 736, 280), "阅读中位数", read_text, 300),
+    def web_box(box, radius, fill, outline=None, line_width=1):
+        if hasattr(draw, "rounded_rectangle"):
+            draw.rounded_rectangle(box, radius=radius, fill=fill, outline=outline, width=line_width)
+        else:
+            draw.rectangle(box, fill=fill, outline=outline, width=line_width)
+
+    # Recreate the PGY web hierarchy from structured data instead of taking a browser screenshot.
+    web_box((16, 10, 20, 28), 2, "#ff2442")
+    draw.text((28, 8), "数据表现", font=section_font, fill="#262626")
+
+    web_box((16, 50, 96, 82), 5, "#fff1f2")
+    draw.text((29, 58), "日常笔记", font=ui_font, fill="#ff2442")
+    web_box((108, 50, 188, 82), 5, "#f7f7f7")
+    draw.text((121, 58), "合作笔记", font=ui_font, fill="#3d3d3d")
+
+    filters = [
+        ((379, 50, 517, 83), "图文+视频"),
+        ((529, 50, 636, 83), "近30日"),
+        ((648, 50, 795, 83), "仅自然流量"),
     ]
-    for box, label, value, max_width in cards:
-        rounded_rect(draw, box, 9, "#f7f8fa")
-        draw.text((box[0] + 18, box[1] + 14), label, font=FONT_SMALL, fill="#6b7280")
-        value_font = FONT_TEXT if label == "内容类目及占比" else FONT_TITLE
-        display_value = ellipsize(draw, value, value_font, max_width)
-        draw.text((box[0] + 18, box[1] + 44), display_value, font=value_font, fill="#202124")
+    for box, label in filters:
+        web_box(box, 5, "#f7f7f7")
+        draw.text((box[0] + 12, box[1] + 8), label, font=ui_font, fill="#262626")
+        arrow_x = box[2] - 17
+        arrow_y = box[1] + 16
+        draw.line((arrow_x - 3, arrow_y - 2, arrow_x, arrow_y + 1), fill="#888888", width=1)
+        draw.line((arrow_x, arrow_y + 1, arrow_x + 3, arrow_y - 2), fill="#888888", width=1)
+    draw.ellipse((735, 61, 745, 71), outline="#b7b7b7", width=1)
+    draw.text((738, 59), "i", font=info_font, fill="#999999")
+
+    web_box((16, 103, 795, 148), 8, "#f7f7f7")
+    summary_y = 118
+    draw.text((28, summary_y), "发布笔记", font=ui_font, fill="#8c8c8c")
+    draw.line((28, 136, 82, 136), fill="#b8b8b8", width=1)
+    draw.text((88, summary_y), note_text, font=ui_bold_font, fill="#262626")
+    draw.line((121, 115, 121, 137), fill="#e6e6e6", width=1)
+    draw.text((136, summary_y), "内容类目及占比", font=ui_font, fill="#8c8c8c")
+    draw.line((136, 136, 234, 136), fill="#b8b8b8", width=1)
+    category_summary = daily_note_ellipsize(category_text)
+    draw.text((242, summary_y), category_summary, font=ui_font, fill="#262626")
+
+    web_box((16, 165, 795, 375), 8, "white", outline="#eeeeee")
+    draw.text((32, 188), "核心指标", font=section_font, fill="#262626")
+    web_box((33, 227, 148, 259), 5, "#f5f5f5")
+    web_box((36, 230, 91, 256), 4, "white", outline="#eeeeee")
+    draw.text((46, 236), "按规模", font=ui_font, fill="#262626")
+    draw.text((104, 236), "按成本", font=ui_font, fill="#8c8c8c")
+
+    metric_cards = [
+        ((33, 275, 397, 351), "曝光中位数", exposure_text, True),
+        ((413, 275, 778, 351), "阅读中位数", read_text, False),
+    ]
+    for box, label, value, selected in metric_cards:
+        web_box(
+            box,
+            5,
+            "#fff8f8" if selected else "white",
+            outline="#ff2442" if selected else "#e6e6e6",
+        )
+        label_x = box[0] + 16
+        draw.text((label_x, box[1] + 14), label, font=ui_font, fill="#595959")
+        draw.line((label_x, box[1] + 36, label_x + 68, box[1] + 36), fill="#9e9e9e", width=1)
+        draw.text((label_x, box[1] + 42), value, font=metric_font, fill="#262626")
 
     output = chart.get("output")
     ensure_dir(output)

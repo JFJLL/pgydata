@@ -35,12 +35,17 @@ assert.match(buildScript, /publishedVersionManifest/, "build must reject rebuild
 assert.match(buildScript, /version_pointer_failed/, "installer must roll back assets when the version pointer fails");
 
 const runtimePatch = readFileSync("scripts/apply-magiorix-runtime-patches.js", "utf8");
+const dailyNoteSvgSource = readFileSync("tools/pgy_daily_note_svg.js", "utf8");
 assert.match(runtimePatch, /pgyHasSingleInstanceLock/, "runtime patch must enforce a single desktop instance");
 assert.match(runtimePatch, /pgyDesktopUpdateActive/, "runtime patch must coordinate desktop and asset updates");
 assert.match(runtimePatch, /partial-/, "runtime patch must stage asset updates");
 assert.match(runtimePatch, /pgyAssetExpectedChecksum/, "runtime patch must verify the downloaded asset archive checksum");
 assert.match(runtimePatch, /dailyNotePerformanceChart/, "runtime patch must generate the daily note performance chart");
 assert.match(runtimePatch, /daily-note-performance/, "runtime patch must route the daily note chart renderer");
+assert.match(runtimePatch, /replaceSection/, "runtime patch must migrate an existing daily note renderer section");
+assert.match(runtimePatch, /pgy_daily_note_svg\.js/, "runtime patch must load the maintained daily note SVG source");
+assert.match(dailyNoteSvgSource, /width="808" height="378"/, "daily note SVG must use the web-layout canvas");
+assert.match(dailyNoteSvgSource, /pgyDailyNoteEllipsize/, "daily note SVG must bound long category text");
 
 const chartRendererBuild = readFileSync("scripts/build-pgy-chart-renderer.ps1", "utf8");
 assert.match(chartRendererBuild, /tools\\pgy_chart_renderer\.py/, "chart renderer build must use the maintained Python source");

@@ -1,0 +1,20 @@
+{
+  "source": "https://pgy.xiaohongshu.com/solar/pre-trade/note/kol",
+  "captureMethod": "Kimi WebBridge computedStyle",
+  "fontFamily": "-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Helvetica Neue, Helvetica, Arial, sans-serif",
+  "baseFontSize": "14px",
+  "tokens": {
+    "--color-brand-6": "#ff2442",
+    "--color-icon-tab-active": "#ff2442",
+    "--color-border-tab": "#ff2442",
+    "--color-grey-0": "#fafafa",
+    "--color-grey-1": "#f3f3f3",
+    "--color-grey-3": "#ccc",
+    "--color-grey-10": "#3d3d3d",
+    "--color-text-2": "#8c8c8c",
+    "--color-text-3": "#262626",
+    "--size-radius-large": "6px",
+    "--spacing-tab-item-card-height-small": "32px",
+    "--shadow-2": "0px 12px 24px -8px rgba(0,0,0,.08)"
+  }
+}
