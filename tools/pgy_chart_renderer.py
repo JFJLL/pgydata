@@ -164,6 +164,148 @@ def trend_points(rows):
     return points
 
 
+def format_integer(value):
+    if value is None or value == "":
+        return "-"
+    try:
+        number = float(value)
+        if not math.isfinite(number):
+            return "-"
+        return f"{int(round(number)):,}"
+    except Exception:
+        return "-"
+
+
+def daily_note_categories(rows):
+    categories = []
+    for row in rows or []:
+        name = str(row.get("contentTag") or "").strip()
+        if not name:
+            continue
+        raw_percent = row.get("percent")
+        try:
+            percent = float(raw_percent)
+            if not math.isfinite(percent):
+                raise ValueError("invalid percent")
+            label = f"{name}（占比{percent:.1f}%）"
+            sort_value = percent
+        except Exception:
+            label = f"{name}（占比-）"
+            sort_value = -1
+        categories.append((sort_value, label))
+    categories.sort(key=lambda item: item[0], reverse=True)
+    visible = [item[1] for item in categories[:3]]
+    if len(categories) > 3:
+        visible.append(f"另有 {len(categories) - 3} 类")
+    return "｜".join(visible) if visible else "-"
+
+
+def daily_note_text_width(value):
+    return sum(14 if ord(char) > 127 else 7 for char in str(value or ""))
+
+
+def daily_note_ellipsize(value, max_width=535):
+    value = str(value or "")
+    if daily_note_text_width(value) <= max_width:
+        return value
+    suffix = "..."
+    while value and daily_note_text_width(value + suffix) > max_width:
+        value = value[:-1]
+    return (value + suffix) if value else suffix
+
+
+def save_daily_note_performance(chart):
+    data = chart.get("data") or {}
+    note_number = data.get("noteNumber")
+    note_value = format_integer(note_number)
+    note_text = f"{note_value}篇" if note_value != "-" else "-"
+    try:
+        has_notes = float(note_number) > 0
+    except Exception:
+        has_notes = False
+    exposure_text = format_integer(data.get("impMedian")) if has_notes else "-"
+    read_text = format_integer(data.get("readMedian")) if has_notes else "-"
+    category_text = daily_note_categories(data.get("noteType"))
+
+    width, height = 808, 378
+    img = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(img)
+    ui_font = load_font(14)
+    ui_bold_font = load_font(14, True)
+    section_font = load_font(16)
+    metric_font = load_font(20, True)
+    info_font = load_font(9)
+
+    def web_box(box, radius, fill, outline=None, line_width=1):
+        if hasattr(draw, "rounded_rectangle"):
+            draw.rounded_rectangle(box, radius=radius, fill=fill, outline=outline, width=line_width)
+        else:
+            draw.rectangle(box, fill=fill, outline=outline, width=line_width)
+
+    # Recreate the PGY web hierarchy from structured data instead of taking a browser screenshot.
+    web_box((16, 10, 20, 28), 2, "#ff2442")
+    draw.text((28, 8), "数据表现", font=section_font, fill="#262626")
+
+    web_box((16, 50, 96, 82), 5, "#fff1f2")
+    draw.text((29, 58), "日常笔记", font=ui_font, fill="#ff2442")
+    web_box((108, 50, 188, 82), 5, "#f7f7f7")
+    draw.text((121, 58), "合作笔记", font=ui_font, fill="#3d3d3d")
+
+    filters = [
+        ((379, 50, 517, 83), "图文+视频"),
+        ((529, 50, 636, 83), "近30日"),
+        ((648, 50, 795, 83), "仅自然流量"),
+    ]
+    for box, label in filters:
+        web_box(box, 5, "#f7f7f7")
+        draw.text((box[0] + 12, box[1] + 8), label, font=ui_font, fill="#262626")
+        arrow_x = box[2] - 17
+        arrow_y = box[1] + 16
+        draw.line((arrow_x - 3, arrow_y - 2, arrow_x, arrow_y + 1), fill="#888888", width=1)
+        draw.line((arrow_x, arrow_y + 1, arrow_x + 3, arrow_y - 2), fill="#888888", width=1)
+    draw.ellipse((735, 61, 745, 71), outline="#b7b7b7", width=1)
+    draw.text((738, 59), "i", font=info_font, fill="#999999")
+
+    web_box((16, 103, 795, 148), 8, "#f7f7f7")
+    summary_y = 118
+    draw.text((28, summary_y), "发布笔记", font=ui_font, fill="#8c8c8c")
+    draw.line((28, 136, 82, 136), fill="#b8b8b8", width=1)
+    draw.text((88, summary_y), note_text, font=ui_bold_font, fill="#262626")
+    draw.line((121, 115, 121, 137), fill="#e6e6e6", width=1)
+    draw.text((136, summary_y), "内容类目及占比", font=ui_font, fill="#8c8c8c")
+    draw.line((136, 136, 234, 136), fill="#b8b8b8", width=1)
+    category_summary = daily_note_ellipsize(category_text)
+    draw.text((242, summary_y), category_summary, font=ui_font, fill="#262626")
+
+    web_box((16, 165, 795, 375), 8, "white", outline="#eeeeee")
+    draw.text((32, 188), "核心指标", font=section_font, fill="#262626")
+    web_box((33, 227, 148, 259), 5, "#f5f5f5")
+    web_box((36, 230, 91, 256), 4, "white", outline="#eeeeee")
+    draw.text((46, 236), "按规模", font=ui_font, fill="#262626")
+    draw.text((104, 236), "按成本", font=ui_font, fill="#8c8c8c")
+
+    metric_cards = [
+        ((33, 275, 397, 351), "曝光中位数", exposure_text, True),
+        ((413, 275, 778, 351), "阅读中位数", read_text, False),
+    ]
+    for box, label, value, selected in metric_cards:
+        web_box(
+            box,
+            5,
+            "#fff8f8" if selected else "white",
+            outline="#ff2442" if selected else "#e6e6e6",
+        )
+        label_x = box[0] + 16
+        draw.text((label_x, box[1] + 14), label, font=ui_font, fill="#595959")
+        draw.line((label_x, box[1] + 36, label_x + 68, box[1] + 36), fill="#9e9e9e", width=1)
+        draw.text((label_x, box[1] + 42), value, font=metric_font, fill="#262626")
+
+    output = chart.get("output")
+    ensure_dir(output)
+    img.save(output, "PNG", optimize=True)
+    return True
+
+
 def save_trend(chart):
     rows = trend_points(chart.get("rows"))
     if len(rows) < 2:
@@ -227,6 +369,8 @@ def main():
                 ok = save_gender(chart)
             elif chart_type == "trend":
                 ok = save_trend(chart)
+            elif chart_type == "daily-note-performance":
+                ok = save_daily_note_performance(chart)
             if ok and field:
                 paths[field] = chart.get("output")
         except Exception as exc:

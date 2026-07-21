@@ -1,9 +1,14 @@
 const fs = require("fs");
 const path = require("path");
 
-const projectRoot = path.resolve(__dirname, "..");
+const projectRoot = process.env.MAGIORIX_PATCH_PROJECT_ROOT
+  ? path.resolve(process.env.MAGIORIX_PATCH_PROJECT_ROOT)
+  : path.resolve(__dirname, "..");
 const mainPath = path.join(projectRoot, "app-source", "dist-electron", "index.js");
 const preloadPath = path.join(projectRoot, "app-source", "dist-electron", "preload.mjs");
+const chartRendererSourcePath = path.join(projectRoot, "tools", "pgy_chart_renderer.py");
+const dailyNoteSvgSourcePath = path.join(projectRoot, "tools", "pgy_daily_note_svg.js");
+const dailyNoteSvgSource = fs.readFileSync(dailyNoteSvgSourcePath, "utf8").trim();
 
 function replaceOnce(source, from, to, label) {
   const fromCrLf = from.replace(/\n/g, "\r\n");
@@ -15,6 +20,15 @@ function replaceOnce(source, from, to, label) {
     throw new Error(`Missing patch target: ${label}`);
   }
   return source.replace(from, to);
+}
+
+function replaceSection(source, startMarker, endMarker, replacement, label) {
+  const start = source.indexOf(startMarker);
+  const end = start >= 0 ? source.indexOf(endMarker, start) : -1;
+  if (start < 0 || end < 0) throw new Error(`Missing patch section: ${label}`);
+  const newline = source.includes("\r\n") ? "\r\n" : "\n";
+  const normalized = replacement.replace(/\r?\n/g, newline).trimEnd() + newline + newline;
+  return source.slice(0, start) + normalized + source.slice(end);
 }
 
 function replaceAllIfExists(source, from, to) {
@@ -1086,6 +1100,324 @@ else if (main.includes(`function pgyChartRoot() {
 }`, pgyChartRootInstall);
 else if (!main.includes(pgyChartRootInstall) && !main.includes('const a = Oe(Ja(ye.getPath("exe")), "pic");'))
   throw new Error("Missing patch target: pgy chart output under install path");
+
+if (!main.includes('dailyNotePerformance: "dailyNotePerformanceChart"')) {
+  main = replaceOnce(
+    main,
+    `  fansGrowthTrendChart: ["fansGrowthTrendChart"]
+}, mm = {`,
+    `  fansGrowthTrendChart: ["fansGrowthTrendChart"],
+  dailyNotePerformanceChart: ["dailyNotePerformanceChart"]
+}, mm = {`,
+    "pgy daily note chart field dependency",
+  );
+
+  main = replaceOnce(
+    main,
+    `    "shareMedian",
+    "interactRate"
+  ],`,
+    `    "shareMedian",
+    "interactRate",
+    "dailyNotePerformanceChart"
+  ],`,
+    "pgy daily note chart daily30 endpoint dependency",
+  );
+
+  main = replaceOnce(
+    main,
+    `  gender: "fansGenderChart",
+  trend: "fansGrowthTrendChart"
+};`,
+    `  gender: "fansGenderChart",
+  trend: "fansGrowthTrendChart",
+  dailyNotePerformance: "dailyNotePerformanceChart"
+};`,
+    "pgy daily note chart image field",
+  );
+
+  main = replaceOnce(
+    main,
+    `def save_trend(chart):`,
+    `def format_integer(value):
+    if value is None or value == "":
+        return "-"
+    try:
+        number = float(value)
+        if not math.isfinite(number):
+            return "-"
+        return f"{int(round(number)):,}"
+    except Exception:
+        return "-"
+
+def daily_note_categories(rows):
+    categories = []
+    for row in rows or []:
+        name = str(row.get("contentTag") or "").strip()
+        if not name:
+            continue
+        raw_percent = row.get("percent")
+        try:
+            percent = float(raw_percent)
+            if not math.isfinite(percent):
+                raise ValueError("invalid percent")
+            label = f"{name}（占比{percent:.1f}%）"
+            sort_value = percent
+        except Exception:
+            label = f"{name}（占比-）"
+            sort_value = -1
+        categories.append((sort_value, label))
+    categories.sort(key=lambda item: item[0], reverse=True)
+    visible = [item[1] for item in categories[:3]]
+    if len(categories) > 3:
+        visible.append(f"另有 {len(categories) - 3} 类")
+    return "｜".join(visible) if visible else "-"
+
+def daily_note_text_width(value):
+    return sum(14 if ord(char) > 127 else 7 for char in str(value or ""))
+
+def daily_note_ellipsize(value, max_width=535):
+    value = str(value or "")
+    if daily_note_text_width(value) <= max_width:
+        return value
+    suffix = "..."
+    while value and daily_note_text_width(value + suffix) > max_width:
+        value = value[:-1]
+    return (value + suffix) if value else suffix
+
+def save_daily_note_performance(chart):
+    data = chart.get("data") or {}
+    note_number = data.get("noteNumber")
+    note_value = format_integer(note_number)
+    note_text = f"{note_value}篇" if note_value != "-" else "-"
+    try:
+        has_notes = float(note_number) > 0
+    except Exception:
+        has_notes = False
+    exposure_text = format_integer(data.get("impMedian")) if has_notes else "-"
+    read_text = format_integer(data.get("readMedian")) if has_notes else "-"
+    category_text = daily_note_categories(data.get("noteType"))
+
+    width, height = 808, 378
+    img = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(img)
+    ui_font = load_font(14)
+    ui_bold_font = load_font(14, True)
+    section_font = load_font(16)
+    metric_font = load_font(20, True)
+    info_font = load_font(9)
+
+    def web_box(box, radius, fill, outline=None, line_width=1):
+        if hasattr(draw, "rounded_rectangle"):
+            draw.rounded_rectangle(box, radius=radius, fill=fill, outline=outline, width=line_width)
+        else:
+            draw.rectangle(box, fill=fill, outline=outline, width=line_width)
+
+    # Recreate the PGY web hierarchy from structured data instead of taking a browser screenshot.
+    web_box((16, 10, 20, 28), 2, "#ff2442")
+    draw.text((28, 8), "数据表现", font=section_font, fill="#262626")
+
+    web_box((16, 50, 96, 82), 5, "#fff1f2")
+    draw.text((29, 58), "日常笔记", font=ui_font, fill="#ff2442")
+    web_box((108, 50, 188, 82), 5, "#f7f7f7")
+    draw.text((121, 58), "合作笔记", font=ui_font, fill="#3d3d3d")
+
+    filters = [
+        ((379, 50, 517, 83), "图文+视频"),
+        ((529, 50, 636, 83), "近30日"),
+        ((648, 50, 795, 83), "仅自然流量"),
+    ]
+    for box, label in filters:
+        web_box(box, 5, "#f7f7f7")
+        draw.text((box[0] + 12, box[1] + 8), label, font=ui_font, fill="#262626")
+        arrow_x = box[2] - 17
+        arrow_y = box[1] + 16
+        draw.line((arrow_x - 3, arrow_y - 2, arrow_x, arrow_y + 1), fill="#888888", width=1)
+        draw.line((arrow_x, arrow_y + 1, arrow_x + 3, arrow_y - 2), fill="#888888", width=1)
+    draw.ellipse((735, 61, 745, 71), outline="#b7b7b7", width=1)
+    draw.text((738, 59), "i", font=info_font, fill="#999999")
+
+    web_box((16, 103, 795, 148), 8, "#f7f7f7")
+    summary_y = 118
+    draw.text((28, summary_y), "发布笔记", font=ui_font, fill="#8c8c8c")
+    draw.line((28, 136, 82, 136), fill="#b8b8b8", width=1)
+    draw.text((88, summary_y), note_text, font=ui_bold_font, fill="#262626")
+    draw.line((121, 115, 121, 137), fill="#e6e6e6", width=1)
+    draw.text((136, summary_y), "内容类目及占比", font=ui_font, fill="#8c8c8c")
+    draw.line((136, 136, 234, 136), fill="#b8b8b8", width=1)
+    category_summary = daily_note_ellipsize(category_text)
+    draw.text((242, summary_y), category_summary, font=ui_font, fill="#262626")
+
+    web_box((16, 165, 795, 375), 8, "white", outline="#eeeeee")
+    draw.text((32, 188), "核心指标", font=section_font, fill="#262626")
+    web_box((33, 227, 148, 259), 5, "#f5f5f5")
+    web_box((36, 230, 91, 256), 4, "white", outline="#eeeeee")
+    draw.text((46, 236), "按规模", font=ui_font, fill="#262626")
+    draw.text((104, 236), "按成本", font=ui_font, fill="#8c8c8c")
+
+    metric_cards = [
+        ((33, 275, 397, 351), "曝光中位数", exposure_text, True),
+        ((413, 275, 778, 351), "阅读中位数", read_text, False),
+    ]
+    for box, label, value, selected in metric_cards:
+        web_box(
+            box,
+            5,
+            "#fff8f8" if selected else "white",
+            outline="#ff2442" if selected else "#e6e6e6",
+        )
+        label_x = box[0] + 16
+        draw.text((label_x, box[1] + 14), label, font=ui_font, fill="#595959")
+        draw.line((label_x, box[1] + 36, label_x + 68, box[1] + 36), fill="#9e9e9e", width=1)
+        draw.text((label_x, box[1] + 42), value, font=metric_font, fill="#262626")
+
+    output = chart.get("output")
+    ensure_dir(output)
+    img.save(output, "PNG", optimize=True)
+    return True
+
+def save_trend(chart):`,
+    "pgy daily note Python summary chart renderer",
+  );
+
+  main = replaceOnce(
+    main,
+    `            elif chart_type == "trend":
+                ok = save_trend(chart)`,
+    `            elif chart_type == "trend":
+                ok = save_trend(chart)
+            elif chart_type == "daily-note-performance":
+                ok = save_daily_note_performance(chart)`,
+    "pgy daily note Python renderer route",
+  );
+
+  main = replaceOnce(
+    main,
+    `async function buildPgyBloggerChartFields(a, e, t, n) {`,
+    `function pgyDailyNoteFormatInteger(a) {
+  if (a == null || a === "") return "-";
+  const e = Number(a);
+  return Number.isFinite(e) ? Math.round(e).toLocaleString("en-US") : "-";
+}
+function pgyDailyNoteCategories(a) {
+  const e = Array.isArray(a) ? a.map((t) => {
+    const n = String(t == null ? void 0 : t.contentTag ?? "").trim(), s = t == null ? void 0 : t.percent, i = s != null && String(s).trim() !== "" && Number.isFinite(Number(s));
+    return n ? { name: n, percent: i ? Number(s) : -1 } : null;
+  }).filter(Boolean).sort((t, n) => n.percent - t.percent) : [], t = e.slice(0, 3).map((n) => n.percent >= 0 ? n.name + "（占比" + n.percent.toFixed(1) + "%）" : n.name + "（占比-）");
+  return e.length > 3 && t.push("另有 " + (e.length - 3) + " 类"), t.join("｜") || "-";
+}
+function pgyDailyNoteTextWidth(a) {
+  return Array.from(String(a ?? "")).reduce((e, t) => e + (t.charCodeAt(0) > 127 ? 14 : 7), 0);
+}
+function pgyDailyNoteEllipsize(a, e = 535) {
+  let t = String(a ?? "");
+  if (pgyDailyNoteTextWidth(t) <= e) return t;
+  for (; t && pgyDailyNoteTextWidth(t + "...") > e; ) t = t.slice(0, -1);
+  return t ? t + "..." : "...";
+}
+function pgyDailyNotePerformanceSvg(a) {
+  const e = a ?? {}, t = pgyDailyNoteFormatInteger(e.noteNumber), n = t === "-" ? "-" : t + "篇", s = Number(e.noteNumber) > 0, i = s ? pgyDailyNoteFormatInteger(e.impMedian) : "-", o = s ? pgyDailyNoteFormatInteger(e.readMedian) : "-", r = pgyDailyNoteCategories(e.noteType), c = pgyDailyNoteEllipsize(r);
+  return \`<svg xmlns="http://www.w3.org/2000/svg" width="808" height="378" viewBox="0 0 808 378"><rect width="100%" height="100%" fill="white"/><g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,Arial,sans-serif"><rect x="16" y="10" width="4" height="18" rx="2" fill="#ff2442"/><text x="28" y="24" font-size="16" fill="#262626">数据表现</text><rect x="16" y="50" width="80" height="32" rx="5" fill="#fff1f2"/><text x="29" y="72" font-size="14" fill="#ff2442">日常笔记</text><rect x="108" y="50" width="80" height="32" rx="5" fill="#f7f7f7"/><text x="121" y="72" font-size="14" fill="#3d3d3d">合作笔记</text><rect x="379" y="50" width="138" height="33" rx="5" fill="#f7f7f7"/><text x="391" y="72" font-size="14" fill="#262626">图文+视频</text><path d="M497 64l3 3 3-3" fill="none" stroke="#888"/><rect x="529" y="50" width="107" height="33" rx="5" fill="#f7f7f7"/><text x="541" y="72" font-size="14" fill="#262626">近30日</text><path d="M616 64l3 3 3-3" fill="none" stroke="#888"/><rect x="648" y="50" width="147" height="33" rx="5" fill="#f7f7f7"/><text x="660" y="72" font-size="14" fill="#262626">仅自然流量</text><circle cx="740" cy="66" r="5" fill="none" stroke="#b7b7b7"/><text x="738.5" y="69" font-size="8" fill="#999">i</text><path d="M775 64l3 3 3-3" fill="none" stroke="#888"/><rect x="16" y="103" width="779" height="45" rx="8" fill="#f7f7f7"/><text x="28" y="132" font-size="14" fill="#8c8c8c">发布笔记</text><line x1="28" y1="136" x2="82" y2="136" stroke="#b8b8b8" stroke-dasharray="2 2"/><text x="88" y="132" font-size="14" font-weight="600" fill="#262626">\${pgyChartEscape(n)}</text><line x1="121" y1="115" x2="121" y2="137" stroke="#e6e6e6"/><text x="136" y="132" font-size="14" fill="#8c8c8c">内容类目及占比</text><line x1="136" y1="136" x2="234" y2="136" stroke="#b8b8b8" stroke-dasharray="2 2"/><text x="242" y="132" font-size="14" fill="#262626">\${pgyChartEscape(c)}</text><rect x="16" y="165" width="779" height="210" rx="8" fill="white" stroke="#eee"/><text x="32" y="204" font-size="16" fill="#262626">核心指标</text><rect x="33" y="227" width="115" height="32" rx="5" fill="#f5f5f5"/><rect x="36" y="230" width="55" height="26" rx="4" fill="white" stroke="#eee"/><text x="46" y="250" font-size="14" fill="#262626">按规模</text><text x="104" y="250" font-size="14" fill="#8c8c8c">按成本</text><rect x="33" y="275" width="364" height="76" rx="5" fill="#fff8f8" stroke="#ff2442"/><text x="49" y="303" font-size="14" fill="#595959">曝光中位数</text><line x1="49" y1="311" x2="117" y2="311" stroke="#9e9e9e" stroke-dasharray="2 2"/><text x="49" y="339" font-size="20" font-weight="700" fill="#262626">\${pgyChartEscape(i)}</text><rect x="413" y="275" width="365" height="76" rx="5" fill="white" stroke="#e6e6e6"/><text x="429" y="303" font-size="14" fill="#595959">阅读中位数</text><line x1="429" y1="311" x2="497" y2="311" stroke="#9e9e9e" stroke-dasharray="2 2"/><text x="429" y="339" font-size="20" font-weight="700" fill="#262626">\${pgyChartEscape(o)}</text></g></svg>\`;
+}
+async function buildPgyBloggerChartFields(a, e, t, n, d) {`,
+    "pgy daily note JS summary chart fallback",
+  );
+
+  main = replaceOnce(
+    main,
+    `  if (!i.length) return s;`,
+    `  pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePerformance) && i.push({ field: "dailyNotePerformanceChart", type: "daily-note-performance", data: d ?? {}, output: pgyChartFile("daily-note", a, "daily-note-performance") });
+  if (!i.length) return s;`,
+    "pgy daily note chart generation queue",
+  );
+
+  main = replaceOnce(
+    main,
+    `      o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "trend" && (r = pgyWriteTrendChartPng(o.rows ?? [], o.output)), r && (s[o.field] = r);`,
+    `      o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "trend" ? r = pgyWriteTrendChartPng(o.rows ?? [], o.output) : o.type === "daily-note-performance" && (r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);`,
+    "pgy daily note JS fallback route",
+  );
+
+  main = replaceOnce(
+    main,
+    "张粉丝图表",
+    "张图表",
+    "pgy chart generic success log",
+  );
+  main = replaceOnce(
+    main,
+    "未生成任何粉丝图表",
+    "未生成任何图表",
+    "pgy chart generic empty log",
+  );
+
+  main = replaceOnce(
+    main,
+    `Q = await buildPgyBloggerChartFields(e, p, (((t.fansTrend == null ? void 0 : t.fansTrend.data) ?? {}).list) ?? [], I);`,
+    `Q = await buildPgyBloggerChartFields(e, p, (((t.fansTrend == null ? void 0 : t.fansTrend.data) ?? {}).list) ?? [], I, o);`,
+    "pgy daily note chart data input",
+  );
+}
+
+const chartRendererSource = fs.readFileSync(chartRendererSourcePath, "utf8");
+const pythonDailyStart = chartRendererSource.indexOf("def format_integer(value):");
+const pythonDailyEnd = chartRendererSource.indexOf("def save_trend(chart):", pythonDailyStart);
+if (pythonDailyStart < 0 || pythonDailyEnd < 0)
+  throw new Error("Missing maintained Python daily note renderer section");
+const pythonDailySource = chartRendererSource.slice(pythonDailyStart, pythonDailyEnd).trim();
+main = replaceSection(
+  main,
+  "def format_integer(value):",
+  "def save_trend(chart):",
+  pythonDailySource,
+  "pgy daily note Python renderer synchronization",
+);
+const dailyNoteSvgStart = main.includes("function pgyDailyNoteTextWidth(a) {")
+  ? "function pgyDailyNoteTextWidth(a) {"
+  : "function pgyDailyNotePerformanceSvg(a) {";
+main = replaceSection(
+  main,
+  dailyNoteSvgStart,
+  "async function buildPgyBloggerChartFields",
+  dailyNoteSvgSource,
+  "pgy daily note SVG renderer synchronization",
+);
+
+main = replaceOnce(
+  main,
+  "    payload = json.load(sys.stdin)",
+  '    payload = json.loads(sys.stdin.buffer.read().decode("utf-8"))',
+  "pgy Python chart renderer UTF-8 input",
+);
+
+main = replaceOnce(
+  main,
+  `        except Exception:
+            label = name
+            sort_value = -1`,
+  `        except Exception:
+            label = f"{name}（占比-）"
+            sort_value = -1`,
+  "pgy daily note missing category percent",
+);
+
+main = main.replace(
+  `    const n = String(t == null ? void 0 : t.contentTag ?? "").trim(), s = t == null ? void 0 : t.percent, i = s !== null && s !== "" && Number.isFinite(Number(s));
+    return n ? { name: n, percent: i ? Number(s) : -1 } : null;`,
+  `    const n = String(t == null ? void 0 : t.contentTag ?? "").trim(), s = t == null ? void 0 : t.percent, i = s != null && String(s).trim() !== "" && Number.isFinite(Number(s));
+    return n ? { name: n, percent: i ? Number(s) : -1 } : null;`,
+);
+
+main = replaceOnce(
+  main,
+  `    const n = String(t == null ? void 0 : t.contentTag ?? "").trim(), s = Number(t == null ? void 0 : t.percent);
+    return n ? { name: n, percent: Number.isFinite(s) ? s : -1 } : null;
+  }).filter(Boolean).sort((t, n) => n.percent - t.percent) : [], t = e.slice(0, 3).map((n) => n.percent >= 0 ? n.name + "（占比" + n.percent.toFixed(1) + "%）" : n.name);`,
+  `    const n = String(t == null ? void 0 : t.contentTag ?? "").trim(), s = t == null ? void 0 : t.percent, i = s != null && String(s).trim() !== "" && Number.isFinite(Number(s));
+    return n ? { name: n, percent: i ? Number(s) : -1 } : null;
+  }).filter(Boolean).sort((t, n) => n.percent - t.percent) : [], t = e.slice(0, 3).map((n) => n.percent >= 0 ? n.name + "（占比" + n.percent.toFixed(1) + "%）" : n.name + "（占比-）");`,
+  "pgy daily note JS missing category percent",
+);
 
 main = main.replace(
   `async function pgyRenderChartsWithPython(a) {

@@ -25,6 +25,8 @@
 
 ## 本地打包命令
 
+绘图程序源码未变化时，打包会复用已通过指纹和 Smoke 校验的仓库内 exe。修改 `tools/pgy_chart_renderer.py` 或绘图构建脚本后，需要本机 Python 环境提供 PyInstaller 6.18.0 和 Pillow 10.4.0；可通过 `PGY_RENDERER_PYTHON` 指定构建解释器。
+
 在项目根目录执行：
 
 ```powershell
