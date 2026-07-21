@@ -236,6 +236,9 @@ Write-Output "Manifest: $manifestPath"
 Write-Output "Rebuilding assets.zip..."
 New-AssetsZip -AssetsDir $sourceAssetsDir -ZipPath $outAssetsZip
 
+Write-Output "Rebuilding bundled PGY chart renderer..."
+Invoke-CheckedProcess -FilePath (Join-Path $PSHOME "pwsh.exe") -Arguments @("-NoProfile", "-File", (Join-Path $PSScriptRoot "build-pgy-chart-renderer.ps1")) -WorkingDirectory $projectRoot
+
 Write-Output "Packing Electron app.asar from app-source..."
 $asarOut = Join-Path (Join-Path $sourceAppDir "resources") "app.asar"
 Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "apply-magiorix-runtime-patches.js")) -WorkingDirectory $projectRoot

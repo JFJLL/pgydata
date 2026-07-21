@@ -42,6 +42,16 @@ assert.match(runtimePatch, /pgyAssetExpectedChecksum/, "runtime patch must verif
 assert.match(runtimePatch, /dailyNotePerformanceChart/, "runtime patch must generate the daily note performance chart");
 assert.match(runtimePatch, /daily-note-performance/, "runtime patch must route the daily note chart renderer");
 
+const chartRendererBuild = readFileSync("scripts/build-pgy-chart-renderer.ps1", "utf8");
+assert.match(chartRendererBuild, /tools\\pgy_chart_renderer\.py/, "chart renderer build must use the maintained Python source");
+assert.match(chartRendererBuild, /Invoke-RendererSmokeTest/, "chart renderer build must smoke test the generated executable");
+assert.match(chartRendererBuild, /build\.sha256/, "chart renderer build must track its complete build fingerprint");
+assert.match(chartRendererBuild, /Get-NormalizedText/, "chart renderer build fingerprint must ignore checkout line endings");
+assert.match(chartRendererBuild, /WaitForExit\(\$SmokeTimeoutSeconds \* 1000\)/, "chart renderer smoke test must have a timeout");
+assert.match(chartRendererBuild, /\.Kill\(\$true\)/, "chart renderer smoke timeout must terminate the process tree");
+assert.match(chartRendererBuild, /0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A/, "chart renderer smoke must verify the full PNG signature");
+assert.match(buildScript, /build-pgy-chart-renderer\.ps1/, "Windows packaging must rebuild the bundled chart renderer");
+
 const verificationPolicy = readFileSync("verification-policy.json", "utf8");
 assert.doesNotMatch(verificationPolicy, /kimi-browser/, "browser testing must remain excluded");
 

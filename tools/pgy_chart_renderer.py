@@ -164,6 +164,80 @@ def trend_points(rows):
     return points
 
 
+def format_integer(value):
+    if value is None or value == "":
+        return "-"
+    try:
+        number = float(value)
+        if not math.isfinite(number):
+            return "-"
+        return f"{int(round(number)):,}"
+    except Exception:
+        return "-"
+
+
+def daily_note_categories(rows):
+    categories = []
+    for row in rows or []:
+        name = str(row.get("contentTag") or "").strip()
+        if not name:
+            continue
+        raw_percent = row.get("percent")
+        try:
+            percent = float(raw_percent)
+            if not math.isfinite(percent):
+                raise ValueError("invalid percent")
+            label = f"{name}（占比{percent:.1f}%）"
+            sort_value = percent
+        except Exception:
+            label = f"{name}（占比-）"
+            sort_value = -1
+        categories.append((sort_value, label))
+    categories.sort(key=lambda item: item[0], reverse=True)
+    visible = [item[1] for item in categories[:3]]
+    if len(categories) > 3:
+        visible.append(f"另有 {len(categories) - 3} 类")
+    return "｜".join(visible) if visible else "-"
+
+
+def save_daily_note_performance(chart):
+    data = chart.get("data") or {}
+    note_number = data.get("noteNumber")
+    note_value = format_integer(note_number)
+    note_text = f"{note_value}篇" if note_value != "-" else "-"
+    try:
+        has_notes = float(note_number) > 0
+    except Exception:
+        has_notes = False
+    exposure_text = format_integer(data.get("impMedian")) if has_notes else "-"
+    read_text = format_integer(data.get("readMedian")) if has_notes else "-"
+    category_text = daily_note_categories(data.get("noteType"))
+
+    width, height = 760, 300
+    img = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(img)
+    draw.text((28, 18), "日常笔记表现", font=FONT_TITLE, fill="#202124")
+    draw.text((28, 52), "日常笔记｜图文+视频｜近30日｜仅自然流量", font=FONT_SMALL, fill="#6b7280")
+
+    cards = [
+        ((24, 84, 190, 176), "发布笔记", note_text, 126),
+        ((204, 84, 736, 176), "内容类目及占比", category_text, 482),
+        ((24, 190, 372, 280), "曝光中位数", exposure_text, 300),
+        ((388, 190, 736, 280), "阅读中位数", read_text, 300),
+    ]
+    for box, label, value, max_width in cards:
+        rounded_rect(draw, box, 9, "#f7f8fa")
+        draw.text((box[0] + 18, box[1] + 14), label, font=FONT_SMALL, fill="#6b7280")
+        value_font = FONT_TEXT if label == "内容类目及占比" else FONT_TITLE
+        display_value = ellipsize(draw, value, value_font, max_width)
+        draw.text((box[0] + 18, box[1] + 44), display_value, font=value_font, fill="#202124")
+
+    output = chart.get("output")
+    ensure_dir(output)
+    img.save(output, "PNG", optimize=True)
+    return True
+
+
 def save_trend(chart):
     rows = trend_points(chart.get("rows"))
     if len(rows) < 2:
@@ -227,6 +301,8 @@ def main():
                 ok = save_gender(chart)
             elif chart_type == "trend":
                 ok = save_trend(chart)
+            elif chart_type == "daily-note-performance":
+                ok = save_daily_note_performance(chart)
             if ok and field:
                 paths[field] = chart.get("output")
         except Exception as exc:

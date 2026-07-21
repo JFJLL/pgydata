@@ -50,7 +50,7 @@ function runPython(source, payload) {
 
 function pngSize(filePath) {
   const buffer = readFileSync(filePath);
-  assert.equal(buffer.subarray(1, 4).toString("ascii"), "PNG");
+  assert.deepEqual(buffer.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
 }
 
@@ -119,6 +119,44 @@ test("Python renderer writes 760 by 300 PNGs for populated and missing data", (t
   assert.match(jsHelpers.pgyDailyNotePerformanceSvg(payload.charts[1].data), />-<\/text>/);
 });
 
+test("bundled chart renderer supports the daily note performance chart", (t) => {
+  const rendererPath = path.join(
+    projectRoot,
+    "runtime",
+    "magiorix-desktop",
+    "resources",
+    "pgy-chart-renderer.exe",
+  );
+  assert.ok(existsSync(rendererPath), "bundled chart renderer must exist");
+
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "magiorix-bundled-daily-note-chart-"));
+  t.after(() => rmSync(tempDir, { recursive: true, force: true }));
+  const outputPath = path.join(tempDir, "daily-note.png");
+  const payload = {
+    charts: [{
+      field: "dailyNotePerformanceChart",
+      type: "daily-note-performance",
+      data: {
+        noteNumber: 7,
+        noteType: [{ contentTag: "美食", percent: "100" }],
+        impMedian: 80586,
+        readMedian: 9287,
+      },
+      output: outputPath,
+    }],
+  };
+  const process = spawnSync(rendererPath, [], {
+    input: JSON.stringify(payload),
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  assert.equal(process.status, 0, process.stderr || process.stdout);
+  const result = JSON.parse(process.stdout.trim().split(/\r?\n/).pop());
+  assert.deepEqual(result.errors, {});
+  assert.equal(result.paths.dailyNotePerformanceChart, outputPath);
+  assert.deepEqual(pngSize(outputPath), { width: 760, height: 300 });
+});
+
 test("production Excel embedder adds the daily note PNG and drawing anchor", async (t) => {
   const embedMatch = runtimeSource.match(
     /function pgyXmlEscape\(a\) \{[\s\S]*?\r?\n\}\r?\nasync function ff\(a\) \{/,
@@ -144,10 +182,32 @@ test("production Excel embedder adds the daily note PNG and drawing anchor", asy
   t.after(() => rmSync(tempDir, { recursive: true, force: true }));
   const pngPath = path.join(tempDir, "daily-note.png");
   const xlsxPath = path.join(tempDir, "daily-note.xlsx");
-  writeFileSync(
-    pngPath,
-    Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"),
+  const rendererPath = path.join(
+    projectRoot,
+    "runtime",
+    "magiorix-desktop",
+    "resources",
+    "pgy-chart-renderer.exe",
   );
+  const renderProcess = spawnSync(rendererPath, [], {
+    input: JSON.stringify({
+      charts: [{
+        field: "dailyNotePerformanceChart",
+        type: "daily-note-performance",
+        data: {
+          noteNumber: 7,
+          noteType: [{ contentTag: "美食", percent: "100" }],
+          impMedian: 80586,
+          readMedian: 9287,
+        },
+        output: pngPath,
+      }],
+    }),
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  assert.equal(renderProcess.status, 0, renderProcess.stderr || renderProcess.stdout);
+  assert.deepEqual(pngSize(pngPath), { width: 760, height: 300 });
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
     ["日常30天"],
