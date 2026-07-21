@@ -25,6 +25,12 @@ assert.doesNotMatch(buildScript, /Sync-AssetsToAppData/, "build must not modify 
 assert.doesNotMatch(buildScript, /serverAssetsZip/, "build must not publish server assets as a side effect");
 assert.match(buildScript, /WaitForMagiorix/, "installer must wait for the old process");
 assert.match(buildScript, /\.installing/, "installer must stage assets before switching the version pointer");
+const stageOutPathIndex = buildScript.indexOf('SetOutPath "`$AssetsStage"');
+const rootOutPathIndex = buildScript.indexOf('SetOutPath "`$AssetsRoot"', stageOutPathIndex);
+const promoteAssetsIndex = buildScript.indexOf('Rename "`$AssetsStage" "`$AssetsTarget"', rootOutPathIndex);
+assert.ok(stageOutPathIndex >= 0, "installer must write assets inside the staging directory");
+assert.ok(rootOutPathIndex > stageOutPathIndex, "installer must leave the staging directory before promotion");
+assert.ok(promoteAssetsIndex > rootOutPathIndex, "installer must release the staging directory before renaming it");
 assert.match(buildScript, /publishedVersionManifest/, "build must reject rebuilding a published version");
 assert.match(buildScript, /version_pointer_failed/, "installer must roll back assets when the version pointer fails");
 

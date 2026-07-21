@@ -453,6 +453,9 @@ Section "Install"
   SetOutPath "`$AssetsStage"
   File /r "$payloadAssetsNsis\*.*"
   !insertmacro CheckErrors "写入资源暂存目录失败：`$AssetsStage"
+  ; Windows 不允许重命名进程当前所在目录，切换回资源根目录后再提升暂存资源。
+  SetOutPath "`$AssetsRoot"
+  !insertmacro CheckErrors "退出资源暂存目录失败：`$AssetsRoot"
 
   !insertmacro Step "5/7 生成资源 manifest/校验文件"
   IfFileExists "`$AssetsStage\integrity-manifest.json" +3 0
