@@ -1,8 +1,8 @@
 {
   "name": "magiorix-desktop",
   "productName": "magiorix",
-  "version": "1.1.5",
-  "assetsVersion": "1.1.5",
+  "version": "1.1.6",
+  "assetsVersion": "1.1.6",
   "description": "Local PGY data collection desktop client",
   "main": "dist-electron/index.js",
   "type": "module",

@@ -15,9 +15,9 @@ const DEFAULT_GIFT_BALANCE = Number(process.env.DEFAULT_GIFT_BALANCE || 100);
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "red-magic-api.sqlite");
 const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, "logs");
-const ASSET_VERSION = "1.1.3";
-const INSTALLER_FILE_NAME = "magiorix-desktop-1.1.3-windows.exe";
-const INSTALLER_DOWNLOAD_URL = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.3-windows.exe";
+const ASSET_VERSION = "1.1.6";
+const INSTALLER_FILE_NAME = "magiorix-desktop-1.1.6-windows.exe";
+const INSTALLER_DOWNLOAD_URL = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.6-windows.exe";
 const INSTALLER_SHA256 = (process.env.INSTALLER_SHA256 || "C874C2166E7C0EBBC2AD427028FB3060441D9A20D33239077B30F3887C5E16BA").trim();
 const RELEASE_MANIFEST_PATH = process.env.RELEASE_MANIFEST_PATH
   || path.join(__dirname, "public", "releases", "windows", "latest.json");
@@ -205,12 +205,35 @@ function truncateString(value, maxLength) {
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
 
+function parsePositiveInteger(value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) return null;
+  return n;
+}
+
+function normalizeTaskId(value) {
+  const taskId = String(value ?? "").trim();
+  return taskId ? truncateString(taskId, 128) : "";
+}
+
+function normalizeConsumeTaskIdentity(body = {}) {
+  const rawDetail = body.detail && typeof body.detail === "object" ? body.detail : null;
+  const taskId = normalizeTaskId(body.taskId ?? rawDetail?.taskId);
+  const itemIndex = parsePositiveInteger(body.itemIndex ?? rawDetail?.itemIndex);
+  if (!taskId) {
+    return { taskId: null, itemIndex: null, invalid: false };
+  }
+  return { taskId, itemIndex, invalid: !itemIndex };
+}
+
 function normalizeConsumeDetail(body = {}) {
   const raw = body.detail || body.details || body.taskDetail || null;
   if (!raw || typeof raw !== "object") {
     return { detailType: "", detailSummary: "", detailJson: "" };
   }
   const inputType = ["manual", "xlsx"].includes(raw.inputType) ? raw.inputType : "";
+  const taskId = normalizeTaskId(body.taskId ?? raw.taskId);
+  const itemIndex = parsePositiveInteger(body.itemIndex ?? raw.itemIndex);
   const pluginId = truncateString(raw.pluginId || "", 64);
   const taskType = truncateString(raw.taskType || "", 64);
   const fileName = truncateString(raw.fileName || "", 180);
@@ -220,6 +243,8 @@ function normalizeConsumeDetail(body = {}) {
   const normalizedRows = rows.slice(0, 2000).map((item) => truncateString(item, 1000));
   const detail = {
     inputType,
+    taskId,
+    itemIndex,
     pluginId,
     taskType,
     fileName,
@@ -230,13 +255,44 @@ function normalizeConsumeDetail(body = {}) {
   };
   const label = inputType === "manual" ? "手动输入" : inputType === "xlsx" ? "xlsx上传" : "任务提交";
   const detailSummary = truncateString(
-    `${label}${fileName ? `：${fileName}` : ""}，${detail.validCount || normalizedRows.length} 条`,
+    `${label}${fileName ? `：${fileName}` : ""}${taskId ? `，任务 ${taskId}` : ""}，${detail.validCount || normalizedRows.length} 条`,
     240,
   );
   return {
     detailType: inputType,
     detailSummary,
     detailJson: truncateString(JSON.stringify(detail), 200000),
+  };
+}
+
+function normalizeTransactionView(value) {
+  const view = String(value || "tasks").trim().toLowerCase();
+  if (view === "legacy" || view === "all") return view;
+  return "tasks";
+}
+
+function adminRequestSource(req) {
+  return truncateString(`${req.method} ${req.path} ip=${req.ip || "-"}`, 240);
+}
+
+function sanitizeAdminConsumeDetail(detail, summary = "", fallback = {}) {
+  const parsed = detail && typeof detail === "object" ? detail : safeJsonParse(detail, null);
+  if (!parsed || typeof parsed !== "object") return null;
+  return {
+    summary: summary || fallback.summary || "",
+    inputType: parsed.inputType || fallback.inputType || "",
+    pluginId: parsed.pluginId || "",
+    taskType: parsed.taskType || "",
+    fileName: parsed.fileName || "",
+    totalRows: Number(parsed.totalRows || 0),
+    validCount: Number(parsed.validCount || 0),
+    taskId: parsed.taskId || fallback.taskId || "",
+    itemIndex: parsed.itemIndex ? Number(parsed.itemIndex) : null,
+    itemCount: fallback.itemCount ?? null,
+    itemRange: fallback.itemRange || "",
+    startedAt: fallback.startedAt || "",
+    finishedAt: fallback.finishedAt || "",
+    truncated: Boolean(parsed.truncated),
   };
 }
 
@@ -400,6 +456,8 @@ async function initDb() {
       detail_type TEXT,
       detail_summary TEXT,
       detail_json TEXT,
+      task_id TEXT,
+      item_index INTEGER,
       created_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
@@ -407,6 +465,13 @@ async function initDb() {
   await ensureColumn("consume_records", "detail_type", "TEXT");
   await ensureColumn("consume_records", "detail_summary", "TEXT");
   await ensureColumn("consume_records", "detail_json", "TEXT");
+  await ensureColumn("consume_records", "task_id", "TEXT");
+  await ensureColumn("consume_records", "item_index", "INTEGER");
+  await dbRun(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_consume_records_task_identity
+    ON consume_records (user_id, task_id, item_index)
+    WHERE task_id IS NOT NULL AND item_index IS NOT NULL
+  `);
 
   await dbRun(`
     CREATE TABLE IF NOT EXISTS recharge_orders (
@@ -431,6 +496,18 @@ async function initDb() {
       delta INTEGER NOT NULL,
       balance_after INTEGER NOT NULL,
       remark TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS admin_user_audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      admin_username TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      action TEXT NOT NULL,
+      request_source TEXT NOT NULL,
       created_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
@@ -920,9 +997,31 @@ app.post("/api/shumiao/consume", authRequired, asyncHandler(async (req, res) => 
   const count = parsePositiveAmount(req.body.count ?? req.body.amount ?? req.body.quantity);
   if (!count) return fail(res, 400, "扣费数量不能为空");
   const detail = normalizeConsumeDetail(req.body);
+  const taskIdentity = normalizeConsumeTaskIdentity(req.body);
+  if (taskIdentity.invalid) return fail(res, 400, "携带 taskId 时 itemIndex 必须为正整数");
 
   await dbRun("BEGIN IMMEDIATE TRANSACTION");
   try {
+    if (taskIdentity.taskId && taskIdentity.itemIndex) {
+      const existing = await dbGet(
+        `SELECT id, count, balance_after AS balanceAfter, created_at AS createdAt
+         FROM consume_records
+         WHERE user_id = ? AND task_id = ? AND item_index = ?`,
+        [req.user.id, taskIdentity.taskId, taskIdentity.itemIndex],
+      );
+      if (existing) {
+        await dbRun("COMMIT");
+        return success(res, {
+          balance: Number(existing.balanceAfter || 0),
+          duplicated: true,
+          taskId: taskIdentity.taskId,
+          itemIndex: taskIdentity.itemIndex,
+          recordId: existing.id,
+          createdAt: existing.createdAt,
+        });
+      }
+    }
+
     const account = await ensureAccount(req.user.id, 0);
     const balance = Number(account.balance || 0);
     if (balance < count) {
@@ -946,8 +1045,8 @@ app.post("/api/shumiao/consume", authRequired, asyncHandler(async (req, res) => 
     );
     await dbRun(
       `INSERT INTO consume_records
-        (user_id, count, balance_after, remark, detail_type, detail_summary, detail_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (user_id, count, balance_after, remark, detail_type, detail_summary, detail_json, task_id, item_index, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.user.id,
         count,
@@ -956,11 +1055,18 @@ app.post("/api/shumiao/consume", authRequired, asyncHandler(async (req, res) => 
         detail.detailType,
         detail.detailSummary,
         detail.detailJson,
+        taskIdentity.taskId,
+        taskIdentity.itemIndex,
         createdAt,
       ],
     );
     await dbRun("COMMIT");
-    return success(res, { balance: nextBalance });
+    return success(res, {
+      balance: nextBalance,
+      duplicated: false,
+      taskId: taskIdentity.taskId,
+      itemIndex: taskIdentity.itemIndex,
+    });
   } catch (err) {
     await dbRun("ROLLBACK").catch(() => {});
     throw err;
@@ -1273,6 +1379,62 @@ app.post("/api/admin/users/:id/add-points", adminRequired, asyncHandler(async (r
   }
 }));
 
+app.post("/api/admin/users/:id/reset-password", adminRequired, asyncHandler(async (req, res) => {
+  const userId = Number(req.params.id);
+  const newPassword = req.body?.newPassword;
+  if (!Number.isInteger(userId) || userId <= 0) return fail(res, 400, "用户不存在");
+  if (typeof newPassword !== "string" || newPassword.length < 8 || newPassword.length > 64) {
+    return fail(res, 400, "新密码长度必须在 8 到 64 个字符之间");
+  }
+
+  const requestSource = adminRequestSource(req);
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+
+  await dbRun("BEGIN IMMEDIATE TRANSACTION");
+  try {
+    const user = await dbGet("SELECT id, phone, status FROM users WHERE id = ?", [userId]);
+    if (!user) {
+      await dbRun("ROLLBACK");
+      return fail(res, 404, "用户不存在");
+    }
+    if (Number(user.status) !== 1) {
+      await dbRun("ROLLBACK");
+      return fail(res, 400, "账号已注销，不能重置密码");
+    }
+
+    const updatedAt = nowIso();
+    await dbRun(
+      "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+      [passwordHash, updatedAt, userId],
+    );
+    const revokeResult = await dbRun("DELETE FROM user_tokens WHERE user_id = ?", [userId]);
+    await dbRun(
+      `INSERT INTO admin_user_audit_logs
+        (admin_username, user_id, action, request_source, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [req.admin.username, userId, "reset_password", requestSource, updatedAt],
+    );
+    await dbRun("COMMIT");
+
+    logInfo("admin_reset_password", {
+      adminUsername: req.admin.username,
+      userId,
+      revokedTokens: Number(revokeResult.changes || 0),
+      requestSource,
+      ...requestLogInfo(req),
+    });
+
+    return success(res, {
+      userId,
+      revokedTokens: Number(revokeResult.changes || 0),
+      updatedAt,
+    }, "密码已重置，用户已退出全部登录");
+  } catch (err) {
+    await dbRun("ROLLBACK").catch(() => {});
+    throw err;
+  }
+}));
+
 app.get("/api/admin/adjustments", adminRequired, asyncHandler(async (req, res) => {
   const { page, pageSize } = parsePageParams(req.query);
   const offset = (page - 1) * pageSize;
@@ -1305,14 +1467,80 @@ app.get("/api/admin/adjustments", adminRequired, asyncHandler(async (req, res) =
 
 app.get("/api/admin/user-transactions", adminRequired, asyncHandler(async (req, res) => {
   const { page, pageSize } = parsePageParams(req.query);
+  const view = normalizeTransactionView(req.query.view);
   const keyword = String(req.query.keyword || "").trim();
   const offset = (page - 1) * pageSize;
   const like = `%${keyword}%`;
   const params = keyword ? [like, like, like, like] : [];
   const where = keyword
-    ? "WHERE u.phone LIKE ? OR u.nickname LIKE ? OR tx.operation LIKE ? OR tx.remark LIKE ?"
+    ? "WHERE u.phone LIKE ? OR u.nickname LIKE ? OR COALESCE(tx.taskId, '') LIKE ? OR COALESCE(tx.detailSummary, tx.remark, tx.operation, '') LIKE ?"
     : "";
+  const sourceSelect = view === "legacy"
+    ? "SELECT * FROM legacy_rows"
+    : view === "all"
+      ? "SELECT * FROM task_rows UNION ALL SELECT * FROM legacy_rows"
+      : "SELECT * FROM task_rows";
   const baseSelect = `
+    WITH task_groups AS (
+      SELECT
+        user_id AS userId,
+        task_id AS taskId,
+        COUNT(*) AS itemCount,
+        SUM(count) AS totalCount,
+        MIN(item_index) AS firstItemIndex,
+        MAX(item_index) AS lastItemIndex,
+        MIN(created_at) AS startedAt,
+        MAX(created_at) AS finishedAt,
+        MAX(id) AS lastRecordId
+      FROM consume_records
+      WHERE task_id IS NOT NULL AND item_index IS NOT NULL
+      GROUP BY user_id, task_id
+    ),
+    task_rows AS (
+      SELECT
+        'task-' || g.userId || '-' || g.taskId AS id,
+        'task' AS type,
+        r.user_id AS userId,
+        r.created_at AS createdAt,
+        -g.totalCount AS amount,
+        r.balance_after AS balanceAfter,
+        '任务消耗' AS operation,
+        COALESCE(r.remark, '') AS remark,
+        COALESCE(r.detail_type, '') AS detailType,
+        COALESCE(r.detail_summary, '') AS detailSummary,
+        COALESCE(r.detail_json, '') AS detailJson,
+        g.taskId AS taskId,
+        g.itemCount AS itemCount,
+        g.firstItemIndex AS firstItemIndex,
+        g.lastItemIndex AS lastItemIndex,
+        g.startedAt AS startedAt,
+        g.finishedAt AS finishedAt
+      FROM task_groups g
+      JOIN consume_records r
+        ON r.id = g.lastRecordId
+    ),
+    legacy_rows AS (
+      SELECT
+        'consume-' || id AS id,
+        'legacy' AS type,
+        user_id AS userId,
+        created_at AS createdAt,
+        -count AS amount,
+        balance_after AS balanceAfter,
+        '采集消耗' AS operation,
+        COALESCE(remark, '') AS remark,
+        COALESCE(detail_type, '') AS detailType,
+        COALESCE(detail_summary, '') AS detailSummary,
+        COALESCE(detail_json, '') AS detailJson,
+        NULL AS taskId,
+        1 AS itemCount,
+        NULL AS firstItemIndex,
+        NULL AS lastItemIndex,
+        created_at AS startedAt,
+        created_at AS finishedAt
+      FROM consume_records
+      WHERE task_id IS NULL OR item_index IS NULL
+    )
     SELECT
       tx.id,
       tx.type,
@@ -1328,22 +1556,14 @@ app.get("/api/admin/user-transactions", adminRequired, asyncHandler(async (req, 
       tx.remark,
       tx.detailType,
       tx.detailSummary,
-      tx.detailJson
-    FROM (
-      SELECT
-        'consume-' || id AS id,
-        'consume' AS type,
-        user_id AS userId,
-        created_at AS createdAt,
-        -count AS amount,
-        balance_after AS balanceAfter,
-        '采集消耗' AS operation,
-        COALESCE(remark, '') AS remark,
-        COALESCE(detail_type, '') AS detailType,
-        COALESCE(detail_summary, '') AS detailSummary,
-        COALESCE(detail_json, '') AS detailJson
-      FROM consume_records
-    ) tx
+      tx.detailJson,
+      tx.taskId,
+      tx.itemCount,
+      tx.firstItemIndex,
+      tx.lastItemIndex,
+      tx.startedAt,
+      tx.finishedAt
+    FROM (${sourceSelect}) tx
     LEFT JOIN users u ON u.id = tx.userId
   `;
 
@@ -1359,18 +1579,42 @@ app.get("/api/admin/user-transactions", adminRequired, asyncHandler(async (req, 
   return success(res, {
     list: rows.map((row) => {
       const { detailJson, ...rest } = row;
+      const detail = sanitizeAdminConsumeDetail(detailJson, row.detailSummary, {
+        inputType: row.detailType,
+        taskId: row.taskId,
+        itemCount: Number(row.itemCount || 0),
+        itemRange: row.firstItemIndex && row.lastItemIndex
+          ? `${Number(row.firstItemIndex)}-${Number(row.lastItemIndex)}`
+          : "",
+        startedAt: row.startedAt,
+        finishedAt: row.finishedAt || row.createdAt,
+      });
+      const detailSummary = row.type === "task"
+        ? truncateString(
+          row.detailSummary
+          || `任务 ${row.taskId || "-"} · ${Number(row.itemCount || 0)} 条`,
+          240,
+        )
+        : row.detailSummary;
       return {
         ...rest,
         amount: Number(row.amount || 0),
         consumedQuota: Number(row.consumedQuota || 0),
         balanceAfter: row.balanceAfter === null ? null : Number(row.balanceAfter || 0),
         status: Number(row.status ?? 1),
-        detail: safeJsonParse(detailJson, null),
+        itemCount: Number(row.itemCount || 0),
+        plannedCount: Number(detail?.totalRows || 0),
+        source: detail?.inputType || row.detailType || "",
+        fileName: detail?.fileName || "",
+        updatedAt: row.finishedAt || row.createdAt,
+        detailSummary,
+        detail,
       };
     }),
     total: Number(total.count || 0),
     page,
     pageSize,
+    view,
   });
 }));
 

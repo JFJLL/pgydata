@@ -30,7 +30,8 @@
       }
 
       button,
-      input {
+      input,
+      select {
         font: inherit;
       }
 
@@ -126,6 +127,21 @@
       }
 
       input:focus {
+        border-color: #e73535;
+        box-shadow: 0 0 0 3px rgba(231, 53, 53, 0.12);
+      }
+
+      select {
+        height: 42px;
+        border: 1px solid #ddd3d0;
+        border-radius: 6px;
+        padding: 0 12px;
+        color: #1f2933;
+        background: #fff;
+        outline: none;
+      }
+
+      select:focus {
         border-color: #e73535;
         box-shadow: 0 0 0 3px rgba(231, 53, 53, 0.12);
       }
@@ -338,6 +354,54 @@
         word-break: break-all;
       }
 
+      .table-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .table-actions .btn {
+        min-width: 76px;
+        height: 34px;
+        padding: 0 12px;
+        font-size: 13px;
+      }
+
+      .detail-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .detail-card {
+        padding: 14px;
+        border: 1px solid #f0e7e4;
+        border-radius: 8px;
+        background: #fff8f6;
+      }
+
+      .detail-card strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 13px;
+      }
+
+      .warning-box {
+        padding: 12px 14px;
+        border-radius: 8px;
+        background: #fff4e5;
+        color: #9a3412;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 20px;
+      }
+
       @media (max-width: 980px) {
         .stats {
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -352,6 +416,10 @@
 
         .table-wrap {
           overflow-x: auto;
+        }
+
+        .detail-grid {
+          grid-template-columns: 1fr;
         }
       }
     </style>
@@ -463,6 +531,11 @@
             <div id="transactionMeta" class="subtle">加载中</div>
           </div>
           <form id="transactionSearchForm" class="search">
+            <select id="transactionView" aria-label="流水视图">
+              <option value="tasks" selected>任务汇总</option>
+              <option value="legacy">旧版单条</option>
+              <option value="all">全部</option>
+            </select>
             <input id="transactionKeyword" placeholder="搜索手机号、昵称、操作或备注" />
             <button class="btn secondary" type="submit">搜索</button>
             <button id="transactionRefreshBtn" class="btn" type="button">刷新</button>
@@ -507,6 +580,40 @@
       </section>
     </div>
 
+    <div id="resetPasswordModal" class="modal-backdrop hidden">
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="resetPasswordTitle">
+        <div class="modal-head">
+          <div>
+            <strong id="resetPasswordTitle">重置用户密码</strong>
+            <div class="subtle">仅限正常用户，提交后该用户当前所有登录会立即失效。</div>
+          </div>
+          <button id="resetPasswordCloseBtn" class="btn secondary" type="button">关闭</button>
+        </div>
+        <form id="resetPasswordForm" class="modal-body">
+          <div class="field" style="margin-top: 0">
+            <label>目标用户</label>
+            <div id="resetPasswordTarget" class="subtle">-</div>
+          </div>
+          <div class="field">
+            <label for="resetPasswordValue">新密码</label>
+            <input id="resetPasswordValue" type="password" minlength="8" maxlength="64" autocomplete="new-password" placeholder="请输入 8-64 位新密码" required />
+          </div>
+          <div class="field">
+            <label for="resetPasswordConfirmValue">再次输入新密码</label>
+            <input id="resetPasswordConfirmValue" type="password" minlength="8" maxlength="64" autocomplete="new-password" placeholder="请再次输入新密码" required />
+          </div>
+          <div class="warning-box">
+            风险提示：重置成功后，该用户当前所有登录 token 会被立即删除，需要重新登录后才能继续使用。
+          </div>
+          <div id="resetPasswordMessage" class="message"></div>
+          <div class="modal-actions">
+            <button id="resetPasswordCancelBtn" class="btn secondary" type="button">取消</button>
+            <button id="resetPasswordSubmitBtn" class="btn" type="submit">确认重置</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
     <script>
       const state = {
         token: localStorage.getItem("redMagicAdminToken") || "",
@@ -515,10 +622,13 @@
         pageSize: 10,
         total: 0,
         keyword: "",
+        users: [],
         transactionPage: 1,
         transactionTotal: 0,
         transactionKeyword: "",
+        transactionView: "tasks",
         transactions: [],
+        resetUser: null,
       };
 
       const $ = (id) => document.getElementById(id);
@@ -549,6 +659,20 @@
         const cls = amount < 0 ? "amount negative" : "amount";
         const text = amount > 0 ? `+${amount}` : String(amount);
         return `<span class="${cls}">${text}</span>`;
+      }
+
+      function inputTypeLabel(value) {
+        if (value === "manual") return "手动输入";
+        if (value === "xlsx") return "xlsx上传";
+        return "任务提交";
+      }
+
+      function transactionSourceLabel(item) {
+        if (item.type === "task") return "任务汇总";
+        if (item.type === "legacy") {
+          return item.detailType ? `${inputTypeLabel(item.detailType)} · 旧版` : "旧版单条";
+        }
+        return item.detailType ? inputTypeLabel(item.detailType) : item.operation;
       }
 
       function setMessage(text) {
@@ -598,6 +722,8 @@
       function logout() {
         state.token = "";
         localStorage.removeItem("redMagicAdminToken");
+        hideTransactionDetail();
+        closeResetPasswordModal();
         showAdmin(false);
       }
 
@@ -618,6 +744,7 @@
         });
         const data = await api(`/api/admin/users?${params}`);
         state.total = data.total;
+        state.users = data.list;
         const tbody = $("userRows");
         tbody.innerHTML = "";
         data.list.forEach((user) => {
@@ -632,7 +759,12 @@
             <td>${formatDate(user.lastActiveAt)}</td>
             <td>${formatDate(user.createdAt)}</td>
             <td>${formatDate(user.deletedAt)}</td>
-            <td><button class="btn" type="button" data-user-id="${user.id}" ${active ? "" : "disabled"}>${active ? "加减积分" : "已注销"}</button></td>
+            <td>
+              <div class="table-actions">
+                <button class="btn secondary" type="button" data-action="points" data-user-id="${user.id}" ${active ? "" : "disabled"}>${active ? "加减积分" : "已注销"}</button>
+                <button class="btn" type="button" data-action="reset-password" data-user-id="${user.id}" ${active ? "" : "disabled"}>重置密码</button>
+              </div>
+            </td>
           `;
           tbody.appendChild(tr);
         });
@@ -647,6 +779,7 @@
           page: String(state.transactionPage),
           pageSize: String(state.pageSize),
           keyword: state.transactionKeyword,
+          view: state.transactionView,
         });
         const data = await api(`/api/admin/user-transactions?${params}`);
         state.transactionTotal = data.total;
@@ -655,22 +788,23 @@
         tbody.innerHTML = "";
         data.list.forEach((item, index) => {
           const tr = document.createElement("tr");
-          const hasDetail = item.detail && Array.isArray(item.detail.rows) && item.detail.rows.length > 0;
+          const hasDetail = Boolean(item.detail);
           tr.innerHTML = `
             <td>${escapeHtml(item.nickname || `用户${String(item.userId || "").padStart(4, "0")}`)}</td>
             <td>${escapeHtml(item.phone)}</td>
             <td>${formatDate(item.createdAt)}</td>
             <td><strong>${item.consumedQuota || 0}</strong></td>
             <td>${item.balanceAfter ?? "-"}</td>
-            <td>${escapeHtml(item.detailType === "manual" ? "手动输入" : item.detailType === "xlsx" ? "xlsx上传" : item.operation)}</td>
+            <td>${escapeHtml(transactionSourceLabel(item))}</td>
             <td>${statusBadge(item.status)}</td>
-            <td>${escapeHtml(item.detailSummary || item.remark)}</td>
+            <td>${escapeHtml(item.detailSummary || item.remark || "-")}</td>
             <td>${hasDetail ? `<button class="link-btn" type="button" data-transaction-index="${index}">查看</button>` : "-"}</td>
           `;
           tbody.appendChild(tr);
         });
         $("emptyTransactions").classList.toggle("hidden", data.list.length > 0);
-        $("transactionMeta").textContent = `共 ${data.total} 条流水，第 ${data.page} 页`;
+        const viewLabel = data.view === "legacy" ? "旧版单条" : data.view === "all" ? "全部流水" : "任务汇总";
+        $("transactionMeta").textContent = `${viewLabel} · 共 ${data.total} 条，第 ${data.page} 页`;
         $("transactionPrevBtn").disabled = state.transactionPage <= 1;
         $("transactionNextBtn").disabled = state.transactionPage * state.pageSize >= state.transactionTotal;
       }
@@ -707,23 +841,86 @@
         await loadAll();
       }
 
+      function openResetPasswordModal(userId) {
+        const user = state.users.find((item) => Number(item.id) === Number(userId));
+        if (!user || Number(user.status) !== 1) return;
+        state.resetUser = user;
+        $("resetPasswordTarget").textContent = `${user.nickname || "未命名用户"} · ${user.phone}`;
+        $("resetPasswordValue").value = "";
+        $("resetPasswordConfirmValue").value = "";
+        $("resetPasswordMessage").textContent = "";
+        $("resetPasswordModal").classList.remove("hidden");
+        $("resetPasswordValue").focus();
+      }
+
+      function closeResetPasswordModal() {
+        state.resetUser = null;
+        $("resetPasswordModal").classList.add("hidden");
+        $("resetPasswordForm").reset();
+        $("resetPasswordMessage").textContent = "";
+      }
+
+      async function handleResetPassword(event) {
+        event.preventDefault();
+        const user = state.resetUser;
+        if (!user) return;
+        const newPassword = $("resetPasswordValue").value;
+        const confirmPassword = $("resetPasswordConfirmValue").value;
+        if (newPassword.length < 8 || newPassword.length > 64) {
+          $("resetPasswordMessage").textContent = "新密码长度必须在 8 到 64 个字符之间";
+          return;
+        }
+        if (confirmPassword !== newPassword) {
+          $("resetPasswordMessage").textContent = "两次输入的新密码不一致";
+          return;
+        }
+
+        $("resetPasswordSubmitBtn").disabled = true;
+        $("resetPasswordMessage").textContent = "";
+        try {
+          await api(`/api/admin/users/${user.id}/reset-password`, {
+            method: "POST",
+            body: JSON.stringify({ newPassword }),
+          });
+          closeResetPasswordModal();
+          await loadUsers();
+          alert(`已重置 ${user.phone} 的密码，用户当前登录已失效`);
+        } catch (err) {
+          $("resetPasswordMessage").textContent = err.message;
+        } finally {
+          $("resetPasswordSubmitBtn").disabled = false;
+        }
+      }
+
       function showTransactionDetail(index) {
         const item = state.transactions[Number(index)];
         if (!item || !item.detail) return;
         const detail = item.detail;
         $("detailSummary").textContent = `${item.nickname || item.phone || "用户"} · ${formatDate(item.createdAt)} · 消耗 ${item.consumedQuota || 0}`;
-        const rows = Array.isArray(detail.rows) ? detail.rows : [];
-        const meta = [
-          `来源：${detail.inputType === "manual" ? "手动输入" : detail.inputType === "xlsx" ? "xlsx上传" : "未知"}`,
-          detail.fileName ? `文件：${detail.fileName}` : "",
-          `有效条数：${detail.validCount ?? rows.length}`,
-          detail.truncated ? "内容过长，已截断显示" : "",
-        ].filter(Boolean);
+        const cards = [
+          ["来源", item.type === "task" ? "任务汇总" : inputTypeLabel(detail.inputType || item.detailType)],
+          ["摘要", detail.summary || item.detailSummary || item.remark || "-"],
+          ["任务 ID", detail.taskId || item.taskId || "-"],
+          ["任务条数", item.type === "task" ? String(item.itemCount || detail.itemCount || 0) : "1"],
+          ["索引范围", detail.itemRange || (detail.itemIndex ? String(detail.itemIndex) : "-")],
+          ["开始时间", formatDate(detail.startedAt || item.createdAt)],
+          ["结束时间", formatDate(detail.finishedAt || item.createdAt)],
+          ["文件", detail.fileName || "-"],
+          ["有效条数", String(detail.validCount || 0)],
+          ["原始条数", String(detail.totalRows || 0)],
+          ["插件", detail.pluginId || "-"],
+          ["任务类型", detail.taskType || "-"],
+        ];
         $("detailBody").innerHTML = `
-          <div class="subtle">${escapeHtml(meta.join(" · "))}</div>
-          <ul class="detail-list">
-            ${rows.length > 0 ? rows.map((row) => `<li>${escapeHtml(row)}</li>`).join("") : "<li>暂无提交内容</li>"}
-          </ul>
+          <div class="subtle">后台仅展示任务摘要，不展示原始提交内容。</div>
+          <div class="detail-grid" style="margin-top: 12px">
+            ${cards.map(([label, value]) => `
+              <div class="detail-card">
+                <strong>${escapeHtml(label)}</strong>
+                <div>${escapeHtml(value || "-")}</div>
+              </div>
+            `).join("")}
+          </div>
         `;
         $("detailModal").classList.remove("hidden");
       }
@@ -746,6 +943,12 @@
       $("transactionSearchForm").addEventListener("submit", (event) => {
         event.preventDefault();
         state.transactionKeyword = $("transactionKeyword").value.trim();
+        state.transactionView = $("transactionView").value;
+        state.transactionPage = 1;
+        loadTransactions().catch((err) => alert(err.message));
+      });
+      $("transactionView").addEventListener("change", () => {
+        state.transactionView = $("transactionView").value;
         state.transactionPage = 1;
         loadTransactions().catch((err) => alert(err.message));
       });
@@ -774,9 +977,19 @@
       $("detailModal").addEventListener("click", (event) => {
         if (event.target.id === "detailModal") hideTransactionDetail();
       });
+      $("resetPasswordCloseBtn").addEventListener("click", closeResetPasswordModal);
+      $("resetPasswordCancelBtn").addEventListener("click", closeResetPasswordModal);
+      $("resetPasswordForm").addEventListener("submit", handleResetPassword);
+      $("resetPasswordModal").addEventListener("click", (event) => {
+        if (event.target.id === "resetPasswordModal") closeResetPasswordModal();
+      });
       $("userRows").addEventListener("click", (event) => {
         const button = event.target.closest("button[data-user-id]");
         if (!button || button.disabled) return;
+        if (button.dataset.action === "reset-password") {
+          openResetPasswordModal(button.dataset.userId);
+          return;
+        }
         adjustPoints(button.dataset.userId).catch((err) => alert(err.message));
       });
       document.querySelectorAll(".tab").forEach((button) => {
@@ -785,6 +998,7 @@
 
       if (state.token) {
         showAdmin(true);
+        $("transactionView").value = state.transactionView;
         loadAll().catch(() => logout());
       }
     </script>

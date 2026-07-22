@@ -45,6 +45,30 @@ function insertAfterOnce(source, marker, insert, already, label) {
 let main = fs.readFileSync(mainPath, "utf8");
 let preload = fs.readFileSync(preloadPath, "utf8");
 
+main = insertAfterOnce(
+  main,
+  'import { ipcMain as F, BrowserWindow as Dt, app as ye, screen as Gi, shell as Ji, dialog as Ki, net as Jt, Notification as Et, session as Pn, nativeImage as PgyNativeImage } from "electron";',
+  'import { CollectionHistoryStore } from "../electron-main/collection-history-store.mjs";',
+  'import { CollectionHistoryStore }',
+  "collection history store import",
+);
+
+if (!main.includes("const pgyCollectionHistory")) {
+  main = replaceOnce(
+    main,
+    `try {
+  ye.setName("magiorix"), ye.setPath("userData", pgyUserDataDir);
+} catch {
+}`,
+    `try {
+  ye.setName("magiorix"), ye.setPath("userData", pgyUserDataDir);
+} catch {
+}
+const pgyCollectionHistory = new CollectionHistoryStore({ baseDir: Oe(pgyUserDataDir, "collection-history"), retentionDays: 90 });`,
+    "collection history store initialization",
+  );
+}
+
 const legacyHost = `https://${"api"}.red-magic.cn`;
 main = main.split(legacyHost).join("https://magiorix.red-magic.cn");
 
@@ -364,15 +388,17 @@ if (!main.includes("checkShumiaoBalanceForTask(e)")) {
     )).data ?? null;
   }
   async checkShumiaoBalanceForTask(e) {
-    const t = Array.isArray(e.urls) ? e.urls.length : 0;
+    const t = Array.isArray(e.urls) ? e.urls.length : 0, n = Array.isArray(e.pendingCharges) ? e.pendingCharges.length : 0, s = Math.max(0, t - n);
     if (t <= 0)
       throw new Error("没有可计费的采集链接");
     if (!this.isAuthenticated())
       throw new Error("未登录，无法判定积分余额");
-    const n = await this.request("GET", \`/api/shumiao/check-balance?count=\${encodeURIComponent(String(t))}\`), s = Number(n.data?.balance ?? 0), i = Number(n.data?.required ?? t), o = Number(n.data?.shortage ?? Math.max(0, i - s));
-    if (!n.data?.sufficient)
-      throw new Error(\`树苗余额不足：当前 \${s}，本次需要 \${i}，还差 \${o}\`);
-    return s;
+    if (s <= 0)
+      return 0;
+    const i = await this.request("GET", \`/api/shumiao/check-balance?count=\${encodeURIComponent(String(s))}\`), o = Number(i.data?.balance ?? 0), r = Number(i.data?.required ?? s), c = Number(i.data?.shortage ?? Math.max(0, r - o));
+    if (!i.data?.sufficient)
+      throw new Error(\`树苗余额不足：当前 \${o}，本次待采集需要 \${r}，还差 \${c}\`);
+    return o;
   }
   async consumeShumiaoForItem(e, t) {
     if (!this.isAuthenticated())
@@ -400,7 +426,7 @@ if (!main.includes("checkShumiaoBalanceForTask(e)")) {
   );
 }
 
-if (!main.includes("consumeShumiaoForItem(e, m)")) {
+if (!main.includes("consumeShumiaoForItem(e, m")) {
   const balanceCheckBlock = `      this.runningTasks.set(t, l);
       try {
         const m = await Le.get().checkShumiaoBalanceForTask(e);
@@ -1983,6 +2009,463 @@ main = replaceAllIfExists(
   'const { taskId: t, pluginId: n, taskType: s, urls: i, fileName: o } = e, r = e.fields && e.fields.length > 0 ? e.fields : null, c = e.accountSource ?? "personal", u = this.plugins.get(n);',
   'const { taskId: t, pluginId: n, taskType: s, urls: i, fileName: o } = e, r = e.fields && e.fields.length > 0 ? e.fields : null, c = "personal", u = this.plugins.get(n);',
 );
+
+if (!main.includes('list: "scraper:history:list"')) {
+  main = replaceOnce(
+    main,
+    `  export: {
+    /** 导出带样式的 Excel (invoke, renderer → main) */
+    toExcel: "scraper:export:to-excel"
+  }
+}`,
+    `  export: {
+    /** 导出带样式的 Excel (invoke, renderer → main) */
+    toExcel: "scraper:export:to-excel"
+  },
+  history: {
+    list: "scraper:history:list",
+    exportTask: "scraper:history:export-task",
+    resumeTask: "scraper:history:resume-task",
+    migrateLegacy: "scraper:history:migrate-legacy"
+  }
+}`,
+    "collection history IPC channels",
+  );
+}
+
+preload = replaceOnce(
+  preload,
+  'export:{toExcel:"scraper:export:to-excel"}}',
+  'export:{toExcel:"scraper:export:to-excel"},history:{list:"scraper:history:list",exportTask:"scraper:history:export-task",resumeTask:"scraper:history:resume-task",migrateLegacy:"scraper:history:migrate-legacy"}}',
+  "preload collection history channels",
+);
+
+preload = replaceOnce(
+  preload,
+  'export:{toExcel:e=>r.ipcRenderer.invoke(s.export.toExcel,e)}}',
+  'export:{toExcel:e=>r.ipcRenderer.invoke(s.export.toExcel,e)},history:{list:()=>r.ipcRenderer.invoke(s.history.list),exportTask:e=>r.ipcRenderer.invoke(s.history.exportTask,{taskId:e}),resumeTask:e=>r.ipcRenderer.invoke(s.history.resumeTask,{taskId:e}),migrateLegacy:e=>r.ipcRenderer.invoke(s.history.migrateLegacy,{history:e})}}',
+  "preload collection history bridge",
+);
+
+if (!main.includes("async consumeShumiaoForItem(e, t, n = t)")) {
+  main = replaceOnce(
+    main,
+    `  async consumeShumiaoForItem(e, t) {
+    if (!this.isAuthenticated())
+      throw new Error("未登录，无法扣减积分");
+    const n = Array.isArray(e.urls) ? e.urls[t] : null, s = {
+      inputType: e.inputType || (String(e.fileName || "").includes("手动输入") ? "manual" : "xlsx"),
+      pluginId: e.pluginId,
+      taskType: e.taskType,
+      fileName: e.fileName,
+      totalRows: e.totalRows ?? (Array.isArray(e.urls) ? e.urls.length : 0),
+      validCount: Array.isArray(e.urls) ? e.urls.length : 0,
+      itemIndex: t + 1,
+      url: n
+    }, i = await this.request("POST", "/api/shumiao/consume", {
+      count: 1,
+      remark: \`采集成功扣减 1 树苗\`,
+      detail: s
+    });
+    return Number(i.data?.balance ?? 0);
+  }`,
+    `  async consumeShumiaoForItem(e, t, n = t) {
+    if (!this.isAuthenticated())
+      throw new Error("未登录，无法扣减积分");
+    const s = Array.isArray(e.urls) ? e.urls[t] : null, o = Number(n), r = {
+      inputType: e.inputType || (String(e.fileName || "").includes("手动输入") ? "manual" : "xlsx"),
+      pluginId: e.pluginId,
+      taskType: e.taskType,
+      fileName: e.fileName,
+      totalRows: e.totalRows ?? (Array.isArray(e.urls) ? e.urls.length : 0),
+      validCount: Array.isArray(e.urls) ? e.urls.length : 0,
+      itemIndex: o + 1,
+      url: s
+    }, i = await this.request("POST", "/api/shumiao/consume", {
+      count: 1,
+      taskId: e.taskId,
+      itemIndex: o + 1,
+      remark: \`采集成功扣减 1 树苗\`,
+      detail: r
+    });
+    return Number(i.data?.balance ?? 0);
+  }`,
+    "idempotent per-item shumiao identity",
+  );
+}
+
+main = replaceOnce(
+  main,
+  `      taskId: e.taskId,
+      itemIndex: o,`,
+  `      taskId: e.taskId,
+      itemIndex: o + 1,`,
+  "send one-based original item index to billing API",
+);
+
+main = replaceOnce(
+  main,
+  `  async checkShumiaoBalanceForTask(e) {
+    const t = Array.isArray(e.urls) ? e.urls.length : 0;
+    if (t <= 0)
+      throw new Error("没有可计费的采集链接");
+    if (!this.isAuthenticated())
+      throw new Error("未登录，无法判定积分余额");
+    const n = await this.request("GET", \`/api/shumiao/check-balance?count=\${encodeURIComponent(String(t))}\`), s = Number(n.data?.balance ?? 0), i = Number(n.data?.required ?? t), o = Number(n.data?.shortage ?? Math.max(0, i - s));
+    if (!n.data?.sufficient)
+      throw new Error(\`树苗余额不足：当前 \${s}，本次需要 \${i}，还差 \${o}\`);
+    return s;
+  }`,
+  `  async checkShumiaoBalanceForTask(e) {
+    const t = Array.isArray(e.urls) ? e.urls.length : 0, n = Array.isArray(e.pendingCharges) ? e.pendingCharges.length : 0, s = Math.max(0, t - n);
+    if (t <= 0)
+      throw new Error("没有可计费的采集链接");
+    if (!this.isAuthenticated())
+      throw new Error("未登录，无法判定积分余额");
+    if (s <= 0)
+      return 0;
+    const i = await this.request("GET", \`/api/shumiao/check-balance?count=\${encodeURIComponent(String(s))}\`), o = Number(i.data?.balance ?? 0), r = Number(i.data?.required ?? s), c = Number(i.data?.shortage ?? Math.max(0, r - o));
+    if (!i.data?.sufficient)
+      throw new Error(\`树苗余额不足：当前 \${o}，本次待采集需要 \${r}，还差 \${c}\`);
+    return o;
+  }`,
+  "pending charge reconciliation does not overstate required balance",
+);
+
+if (!main.includes("pgyCollectionHistory.createTask(t)")) {
+  main = replaceOnce(
+    main,
+    `  ), F.on(W.task.start, (e, t) => {
+    ge.startTask(t).catch((n) => {
+      Qe.error("任务启动失败:", n);
+    });
+  }), F.on(W.task.pause, (e, t) => {`,
+    `  ), F.on(W.task.start, (e, t) => {
+    pgyCollectionHistory.createTask(t).then(() => ge.startTask(t)).catch(async (n) => {
+      Qe.error("任务启动失败:", n);
+      await pgyCollectionHistory.setStatus(t.taskId, "interrupted").catch(() => {});
+    });
+  }), F.on(W.task.pause, (e, t) => {`,
+    "persist task before scraper start",
+  );
+}
+
+if (!main.includes("W.history.list")) {
+  main = replaceOnce(
+    main,
+    `  }), F.handle(W.export.toExcel, async (e, t) => ff(t));`,
+    `  }), F.handle(W.export.toExcel, async (e, t) => ff(t)), F.handle(W.history.list, async () => pgyCollectionHistory.listTasks()), F.handle(W.history.exportTask, async (e, t) => {
+    const n = await pgyCollectionHistory.getTask(t.taskId), s = await pgyCollectionHistory.getExportRows(t.taskId);
+    if (!n)
+      throw new Error("历史任务不存在");
+    if (s.length === 0)
+      throw new Error("该任务暂无可导出的成功内容");
+    return ff({ taskId: t.taskId, fileName: n.fileName || \`\${t.taskId}.xlsx\`, data: s });
+  }), F.handle(W.history.resumeTask, async (e, t) => {
+    const n = await pgyCollectionHistory.getResumePlan(t.taskId);
+    if (n.payload.urls.length === 0) {
+      await pgyCollectionHistory.setStatus(t.taskId, "completed");
+      return { ok: !0, remaining: 0, completed: !0 };
+    }
+    await pgyCollectionHistory.setStatus(t.taskId, "running");
+    ge.startTask({ ...n.payload, pendingCharges: n.pendingCharges }).catch(async (s) => {
+      Qe.error("历史任务继续失败:", s);
+      await pgyCollectionHistory.setStatus(t.taskId, "interrupted").catch(() => {});
+    });
+    return { ok: !0, remaining: n.payload.urls.length };
+  }), F.handle(W.history.migrateLegacy, async (e, t) => pgyCollectionHistory.importLegacyHistory(t?.history));`,
+    "collection history IPC handlers",
+  );
+}
+
+if (!main.includes("await pgyCollectionHistory.initialize()")) {
+  main = replaceOnce(
+    main,
+    `  ye.whenReady().then(() => {
+  Ee.info("桌面端启动", {`,
+    `  ye.whenReady().then(async () => {
+  await pgyCollectionHistory.initialize();
+  Ee.info("桌面端启动", {`,
+    "initialize collection history before desktop handlers",
+  );
+}
+
+if (!main.includes("const pgySourceIndexes")) {
+  main = replaceOnce(
+    main,
+    `    const { taskId: t, pluginId: n, taskType: s, urls: i, fileName: o } = e, r = e.fields && e.fields.length > 0 ? e.fields : null, c = "personal", u = this.plugins.get(n);`,
+    `    const { taskId: t, pluginId: n, taskType: s, urls: i, fileName: o } = e, r = e.fields && e.fields.length > 0 ? e.fields : null, c = "personal", u = this.plugins.get(n);
+    const pgySourceIndexes = Array.isArray(e.sourceIndexes) && e.sourceIndexes.length === i.length ? e.sourceIndexes.map((m) => Number(m)) : i.map((m, f) => f), pgyPendingCharges = new Map((Array.isArray(e.pendingCharges) ? e.pendingCharges : []).map((m) => [Number(m.itemIndex), m]));
+    let pgyAuthExpired = !1, pgyInterrupted = !1;`,
+    "collection task original indexes and recovery state",
+  );
+}
+
+if (!main.includes('await pgyCollectionHistory.setStatus(t, "auth_expired")')) {
+  main = replaceOnce(
+    main,
+    `        if (!m.authorized) {
+          this.sendToRenderer(W.task.error, {`,
+    `        if (!m.authorized) {
+          await pgyCollectionHistory.setStatus(t, "auth_expired");
+          this.sendToRenderer(W.task.error, {`,
+    "persist unavailable authorization status",
+  );
+  main = replaceOnce(
+    main,
+    `      } catch (m) {
+        this.sendToRenderer(W.task.error, {
+          taskId: t,
+          message: m instanceof Error ? m.message : String(m),
+          errorCategory: "auth",
+          errorCategoryLabel: "授权检测失败"
+        });`,
+    `      } catch (m) {
+        await pgyCollectionHistory.setStatus(t, "auth_expired");
+        this.sendToRenderer(W.task.error, {
+          taskId: t,
+          message: m instanceof Error ? m.message : String(m),
+          errorCategory: "auth",
+          errorCategoryLabel: "授权检测失败"
+        });`,
+    "persist failed authorization precheck",
+  );
+}
+
+if (!main.includes('await pgyCollectionHistory.setStatus(t, "interrupted")')) {
+  main = replaceOnce(
+    main,
+    `      } catch (m) {
+        this.runningTasks.delete(t), ue.warn(\`[task=\${t}] 积分判定失败，任务未启动:\`, m), this.sendToRenderer(W.task.error, {`,
+    `      } catch (m) {
+        await pgyCollectionHistory.setStatus(t, "interrupted");
+        this.runningTasks.delete(t), ue.warn(\`[task=\${t}] 积分判定失败，任务未启动:\`, m), this.sendToRenderer(W.task.error, {`,
+    "persist balance precheck interruption",
+  );
+}
+
+if (!main.includes("const pgyPending = pgyPendingCharges.get(pgyItemIndex)")) {
+  main = replaceOnce(
+    main,
+    `      const f = i[m];
+      l.current = m + 1;`,
+    `      const f = i[m], pgyItemIndex = pgySourceIndexes[m] ?? m, pgyPending = pgyPendingCharges.get(pgyItemIndex);
+      l.current = m + 1;`,
+    "map resume item to original source index",
+  );
+  main = replaceOnce(
+    main,
+    `      ue.info(\`[task=\${t}] 开始采集第 \${m + 1}/\${i.length} 条 plugin=\${n} taskType=\${s} url=\${String(f).slice(0, 180)}\`);
+      try {`,
+    `      ue.info(\`[task=\${t}] 开始采集原始第 \${pgyItemIndex + 1} 条，当前 \${m + 1}/\${i.length} plugin=\${n} taskType=\${s} url=\${String(f).slice(0, 180)}\`);
+      if (pgyPending) {
+        try {
+          const v = await Le.get().consumeShumiaoForItem(e, m, pgyItemIndex);
+          await pgyCollectionHistory.recordSuccess(t, pgyItemIndex, pgyPending.row, v, pgyPending.sourceUrl || f);
+          l.successCount++, this.sendToRenderer(W.task.itemResult, {
+            taskId: t,
+            index: pgyItemIndex,
+            status: "success",
+            data: pgyPending.row,
+            balanceAfter: v,
+            recoveredPendingCharge: !0
+          });
+          continue;
+        } catch (v) {
+          pgyInterrupted = !0, this.sendToRenderer(W.task.error, {
+            taskId: t,
+            message: v instanceof Error ? v.message : String(v),
+            errorCategory: "balance",
+            errorCategoryLabel: "扣费确认失败"
+          });
+          break;
+        }
+      }
+      try {`,
+    "reconcile pending charge before re-scraping",
+  );
+}
+
+if (!main.includes("recordPendingCharge(t, pgyItemIndex")) {
+  main = replaceOnce(
+    main,
+    `        if (y.status === "success")
+          try {
+            const x = await Le.get().consumeShumiaoForItem(e, m);
+            C = x;
+            ue.info(\`[task=\${t}] 单条积分扣减完成 index=\${m + 1} balance=\${x}\`);`,
+    `        if (y.status === "success")
+          try {
+            await pgyCollectionHistory.recordPendingCharge(t, pgyItemIndex, y.data, f);
+            const x = await Le.get().consumeShumiaoForItem(e, m, pgyItemIndex);
+            C = x;
+            await pgyCollectionHistory.recordSuccess(t, pgyItemIndex, y.data, x, f);
+            ue.info(\`[task=\${t}] 单条积分扣减完成 originalIndex=\${pgyItemIndex + 1} balance=\${x}\`);`,
+    "persist pending result before idempotent debit",
+  );
+  main = replaceOnce(
+    main,
+    `          } catch (x) {
+            S = !0, y.status = "error", y.data = null, y.errorMessage = x instanceof Error ? x.message : String(x), y.errorCode = "SHUMIAO_CONSUME_FAILED";
+          }
+        const b = this.classifyFailure(y.errorCode, y.errorMessage, y.errorDetails);
+        y.status === "success" ? l.successCount++ : l.errorCount++, this.sendToRenderer(W.task.itemResult, {
+          taskId: t,
+          index: m,`,
+    `          } catch (x) {
+            S = !0, pgyInterrupted = !0, y.status = "error", y.data = null, y.errorMessage = x instanceof Error ? x.message : String(x), y.errorCode = "SHUMIAO_CONSUME_FAILED";
+          }
+        const b = this.classifyFailure(y.errorCode, y.errorMessage, y.errorDetails);
+        y.status !== "success" && !S && await pgyCollectionHistory.recordFailure(t, pgyItemIndex, { errorCode: y.errorCode, errorMessage: y.errorMessage, errorCategory: b.code });
+        b.code === "auth" && (pgyAuthExpired = !0);
+        y.status === "success" ? l.successCount++ : l.errorCount++, this.sendToRenderer(W.task.itemResult, {
+          taskId: t,
+          index: pgyItemIndex,`,
+    "persist failures and emit original item index",
+  );
+  main = replaceOnce(
+    main,
+    `        if (S) {
+          this.sendToRenderer(W.task.error, {
+            taskId: t,
+            message: y.errorMessage || "积分扣减失败，采集已停止",
+            errorCategory: "balance",
+            errorCategoryLabel: "积分不足"
+          });
+          break;
+        }`,
+    `        if (S) {
+          this.sendToRenderer(W.task.error, {
+            taskId: t,
+            message: y.errorMessage || "积分扣减失败，采集已停止",
+            errorCategory: "balance",
+            errorCategoryLabel: "扣费失败"
+          });
+          break;
+        }
+        if (pgyAuthExpired) {
+          this.sendToRenderer(W.task.error, {
+            taskId: t,
+            message: \`第 \${pgyItemIndex + 1} 条登录已过期，任务已停止，可重新授权后继续\`,
+            errorCategory: "auth",
+            errorCategoryLabel: "授权失效"
+          });
+          break;
+        }`,
+    "stop task immediately after authorization expiry",
+  );
+}
+
+if (!main.includes("recordFailure(t, pgyItemIndex, { errorCode: \"UNKNOWN_ERROR\"")) {
+  main = replaceOnce(
+    main,
+    `        ue.error(\`[task=\${t}] 采集第 \${m + 1}/\${i.length} 条异常 plugin=\${n} url=\${String(f).slice(0, 180)}\`, v);
+        l.errorCount++, this.sendToRenderer(W.task.itemResult, {
+          taskId: t,
+          index: m,`,
+    `        ue.error(\`[task=\${t}] 采集原始第 \${pgyItemIndex + 1} 条异常 plugin=\${n} url=\${String(f).slice(0, 180)}\`, v);
+        await pgyCollectionHistory.recordFailure(t, pgyItemIndex, { errorCode: "UNKNOWN_ERROR", errorMessage: v instanceof Error ? v.message : String(v), errorCategory: y.code });
+        y.code === "auth" && (pgyAuthExpired = !0);
+        l.errorCount++, this.sendToRenderer(W.task.itemResult, {
+          taskId: t,
+          index: pgyItemIndex,`,
+    "persist thrown item failures",
+  );
+  main = replaceOnce(
+    main,
+    `          errorCategory: y.code,
+          errorCategoryLabel: y.label
+        });
+      }
+      const g = Math.round(l.current / l.total * 100);`,
+    `          errorCategory: y.code,
+          errorCategoryLabel: y.label
+        });
+        if (pgyAuthExpired) {
+          this.sendToRenderer(W.task.error, {
+            taskId: t,
+            message: \`第 \${pgyItemIndex + 1} 条登录已过期，任务已停止，可重新授权后继续\`,
+            errorCategory: "auth",
+            errorCategoryLabel: "授权失效"
+          });
+          break;
+        }
+      }
+      const g = Math.round(l.current / l.total * 100);`,
+    "stop after thrown authorization failure",
+  );
+}
+
+if (!main.includes("const pgyFinalStatus")) {
+  main = replaceOnce(
+    main,
+    `    this.scrapeWindowManager.closeWindow(p);
+    const h = Date.now() - l.startTime;`,
+    `    this.scrapeWindowManager.closeWindow(p);
+    const pgyFinalStatus = l.cancelled ? "cancelled" : pgyAuthExpired ? "auth_expired" : pgyInterrupted ? "interrupted" : "completed";
+    await pgyCollectionHistory.setStatus(t, pgyFinalStatus);
+    const h = Date.now() - l.startTime;`,
+    "finalize persistent collection task status",
+  );
+  main = replaceOnce(
+    main,
+    `      duration: h,
+      cancelled: !0
+    }) : (this.sendToRenderer(W.task.complete, {
+      taskId: t,
+      successCount: l.successCount,
+      errorCount: l.errorCount,
+      duration: h
+    }),`,
+    `      duration: h,
+      cancelled: !0,
+      status: pgyFinalStatus
+    }) : (this.sendToRenderer(W.task.complete, {
+      taskId: t,
+      successCount: l.successCount,
+      errorCount: l.errorCount,
+      duration: h,
+      status: pgyFinalStatus
+    }),`,
+    "emit persistent final task status",
+  );
+}
+
+if (!main.includes('if (!u) {\n      await pgyCollectionHistory.setStatus(t, "interrupted");')) {
+  main = replaceOnce(
+    main,
+    `    if (!u) {
+      this.sendToRenderer(W.task.error, {`,
+    `    if (!u) {
+      await pgyCollectionHistory.setStatus(t, "interrupted");
+      this.sendToRenderer(W.task.error, {`,
+    "finalize unknown plugin task",
+  );
+}
+
+if (!main.includes('if (!Array.isArray(i) || i.length === 0) {\n      await pgyCollectionHistory.setStatus(t, "cancelled");')) {
+  main = replaceOnce(
+    main,
+    `    if (!Array.isArray(i) || i.length === 0) {
+      this.sendToRenderer(W.task.error, {`,
+    `    if (!Array.isArray(i) || i.length === 0) {
+      await pgyCollectionHistory.setStatus(t, "cancelled");
+      this.sendToRenderer(W.task.error, {`,
+    "finalize empty collection task",
+  );
+}
+
+if (!main.includes('if (existingTask) {\n      await pgyCollectionHistory.setStatus(t, "interrupted");')) {
+  main = replaceOnce(
+    main,
+    `    if (existingTask) {
+      this.sendToRenderer(W.task.error, {`,
+    `    if (existingTask) {
+      await pgyCollectionHistory.setStatus(t, "interrupted");
+      this.sendToRenderer(W.task.error, {`,
+    "finalize blocked collection task",
+  );
+}
 
 fs.writeFileSync(mainPath, main);
 fs.writeFileSync(preloadPath, preload);

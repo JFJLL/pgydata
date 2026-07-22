@@ -628,6 +628,7 @@ replaceAllIfExists(mainBundle, '"1.1.1"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, '"1.1.2"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, '"1.1.3"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, '"1.1.4"', `"${assetVersion}"`);
+replaceAllIfExists(mainBundle, '"1.1.5"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, previousServerBaseUrl, serverBaseUrl);
 
 replaceOnce(
