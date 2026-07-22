@@ -90,6 +90,12 @@ https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-<version>-wind
 
 已正式发布的版本禁止覆盖同名安装包或资源包。发布前确需重建候选产物时使用 `-OverwriteCandidate`；版本一旦出现在正式版本 manifest 中，后续修复必须升级 patch 版本。
 
+`red-magic-api/public/releases/windows/<version>.json` 和 `latest.json` 是发布状态，不是可随构建清理的临时文件：
+
+- `<version>.json` 是该版本的不可变清单。它存在时，禁止为了重新打包或通过验证而删除、覆盖或重建同一版本；需要变更产物时必须升级 patch 版本。
+- `latest.json` 是当前正式版本指针。只有远端安装包、资源包和版本清单验证通过后才能更新；也不得因本地构建或验证冲突而擅自回退。
+- 如果现有 manifest、`latest.json`、本地产物或线上文件的版本及 SHA256 不一致，应停止操作并先确认当前处于 Candidate、Prepare、Promote 还是已发布阶段，不能通过删除清单绕过保护。
+
 发布分两步执行：
 
 ```powershell
@@ -99,6 +105,8 @@ rtk pwsh -NoProfile -File scripts/publish-magiorix-windows-release.ps1 -Stage Pr
 # 2. 上传安装包、同步资源和版本 manifest 后，验证远端内容并生成 latest.json
 rtk pwsh -NoProfile -File scripts/publish-magiorix-windows-release.ps1 -Stage Promote
 ```
+
+`Promote` 会把线上 EXE 和 assets.zip 临时下载到 `%TEMP%\magiorix-release-verify-<随机 GUID>\`，核对大小与 SHA256 后自动删除；它不会把远端文件保存为新的本地发布产物。
 
 `latest.json` 必须最后同步到服务器。部署完成后运行：
 

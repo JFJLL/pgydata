@@ -53,6 +53,9 @@
 - 发布时应追加单独的版本发布提交。
 - 本地构建和验证通过后，再推送 `master`。
 - 以下目录或产物不提交：`desktop-versions/`、`red-magic-api/data/`、`red-magic-api/logs/`、`node_modules/`。
+- `red-magic-api/public/releases/windows/<version>.json` 和 `latest.json` 属于发布状态与用户成果，不得当作构建残留删除、覆盖或回退。
+- 已存在版本 manifest 时，构建脚本拒绝同版本重建是不可变发布保护；不得删除 manifest 来绕过。若需改变产物，升级 patch 版本。
+- manifest、`latest.json`、本地产物或线上文件发生冲突时，先停止并向用户确认发布阶段和文件归属；不得为了让验证通过而擅自改变发布状态。
 
 ## 安全红线
 
