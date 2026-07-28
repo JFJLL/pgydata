@@ -41,14 +41,14 @@ test("preload and assistant expose persistent history, partial export, resume, a
   assert.doesNotMatch(assistant, /MAX_EXPORT_ROWS_PER_TASK/);
 });
 
-test("source package, asset version, and backend package stay aligned at 1.1.7", () => {
+test("source package, asset version, and backend package stay aligned at 1.1.8", () => {
   const desktop = JSON.parse(read("app-source/package.json"));
   const backend = JSON.parse(read("red-magic-api/package.json"));
-  const assets = JSON.parse(read("assets/1.1.7/version.json"));
-  assert.equal(desktop.version, "1.1.7");
-  assert.equal(desktop.assetsVersion, "1.1.7");
-  assert.equal(backend.version, "1.1.7");
-  assert.equal(assets.version, "1.1.7");
+  const assets = JSON.parse(read("assets/1.1.8/version.json"));
+  assert.equal(desktop.version, "1.1.8");
+  assert.equal(desktop.assetsVersion, "1.1.8");
+  assert.equal(backend.version, "1.1.8");
+  assert.equal(assets.version, "1.1.8");
 });
 
 test("admin password reset dialog requires matching passwords and task transaction filter", () => {

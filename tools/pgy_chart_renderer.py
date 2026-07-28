@@ -219,6 +219,7 @@ def daily_note_ellipsize(value, max_width=535):
 
 def save_daily_note_performance(chart):
     data = chart.get("data") or {}
+    note_type_label = str(data.get("pgyNoteTypeLabel") or "图文+视频")
     note_number = data.get("noteNumber")
     note_value = format_integer(note_number)
     note_text = f"{note_value}篇" if note_value != "-" else "-"
@@ -255,7 +256,7 @@ def save_daily_note_performance(chart):
     draw.text((121, 58), "合作笔记", font=ui_font, fill="#3d3d3d")
 
     filters = [
-        ((379, 50, 517, 83), "图文+视频"),
+        ((379, 50, 517, 83), note_type_label),
         ((529, 50, 636, 83), "近30日"),
         ((648, 50, 795, 83), "仅自然流量"),
     ]

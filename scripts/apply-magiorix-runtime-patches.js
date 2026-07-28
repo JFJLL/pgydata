@@ -1501,6 +1501,112 @@ async function buildPgyBloggerChartFields(a, e, t, n, d, B) {`,
   );
 }
 
+main = replaceOnce(
+    main,
+    `  daily30: (a) => \`\${Re}/api/solar/kol/data_v3/notes_rate?userId=\${a}&business=0&noteType=3&dateType=1&advertiseSwitch=1\`,
+  /** 日常笔记近90天 */`,
+    `  daily30: (a) => \`\${Re}/api/solar/kol/data_v3/notes_rate?userId=\${a}&business=0&noteType=3&dateType=1&advertiseSwitch=1\`,
+  /** 日常图文笔记近30天 */
+  daily30Picture: (a) => \`\${Re}/api/solar/kol/data_v3/notes_rate?userId=\${a}&business=0&noteType=1&dateType=1&advertiseSwitch=1\`,
+  /** 日常视频笔记近30天 */
+  daily30Video: (a) => \`\${Re}/api/solar/kol/data_v3/notes_rate?userId=\${a}&business=0&noteType=2&dateType=1&advertiseSwitch=1\`,
+  /** 日常笔记近90天 */`,
+    "pgy typed daily note endpoints",
+  );
+
+main = replaceOnce(
+    main,
+    `  "daily30",
+  "daily90",`,
+    `  "daily30",
+  "daily30Picture",
+  "daily30Video",
+  "daily90",`,
+    "pgy typed daily note endpoint list",
+  );
+
+main = replaceOnce(
+    main,
+    `  dailyNotePerformanceChart: ["dailyNotePerformanceChart"],
+  bloggerOverviewChart: ["bloggerOverviewChart"]`,
+    `  dailyNotePerformanceChart: ["dailyNotePerformanceChart"],
+  dailyNotePicturePerformanceChart: ["dailyNotePicturePerformanceChart"],
+  dailyNoteVideoPerformanceChart: ["dailyNoteVideoPerformanceChart"],
+  bloggerOverviewChart: ["bloggerOverviewChart"]`,
+    "pgy typed daily note field dependencies",
+  );
+
+main = replaceOnce(
+    main,
+    `    "dailyNotePerformanceChart",
+    "bloggerOverviewChart"
+  ],
+  daily90: [`,
+    `    "dailyNotePerformanceChart",
+    "bloggerOverviewChart"
+  ],
+  daily30Picture: ["dailyNotePicturePerformanceChart"],
+  daily30Video: ["dailyNoteVideoPerformanceChart"],
+  daily90: [`,
+    "pgy typed daily note request routing",
+  );
+
+main = replaceOnce(
+    main,
+    `  dailyNotePerformance: "dailyNotePerformanceChart",
+  bloggerOverview: "bloggerOverviewChart"`,
+    `  dailyNotePerformance: "dailyNotePerformanceChart",
+  dailyNotePicturePerformance: "dailyNotePicturePerformanceChart",
+  dailyNoteVideoPerformance: "dailyNoteVideoPerformanceChart",
+  bloggerOverview: "bloggerOverviewChart"`,
+    "pgy typed daily note chart fields",
+  );
+
+main = replaceOnce(
+    main,
+    `function pgyDailyNotePerformanceSvg(a) {
+  const e = a ?? {}, t = pgyDailyNoteFormatInteger(e.noteNumber), n = t === "-" ? "-" : t + "篇", s = Number(e.noteNumber) > 0, i = s ? pgyDailyNoteFormatInteger(e.impMedian) : "-", o = s ? pgyDailyNoteFormatInteger(e.readMedian) : "-", r = pgyDailyNoteCategories(e.noteType), c = pgyDailyNoteEllipsize(r);`,
+    `function pgyDailyNotePerformanceSvg(a) {
+  const e = a ?? {}, t = pgyDailyNoteFormatInteger(e.noteNumber), n = t === "-" ? "-" : t + "篇", s = Number(e.noteNumber) > 0, i = s ? pgyDailyNoteFormatInteger(e.impMedian) : "-", o = s ? pgyDailyNoteFormatInteger(e.readMedian) : "-", r = pgyDailyNoteCategories(e.noteType), c = pgyDailyNoteEllipsize(r), l = String(e.pgyNoteTypeLabel ?? "图文+视频");`,
+    "pgy typed daily note SVG label data",
+  );
+main = replaceOnce(
+    main,
+    `fill="#262626">图文+视频</text><path d="M497 64l3 3 3-3"`,
+    `fill="#262626">\${pgyChartEscape(l)}</text><path d="M497 64l3 3 3-3"`,
+    "pgy typed daily note SVG label",
+  );
+
+main = replaceOnce(
+    main,
+    `async function buildPgyBloggerChartFields(a, e, t, n, d, B) {`,
+    `async function buildPgyBloggerChartFields(a, e, t, n, d, B, P, V) {`,
+    "pgy typed daily note chart inputs",
+  );
+main = replaceOnce(
+    main,
+    `  pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePerformance) && i.push({ field: "dailyNotePerformanceChart", type: "daily-note-performance", data: d ?? {}, output: pgyChartFile("daily-note", a, "daily-note-performance") });
+  pgyHasSelectedField(n, PYG_CHART_FIELDS.bloggerOverview)`,
+    `  pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePerformance) && i.push({ field: "dailyNotePerformanceChart", type: "daily-note-performance", data: { ...(d ?? {}), pgyNoteTypeLabel: "图文+视频" }, output: pgyChartFile("daily-note", a, "daily-note-performance") });
+  pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePicturePerformance) && i.push({ field: "dailyNotePicturePerformanceChart", type: "daily-note-performance", data: { ...(P ?? {}), pgyNoteTypeLabel: "图文" }, output: pgyChartFile("daily-note", a, "daily-note-picture-performance") });
+  pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNoteVideoPerformance) && i.push({ field: "dailyNoteVideoPerformanceChart", type: "daily-note-performance", data: { ...(V ?? {}), pgyNoteTypeLabel: "视频" }, output: pgyChartFile("daily-note", a, "daily-note-video-performance") });
+  pgyHasSelectedField(n, PYG_CHART_FIELDS.bloggerOverview)`,
+    "pgy typed daily note chart queue",
+  );
+
+main = replaceOnce(
+    main,
+    `const s = ((O = t.profile) == null ? void 0 : O.data) ?? {}, i = ((le = t.effective) == null ? void 0 : le.data) ?? {}, o = ((de = t.daily30) == null ? void 0 : de.data) ?? {}, r = ((H = t.daily90) == null ? void 0 : H.data) ?? {},`,
+    `const s = ((O = t.profile) == null ? void 0 : O.data) ?? {}, i = ((le = t.effective) == null ? void 0 : le.data) ?? {}, o = ((de = t.daily30) == null ? void 0 : de.data) ?? {}, dailyPicture = (t.daily30Picture == null ? void 0 : t.daily30Picture.data) ?? {}, dailyVideo = (t.daily30Video == null ? void 0 : t.daily30Video.data) ?? {}, r = ((H = t.daily90) == null ? void 0 : H.data) ?? {},`,
+    "pgy typed daily note response data",
+  );
+  main = replaceOnce(
+    main,
+    `I, o, pgyBuildBloggerOverviewData({ bloggerId: e, profile: s, effective: i, daily30: o, fansSummary: l, avatar: n }));`,
+    `I, o, pgyBuildBloggerOverviewData({ bloggerId: e, profile: s, effective: i, daily30: o, fansSummary: l, avatar: n }), dailyPicture, dailyVideo);`,
+    "pgy typed daily note chart data input",
+  );
+
 const chartRendererSource = fs.readFileSync(chartRendererSourcePath, "utf8");
 if (!main.includes("import urllib.request")) {
   main = replaceOnce(

@@ -35,6 +35,7 @@ assert.match(buildScript, /publishedVersionManifest/, "build must reject rebuild
 assert.match(buildScript, /version_pointer_failed/, "installer must roll back assets when the version pointer fails");
 
 const runtimePatch = readFileSync("scripts/apply-magiorix-runtime-patches.js", "utf8");
+const frontendPatch = readFileSync("scripts/apply-magiorix-frontend-patches.js", "utf8");
 const dailyNoteSvgSource = readFileSync("tools/pgy_daily_note_svg.js", "utf8");
 const bloggerOverviewSvgSource = readFileSync("tools/pgy_blogger_overview_svg.js", "utf8");
 assert.match(runtimePatch, /pgyHasSingleInstanceLock/, "runtime patch must enforce a single desktop instance");
@@ -42,6 +43,20 @@ assert.match(runtimePatch, /pgyDesktopUpdateActive/, "runtime patch must coordin
 assert.match(runtimePatch, /partial-/, "runtime patch must stage asset updates");
 assert.match(runtimePatch, /pgyAssetExpectedChecksum/, "runtime patch must verify the downloaded asset archive checksum");
 assert.match(runtimePatch, /dailyNotePerformanceChart/, "runtime patch must generate the daily note performance chart");
+assert.match(runtimePatch, /dailyNotePicturePerformanceChart/, "runtime patch must generate the picture-only daily note chart");
+assert.match(runtimePatch, /dailyNoteVideoPerformanceChart/, "runtime patch must generate the video-only daily note chart");
+assert.match(runtimePatch, /noteType=1/, "runtime patch must request picture-only daily note data");
+assert.match(runtimePatch, /noteType=2/, "runtime patch must request video-only daily note data");
+assert.doesNotMatch(
+  runtimePatch,
+  /if \(!main\.includes\('dailyNotePicturePerformance:/,
+  "typed daily note runtime patch steps must remain independently resumable",
+);
+assert.doesNotMatch(
+  frontendPatch,
+  /if \(!fs\.readFileSync\(mainBundle[^\n]+dailyNotePicturePerformanceChart/,
+  "typed daily note frontend patch steps must remain independently resumable",
+);
 assert.match(runtimePatch, /daily-note-performance/, "runtime patch must route the daily note chart renderer");
 assert.match(runtimePatch, /replaceSection/, "runtime patch must migrate an existing daily note renderer section");
 assert.match(runtimePatch, /pgy_daily_note_svg\.js/, "runtime patch must load the maintained daily note SVG source");
@@ -50,6 +65,7 @@ assert.match(runtimePatch, /blogger-overview/, "runtime patch must route the blo
 assert.match(runtimePatch, /pgy_blogger_overview_svg\.js/, "runtime patch must load the maintained blogger overview SVG source");
 assert.match(dailyNoteSvgSource, /width="808" height="378"/, "daily note SVG must use the web-layout canvas");
 assert.match(dailyNoteSvgSource, /pgyDailyNoteEllipsize/, "daily note SVG must bound long category text");
+assert.match(dailyNoteSvgSource, /pgyNoteTypeLabel/, "daily note SVG must render its selected note type");
 assert.match(bloggerOverviewSvgSource, /width="2048" height="1066"/, "blogger overview SVG must match the approved crop");
 assert.match(bloggerOverviewSvgSource, /function pgyBuildBloggerOverviewData/, "blogger overview must normalize raw PGY fields");
 assert.match(bloggerOverviewSvgSource, /interactionPeerText/, "blogger overview must preserve peer percentile metrics");
@@ -85,23 +101,36 @@ const mainBundle = readdirSync(`${assetRoot}/assets`)
 assert.ok(mainBundle, "frontend must expose the daily note performance chart field");
 assert.match(
   mainBundle,
-  /fansGrowthTrendChart",headerName:"粉丝增长趋势图",width:320\},\{field:"dailyNotePerformanceChart",headerName:"日常笔记表现图"/,
+  /fansGrowthTrendChart",headerName:"粉丝增长趋势图",width:320\},\{field:"dailyNotePerformanceChart",headerName:"日常笔记表现图（图文\+视频）"/,
   "daily note chart must follow the five fan chart columns",
 );
 assert.match(
   mainBundle,
-  /\{key:"dailyNotePerformanceChart",label:"日常笔记表现图"\}/,
-  "daily note chart must be optional in the daily-30 selector group",
+  /\{key:"dailyNotePerformanceChart",label:"日常笔记表现图（图文\+视频）"\},\{key:"dailyNotePicturePerformanceChart",label:"日常笔记表现图（图文）"\},\{key:"dailyNoteVideoPerformanceChart",label:"日常笔记表现图（视频）"\}/,
+  "all three daily note charts must be optional in the daily-30 selector group",
 );
 assert.match(
   mainBundle,
-  /dailyNotePerformanceChart",headerName:"日常笔记表现图",width:320\},\{field:"bloggerOverviewChart",headerName:"博主数据概览图"/,
-  "blogger overview chart column must immediately follow the daily note chart",
+  /dailyNotePerformanceChart",headerName:"日常笔记表现图（图文\+视频）",width:320\},\{field:"dailyNotePicturePerformanceChart",headerName:"日常笔记表现图（图文）",width:320\},\{field:"dailyNoteVideoPerformanceChart",headerName:"日常笔记表现图（视频）",width:320\},\{field:"bloggerOverviewChart",headerName:"博主数据概览图"/,
+  "typed daily note chart columns must precede the blogger overview chart",
 );
 assert.match(
   mainBundle,
-  /key:"dailyNotePerformanceChart",label:"日常笔记表现图"\},\{key:"bloggerOverviewChart",label:"博主数据概览图"\}\]\},\{groupKey:"daily-90"/,
-  "blogger overview chart must immediately follow the daily note chart selector",
+  /key:"dailyNoteVideoPerformanceChart",label:"日常笔记表现图（视频）"\},\{key:"bloggerOverviewChart",label:"博主数据概览图"\}\]\},\{groupKey:"daily-90"/,
+  "blogger overview selector must immediately follow the three daily note chart selectors",
 );
+assert.match(
+  mainBundle,
+  /groupKey:"basic",groupLabel:"本地信息",description:"昵称必选，其余本地信息可按需导出",fields:\[\{key:"nickname",label:"昵称",required:!0\},\{key:"url",label:"主页链接"\}/,
+  "only nickname must be required in the pgy blogger local-information group",
+);
+const fieldSelectorBundle = readdirSync(`${assetRoot}/assets`)
+  .filter((file) => file.endsWith(".js"))
+  .map((file) => readFileSync(`${assetRoot}/assets/${file}`, "utf8"))
+  .find((source) => source.includes("function ge(t){const r=new Set"));
+assert.ok(fieldSelectorBundle, "frontend field selector bundle must exist");
+assert.match(fieldSelectorBundle, /l=s\|\|!!g\.required/, "required nickname must be disabled");
+assert.match(fieldSelectorBundle, /\(n\.required\|\|a\.required\)&&r\.add\(a\.key\)/, "required nickname must survive group toggles and templates");
+assert.match(fieldSelectorBundle, /n\.required\|\|a\.required\|\|a\.defaultSelected/, "required nickname must be selected by default");
 
 console.log(`Static checks passed for ${javascriptFiles.length} JavaScript files.`);

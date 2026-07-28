@@ -120,6 +120,10 @@ test("runtime patch upgrades the legacy daily-note layout and is idempotent", (t
   assert.doesNotMatch(upgraded, /width="760" height="300"[^]*数据表现/);
   assert.match(upgraded, /width="2048" height="1066"/);
   assert.match(upgraded, /bloggerOverviewChart/);
+  assert.match(upgraded, /dailyNotePicturePerformanceChart/);
+  assert.match(upgraded, /dailyNoteVideoPerformanceChart/);
+  assert.match(upgraded, /noteType=1/);
+  assert.match(upgraded, /noteType=2/);
 
   const secondRun = spawnSync(process.execPath, [patchScript], { cwd: projectRoot, env, encoding: "utf8", windowsHide: true });
   assert.equal(secondRun.status, 0, secondRun.stderr || secondRun.stdout);
@@ -224,6 +228,16 @@ test("blogger overview normalization preserves PGY formatting and missing-value 
   assert.equal(missing.picturePriceText, "-");
   assert.equal(missing.exposurePeerText, "优于 - 同行");
   assert.equal(missing.cooperationIndustryText, "暂无");
+});
+
+test("typed daily note charts use independent endpoints and visible filter labels", () => {
+  assert.match(runtimeSource, /daily30Picture: \(a\) => `[^`]+noteType=1&dateType=1/);
+  assert.match(runtimeSource, /daily30Video: \(a\) => `[^`]+noteType=2&dateType=1/);
+  assert.match(runtimeSource, /daily30Picture: \["dailyNotePicturePerformanceChart"\]/);
+  assert.match(runtimeSource, /daily30Video: \["dailyNoteVideoPerformanceChart"\]/);
+  assert.match(jsHelpers.pgyDailyNotePerformanceSvg({ pgyNoteTypeLabel: "图文" }), />图文<\/text>/);
+  assert.match(jsHelpers.pgyDailyNotePerformanceSvg({ pgyNoteTypeLabel: "视频" }), />视频<\/text>/);
+  assert.match(jsHelpers.pgyDailyNotePerformanceSvg({}), />图文\+视频<\/text>/);
 });
 
 test("Python renderer writes 808 by 378 web-layout PNGs for populated and missing data", (t) => {
@@ -394,7 +408,7 @@ test("bundled chart renderer supports the blogger overview chart", (t) => {
   assert.deepEqual(pngSize(outputPath), { width: 2048, height: 1066 });
 });
 
-test("production Excel embedder adds daily-note and blogger-overview PNGs in field order", async (t) => {
+test("production Excel embedder adds typed daily-note and blogger-overview PNGs in field order", async (t) => {
   const embedMatch = runtimeSource.match(
     /function pgyXmlEscape\(a\) \{[\s\S]*?\r?\n\}\r?\nasync function ff\(a\) \{/,
   );
@@ -408,7 +422,7 @@ test("production Excel embedder adds daily-note and blogger-overview PNGs in fie
     "JSZip",
     `${embedSource}; return { pgyEmbedImagesInWorkbook };`,
   )(
-    new Set(["dailyNotePerformanceChart", "bloggerOverviewChart"]),
+    new Set(["dailyNotePerformanceChart", "dailyNotePicturePerformanceChart", "dailyNoteVideoPerformanceChart", "bloggerOverviewChart"]),
     existsSync,
     readFileSync,
     writeFileSync,
@@ -418,6 +432,8 @@ test("production Excel embedder adds daily-note and blogger-overview PNGs in fie
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "magiorix-daily-note-xlsx-"));
   t.after(() => rmSync(tempDir, { recursive: true, force: true }));
   const pngPath = path.join(tempDir, "daily-note.png");
+  const picturePath = path.join(tempDir, "daily-note-picture.png");
+  const videoPath = path.join(tempDir, "daily-note-video.png");
   const overviewPath = path.join(tempDir, "blogger-overview.png");
   const xlsxPath = path.join(tempDir, "daily-note.xlsx");
   const rendererPath = path.join(
@@ -442,6 +458,18 @@ test("production Excel embedder adds daily-note and blogger-overview PNGs in fie
           output: pngPath,
         },
         {
+          field: "dailyNotePicturePerformanceChart",
+          type: "daily-note-performance",
+          data: { noteNumber: 4, noteType: [], impMedian: 70000, readMedian: 9000, pgyNoteTypeLabel: "图文" },
+          output: picturePath,
+        },
+        {
+          field: "dailyNoteVideoPerformanceChart",
+          type: "daily-note-performance",
+          data: { noteNumber: 3, noteType: [], impMedian: 90000, readMedian: 12000, pgyNoteTypeLabel: "视频" },
+          output: videoPath,
+        },
+        {
           field: "bloggerOverviewChart",
           type: "blogger-overview",
           data: jsHelpers.pgyBuildBloggerOverviewData({
@@ -457,34 +485,47 @@ test("production Excel embedder adds daily-note and blogger-overview PNGs in fie
   });
   assert.equal(renderProcess.status, 0, renderProcess.stderr || renderProcess.stdout);
   assert.deepEqual(pngSize(pngPath), { width: 808, height: 378 });
+  assert.deepEqual(pngSize(picturePath), { width: 808, height: 378 });
+  assert.deepEqual(pngSize(videoPath), { width: 808, height: 378 });
   assert.deepEqual(pngSize(overviewPath), { width: 2048, height: 1066 });
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
-    ["日常30天", ""],
-    ["日常笔记表现图", "博主数据概览图"],
-    ["", ""],
+    ["日常30天", "", "", ""],
+    ["日常笔记表现图（图文+视频）", "日常笔记表现图（图文）", "日常笔记表现图（视频）", "博主数据概览图"],
+    ["", "", "", ""],
   ]), "Sheet1");
   XLSX.writeFile(workbook, xlsxPath);
 
   await pgyEmbedImagesInWorkbook(
     xlsxPath,
     [
-      { key: "dailyNotePerformanceChart", label: "日常笔记表现图" },
+      { key: "dailyNotePerformanceChart", label: "日常笔记表现图（图文+视频）" },
+      { key: "dailyNotePicturePerformanceChart", label: "日常笔记表现图（图文）" },
+      { key: "dailyNoteVideoPerformanceChart", label: "日常笔记表现图（视频）" },
       { key: "bloggerOverviewChart", label: "博主数据概览图" },
     ],
-    [{ dailyNotePerformanceChart: pngPath, bloggerOverviewChart: overviewPath }],
+    [{
+      dailyNotePerformanceChart: pngPath,
+      dailyNotePicturePerformanceChart: picturePath,
+      dailyNoteVideoPerformanceChart: videoPath,
+      bloggerOverviewChart: overviewPath,
+    }],
   );
 
   const archive = await JSZip.loadAsync(readFileSync(xlsxPath));
   assert.ok(archive.file("xl/media/pgy_chart_1.png"));
   assert.ok(archive.file("xl/media/pgy_chart_2.png"));
+  assert.ok(archive.file("xl/media/pgy_chart_3.png"));
+  assert.ok(archive.file("xl/media/pgy_chart_4.png"));
   const drawing = await archive.file("xl/drawings/drawing1.xml").async("string");
   const anchors = [...drawing.matchAll(
     /<xdr:twoCellAnchor[^>]*><xdr:from><xdr:col>(\d+)<\/xdr:col>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>[\s\S]*?<xdr:cNvPr[^>]*name="([^"]+)"/g,
   )].map((match) => ({ col: Number(match[1]), row: Number(match[2]), name: match[3] }));
   assert.deepEqual(anchors, [
-    { col: 0, row: 2, name: "日常笔记表现图-1" },
-    { col: 1, row: 2, name: "博主数据概览图-1" },
+    { col: 0, row: 2, name: "日常笔记表现图（图文+视频）-1" },
+    { col: 1, row: 2, name: "日常笔记表现图（图文）-1" },
+    { col: 2, row: 2, name: "日常笔记表现图（视频）-1" },
+    { col: 3, row: 2, name: "博主数据概览图-1" },
   ]);
   const sheet = await archive.file("xl/worksheets/sheet1.xml").async("string");
   assert.match(sheet, /<drawing r:id="rId\d+"\/>/);
