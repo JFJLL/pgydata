@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>magiorix 积分充值</title>
+  <link rel="stylesheet" href="/pay/pay.css">
+</head>
+<body>
+  <main class="pay-shell">
+    <span class="brand">magiorix</span>
+    <h1>选择支付方式</h1>
+    <p class="muted">订单 {{ORDER_NO}}</p>
+    <div class="amount">¥{{AMOUNT}}</div>
+    <p>支付成功后将获得 <strong>{{TOTAL_COUNT}} 积分</strong></p>
+    <div class="channels">
+      <a class="channel alipay" href="/pay/{{TOKEN}}/alipay">支付宝支付</a>
+      <a class="channel wechat" href="/pay/{{TOKEN}}/wechat">微信支付</a>
+    </div>
+    <p class="hint">支付凭证 30 分钟内有效。请勿重复创建或支付订单。</p>
+  </main>
+</body>
+</html>

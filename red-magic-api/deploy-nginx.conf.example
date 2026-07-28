@@ -1,14 +1,14 @@
 # 1. 强制 HTTP 跳 HTTPS
 server {
     listen 80;
-    server_name magiorix.red-magic.cn xhs.red-magic.cn;
+    server_name api.red-magic.cn magiorix.red-magic.cn xhs.red-magic.cn;
     return 301 https://$host$request_uri;
 }
 
 # 2. HTTPS 核心服务
 server {
     listen 443 ssl;
-    server_name magiorix.red-magic.cn xhs.red-magic.cn;
+    server_name api.red-magic.cn magiorix.red-magic.cn xhs.red-magic.cn;
 
     # 复用通配符证书
     ssl_certificate     /etc/nginx/ssl/red-magic.cn/fullchain.pem;
@@ -17,6 +17,37 @@ server {
     ssl_ciphers HIGH:!aNULL:!MD5;
 
     client_max_body_size 200M;
+
+    # 微信 API v3 通知：原始 JSON body 由 Node 在全局 JSON parser 前验签。
+    location = /order {
+        proxy_pass http://127.0.0.1:3050;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_request_buffering off;
+    }
+
+    # 支付宝异步通知与同步返回。
+    location ^~ /order/alipay/ {
+        proxy_pass http://127.0.0.1:3050;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # 30 分钟支付选择页与微信 Native 二维码页。
+    location ^~ /pay/ {
+        proxy_pass http://127.0.0.1:3050;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
     # Node 服务同时提供 /api 和 /assets
     location / {

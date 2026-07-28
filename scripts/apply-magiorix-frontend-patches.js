@@ -48,6 +48,17 @@ function replaceAnyOnce(filePath, fromList, to, label) {
   throw new Error(`Missing frontend patch target: ${label}`);
 }
 
+function replaceSection(filePath, startMarker, endMarker, replacement, appliedMarker, label) {
+  let source = fs.readFileSync(filePath, "utf8");
+  if (source.includes(appliedMarker)) return false;
+  const start = source.indexOf(startMarker);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  if (start < 0 || end < 0) throw new Error(`Missing frontend patch target: ${label}`);
+  source = source.slice(0, start) + replacement + source.slice(end);
+  fs.writeFileSync(filePath, source);
+  return true;
+}
+
 function removeIfExists(filePath) {
   if (fs.existsSync(filePath)) {
     fs.rmSync(filePath, { force: true });
@@ -64,6 +75,7 @@ const starmapTaskPanelBundle = path.join(assetsDir, "index-Ct9D5phI.js");
 const douyinTaskPanelBundle = path.join(assetsDir, "index-D1aMO0QN.js");
 const urlValidatorBundle = path.join(assetsDir, "url-validator-00wRYD83.js");
 const contactLinkBundle = path.join(assetsDir, "ContactLink-WXibGCB4.js");
+const rechargeBundle = path.join(assetsDir, "index-C0Ke2Ul0.js");
 const feishuQrSource = "D:\\download\\feishu_down\\飞书20260521-115131.png";
 const feishuQrAssetName = "feishu-group-qr.png";
 if (fs.existsSync(feishuQrSource)) {
@@ -74,6 +86,83 @@ const directRoute = `../pages/database/xhs/${"xhs"}-blogger/index.tsx`;
 const directChunk = `index-${"BxFWMnhZ"}.js`;
 const directTemplate = `xhs_${"direct"}_blogger_template-CGkXo9G3.xlsx`;
 const directTabLabel = `小红书${"直采"}`;
+
+replaceOnce(
+  mainBundle,
+  'Yl=e=>W.post("/api/auth/login",e),Jl=e=>W.post("/api/auth/sms/login",e),rr=async()=>{throw new Error("短信功能已停用")},Bt=',
+  'Yl=e=>W.post("/api/auth/login",e),Jl=e=>W.post("/api/auth/register",e),rr=e=>W.post("/api/auth/sms/send",e),R19=e=>W.post("/api/auth/password/reset",e),Bt=',
+  "enable SMS registration and password reset APIs",
+);
+
+replaceOnce(
+  mainBundle,
+  'S.loginType==="sms"?E=await Jl({phone:S.phone,password:S.password}):E=await Yl(S)',
+  'S.loginType==="sms"?E=await Jl({phone:S.phone,code:S.code,password:S.password}):E=await Yl(S)',
+  "pass registration verification code",
+);
+
+replaceSection(
+  mainBundle,
+  "function y5(){",
+  "function b5(",
+  String.raw`function y5(){const e=Te(),t=r1(),{login:r}=ze(),[a,n]=m.useState(()=>localStorage.getItem("magiorix.login.phone")||""),[l,s]=m.useState(""),[i,d]=m.useState(""),[c,u]=m.useState(!1),[f,b]=m.useState(!1),[C,h]=m.useState(0),[g,p]=m.useState("");m.useEffect(()=>{if(C<=0)return;const v=setInterval(()=>h(y=>Math.max(0,y-1)),1e3);return()=>clearInterval(v)},[C]);const y=async()=>{const v=a.trim();if(!/^1[3-9]\d{9}$/.test(v)){p("请输入正确的手机号");return}b(!0),p("");try{await rr({phone:v,purpose:"register"}),h(60)}catch(j){p(j.message||"验证码发送失败")}finally{b(!1)}};const v=async j=>{var S,E;if(j&&j.preventDefault(),c)return;p("");const D=a.trim();if(!/^1[3-9]\d{9}$/.test(D)){p("请输入正确的手机号");return}if(!/^\d{4}$/.test(l)){p("请输入4位验证码");return}if(i.length<8){p("密码至少8位");return}u(!0);try{await r({loginType:"sms",phone:D,code:l,password:i}),localStorage.setItem("magiorix.login.phone",D);const A=(E=(S=t.state)==null?void 0:S.from)==null?void 0:E.pathname;e(A&&A!=="/sign-in"?A:vr(Se.getState().menus)||"/",{replace:!0})}catch(A){p(A.message||"注册失败")}finally{u(!1)}};return o.jsxs(x,{component:"form",onSubmit:v,noValidate:!0,className:"sms-login",children:[g&&o.jsx(oe,{severity:"error",sx:{mb:1.5},children:g}),o.jsxs(x,{className:"sms-login__fields",children:[o.jsx(ae,{fullWidth:!0,value:a,onChange:j=>n(j.target.value),placeholder:"请输入手机号",autoComplete:"tel",autoFocus:!0,size:"small",disabled:c}),o.jsx(ae,{fullWidth:!0,value:l,onChange:j=>s(j.target.value.replace(/\D/g,"").slice(0,4)),placeholder:"请输入4位验证码",size:"small",disabled:c,slotProps:{input:{endAdornment:o.jsx($,{type:"button",size:"small",onClick:y,disabled:f||C>0,children:C>0?C+"秒":f?"发送中":"获取验证码"})}}}),o.jsx(ae,{fullWidth:!0,type:"password",value:i,onChange:j=>d(j.target.value),placeholder:"设置密码（8-64位）",autoComplete:"new-password",size:"small",disabled:c})]}),o.jsx($,{fullWidth:!0,size:"large",type:"submit",variant:"contained",disabled:c,className:"sms-login__submit",children:c?"注册中...":"手机号注册"})]})}`,
+  'purpose:"register"',
+  "replace legacy password-only registration form",
+);
+
+replaceSection(
+  mainBundle,
+  "function b5(",
+  "function wr(",
+  String.raw`function b5({open:e,onClose:t}){const[r,a]=m.useState(""),[n,l]=m.useState(""),[s,i]=m.useState(""),[d,c]=m.useState(!1),[u,f]=m.useState(!1),[b,C]=m.useState(0),[h,g]=m.useState("");m.useEffect(()=>{if(B<=0)return;const H=setInterval(()=>C(R=>Math.max(0,R-1)),1e3);return()=>clearInterval(H)},[b]);const p=async()=>{if(!/^1[3-9]\d{9}$/.test(r)){g("请输入正确的手机号");return}f(!0),g("");try{await rr({phone:r,purpose:"reset_password"}),C(60)}catch(H){g(H.message||"验证码发送失败")}finally{f(!1)}};const y=async()=>{if(!/^\d{4}$/.test(n)){g("请输入4位验证码");return}if(s.length<8){g("新密码至少8位");return}c(!0),g("");try{await R19({phone:r,code:n,newPassword:s}),t()}catch(H){g(H.message||"重置失败")}finally{c(!1)}};return o.jsxs(ue,{open:e,onClose:t,PaperProps:{sx:{width:380}},children:[o.jsx(be,{children:"重置密码"}),o.jsxs(pe,{sx:{display:"grid",gap:1.5},children:[h&&o.jsx(oe,{severity:"error",children:h}),o.jsx(ae,{value:r,onChange:H=>a(H.target.value),label:"手机号",size:"small"}),o.jsx(ae,{value:n,onChange:H=>l(H.target.value.replace(/\D/g,"").slice(0,4)),label:"验证码",size:"small",slotProps:{input:{endAdornment:o.jsx($,{size:"small",onClick:p,disabled:u||b>0,children:b>0?b+"秒":"获取验证码"})}}}),o.jsx(ae,{type:"password",value:s,onChange:H=>i(H.target.value),label:"新密码（8-64位）",size:"small"})]}),o.jsxs(_e,{children:[o.jsx($,{onClick:t,disabled:d,children:"取消"}),o.jsx($,{variant:"contained",onClick:y,disabled:d,children:d?"提交中...":"重置密码"})]})]})}`,
+  'purpose:"reset_password"',
+  "replace unsupported password recovery dialog",
+);
+
+replaceOnce(
+  mainBundle,
+  "m.useEffect(()=>{if(B<=0)return;const H=setInterval(()=>C(R=>Math.max(0,R-1)),1e3);return()=>clearInterval(H)},[b])",
+  "m.useEffect(()=>{if(b<=0)return;const H=setInterval(()=>C(R=>Math.max(0,R-1)),1e3);return()=>clearInterval(H)},[b])",
+  "use reset-password countdown state",
+);
+
+if (false) {
+replaceSection(
+  mainBundle,
+  "function C5(){",
+  "const Z0=",
+  "function C5(){return null}",
+  "function C5(){return null}",
+  "remove QR login implementation",
+);
+}
+
+replaceSection(
+  mainBundle,
+  'const Z0="zs.login.method";',
+  "const v5=",
+  String.raw`const Z0="magiorix.login.method";function Sr(){const[e,t]=m.useState("password");return m.useEffect(()=>{window.localStorage.setItem(Z0,e)},[e]),o.jsx(x,{className:"sign-in",children:o.jsx(x,{className:"sign-in__container",children:o.jsxs(x,{className:"sign-in__card",sx:{maxWidth:480,width:"100%",mx:"auto"},children:[o.jsxs(x,{className:"sign-in__title-bar",sx:{WebkitAppRegion:"drag","& button, & a":{WebkitAppRegion:"no-drag"}},children:[o.jsx(w,{variant:"h4",className:"sign-in__title",children:"登录 magiorix"}),o.jsx(x,{sx:{position:"absolute",right:40,top:5},children:o.jsx(dr,{})})]}),o.jsxs(x,{className:"sign-in__right",sx:{width:"100%"},children:[o.jsxs(x,{className:"sign-in__right-header",children:[o.jsx(w,{variant:"h6",className:"sign-in__tab "+(e==="password"?"sign-in__tab--active":""),onClick:()=>t("password"),children:"密码登录"}),o.jsx(w,{variant:"h6",className:"sign-in__tab "+(e==="register"?"sign-in__tab--active":""),onClick:()=>t("register"),children:"手机号注册"})]}),e==="password"?o.jsx(x5,{}):o.jsx(y5,{})]})]})})})}`,
+  'const Z0="magiorix.login.method";',
+  "make password login the centered single-column default",
+);
+
+replaceSection(
+  rechargeBundle,
+  "function ie(",
+  "export{ue as default};",
+  String.raw`function ie({pkg:i,selected:l,onSelect:o}){const u=Number(i.amount),j=u===100?50:u===500?300:u===1000?1000:0;return e.jsxs(F,{onClick:o,sx:{minWidth:190,flex:"1 0 190px",p:2,cursor:"pointer",position:"relative",border:2,borderColor:l?"primary.main":"divider",bgcolor:l?"primary.lighter":"background.paper",transition:"all .2s","&:hover":{transform:"translateY(-2px)"}},children:[j>0&&e.jsxs(t,{sx:{position:"absolute",top:8,right:8,px:1,py:.25,borderRadius:2,bgcolor:"warning.main",color:"white",fontSize:12,fontWeight:700},children:["赠",j]}),e.jsxs(t,{sx:{textAlign:"center",mt:1},children:[e.jsx(s,{variant:"h4",sx:{fontWeight:800,color:"primary.main"},children:u}),e.jsx(s,{variant:"body2",color:"text.secondary",children:"元"})]}),e.jsxs(s,{variant:"body2",sx:{textAlign:"center",mt:1,fontWeight:600},children:["获得 ",Number(i.totalCount).toLocaleString()," 积分"]})]})}function ue(){const{balance:i,fetchBalance:l,packages:o,packagesLoading:u,fetchPackages:j}=Y(),[n,c]=r.useState(null),[x,b]=r.useState(!1),[h,a]=r.useState(null),[C,y]=r.useState(""),[I,f]=r.useState("");r.useEffect(()=>{l(),j()},[l,j]),r.useEffect(()=>{o.length>0&&!n&&c(o[0])},[o,n]);const m=r.useCallback(async()=>{if(!h)return;try{const p=await Q(h.orderNo);p.status===1?(y("paid"),l()):p.status===2&&y("closed")}catch(p){console.error("查询订单状态失败:",p)}},[h,l]);r.useEffect(()=>{if(!h||C==="paid"||C==="closed")return;const p=setInterval(m,3e3);return()=>clearInterval(p)},[h,C,m]),r.useEffect(()=>{const p=()=>{l(),m()};return window.addEventListener("focus",p),()=>window.removeEventListener("focus",p)},[l,m]);const k=async()=>{if(!n)return;f(""),b(!0);try{const p=await ne(n.id);a(p),y("pending");const P=p.payUrl||p.codeUrl;if(window.bridge&&window.bridge.shell&&window.bridge.shell.openExternal)await window.bridge.shell.openExternal(P);else window.open(P,"_blank","noopener")}catch(p){f(p instanceof Error?p.message:"创建订单失败")}finally{b(!1)}};return e.jsxs(t,{sx:{p:3,maxWidth:1100,mx:"auto"},children:[e.jsxs(t,{sx:{display:"flex",alignItems:"center",justifyContent:"space-between",mb:3},children:[e.jsx(s,{variant:"h5",sx:{fontWeight:700},children:"积分充值"}),e.jsxs(t,{sx:{display:"flex",alignItems:"center",gap:1},children:[e.jsx(s,{variant:"body2",color:"text.secondary",children:"云端余额"}),e.jsx(s,{variant:"h6",sx:{fontWeight:800,color:"primary.main"},children:i.toLocaleString()}),e.jsx(v,{size:"small",variant:"outlined",onClick:()=>{l(),m()},children:"刷新"})]})]}),u?e.jsx(t,{sx:{display:"flex",justifyContent:"center",py:6},children:e.jsx(R,{})}):e.jsx(t,{sx:{display:"flex",flexWrap:"nowrap",gap:2,overflowX:"auto",pb:2},children:o.map(p=>e.jsx(ie,{pkg:p,selected:(n==null?void 0:n.id)===p.id,onSelect:()=>c(p)},p.id))}),I&&e.jsx(w,{severity:"error",sx:{mt:2},children:I}),C==="paid"&&e.jsx(w,{severity:"success",sx:{mt:2},children:"支付成功，积分已到账"}),C==="closed"&&e.jsx(w,{severity:"warning",sx:{mt:2},children:"订单已关闭，请重新创建"}),e.jsxs(t,{sx:{textAlign:"center",mt:4},children:[e.jsx(v,{variant:"contained",size:"large",disabled:!n||x,onClick:k,sx:{minWidth:240,py:1.5},children:x?"创建订单中...":"立即充值 "+((n==null?void 0:n.amount)||0)+" 元"}),n&&e.jsxs(s,{variant:"body2",color:"text.secondary",sx:{mt:1},children:["将获得 ",e.jsx("strong",{children:Number(n.totalCount).toLocaleString()})," 积分"]}),h&&C==="pending"&&e.jsxs(s,{variant:"caption",color:"text.secondary",sx:{display:"block",mt:1},children:["订单 ",h.orderNo," 正在等待支付，应用每3秒自动查询"]})]})]})}`,
+  'children:"云端余额"',
+  "replace promotion recharge page with four-card browser payment flow",
+);
+
+replaceSection(
+  mainBundle,
+  "function X5(",
+  "function Q5(",
+  String.raw`function X5({authUser:e,onOpenAvatarPicker:t,onOpenNicknameDialog:r,onOpenEmailDialog:a}){const n=(e==null?void 0:e.nickname)||(e==null?void 0:e.username)||"";return o.jsxs(o.Fragment,{children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,sx:{mb:1.5},children:"账号信息"}),o.jsxs(x,{sx:{border:1,borderColor:"divider",borderRadius:2,bgcolor:"background.paper"},children:[o.jsx(Be,{label:"头像",value:o.jsx(A1,{src:e==null?void 0:e.avatar,alt:n,sx:{width:40,height:40},children:n.charAt(0).toUpperCase()}),action:o.jsx(Xe,{label:"修改",onClick:t})}),o.jsx(Oe,{}),o.jsx(Be,{label:"昵称",value:n||"-",action:o.jsx(Xe,{label:"修改",onClick:r})}),o.jsx(Oe,{}),o.jsx(Be,{label:"邮箱",value:(e==null?void 0:e.email)||"未绑定",action:o.jsx(Xe,{label:e!=null&&e.email?"修改":"绑定",onClick:a})})]})]})}`,
+  "function X5({authUser:e,onOpenAvatarPicker:t,onOpenNicknameDialog:r,onOpenEmailDialog:a}){const n=",
+  "remove promotion and inviter controls from profile",
+);
 
 if (!fs.readFileSync(mainBundle, "utf8").includes('field:"dailyNotePerformanceChart"')) {
   replaceOnce(
@@ -280,12 +369,14 @@ replaceOnce(
   "remove xhs homepage template label",
 );
 
-replaceOnce(
-  mainBundle,
-  'catch(R){const q=R instanceof Error?R.message:"获取二维码失败";C(q),i("error")}',
-  'catch(R){console.warn("[WechatLogin] qrcode endpoint unavailable:",R),c(""),f(""),g(0),y(0),C(""),i("empty")}',
-  "wechat login qrcode empty placeholder",
-);
+if (!fs.readFileSync(mainBundle, "utf8").includes("function C5(){return null}")) {
+  replaceOnce(
+    mainBundle,
+    'catch(R){const q=R instanceof Error?R.message:"获取二维码失败";C(q),i("error")}',
+    'catch(R){console.warn("[WechatLogin] qrcode endpoint unavailable:",R),c(""),f(""),g(0),y(0),C(""),i("empty")}',
+    "wechat login qrcode empty placeholder",
+  );
+}
 
 replaceOnce(
   exportTemplateBundle,
@@ -555,9 +646,9 @@ replaceAnyOnce(
   pgyTaskPanelBundle,
   [
     'const Y=o.useCallback((s,c,u)=>{const M=Xe(),_={kind:"plugin",id:M,pluginId:d,taskType:a,status:"running",fileName:s.name,urls:c,results:[],errorCount:0,current:0,total:c.length,percent:0,createdAt:Date.now(),duration:0,fields:u,accountSource:l};m(_),D.task.start({taskId:M,pluginId:d,taskType:a,urls:c,fileName:s.name,fields:u,accountSource:l,pacePolicyId:I&&x||null})},[a,m,l,I,x])',
-    'const Y=o.useCallback(async(s,c,u)=>{if(l!=="enterprise"){const M=Number.isFinite(Number(b))?Number(b):0,_=await C(c.length);if(!_){setManualError(`树苗余额不足：当前 ${M}，本次需要 ${c.length}，还差 ${Math.max(0,c.length-M)}。请先充值后再开始采集。`);return}}const M=Xe(),_={kind:"plugin",id:M,pluginId:d,taskType:a,status:"running",fileName:s.name,urls:c,results:[],errorCount:0,current:0,total:c.length,percent:0,createdAt:Date.now(),duration:0,fields:u,accountSource:l};m(_),D.task.start({taskId:M,pluginId:d,taskType:a,urls:c,fileName:s.name,fields:u,accountSource:l,pacePolicyId:I&&x||null})},[a,m,l,I,x,b,C])',
+    'const Y=o.useCallback(async(s,c,u)=>{if(l!=="enterprise"){const M=Number.isFinite(Number(b))?Number(b):0,_=await C(c.length);if(!_){setManualError(`积分余额不足：当前 ${M}，本次需要 ${c.length}，还差 ${Math.max(0,c.length-M)}。请先充值后再开始采集。`);return}}const M=Xe(),_={kind:"plugin",id:M,pluginId:d,taskType:a,status:"running",fileName:s.name,urls:c,results:[],errorCount:0,current:0,total:c.length,percent:0,createdAt:Date.now(),duration:0,fields:u,accountSource:l};m(_),D.task.start({taskId:M,pluginId:d,taskType:a,urls:c,fileName:s.name,fields:u,accountSource:l,pacePolicyId:I&&x||null})},[a,m,l,I,x,b,C])',
   ],
-  'const Y=o.useCallback(async(s,c,u)=>{if(l!=="enterprise"){const _=await C(c.length),M=Number.isFinite(Number($e.getState().balance))?Number($e.getState().balance):0;if(!_){setManualError(`树苗余额不足：当前 ${M}，本次需要 ${c.length}，还差 ${Math.max(0,c.length-M)}。请先充值后再开始采集。`);return}}const M=Xe(),_={kind:"plugin",id:M,pluginId:d,taskType:a,status:"running",fileName:s.name,urls:c,results:[],errorCount:0,current:0,total:c.length,percent:0,createdAt:Date.now(),duration:0,fields:u,accountSource:l};m(_),D.task.start({taskId:M,pluginId:d,taskType:a,urls:c,fileName:s.name,fields:u,accountSource:l,pacePolicyId:I&&x||null})},[a,m,l,I,x,C])',
+  'const Y=o.useCallback(async(s,c,u)=>{if(l!=="enterprise"){const _=await C(c.length),M=Number.isFinite(Number($e.getState().balance))?Number($e.getState().balance):0;if(!_){setManualError(`积分余额不足：当前 ${M}，本次需要 ${c.length}，还差 ${Math.max(0,c.length-M)}。请先充值后再开始采集。`);return}}const M=Xe(),_={kind:"plugin",id:M,pluginId:d,taskType:a,status:"running",fileName:s.name,urls:c,results:[],errorCount:0,current:0,total:c.length,percent:0,createdAt:Date.now(),duration:0,fields:u,accountSource:l};m(_),D.task.start({taskId:M,pluginId:d,taskType:a,urls:c,fileName:s.name,fields:u,accountSource:l,pacePolicyId:I&&x||null})},[a,m,l,I,x,C])',
   "task panel blocks start when shumiao balance is insufficient",
 );
 
@@ -655,7 +746,7 @@ replaceOnce(
 replaceOnce(
   mainBundle,
   'const l=n.results.filter(s=>s.status==="success").length;if(l>0){const s=n.pluginId==="pgy"?"pgy_scrape":"starmap_scrape";Tl({count:l,consumeType:s,refType:"scraper_task",refId:r,remark:`${n.fileName} 采集成功 ${l} 条`}).then(i=>{Z2.getState().setBalance((i==null?void 0:i.balanceAfter)??(i==null?void 0:i.balance))}).catch(i=>{console.error("薯苗扣费失败:",i)})}',
-  'Z2.getState().fetchBalance().catch(s=>{console.error("刷新树苗余额失败:",s)})',
+  'Z2.getState().fetchBalance().catch(s=>{console.error("刷新积分余额失败:",s)})',
   "plugin task completion refreshes shumiao balance without duplicate charge",
 );
 
@@ -829,6 +920,24 @@ replaceOnce(
   "settings dialog no longer auto-checks updates",
 );
 
+replaceSection(
+  mainBundle,
+  "function C5(){",
+  "const Z0=",
+  "function C5(){return null}",
+  "function C5(){return null}",
+  "remove QR login implementation after legacy QR patches",
+);
+
+replaceSection(
+  mainBundle,
+  "function G5({onToast:e})",
+  "function n2(",
+  "function G5(){return null}",
+  "function G5(){return null}",
+  "remove QR login and commission binding section",
+);
+
 for (const entry of fs.readdirSync(assetsDir)) {
   if (!/\.(js|css|html|svg)$/i.test(entry)) continue;
   const filePath = path.join(assetsDir, entry);
@@ -837,6 +946,8 @@ for (const entry of fs.readdirSync(assetsDir)) {
   replaceAllIfExists(filePath, legacyPublisher, "magiorix");
   replaceAllIfExists(filePath, legacyExeName, "magiorix");
   replaceAllIfExists(filePath, legacyVersion, assetVersion);
+  replaceAllIfExists(filePath, "薯苗", "积分");
+  replaceAllIfExists(filePath, "树苗", "积分");
 }
 
 replaceAllIfExists(path.join(assetsRoot, "index.html"), legacyChineseName, "magiorix");

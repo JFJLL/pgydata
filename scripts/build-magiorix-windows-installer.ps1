@@ -240,7 +240,7 @@ Write-Output "Rebuilding bundled PGY chart renderer..."
 Invoke-CheckedProcess -FilePath (Join-Path $PSHOME "pwsh.exe") -Arguments @("-NoProfile", "-File", (Join-Path $PSScriptRoot "build-pgy-chart-renderer.ps1")) -WorkingDirectory $projectRoot
 
 Write-Output "Packing Electron app.asar from app-source..."
-$asarOut = Join-Path (Join-Path $sourceAppDir "resources") "app.asar"
+$asarOut = Join-Path $buildWorkDir "app.asar"
 Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "apply-magiorix-runtime-patches.js")) -WorkingDirectory $projectRoot
 Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "pack-asar.js"), $appSourceDir, $asarOut) -WorkingDirectory $projectRoot
 
@@ -282,7 +282,8 @@ foreach ($file in $rootFiles) {
 }
 
 New-Item -ItemType Directory -Force -Path (Join-Path $payloadAppDir "resources") | Out-Null
-foreach ($file in @("app.asar", "app-update.yml", "elevate.exe", "pgy-chart-renderer.exe", $appIconResource)) {
+Copy-Item -LiteralPath $asarOut -Destination (Join-Path $payloadAppDir "resources\app.asar") -Force
+foreach ($file in @("app-update.yml", "elevate.exe", "pgy-chart-renderer.exe", $appIconResource)) {
   $source = Join-Path (Join-Path $sourceAppDir "resources") $file
   if (-not (Test-Path -LiteralPath $source)) {
     throw "Required resource file not found: $source"

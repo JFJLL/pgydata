@@ -35,6 +35,8 @@ red-magic-api/
 │   └── index.html
 ├── package.json
 ├── package-lock.json
+├── lib/
+├── public/pay/
 ├── README.md
 └── server.js
 ```
@@ -49,6 +51,10 @@ red-magic-api/
 ## 部署时需要同步的文件
 
 - `/home/red/work/moneyboost/red-magic-api/server.js`
+- `/home/red/work/moneyboost/red-magic-api/lib/`
+- `/home/red/work/moneyboost/red-magic-api/public/pay/`
+- `/home/red/work/moneyboost/red-magic-api/package.json`
+- `/home/red/work/moneyboost/red-magic-api/package-lock.json`
 - `/home/red/work/moneyboost/red-magic-api/public/index.html`
 - `/home/red/work/moneyboost/red-magic-api/public/assets/desktop/<version>/assets.zip`
 - `/home/red/work/moneyboost/red-magic-api/public/releases/windows/<version>.json`
@@ -68,6 +74,9 @@ https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-<version>-wind
 
 ## 部署后动作
 
+- 先备份数据库；首次启动会以兼容 `ALTER TABLE` 增加短信和支付字段，不删除历史套餐、订单或用户。
+- 检查服务器 `.env` 已配置 `.env.example` 中全部短信/支付变量，密钥和证书文件权限只授予服务账号。
+- `nginx -t` 后确认 `api.red-magic.cn` 的 `/pay/`、`/order`、`/order/alipay/` 都代理到 3050，微信 `/order` 不改写 JSON body。
 - 重启服务：`pm2 restart red-magic-api`
 - `latest.json` 必须在安装包、资源包和版本 manifest 全部在线且 SHA 校验通过后再同步。
 - 确认接口返回的版本、地址、校验信息都已更新。
@@ -85,6 +94,8 @@ https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-<version>-wind
   - 返回桌面端更新检测结果。
 
 三个接口统一读取 `public/releases/windows/latest.json`。文件不存在时保留 1.1.3 旧常量兼容；新版本正式发布必须提供 manifest。
+
+1.1.9 还提供 `/api/auth/register`、`/api/auth/password/reset`、`/pay/:token`、`POST /order` 与 `/order/alipay/notify`。无新商户真实密钥时只允许部署到候选环境，不得宣称真实支付已通，也不得晋升 `latest.json`。
 
 下载页故意不显示安装包大小，因为安装包正式放在 OSS，不一定存在于服务器本地文件系统。
 

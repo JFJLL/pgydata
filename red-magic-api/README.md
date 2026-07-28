@@ -1,6 +1,6 @@
 # red-magic-api
 
-这是一个可直接部署到服务器的最小后端目录，用于兼容 magiorix 客户端切换到 `https://magiorix.red-magic.cn` 后的基础接口。
+这是 magiorix 的 Express + SQLite 云端服务，1.1.9 增加短信注册/重置密码、四档积分充值、支付宝电脑网站支付与微信 Native 支付。
 
 当前部署建议同时保留 `https://xhs.red-magic.cn` 入口，供尚未同步 Windows 域名修改的 mac 客户端继续使用；两个域名都代理到同一个 Node 服务。
 
@@ -61,16 +61,7 @@ pm2 startup
 
 ## 环境变量
 
-`.env.example` 默认内容：
-
-```env
-PORT=3050
-BASE_URL=https://magiorix.red-magic.cn
-DEFAULT_GIFT_BALANCE=100
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=redmagic2026
-LOG_DIR=./logs
-```
+环境变量完整清单以 `.env.example` 为准。真实 AccessKey、APIv3 密钥、私钥和证书只放服务器 `.env` 或受限文件路径，不复制到仓库；`SMS_CODE_SECRET` 需使用独立的随机值。
 
 SQLite 数据库会自动创建到：
 
@@ -86,7 +77,7 @@ logs/server-YYYY-MM-DD.log
 
 日志会记录启动、请求错误、管理员登录和积分调整等排查信息，不会主动记录密码或登录 token。
 
-启动时会自动创建表并初始化默认树苗套餐。
+启动时会兼容迁移 `sms_codes`、积分套餐与支付订单字段；旧套餐保留但禁用，新接口只返回 10/100/500/1000 元四档。
 
 ## 管理后台
 
@@ -172,13 +163,19 @@ https://xhs.red-magic.cn/assets/desktop/1.1.2/assets.zip
 
 ## 关键接口测试
 
-手机号注册/登录：
+短信注册分三步：
 
 ```bash
-curl -X POST http://127.0.0.1:3050/api/auth/sms/login \
+curl -X POST http://127.0.0.1:3050/api/auth/sms/send \
   -H "Content-Type: application/json" \
-  -d '{"phone":"13800000000","password":"123456"}'
+  -d '{"phone":"13800000000","purpose":"register"}'
+
+curl -X POST http://127.0.0.1:3050/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"13800000000","code":"四位验证码","password":"至少8位密码"}'
 ```
+
+重置密码把 `purpose` 改为 `reset_password`，再调用 `/api/auth/password/reset`。旧 `/api/auth/sms/login` 仅兼容已有用户的手机号密码登录，不再创建账号。
 
 复制返回的 `data.token`，后续接口带请求头 `satoken`。
 
@@ -189,14 +186,14 @@ curl http://127.0.0.1:3050/api/auth/info \
   -H "satoken: 这里替换成登录返回的token"
 ```
 
-查询树苗余额：
+查询积分余额（内部兼容路径仍为 `/api/shumiao/*`）：
 
 ```bash
 curl http://127.0.0.1:3050/api/shumiao/balance \
   -H "satoken: 这里替换成登录返回的token"
 ```
 
-扣减树苗：
+扣减积分：
 
 ```bash
 curl -X POST http://127.0.0.1:3050/api/shumiao/consume \
@@ -211,8 +208,18 @@ curl -X POST http://127.0.0.1:3050/api/shumiao/consume \
 curl -X POST http://127.0.0.1:3050/api/shumiao/recharge \
   -H "Content-Type: application/json" \
   -H "satoken: 这里替换成登录返回的token" \
-  -d '{"packageId":"pkg_990"}'
+  -d '{"packageId":"points_1000"}'
 ```
+
+响应里的 `payUrl` 是 30 分钟有效的浏览器支付页，用户在页面内选择支付宝或微信。微信通知固定为 `POST /order`，支付宝通知为 `/order/alipay/notify`；两路都必须通过签名、商户/应用、订单、金额和有效期校验后才原子入账，通知重放只返回成功而不重复加分。
+
+自动验收：
+
+```bash
+npm test
+```
+
+测试用临时数据库和运行时生成的 RSA/AES 夹具覆盖短信限流、过期/错误/一次性验证码、旧接口禁建号、100 初始积分、双渠道非法签名/错金额/过期订单及通知重放，不能替代新商户真实密钥联调。
 
 查询桌面资源：
 
