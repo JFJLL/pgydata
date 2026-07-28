@@ -802,6 +802,9 @@ function settleRechargeOrder(input) {
 }
 
 async function settleRechargeOrderInternal({ orderNo, channel, amountCents, merchantId, appId, transactionId }) {
+  const normalizedTransactionId = String(transactionId ?? "").trim();
+  if (!normalizedTransactionId) return { ok: false, reason: "平台交易号缺失" };
+
   await dbRun("BEGIN IMMEDIATE TRANSACTION");
   try {
     const order = await dbGet("SELECT * FROM recharge_orders WHERE order_no = ?", [orderNo]);
@@ -822,6 +825,10 @@ async function settleRechargeOrderInternal({ orderNo, channel, amountCents, merc
       return { ok: false, reason: "商户或应用不匹配" };
     }
     if (Number(order.status) === 1 && order.credited_at) {
+      if (String(order.platform_transaction_id || "") !== normalizedTransactionId) {
+        await dbRun("ROLLBACK");
+        return { ok: false, reason: "已支付订单平台交易号不匹配" };
+      }
       await dbRun("COMMIT");
       return { ok: true, duplicated: true, order };
     }
@@ -836,7 +843,7 @@ async function settleRechargeOrderInternal({ orderNo, channel, amountCents, merc
     }
     const transactionOwner = await dbGet(
       "SELECT order_no FROM recharge_orders WHERE channel = ? AND platform_transaction_id = ? AND order_no <> ?",
-      [channel, transactionId, orderNo],
+      [channel, normalizedTransactionId, orderNo],
     );
     if (transactionOwner) {
       await dbRun("ROLLBACK");
@@ -850,7 +857,7 @@ async function settleRechargeOrderInternal({ orderNo, channel, amountCents, merc
       `UPDATE recharge_orders
        SET status = 1, platform_transaction_id = ?, paid_at = ?, credited_at = ?, failed_reason = NULL, updated_at = ?
        WHERE order_no = ? AND status = 0 AND credited_at IS NULL`,
-      [transactionId, paidAt, paidAt, paidAt, orderNo],
+      [normalizedTransactionId, paidAt, paidAt, paidAt, orderNo],
     );
     if (updated.changes !== 1) throw new Error("订单状态并发更新失败");
     await dbRun("COMMIT");

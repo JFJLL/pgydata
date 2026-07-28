@@ -38,6 +38,13 @@ async function createOrder(token, packageId = "points_1000") {
   return { ...result.data.data, token: new URL(result.data.data.payUrl).pathname.split("/").pop() };
 }
 
+function orderState(orderNo) {
+  return fixture.dbGet(
+    "SELECT status, user_id, platform_transaction_id, paid_at, credited_at FROM recharge_orders WHERE order_no = ?",
+    [orderNo],
+  );
+}
+
 function encryptWechatResource(payload) {
   const key = Buffer.from("12345678901234567890123456789012");
   const nonce = "0123456789ab";
@@ -281,6 +288,60 @@ describe("magiorix 1.1.10 auth and payment", { concurrency: false }, () => {
     assert.equal(first.response.status, 200);
     assert.equal(replay.response.status, 200);
     assert.equal(await balance(user.token), 150);
+    assert.equal((await orderState(order.orderNo)).platform_transaction_id, "wx-valid-replay");
+  });
+
+  test("微信合法通知缺少平台交易号时不入账", async () => {
+    const user = await register();
+    const order = await createOrder(user.token);
+    await fixture.api(`/pay/${order.token}/wechat`);
+    const result = await wechatNotify({
+      appid: "wx-test-app",
+      mchid: "wx-test-merchant",
+      out_trade_no: order.orderNo,
+      trade_state: "SUCCESS",
+      amount: { total: 1000 },
+    });
+    const afterBalance = await balance(user.token);
+    const stored = await orderState(order.orderNo);
+    assert.equal(afterBalance, 100);
+    assert.notEqual(result.response.status, 200);
+    assert.equal(result.data.code, "FAIL");
+    assert.equal(stored.status, 0);
+    assert.equal(stored.platform_transaction_id, null);
+    assert.equal(stored.credited_at, null);
+  });
+
+  test("微信已支付订单使用不同交易号重放时拒绝且余额不变", async () => {
+    const user = await register();
+    const order = await createOrder(user.token);
+    await fixture.api(`/pay/${order.token}/wechat`);
+    const payload = { appid: "wx-test-app", mchid: "wx-test-merchant", out_trade_no: order.orderNo, transaction_id: "wx-original-id", trade_state: "SUCCESS", amount: { total: 1000 } };
+    assert.equal((await wechatNotify(payload)).response.status, 200);
+    const different = await wechatNotify({ ...payload, transaction_id: "wx-different-id" });
+    assert.equal(different.response.status, 400);
+    assert.equal(different.data.code, "FAIL");
+    assert.equal(await balance(user.token), 150);
+    assert.equal((await orderState(order.orderNo)).platform_transaction_id, "wx-original-id");
+  });
+
+  test("微信同一平台交易号不能绑定另一订单或篡改两个用户余额", async () => {
+    const firstUser = await register();
+    const secondUser = await register();
+    const firstOrder = await createOrder(firstUser.token);
+    const secondOrder = await createOrder(secondUser.token);
+    await fixture.api(`/pay/${firstOrder.token}/wechat`);
+    await fixture.api(`/pay/${secondOrder.token}/wechat`);
+    const sharedTransactionId = "wx-shared-cross-order";
+    assert.equal((await wechatNotify({ appid: "wx-test-app", mchid: "wx-test-merchant", out_trade_no: firstOrder.orderNo, transaction_id: sharedTransactionId, trade_state: "SUCCESS", amount: { total: 1000 } })).response.status, 200);
+    const rejected = await wechatNotify({ appid: "wx-test-app", mchid: "wx-test-merchant", out_trade_no: secondOrder.orderNo, transaction_id: sharedTransactionId, trade_state: "SUCCESS", amount: { total: 1000 } });
+    assert.equal(rejected.response.status, 400);
+    assert.equal(await balance(firstUser.token), 150);
+    assert.equal(await balance(secondUser.token), 100);
+    assert.equal((await orderState(firstOrder.orderNo)).platform_transaction_id, sharedTransactionId);
+    const secondStored = await orderState(secondOrder.orderNo);
+    assert.equal(secondStored.status, 0);
+    assert.equal(secondStored.platform_transaction_id, null);
   });
 
   test("过期订单收到合法通知也不入账", async () => {
@@ -353,6 +414,21 @@ describe("magiorix 1.1.10 auth and payment", { concurrency: false }, () => {
     assert.equal(await balance(user.token), 100);
   });
 
+  test("支付宝合法通知缺少平台交易号时不入账", async () => {
+    const user = await register();
+    const order = await createOrder(user.token);
+    await fixture.api(`/pay/${order.token}/alipay`);
+    const params = { app_id: "alipay-test-app", seller_id: "alipay-test-seller", out_trade_no: order.orderNo, trade_status: "TRADE_SUCCESS", total_amount: "10.00" };
+    const result = await fixture.api("/order/alipay/notify", { method: "POST", body: alipayBody(params), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+    assert.equal(result.response.status, 400);
+    assert.equal(result.data, "failure");
+    assert.equal(await balance(user.token), 100);
+    const stored = await orderState(order.orderNo);
+    assert.equal(stored.status, 0);
+    assert.equal(stored.platform_transaction_id, null);
+    assert.equal(stored.credited_at, null);
+  });
+
   test("支付宝合法通知重放两次只到账一次", async () => {
     const user = await register();
     const order = await createOrder(user.token);
@@ -362,5 +438,20 @@ describe("magiorix 1.1.10 auth and payment", { concurrency: false }, () => {
     assert.equal((await fixture.api("/order/alipay/notify", { method: "POST", body, headers: { "Content-Type": "application/x-www-form-urlencoded" } })).response.status, 200);
     assert.equal((await fixture.api("/order/alipay/notify", { method: "POST", body, headers: { "Content-Type": "application/x-www-form-urlencoded" } })).response.status, 200);
     assert.equal(await balance(user.token), 150);
+    assert.equal((await orderState(order.orderNo)).platform_transaction_id, "ali-valid-replay");
+  });
+
+  test("支付宝已支付订单使用不同交易号重放时拒绝且余额不变", async () => {
+    const user = await register();
+    const order = await createOrder(user.token);
+    await fixture.api(`/pay/${order.token}/alipay`);
+    const original = { app_id: "alipay-test-app", seller_id: "alipay-test-seller", out_trade_no: order.orderNo, trade_no: "ali-original-id", trade_status: "TRADE_SUCCESS", total_amount: "10.00" };
+    assert.equal((await fixture.api("/order/alipay/notify", { method: "POST", body: alipayBody(original), headers: { "Content-Type": "application/x-www-form-urlencoded" } })).response.status, 200);
+    const different = { ...original, trade_no: "ali-different-id" };
+    const rejected = await fixture.api("/order/alipay/notify", { method: "POST", body: alipayBody(different), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+    assert.equal(rejected.response.status, 400);
+    assert.equal(rejected.data, "failure");
+    assert.equal(await balance(user.token), 150);
+    assert.equal((await orderState(order.orderNo)).platform_transaction_id, "ali-original-id");
   });
 });

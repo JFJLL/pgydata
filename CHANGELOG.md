@@ -2,14 +2,15 @@
 
 本文件保存版本历史、发布记录、安装包路径与校验信息，不放长期维护规则。
 
-## 1.1.10 (Blocked Candidate — 禁止发布)
+## 1.1.10 (Candidate code complete)
 
 - 账号与短信：默认手机号密码登录，短信仅用于 4 位码注册与重置密码；5 分钟一次性、同手机号 60 秒限发、5 次错误锁定，新用户赠 100 积分，旧接口不再无验证码建号。
 - 支付：提供 10/100/500/1000 元四档，浏览器支付页选择支付宝电脑网站支付或微信 Native；双渠道验签并核对订单、渠道、整数分金额、商户与应用，`BEGIN IMMEDIATE` 幂等入账。
 - 资金安全：修复客户端在异步事务期间断连时提前释放 SQLite 串行队列的问题，并将可能隐式写库的 API/payment GET 纳入队列；合法通知重放两次只增加一次积分。
+- 资金安全：统一入账边界强制要求去空白后的平台交易号；空交易号不入账，已支付订单仅接受同交易号幂等重放，不同交易号或跨订单复用均拒绝。
 - 桌面端：充值页四卡单行展示，使用 `window.bridge.system.shell.openExternal` 打开系统浏览器，每 3 秒、窗口聚焦与手动刷新读取云端订单和余额；用户可见文案统一为“积分”。
 - 验证：后端专项测试 22 个、skipped=0；使用本地测试密钥完成签名夹具、非法签名、错金额、过期订单和重放验证。尚未使用新商户真实密钥联调，不得声称真实支付已通。
-- 发布状态：Blocked Candidate；最终审查发现空平台交易号仍可入账，禁止上传、部署、发布、Promote 或更新 `latest.json`。
+- 发布状态：Candidate code complete；缺真实新商户密钥与真实扣款回调联调，仅阻止生产上线和 Promote。当前仍不得上传、部署、Promote 或更新 `latest.json`。
 - Windows 安装包：`desktop-versions/windows/1.1.10/magiorix-desktop-1.1.10-windows.exe`，大小 `106587966`，SHA256 `DD4B3D64E3CC5BE8354ECF264586E93992139C2A66325B106C231C2342F429BA`。
 - 前端资源包：`desktop-versions/windows/1.1.10/magiorix-desktop-1.1.10-assets.zip`，大小 `2533031`，SHA256 `B85ABBDB73C2357F427F0FFA85B143D0A9ABA9E8125DA250AD8BE7A35BCDC63D`。
 

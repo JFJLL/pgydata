@@ -28,6 +28,17 @@ function dbRun(dbPath, sql, params = []) {
   });
 }
 
+function dbGet(dbPath, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    const db = new sqlite3.Database(dbPath);
+    db.get(sql, params, (error, row) => {
+      db.close();
+      if (error) reject(error);
+      else resolve(row);
+    });
+  });
+}
+
 async function startApi(envOverrides = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "magiorix-1.1.10-test-"));
   const dbPath = path.join(root, "api.sqlite");
@@ -100,6 +111,7 @@ async function startApi(envOverrides = {}) {
       return { response, data: contentType.includes("json") ? await response.json() : await response.text() };
     },
     dbRun: (sql, params) => dbRun(dbPath, sql, params),
+    dbGet: (sql, params) => dbGet(dbPath, sql, params),
     stop: async () => {
       child.kill();
       await new Promise((resolve) => child.once("exit", resolve));

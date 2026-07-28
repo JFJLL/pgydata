@@ -43,3 +43,9 @@
 42. 第 5 轮确定性 R3 预检全绿：static JS 5 files、PowerShell 8 files；unit 15/15；immutable build verify、smoke、integration 13/13、publish-prepare 均 pass；skipped 0、todo 0。
 43. 第 5 轮 fresh-context 最终审查仍 FAIL（High）：合法签名、正确商户/应用/订单/金额的微信通知缺失 `transaction_id` 时实际返回 HTTP 200 SUCCESS，余额 `100→150`；支付宝空 `trade_no` 走同一未校验路径。其余断连队列、管理员 fail-fast、版本/哈希/bridge、历史不可变与敏感材料审查通过。已用完新增两轮授权，按硬规则停止，不进入第 6 轮；1.1.10 标记为 Blocked Candidate，禁止发布/Promote。
 44. 最终 `verify-change.ps1` 实际 exit 1：static 全过；unit 15/15；immutable build verify、smoke、integration 13/13、publish-prepare 全过；agent-review evidence 为 FAIL，因此 receipt 正确为 fail。没有修改验收脚本或手工编辑 receipt。
+45. 单点资金安全修补初始 RED：新增五项真实 API/数据库回归后定向测试 exit 1，`1/5 pass`、`4 fail`、skipped 0；微信/支付宝缺交易号均实际 HTTP 200，已支付订单换不同交易号也错误返回 200，同渠道同交易号跨订单保护原本已通过。测试直接使用现有签名夹具并查询订单/余额，未 mock 入账函数。
+46. 中央入账边界现对 `transactionId` 执行字符串化与 `trim()`，空值在开启事务和余额更新前返回“平台交易号缺失”；所有查询/写库使用规范值，已支付订单仅在交易号与数据库完全一致时才作为幂等重放。五项定向测试 exit 0、`5/5 pass`、skipped 0、todo 0。
+47. 固定中央判断 RED→GREEN：临时删除唯一空交易号判断后，两渠道缺交易号测试 exit 1、`0/2 pass`；微信余额明确错误变为 `150 !== 100`，支付宝错误返回 `200 !== 400`。恢复同一判断后 exit 0、`2/2 pass`、skipped 0、todo 0；未改变期望、未 skip、未 mock 入账函数。
+48. 单点修补后 `npm test` exit 0：29/29 pass、fail 0、skipped 0、todo 0；同交易号重放仍仅到账一次，不同交易号重放及同渠道跨订单复用均拒绝且余额/订单归属不变。
+49. 固定预验收：根 unit 15/15、skipped 0、todo 0；`node --check red-magic-api/server.js` exit 0；1.1.10 immutable Candidate 校验 exit 0 且哈希保持 `DD4B3D64…F429BA` / `B85ABBDB…CDC63D`；`git diff --check`、敏感信息扫描通过，桌面/资产/release manifest 相对修补前 SHA 无差异。
+50. 固定最终 `verify-change.ps1` exit 0：static、unit 15/15、immutable build verify、smoke、integration 13/13、publish-prepare 及授权的单点闭环 evidence 全部 pass；脚本生成 pass receipt，未手工修改。
