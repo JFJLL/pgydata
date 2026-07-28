@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
+import base64
+import io
 import json
 import math
 import os
 import sys
+import urllib.request
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 
 FONT_CANDIDATES = [
@@ -306,6 +309,221 @@ def save_daily_note_performance(chart):
     return True
 
 
+def load_overview_avatar(source, size):
+    if not source or source == "-":
+        return None
+    try:
+        if str(source).startswith("data:image/"):
+            encoded = str(source).split(",", 1)[1]
+            raw = base64.b64decode(encoded)
+        elif str(source).startswith(("http://", "https://")):
+            request = urllib.request.Request(str(source), headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(request, timeout=4) as response:
+                raw = response.read(5 * 1024 * 1024)
+        elif os.path.isfile(str(source)):
+            with open(str(source), "rb") as handle:
+                raw = handle.read(5 * 1024 * 1024)
+        else:
+            return None
+        avatar = Image.open(io.BytesIO(raw)).convert("RGB")
+        resampling = getattr(Image, "Resampling", Image)
+        square = ImageOps.fit(
+            avatar,
+            (size, size),
+            method=getattr(resampling, "LANCZOS"),
+            centering=(0.5, 0.5),
+        )
+        mask = Image.new("L", (size, size), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, size - 1, size - 1), fill=255)
+        square.putalpha(mask)
+        return square
+    except Exception:
+        return None
+
+
+def save_blogger_overview(chart):
+    data = chart.get("data") or {}
+    width, height = 2048, 1066
+    img = Image.new("RGB", (width, height), "#f7f7f9")
+    draw = ImageDraw.Draw(img)
+    font_18 = load_font(18)
+    font_19 = load_font(19)
+    font_20 = load_font(20)
+    font_21 = load_font(21)
+    font_22 = load_font(22)
+    font_24 = load_font(24)
+    font_24_bold = load_font(24, True)
+    font_26_bold = load_font(26, True)
+    font_27 = load_font(27)
+    font_27_bold = load_font(27, True)
+    font_28_bold = load_font(28, True)
+    font_31_bold = load_font(31, True)
+    font_32_bold = load_font(32, True)
+    font_34_bold = load_font(34, True)
+
+    def value(key, default="-"):
+        raw = data.get(key)
+        return default if raw is None or raw == "" else str(raw)
+
+    def box(coords, radius=8, fill="white", outline=None, line_width=1):
+        if hasattr(draw, "rounded_rectangle"):
+            draw.rounded_rectangle(coords, radius=radius, fill=fill, outline=outline, width=line_width)
+        else:
+            draw.rectangle(coords, fill=fill, outline=outline, width=line_width)
+
+    def line(x1, y1, x2, y2, fill="#dddddd", line_width=1):
+        draw.line((x1, y1, x2, y2), fill=fill, width=line_width)
+
+    def dashed(x1, y, x2, fill="#999999"):
+        for start in range(int(x1), int(x2), 10):
+            line(start, y, min(start + 5, x2), y, fill)
+
+    def put(x, y, text, font=font_21, fill="#262626", max_width=None):
+        output = str(text)
+        if max_width is not None:
+            output = ellipsize(draw, output, font, max_width)
+        draw.text((x, y), output, font=font, fill=fill)
+
+    # Static PGY page chrome.
+    box((96, 20, 616, 118), 14)
+    box((126, 42, 340, 90), 5, "white", "#eeeeee")
+    box((340, 42, 586, 90), 5, "#f6f6f6")
+    put(188, 52, "笔记主页", font_24_bold)
+    put(424, 52, "直播主页", font_24, "#666666")
+    box((650, 20, 1948, 94), 14)
+    put(712, 41, "数据概览", font_26_bold)
+    put(856, 41, "笔记数据", font_24, "#777777")
+    put(996, 41, "粉丝分析", font_24, "#777777")
+    line(700, 92, 826, 92, "#c73549", 2)
+    put(1632, 42, f"数据更新至： {value('updatedAtText')}", font_21, "#aaaaaa", 280)
+
+    # Profile and pricing column.
+    box((96, 120, 616, 620), 14)
+    draw.ellipse((126, 164, 230, 268), fill="#e8edf4")
+    put(164, 191, value("nickname")[:1], font_34_bold, "#6d87a8")
+    avatar = load_overview_avatar(data.get("avatar"), 104)
+    if avatar:
+        img.paste(avatar, (126, 164), avatar)
+    put(252, 168, value("nickname"), font_24_bold, max_width=230)
+    draw.ellipse((378, 176, 402, 200), fill="#e9f1ff")
+    if bool(data.get("verified")):
+        draw.ellipse((415, 176, 439, 200), fill="#edf9ef", outline="#5ab76b", width=2)
+        line(421, 188, 425, 192, "#5ab76b", 2)
+        line(425, 192, 432, 183, "#5ab76b", 2)
+    put(252, 216, "小红书号：", font_19, "#999999")
+    put(354, 216, value("redId"), font_20, "#5273b4", 190)
+    put(252, 256, f"● {value('location')}", font_18, "#999999", 150)
+    draw.rectangle((420, 260, 432, 274), outline="#777777", width=2)
+    line(424, 263, 424, 271, "#777777")
+    line(428, 263, 428, 271, "#777777")
+    put(440, 256, value("mcn"), font_18, "#5273b4", 130)
+    tags = data.get("categoryTags") if isinstance(data.get("categoryTags"), list) else []
+    for index, tag in enumerate(tags[:3]):
+        x = 126 + index * 112
+        box((x, 303, x + 92, 333), 4, "#f2f2f2")
+        put(x + 10, 307, str(tag), font_18, "#595959", 72)
+    put(198, 382, "粉丝数", font_22)
+    put(402, 382, "获赞与收藏", font_22)
+    put(192, 425, value("fansText"), font_32_bold)
+    put(402, 425, value("likeCollectText"), font_32_bold)
+    line(126, 500, 586, 500, "#f1f1f1")
+    box((126, 530, 336, 586), 6, "#f7f7f7")
+    box((352, 530, 586, 586), 6, "#f23b49")
+    put(190, 545, "☆ 收藏", font_22)
+    draw.ellipse((406, 548, 420, 562), outline="white", width=2)
+    draw.ellipse((416, 548, 430, 562), outline="white", width=2)
+    put(442, 545, "邀约", font_22, "white")
+
+    box((96, 650, 616, 1040), 14)
+    put(126, 676, "合作报价", font_28_bold)
+    for y, label, key in [
+        (736, "图文笔记一口价", "picturePriceText"),
+        (882, "视频笔记一口价", "videoPriceText"),
+    ]:
+        box((126, y, 586, y + 126), 5, "white", "#e8e8e8")
+        put(158, y + 26, label, font_22, "#595959")
+        put(158, y + 70, value(key), font_27)
+        draw.ellipse((538, y + 48, 566, y + 76), outline="#d73c51", width=3)
+        put(545, y + 47, "+", font_22, "#d73c51")
+
+    # Overview content column.
+    box((650, 112, 1948, 1040), 14)
+    put(700, 142, "数据概览", font_28_bold)
+    line(650, 212, 1948, 212, "#eeeeee")
+    box((700, 240, 1898, 318), 9, "#f7f7f7")
+    summary = [
+        (720, "博主优势", value("advantageText"), 820, 128),
+        (972, "发布笔记", value("publishedNotesText"), 1068, 94),
+        (1190, "内容类目", value("contentCategoriesText"), 1294, 260),
+        (1606, "合作行业", value("cooperationIndustryText"), 1710, 170),
+    ]
+    for x, label, text, value_x, max_w in summary:
+        put(x, 263, label, font_21, "#999999")
+        put(value_x, 263, text, font_22, "#262626", max_w)
+    for x in (948, 1166, 1582):
+        line(x, 257, x, 302, "#dddddd")
+
+    box((700, 344, 1898, 636), 9, "white", "#e8e8e8")
+    box((726, 372, 760, 406), 8, "#fff0e7")
+    for y in (381, 388, 395):
+        line(736, y, 750, y, "#e8753a", 2)
+    put(778, 371, "笔记数据", font_27_bold)
+    box((726, 430, 838, 478), 6, "#fff0f1")
+    put(748, 439, "按规模", font_21, "#d43d51")
+    box((850, 430, 950, 478), 6, "#f7f7f7")
+    put(872, 439, "按成本", font_21, "#555555")
+    box((1658, 430, 1876, 478), 6, "#f7f7f7")
+    box((1664, 436, 1776, 472), 5, "white", "#eeeeee")
+    put(1680, 441, "日常笔记", font_20)
+    put(1788, 441, "合作笔记", font_20, "#777777")
+    metrics = [
+        (726, "曝光中位数", "exposureText", "exposurePeerText"),
+        (1110, "阅读中位数", "readText", "readPeerText"),
+        (1532, "互动中位数", "interactionText", "interactionPeerText"),
+    ]
+    for x, label, value_key, peer_key in metrics:
+        put(x, 505, label, font_21, "#666666")
+        dashed(x, 535, x + 114)
+        put(x, 548, value(value_key), font_31_bold, "#111111")
+        put(x, 585, value(peer_key), font_19, "#777777")
+    line(1078, 506, 1078, 608)
+    line(1500, 506, 1500, 608)
+
+    box((700, 662, 1274, 902), 9, "white", "#e8e8e8")
+    box((726, 690, 760, 724), 8, "#e8f4ff")
+    put(738, 696, "◇", font_19, "#4a91d8")
+    put(778, 689, "服务表现", font_27_bold)
+    put(726, 755, "近7天活跃天数", font_21, "#666666")
+    dashed(726, 786, 862)
+    put(726, 800, value("activeDaysText"), font_31_bold, "#111111")
+    box((726, 846, 806, 875), 0, "#eef2ff")
+    put(736, 846, value("activeLabelText"), font_18, "#5273b4", 62)
+    line(986, 758, 986, 866)
+    put(1020, 755, "邀约48小时回复率", font_21, "#666666")
+    dashed(1020, 786, 1180)
+    put(1020, 800, value("replyRateText"), font_31_bold, "#111111")
+    box((1020, 846, 1112, 875), 0, "#eef2ff")
+    put(1030, 846, value("replyLabelText"), font_18, "#5273b4", 72)
+
+    box((1300, 662, 1898, 902), 9, "white", "#e8e8e8")
+    box((1326, 690, 1360, 724), 8, "#e8f7f4")
+    line(1335, 713, 1335, 701, "#58aa9b", 2)
+    line(1335, 713, 1351, 713, "#58aa9b", 2)
+    line(1338, 709, 1343, 704, "#58aa9b", 2)
+    line(1343, 704, 1348, 707, "#58aa9b", 2)
+    line(1348, 707, 1353, 698, "#58aa9b", 2)
+    put(1378, 689, "成长表现", font_27_bold)
+    put(1326, 755, "粉丝量变化幅度", font_21, "#666666")
+    dashed(1326, 786, 1464)
+    put(1326, 800, value("fansGrowthText"), font_31_bold, "#111111")
+    put(1326, 846, value("fansGrowthPeerText"), font_19, "#777777")
+
+    output = chart.get("output")
+    ensure_dir(output)
+    img.save(output, "PNG", optimize=True)
+    return True
+
+
 def save_trend(chart):
     rows = trend_points(chart.get("rows"))
     if len(rows) < 2:
@@ -371,6 +589,8 @@ def main():
                 ok = save_trend(chart)
             elif chart_type == "daily-note-performance":
                 ok = save_daily_note_performance(chart)
+            elif chart_type == "blogger-overview":
+                ok = save_blogger_overview(chart)
             if ok and field:
                 paths[field] = chart.get("output")
         except Exception as exc:

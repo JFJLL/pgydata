@@ -36,6 +36,7 @@ assert.match(buildScript, /version_pointer_failed/, "installer must roll back as
 
 const runtimePatch = readFileSync("scripts/apply-magiorix-runtime-patches.js", "utf8");
 const dailyNoteSvgSource = readFileSync("tools/pgy_daily_note_svg.js", "utf8");
+const bloggerOverviewSvgSource = readFileSync("tools/pgy_blogger_overview_svg.js", "utf8");
 assert.match(runtimePatch, /pgyHasSingleInstanceLock/, "runtime patch must enforce a single desktop instance");
 assert.match(runtimePatch, /pgyDesktopUpdateActive/, "runtime patch must coordinate desktop and asset updates");
 assert.match(runtimePatch, /partial-/, "runtime patch must stage asset updates");
@@ -44,8 +45,14 @@ assert.match(runtimePatch, /dailyNotePerformanceChart/, "runtime patch must gene
 assert.match(runtimePatch, /daily-note-performance/, "runtime patch must route the daily note chart renderer");
 assert.match(runtimePatch, /replaceSection/, "runtime patch must migrate an existing daily note renderer section");
 assert.match(runtimePatch, /pgy_daily_note_svg\.js/, "runtime patch must load the maintained daily note SVG source");
+assert.match(runtimePatch, /bloggerOverviewChart/, "runtime patch must generate the blogger overview chart");
+assert.match(runtimePatch, /blogger-overview/, "runtime patch must route the blogger overview renderer");
+assert.match(runtimePatch, /pgy_blogger_overview_svg\.js/, "runtime patch must load the maintained blogger overview SVG source");
 assert.match(dailyNoteSvgSource, /width="808" height="378"/, "daily note SVG must use the web-layout canvas");
 assert.match(dailyNoteSvgSource, /pgyDailyNoteEllipsize/, "daily note SVG must bound long category text");
+assert.match(bloggerOverviewSvgSource, /width="2048" height="1066"/, "blogger overview SVG must match the approved crop");
+assert.match(bloggerOverviewSvgSource, /function pgyBuildBloggerOverviewData/, "blogger overview must normalize raw PGY fields");
+assert.match(bloggerOverviewSvgSource, /interactionPeerText/, "blogger overview must preserve peer percentile metrics");
 
 const chartRendererBuild = readFileSync("scripts/build-pgy-chart-renderer.ps1", "utf8");
 assert.match(chartRendererBuild, /tools\\pgy_chart_renderer\.py/, "chart renderer build must use the maintained Python source");
@@ -83,8 +90,18 @@ assert.match(
 );
 assert.match(
   mainBundle,
-  /key:"dailyNotePerformanceChart",label:"日常笔记表现图"\}\]\},\{groupKey:"daily-90"/,
+  /\{key:"dailyNotePerformanceChart",label:"日常笔记表现图"\}/,
   "daily note chart must be optional in the daily-30 selector group",
+);
+assert.match(
+  mainBundle,
+  /dailyNotePerformanceChart",headerName:"日常笔记表现图",width:320\},\{field:"bloggerOverviewChart",headerName:"博主数据概览图"/,
+  "blogger overview chart column must immediately follow the daily note chart",
+);
+assert.match(
+  mainBundle,
+  /key:"dailyNotePerformanceChart",label:"日常笔记表现图"\},\{key:"bloggerOverviewChart",label:"博主数据概览图"\}\]\},\{groupKey:"daily-90"/,
+  "blogger overview chart must immediately follow the daily note chart selector",
 );
 
 console.log(`Static checks passed for ${javascriptFiles.length} JavaScript files.`);

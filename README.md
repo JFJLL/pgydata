@@ -108,7 +108,15 @@ rtk pwsh -NoProfile -File scripts/publish-magiorix-windows-release.ps1 -Stage Pr
 
 `Promote` 会把线上 EXE 和 assets.zip 临时下载到 `%TEMP%\magiorix-release-verify-<随机 GUID>\`，核对大小与 SHA256 后自动删除；它不会把远端文件保存为新的本地发布产物。
 
-`latest.json` 必须最后同步到服务器。部署完成后运行：
+`latest.json` 必须最后同步到服务器。
+
+**同步后先重启 API 服务**，使 API 加载新的 manifest：
+
+```bash
+pm2 restart red-magic-api
+```
+
+重启后再运行验证脚本，否则 API 仍返回旧版本数据，验证会报 `API version does not match manifest` 错误：
 
 ```powershell
 rtk pwsh -NoProfile -File scripts/verify-magiorix-windows-release.ps1 -ManifestPath red-magic-api/public/releases/windows/latest.json

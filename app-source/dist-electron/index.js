@@ -17772,7 +17772,8 @@ const dm = {
   fansAgeChart: ["fansAgeChart"],
   fansGenderChart: ["fansGenderChart"],
   fansGrowthTrendChart: ["fansGrowthTrendChart"],
-  dailyNotePerformanceChart: ["dailyNotePerformanceChart"]
+  dailyNotePerformanceChart: ["dailyNotePerformanceChart"],
+  bloggerOverviewChart: ["bloggerOverviewChart"]
 }, mm = {
   profile: [
     "nickname",
@@ -17792,7 +17793,8 @@ const dm = {
     "videoPrice",
     "category",
     "tags",
-    "priceJson"
+    "priceJson",
+    "bloggerOverviewChart"
   ],
   effective: [
     "pictureReadCost",
@@ -17803,7 +17805,8 @@ const dm = {
     "estimateVideoCpm",
     "estimatePictureCpuv",
     "estimateVideoCpuv",
-    "priceJson"
+    "priceJson",
+    "bloggerOverviewChart"
   ],
   daily30: [
     "noteNumber30",
@@ -17820,7 +17823,8 @@ const dm = {
     "commentMedian",
     "shareMedian",
     "interactRate",
-    "dailyNotePerformanceChart"
+    "dailyNotePerformanceChart",
+    "bloggerOverviewChart"
   ],
   daily90: [
     "noteNumber90",
@@ -17858,7 +17862,7 @@ const dm = {
     "impMedianBusiness90",
     "interactRate"
   ],
-  fansSummary: ["activeFansRate", "fansIncreaseNum", "fansGrowthRate", "engageFansRate"],
+  fansSummary: ["activeFansRate", "fansIncreaseNum", "fansGrowthRate", "engageFansRate", "bloggerOverviewChart"],
   fansProfile: [
     "fansFemale",
     "fansMale",
@@ -17910,7 +17914,8 @@ const PYG_CHART_FIELDS = {
   age: "fansAgeChart",
   gender: "fansGenderChart",
   trend: "fansGrowthTrendChart",
-  dailyNotePerformance: "dailyNotePerformanceChart"
+  dailyNotePerformance: "dailyNotePerformanceChart",
+  bloggerOverview: "bloggerOverviewChart"
 };
 function pgyHasSelectedField(a, e) {
   const t = ur(a);
@@ -18058,12 +18063,15 @@ function pgyWriteTrendChartPng(a, e) {
   });
 }
 const PGY_PYTHON_CHART_SCRIPT = String.raw`
+import base64
+import io
 import json
 import math
 import os
 import sys
+import urllib.request
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 FONT_PATHS = [
     r"C:\Windows\Fonts\msyh.ttc",
@@ -18353,6 +18361,221 @@ def save_daily_note_performance(chart):
     img.save(output, "PNG", optimize=True)
     return True
 
+
+def load_overview_avatar(source, size):
+    if not source or source == "-":
+        return None
+    try:
+        if str(source).startswith("data:image/"):
+            encoded = str(source).split(",", 1)[1]
+            raw = base64.b64decode(encoded)
+        elif str(source).startswith(("http://", "https://")):
+            request = urllib.request.Request(str(source), headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(request, timeout=4) as response:
+                raw = response.read(5 * 1024 * 1024)
+        elif os.path.isfile(str(source)):
+            with open(str(source), "rb") as handle:
+                raw = handle.read(5 * 1024 * 1024)
+        else:
+            return None
+        avatar = Image.open(io.BytesIO(raw)).convert("RGB")
+        resampling = getattr(Image, "Resampling", Image)
+        square = ImageOps.fit(
+            avatar,
+            (size, size),
+            method=getattr(resampling, "LANCZOS"),
+            centering=(0.5, 0.5),
+        )
+        mask = Image.new("L", (size, size), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, size - 1, size - 1), fill=255)
+        square.putalpha(mask)
+        return square
+    except Exception:
+        return None
+
+
+def save_blogger_overview(chart):
+    data = chart.get("data") or {}
+    width, height = 2048, 1066
+    img = Image.new("RGB", (width, height), "#f7f7f9")
+    draw = ImageDraw.Draw(img)
+    font_18 = load_font(18)
+    font_19 = load_font(19)
+    font_20 = load_font(20)
+    font_21 = load_font(21)
+    font_22 = load_font(22)
+    font_24 = load_font(24)
+    font_24_bold = load_font(24, True)
+    font_26_bold = load_font(26, True)
+    font_27 = load_font(27)
+    font_27_bold = load_font(27, True)
+    font_28_bold = load_font(28, True)
+    font_31_bold = load_font(31, True)
+    font_32_bold = load_font(32, True)
+    font_34_bold = load_font(34, True)
+
+    def value(key, default="-"):
+        raw = data.get(key)
+        return default if raw is None or raw == "" else str(raw)
+
+    def box(coords, radius=8, fill="white", outline=None, line_width=1):
+        if hasattr(draw, "rounded_rectangle"):
+            draw.rounded_rectangle(coords, radius=radius, fill=fill, outline=outline, width=line_width)
+        else:
+            draw.rectangle(coords, fill=fill, outline=outline, width=line_width)
+
+    def line(x1, y1, x2, y2, fill="#dddddd", line_width=1):
+        draw.line((x1, y1, x2, y2), fill=fill, width=line_width)
+
+    def dashed(x1, y, x2, fill="#999999"):
+        for start in range(int(x1), int(x2), 10):
+            line(start, y, min(start + 5, x2), y, fill)
+
+    def put(x, y, text, font=font_21, fill="#262626", max_width=None):
+        output = str(text)
+        if max_width is not None:
+            output = ellipsize(draw, output, font, max_width)
+        draw.text((x, y), output, font=font, fill=fill)
+
+    # Static PGY page chrome.
+    box((96, 20, 616, 118), 14)
+    box((126, 42, 340, 90), 5, "white", "#eeeeee")
+    box((340, 42, 586, 90), 5, "#f6f6f6")
+    put(188, 52, "笔记主页", font_24_bold)
+    put(424, 52, "直播主页", font_24, "#666666")
+    box((650, 20, 1948, 94), 14)
+    put(712, 41, "数据概览", font_26_bold)
+    put(856, 41, "笔记数据", font_24, "#777777")
+    put(996, 41, "粉丝分析", font_24, "#777777")
+    line(700, 92, 826, 92, "#c73549", 2)
+    put(1632, 42, f"数据更新至： {value('updatedAtText')}", font_21, "#aaaaaa", 280)
+
+    # Profile and pricing column.
+    box((96, 120, 616, 620), 14)
+    draw.ellipse((126, 164, 230, 268), fill="#e8edf4")
+    put(164, 191, value("nickname")[:1], font_34_bold, "#6d87a8")
+    avatar = load_overview_avatar(data.get("avatar"), 104)
+    if avatar:
+        img.paste(avatar, (126, 164), avatar)
+    put(252, 168, value("nickname"), font_24_bold, max_width=230)
+    draw.ellipse((378, 176, 402, 200), fill="#e9f1ff")
+    if bool(data.get("verified")):
+        draw.ellipse((415, 176, 439, 200), fill="#edf9ef", outline="#5ab76b", width=2)
+        line(421, 188, 425, 192, "#5ab76b", 2)
+        line(425, 192, 432, 183, "#5ab76b", 2)
+    put(252, 216, "小红书号：", font_19, "#999999")
+    put(354, 216, value("redId"), font_20, "#5273b4", 190)
+    put(252, 256, f"● {value('location')}", font_18, "#999999", 150)
+    draw.rectangle((420, 260, 432, 274), outline="#777777", width=2)
+    line(424, 263, 424, 271, "#777777")
+    line(428, 263, 428, 271, "#777777")
+    put(440, 256, value("mcn"), font_18, "#5273b4", 130)
+    tags = data.get("categoryTags") if isinstance(data.get("categoryTags"), list) else []
+    for index, tag in enumerate(tags[:3]):
+        x = 126 + index * 112
+        box((x, 303, x + 92, 333), 4, "#f2f2f2")
+        put(x + 10, 307, str(tag), font_18, "#595959", 72)
+    put(198, 382, "粉丝数", font_22)
+    put(402, 382, "获赞与收藏", font_22)
+    put(192, 425, value("fansText"), font_32_bold)
+    put(402, 425, value("likeCollectText"), font_32_bold)
+    line(126, 500, 586, 500, "#f1f1f1")
+    box((126, 530, 336, 586), 6, "#f7f7f7")
+    box((352, 530, 586, 586), 6, "#f23b49")
+    put(190, 545, "☆ 收藏", font_22)
+    draw.ellipse((406, 548, 420, 562), outline="white", width=2)
+    draw.ellipse((416, 548, 430, 562), outline="white", width=2)
+    put(442, 545, "邀约", font_22, "white")
+
+    box((96, 650, 616, 1040), 14)
+    put(126, 676, "合作报价", font_28_bold)
+    for y, label, key in [
+        (736, "图文笔记一口价", "picturePriceText"),
+        (882, "视频笔记一口价", "videoPriceText"),
+    ]:
+        box((126, y, 586, y + 126), 5, "white", "#e8e8e8")
+        put(158, y + 26, label, font_22, "#595959")
+        put(158, y + 70, value(key), font_27)
+        draw.ellipse((538, y + 48, 566, y + 76), outline="#d73c51", width=3)
+        put(545, y + 47, "+", font_22, "#d73c51")
+
+    # Overview content column.
+    box((650, 112, 1948, 1040), 14)
+    put(700, 142, "数据概览", font_28_bold)
+    line(650, 212, 1948, 212, "#eeeeee")
+    box((700, 240, 1898, 318), 9, "#f7f7f7")
+    summary = [
+        (720, "博主优势", value("advantageText"), 820, 128),
+        (972, "发布笔记", value("publishedNotesText"), 1068, 94),
+        (1190, "内容类目", value("contentCategoriesText"), 1294, 260),
+        (1606, "合作行业", value("cooperationIndustryText"), 1710, 170),
+    ]
+    for x, label, text, value_x, max_w in summary:
+        put(x, 263, label, font_21, "#999999")
+        put(value_x, 263, text, font_22, "#262626", max_w)
+    for x in (948, 1166, 1582):
+        line(x, 257, x, 302, "#dddddd")
+
+    box((700, 344, 1898, 636), 9, "white", "#e8e8e8")
+    box((726, 372, 760, 406), 8, "#fff0e7")
+    for y in (381, 388, 395):
+        line(736, y, 750, y, "#e8753a", 2)
+    put(778, 371, "笔记数据", font_27_bold)
+    box((726, 430, 838, 478), 6, "#fff0f1")
+    put(748, 439, "按规模", font_21, "#d43d51")
+    box((850, 430, 950, 478), 6, "#f7f7f7")
+    put(872, 439, "按成本", font_21, "#555555")
+    box((1658, 430, 1876, 478), 6, "#f7f7f7")
+    box((1664, 436, 1776, 472), 5, "white", "#eeeeee")
+    put(1680, 441, "日常笔记", font_20)
+    put(1788, 441, "合作笔记", font_20, "#777777")
+    metrics = [
+        (726, "曝光中位数", "exposureText", "exposurePeerText"),
+        (1110, "阅读中位数", "readText", "readPeerText"),
+        (1532, "互动中位数", "interactionText", "interactionPeerText"),
+    ]
+    for x, label, value_key, peer_key in metrics:
+        put(x, 505, label, font_21, "#666666")
+        dashed(x, 535, x + 114)
+        put(x, 548, value(value_key), font_31_bold, "#111111")
+        put(x, 585, value(peer_key), font_19, "#777777")
+    line(1078, 506, 1078, 608)
+    line(1500, 506, 1500, 608)
+
+    box((700, 662, 1274, 902), 9, "white", "#e8e8e8")
+    box((726, 690, 760, 724), 8, "#e8f4ff")
+    put(738, 696, "◇", font_19, "#4a91d8")
+    put(778, 689, "服务表现", font_27_bold)
+    put(726, 755, "近7天活跃天数", font_21, "#666666")
+    dashed(726, 786, 862)
+    put(726, 800, value("activeDaysText"), font_31_bold, "#111111")
+    box((726, 846, 806, 875), 0, "#eef2ff")
+    put(736, 846, value("activeLabelText"), font_18, "#5273b4", 62)
+    line(986, 758, 986, 866)
+    put(1020, 755, "邀约48小时回复率", font_21, "#666666")
+    dashed(1020, 786, 1180)
+    put(1020, 800, value("replyRateText"), font_31_bold, "#111111")
+    box((1020, 846, 1112, 875), 0, "#eef2ff")
+    put(1030, 846, value("replyLabelText"), font_18, "#5273b4", 72)
+
+    box((1300, 662, 1898, 902), 9, "white", "#e8e8e8")
+    box((1326, 690, 1360, 724), 8, "#e8f7f4")
+    line(1335, 713, 1335, 701, "#58aa9b", 2)
+    line(1335, 713, 1351, 713, "#58aa9b", 2)
+    line(1338, 709, 1343, 704, "#58aa9b", 2)
+    line(1343, 704, 1348, 707, "#58aa9b", 2)
+    line(1348, 707, 1353, 698, "#58aa9b", 2)
+    put(1378, 689, "成长表现", font_27_bold)
+    put(1326, 755, "粉丝量变化幅度", font_21, "#666666")
+    dashed(1326, 786, 1464)
+    put(1326, 800, value("fansGrowthText"), font_31_bold, "#111111")
+    put(1326, 846, value("fansGrowthPeerText"), font_19, "#777777")
+
+    output = chart.get("output")
+    ensure_dir(output)
+    img.save(output, "PNG", optimize=True)
+    return True
+
 def save_trend(chart):
     rows = trend_points(chart.get("rows"))
     if len(rows) < 2:
@@ -18413,6 +18636,8 @@ def main():
                 ok = save_trend(chart)
             elif chart_type == "daily-note-performance":
                 ok = save_daily_note_performance(chart)
+            elif chart_type == "blogger-overview":
+                ok = save_blogger_overview(chart)
             if ok and field:
                 paths[field] = chart.get("output")
         except Exception as exc:
@@ -18588,7 +18813,195 @@ function pgyDailyNotePerformanceSvg(a) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="808" height="378" viewBox="0 0 808 378"><rect width="100%" height="100%" fill="white"/><g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,Arial,sans-serif"><rect x="16" y="10" width="4" height="18" rx="2" fill="#ff2442"/><text x="28" y="24" font-size="16" fill="#262626">数据表现</text><rect x="16" y="50" width="80" height="32" rx="5" fill="#fff1f2"/><text x="29" y="72" font-size="14" fill="#ff2442">日常笔记</text><rect x="108" y="50" width="80" height="32" rx="5" fill="#f7f7f7"/><text x="121" y="72" font-size="14" fill="#3d3d3d">合作笔记</text><rect x="379" y="50" width="138" height="33" rx="5" fill="#f7f7f7"/><text x="391" y="72" font-size="14" fill="#262626">图文+视频</text><path d="M497 64l3 3 3-3" fill="none" stroke="#888"/><rect x="529" y="50" width="107" height="33" rx="5" fill="#f7f7f7"/><text x="541" y="72" font-size="14" fill="#262626">近30日</text><path d="M616 64l3 3 3-3" fill="none" stroke="#888"/><rect x="648" y="50" width="147" height="33" rx="5" fill="#f7f7f7"/><text x="660" y="72" font-size="14" fill="#262626">仅自然流量</text><circle cx="740" cy="66" r="5" fill="none" stroke="#b7b7b7"/><text x="738.5" y="69" font-size="8" fill="#999">i</text><path d="M775 64l3 3 3-3" fill="none" stroke="#888"/><rect x="16" y="103" width="779" height="45" rx="8" fill="#f7f7f7"/><text x="28" y="132" font-size="14" fill="#8c8c8c">发布笔记</text><line x1="28" y1="136" x2="82" y2="136" stroke="#b8b8b8" stroke-dasharray="2 2"/><text x="88" y="132" font-size="14" font-weight="600" fill="#262626">${pgyChartEscape(n)}</text><line x1="121" y1="115" x2="121" y2="137" stroke="#e6e6e6"/><text x="136" y="132" font-size="14" fill="#8c8c8c">内容类目及占比</text><line x1="136" y1="136" x2="234" y2="136" stroke="#b8b8b8" stroke-dasharray="2 2"/><text x="242" y="132" font-size="14" fill="#262626">${pgyChartEscape(c)}</text><rect x="16" y="165" width="779" height="210" rx="8" fill="white" stroke="#eee"/><text x="32" y="204" font-size="16" fill="#262626">核心指标</text><rect x="33" y="227" width="115" height="32" rx="5" fill="#f5f5f5"/><rect x="36" y="230" width="55" height="26" rx="4" fill="white" stroke="#eee"/><text x="46" y="250" font-size="14" fill="#262626">按规模</text><text x="104" y="250" font-size="14" fill="#8c8c8c">按成本</text><rect x="33" y="275" width="364" height="76" rx="5" fill="#fff8f8" stroke="#ff2442"/><text x="49" y="303" font-size="14" fill="#595959">曝光中位数</text><line x1="49" y1="311" x2="117" y2="311" stroke="#9e9e9e" stroke-dasharray="2 2"/><text x="49" y="339" font-size="20" font-weight="700" fill="#262626">${pgyChartEscape(i)}</text><rect x="413" y="275" width="365" height="76" rx="5" fill="white" stroke="#e6e6e6"/><text x="429" y="303" font-size="14" fill="#595959">阅读中位数</text><line x1="429" y1="311" x2="497" y2="311" stroke="#9e9e9e" stroke-dasharray="2 2"/><text x="429" y="339" font-size="20" font-weight="700" fill="#262626">${pgyChartEscape(o)}</text></g></svg>`;
 }
 
-async function buildPgyBloggerChartFields(a, e, t, n, d) {
+function pgyOverviewGet(a, e) {
+  let t = a;
+  for (const n of String(e).split(".")) {
+    if (t == null || typeof t !== "object" || !(n in t)) return void 0;
+    t = t[n];
+  }
+  return t;
+}
+
+function pgyOverviewPick(a, e) {
+  for (const t of e) {
+    const n = pgyOverviewGet(a, t);
+    if (n != null && String(n).trim() !== "") return n;
+  }
+  return void 0;
+}
+
+function pgyOverviewPickAny(a, e) {
+  for (const t of a) {
+    const n = pgyOverviewPick(t, e);
+    if (n != null) return n;
+  }
+  return void 0;
+}
+
+function pgyOverviewLabel(a) {
+  if (a == null || a === "") return "-";
+  if (Array.isArray(a)) {
+    const e = a.map((t) => pgyOverviewLabel(t)).filter((t) => t !== "-");
+    return e.join("、") || "-";
+  }
+  if (typeof a === "object") {
+    const e = pgyOverviewPick(a, ["name", "label", "title", "tagName", "contentTag", "industryName", "value", "text"]);
+    return e == null ? "-" : pgyOverviewLabel(e);
+  }
+  const e = String(a).trim();
+  return e && !["null", "undefined", "无数据"].includes(e) ? e : "-";
+}
+
+function pgyOverviewList(a) {
+  if (!Array.isArray(a)) {
+    const e = pgyOverviewLabel(a);
+    return e === "-" ? [] : e.split(/[、,，/|｜]/).map((t) => t.trim()).filter(Boolean);
+  }
+  return a.map((e) => pgyOverviewLabel(e)).filter((e) => e !== "-");
+}
+
+function pgyOverviewNumber(a) {
+  if (a == null || a === "") return null;
+  const e = Number(String(a).replace(/[,%￥¥\s]/g, ""));
+  return Number.isFinite(e) ? e : null;
+}
+
+function pgyOverviewFormatInteger(a) {
+  const e = pgyOverviewNumber(a);
+  return e == null ? "-" : Math.round(e).toLocaleString("en-US");
+}
+
+function pgyOverviewFormatCompact(a) {
+  const e = pgyOverviewNumber(a);
+  if (e == null) return "-";
+  if (Math.abs(e) >= 1e4) {
+    const t = (e / 1e4).toFixed(1).replace(/\.0$/, "");
+    return t + "w";
+  }
+  return Math.round(e).toLocaleString("en-US");
+}
+
+function pgyOverviewFormatMoney(a) {
+  const e = pgyOverviewNumber(a);
+  return e == null || e <= 0 ? "-" : "¥" + Math.round(e).toLocaleString("en-US");
+}
+
+function pgyOverviewFormatPercent(a) {
+  if (a == null || a === "") return "-";
+  if (typeof a === "object") {
+    const n = pgyOverviewPick(a, ["percent", "value", "rankPercent", "peerPercent", "ratio"]);
+    return n == null ? "-" : pgyOverviewFormatPercent(n);
+  }
+  const e = String(a).trim();
+  if (!e || ["null", "undefined", "无数据"].includes(e)) return "-";
+  if (e.endsWith("%")) return e;
+  const t = pgyOverviewNumber(e);
+  return t == null ? "-" : e + "%";
+}
+
+function pgyOverviewPeerText(a) {
+  const e = pgyOverviewFormatPercent(a);
+  return e === "-" ? "优于 - 同行" : "优于 " + e + " 同行";
+}
+
+function pgyOverviewDate(a) {
+  if (a == null || a === "") return "-";
+  const e = String(a).trim();
+  const t = e.match(/\d{4}[-/.]\d{1,2}[-/.]\d{1,2}/);
+  if (t) return t[0].replace(/[/.]/g, "-").split("-").map((n, s) => s ? n.padStart(2, "0") : n).join("-");
+  const n = Number(a), s = Number.isFinite(n) ? new Date(n < 1e12 ? n * 1e3 : n) : new Date(e);
+  if (!Number.isFinite(s.getTime())) return "-";
+  return [s.getFullYear(), String(s.getMonth() + 1).padStart(2, "0"), String(s.getDate()).padStart(2, "0")].join("-");
+}
+
+function pgyOverviewEllipsize(a, e) {
+  const t = String(a ?? "-");
+  return Array.from(t).length <= e ? t : Array.from(t).slice(0, Math.max(1, e - 3)).join("") + "...";
+}
+
+function pgyBuildBloggerOverviewData(a) {
+  const e = a == null ? {} : a, t = e.profile ?? {}, n = e.effective ?? {}, s = e.daily30 ?? {}, i = e.fansSummary ?? {}, o = [t, n, s, i];
+  const r = pgyOverviewList(pgyOverviewPick(t, ["personalTags", "featureTags", "contentTags", "tags", "categoryTags"]));
+  const c = pgyOverviewList(pgyOverviewPick(s, ["noteType", "contentTags", "categories"]));
+  const u = c.length ? c : r;
+  const l = pgyOverviewList(pgyOverviewPick(t, ["cooperationIndustry", "cooperateIndustry", "cooperationIndustries", "industryTags", "businessTags", "tradeTags"]));
+  const p = pgyOverviewPickAny(o, ["activeDays", "activeDays7", "activeDayNum", "sevenDayActiveDays", "sevenDaysActiveNum", "servicePerformance.activeDays"]);
+  const h = pgyOverviewPickAny(o, ["responseRate", "replyRate", "inviteReplyRate", "inviteReplyRatio", "cooperateReplyRate", "servicePerformance.replyRate"]);
+  const m = pgyOverviewPick(s, ["interactMedian", "interactionMedian", "mEngagementNum", "engagementMedian"]);
+  const f = pgyOverviewPick(s, ["impMedianPercent", "impMedianRankPercent", "impMedianPeerPercent", "impRankPercent", "impRank"]);
+  const g = pgyOverviewPick(s, ["readMedianPercent", "readMedianRankPercent", "readMedianPeerPercent", "readRankPercent", "readRank"]);
+  const v = pgyOverviewPick(s, ["interactMedianPercent", "interactionMedianPercent", "mEngagementNumPercent", "engagementMedianPercent", "interactRankPercent"]);
+  const y = pgyOverviewPick(i, ["fansGrowthRatePercent", "fansGrowthRankPercent", "fansGrowthPeerPercent", "fansIncreasePercent", "growthRankPercent"]);
+  const b = pgyOverviewPick(t, ["liveSign.name", "noteSign.name", "mcnName", "orgName", "organization.name", "companyName"]);
+  const S = pgyOverviewPick(t, ["bloggerAdvantage", "bloggerType", "kolType", "currentLevel.name", "currentLevel.label", "currentLevel"]);
+  const C = pgyOverviewPickAny(o, ["dataUpdateTime", "dataUpdatedAt", "updateTime", "updatedAt", "lastUpdateTime", "lastUpdatedAt", "dataDate"]);
+  const _ = pgyOverviewPickAny(o, ["activeLabel", "activeStatus", "activityLabel", "servicePerformance.activeLabel"]);
+  const k = pgyOverviewPickAny(o, ["replyLabel", "replyStatus", "contactLabel", "servicePerformance.replyLabel"]);
+  const P = pgyOverviewPick(t, ["verified", "isVerified", "verifyStatus", "certified"]);
+  return {
+    nickname: pgyOverviewLabel(pgyOverviewPick(t, ["name", "nickName", "nickname"])),
+    avatar: pgyOverviewLabel(e.avatar ?? pgyOverviewPick(t, ["headPhoto", "avatar", "avatarUrl"])),
+    redId: pgyOverviewLabel(pgyOverviewPick(t, ["redId", "redBookId", "xhsId"])),
+    location: pgyOverviewLabel(pgyOverviewPick(t, ["location", "city", "province", "locationName"])),
+    mcn: pgyOverviewLabel(b),
+    verified: Boolean(P && !["0", "false", "未认证"].includes(String(P).toLowerCase())),
+    categoryTags: (r.length ? r : c).slice(0, 3),
+    fansText: pgyOverviewFormatCompact(pgyOverviewPick(t, ["fansCount", "fansNum", "followerCount"])),
+    likeCollectText: pgyOverviewFormatCompact(pgyOverviewPick(t, ["likeCollectCountInfo", "likeCollectCount", "likeAndCollectCount"])),
+    picturePriceText: pgyOverviewFormatMoney(pgyOverviewPick(t, ["picturePrice", "picPrice", "imagePrice"])),
+    videoPriceText: pgyOverviewFormatMoney(pgyOverviewPick(t, ["videoPrice"])),
+    updatedAtText: pgyOverviewDate(C),
+    advantageText: pgyOverviewLabel(S),
+    publishedNotesText: (() => {
+      const Q = pgyOverviewFormatInteger(pgyOverviewPick(s, ["noteNumber", "noteCount"]));
+      return Q === "-" ? "-" : Q + "篇";
+    })(),
+    contentCategoriesText: pgyOverviewEllipsize(u.join("、") || "-", 26),
+    cooperationIndustryText: l.join("、") || "暂无",
+    exposureText: pgyOverviewFormatInteger(pgyOverviewPick(s, ["impMedian", "exposureMedian"])),
+    exposurePeerText: pgyOverviewPeerText(f),
+    readText: pgyOverviewFormatInteger(pgyOverviewPick(s, ["readMedian"])),
+    readPeerText: pgyOverviewPeerText(g),
+    interactionText: pgyOverviewFormatInteger(m),
+    interactionPeerText: pgyOverviewPeerText(v),
+    activeDaysText: p == null || p === "" ? "-" : pgyOverviewFormatInteger(p) + "天",
+    activeLabelText: pgyOverviewLabel(_),
+    replyRateText: pgyOverviewFormatPercent(h),
+    replyLabelText: pgyOverviewLabel(k),
+    fansGrowthText: pgyOverviewFormatPercent(pgyOverviewPick(i, ["fansGrowthRate", "fansIncreaseRate", "fansChangeRate"])),
+    fansGrowthPeerText: pgyOverviewPeerText(y)
+  };
+}
+
+function pgyBloggerOverviewSvg(a) {
+  const e = a ?? {}, t = (n) => pgyChartEscape(n == null || n === "" ? "-" : String(n)), s = Array.isArray(e.categoryTags) ? e.categoryTags.slice(0, 3) : [];
+  const i = s.map((n, o) => {
+    const r = 126 + o * 112, c = pgyOverviewEllipsize(n, 6);
+    return `<rect x="${r}" y="303" width="92" height="30" rx="4" fill="#f2f2f2"/><text x="${r + 10}" y="324" font-size="18" fill="#595959">${t(c)}</text>`;
+  }).join("");
+  const o = t(String(e.nickname ?? "-").slice(0, 1));
+  const r = e.avatar && e.avatar !== "-" ? `<image href="${t(e.avatar)}" x="126" y="164" width="104" height="104" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>` : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1066" viewBox="0 0 2048 1066">
+<defs><clipPath id="avatarClip"><circle cx="178" cy="216" r="52"/></clipPath></defs>
+<rect width="2048" height="1066" fill="#f7f7f9"/>
+<g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,Arial,sans-serif">
+<rect x="96" y="20" width="520" height="98" rx="14" fill="#fff"/><rect x="126" y="42" width="214" height="48" rx="5" fill="#fff" stroke="#eee"/><rect x="340" y="42" width="246" height="48" rx="5" fill="#f6f6f6"/><text x="188" y="75" font-size="24" font-weight="600" fill="#262626">笔记主页</text><text x="424" y="75" font-size="24" fill="#666">直播主页</text>
+<rect x="650" y="20" width="1298" height="74" rx="14" fill="#fff"/><text x="712" y="67" font-size="26" font-weight="700" fill="#262626">数据概览</text><text x="856" y="67" font-size="24" fill="#777">笔记数据</text><text x="996" y="67" font-size="24" fill="#777">粉丝分析</text><line x1="700" y1="92" x2="826" y2="92" stroke="#c73549" stroke-width="2"/><text x="1632" y="66" font-size="21" fill="#aaa">数据更新至： ${t(e.updatedAtText)}</text>
+<rect x="96" y="120" width="520" height="500" rx="14" fill="#fff"/><circle cx="178" cy="216" r="52" fill="#e8edf4"/><text x="164" y="229" font-size="34" font-weight="700" fill="#6d87a8">${o}</text>${r}<text x="252" y="194" font-size="24" font-weight="600" fill="#262626">${t(pgyOverviewEllipsize(e.nickname, 12))}</text><circle cx="390" cy="188" r="12" fill="#e9f1ff"/><text x="385" y="194" font-size="14" fill="#4d7ed8">●</text>${e.verified ? '<circle cx="427" cy="188" r="12" fill="#edf9ef" stroke="#5ab76b"/><path d="M421 188l4 4 7-9" fill="none" stroke="#5ab76b" stroke-width="2"/>' : ""}
+<text x="252" y="236" font-size="19" fill="#999">小红书号：</text><text x="354" y="236" font-size="20" fill="#5273b4">${t(e.redId)}</text><text x="252" y="276" font-size="18" fill="#999">● ${t(pgyOverviewEllipsize(e.location, 10))}</text><rect x="420" y="262" width="12" height="14" fill="none" stroke="#777" stroke-width="2"/><line x1="424" y1="265" x2="424" y2="273" stroke="#777"/><line x1="428" y1="265" x2="428" y2="273" stroke="#777"/><text x="440" y="276" font-size="18" fill="#5273b4">${t(pgyOverviewEllipsize(e.mcn, 8))}</text>${i}
+<text x="198" y="405" font-size="22" fill="#262626">粉丝数</text><text x="402" y="405" font-size="22" fill="#262626">获赞与收藏</text><text x="192" y="460" font-size="32" font-weight="700" fill="#262626">${t(e.fansText)}</text><text x="402" y="460" font-size="32" font-weight="700" fill="#262626">${t(e.likeCollectText)}</text><line x1="126" y1="500" x2="586" y2="500" stroke="#f1f1f1"/>
+<rect x="126" y="530" width="210" height="56" rx="6" fill="#f7f7f7"/><rect x="352" y="530" width="234" height="56" rx="6" fill="#f23b49"/><text x="190" y="567" font-size="22" fill="#333">☆ 收藏</text><circle cx="413" cy="558" r="7" fill="none" stroke="#fff" stroke-width="2"/><circle cx="423" cy="558" r="7" fill="none" stroke="#fff" stroke-width="2"/><text x="442" y="567" font-size="22" fill="#fff">邀约</text>
+<rect x="96" y="650" width="520" height="390" rx="14" fill="#fff"/><text x="126" y="708" font-size="28" font-weight="600" fill="#262626">合作报价</text><rect x="126" y="736" width="460" height="126" rx="5" fill="#fff" stroke="#e8e8e8"/><text x="158" y="786" font-size="22" fill="#595959">图文笔记一口价</text><text x="158" y="832" font-size="27" fill="#262626">${t(e.picturePriceText)}</text><circle cx="552" cy="798" r="14" fill="none" stroke="#d73c51" stroke-width="3"/><text x="545" y="805" font-size="22" fill="#d73c51">+</text><rect x="126" y="882" width="460" height="126" rx="5" fill="#fff" stroke="#e8e8e8"/><text x="158" y="932" font-size="22" fill="#595959">视频笔记一口价</text><text x="158" y="978" font-size="27" fill="#262626">${t(e.videoPriceText)}</text><circle cx="552" cy="944" r="14" fill="none" stroke="#d73c51" stroke-width="3"/><text x="545" y="951" font-size="22" fill="#d73c51">+</text>
+<rect x="650" y="112" width="1298" height="928" rx="14" fill="#fff"/><text x="700" y="174" font-size="28" font-weight="700" fill="#262626">数据概览</text><line x1="650" y1="212" x2="1948" y2="212" stroke="#eee"/>
+<rect x="700" y="240" width="1198" height="78" rx="9" fill="#f7f7f7"/><text x="720" y="288" font-size="21" fill="#999">博主优势</text><text x="820" y="288" font-size="22" font-weight="600" fill="#262626">${t(pgyOverviewEllipsize(e.advantageText, 10))}</text><line x1="948" y1="257" x2="948" y2="302" stroke="#ddd"/><text x="972" y="288" font-size="21" fill="#999">发布笔记</text><text x="1068" y="288" font-size="22" font-weight="600" fill="#262626">${t(e.publishedNotesText)}</text><line x1="1166" y1="257" x2="1166" y2="302" stroke="#ddd"/><text x="1190" y="288" font-size="21" fill="#999">内容类目</text><text x="1294" y="288" font-size="22" font-weight="600" fill="#262626">${t(pgyOverviewEllipsize(e.contentCategoriesText, 18))}</text><line x1="1582" y1="257" x2="1582" y2="302" stroke="#ddd"/><text x="1606" y="288" font-size="21" fill="#999">合作行业</text><text x="1710" y="288" font-size="22" font-weight="600" fill="#262626">${t(pgyOverviewEllipsize(e.cooperationIndustryText, 10))}</text>
+<rect x="700" y="344" width="1198" height="292" rx="9" fill="#fff" stroke="#e8e8e8"/><rect x="726" y="372" width="34" height="34" rx="8" fill="#fff0e7"/><line x1="736" y1="382" x2="750" y2="382" stroke="#e8753a" stroke-width="2"/><line x1="736" y1="389" x2="750" y2="389" stroke="#e8753a" stroke-width="2"/><line x1="736" y1="396" x2="750" y2="396" stroke="#e8753a" stroke-width="2"/><text x="778" y="400" font-size="27" font-weight="600" fill="#262626">笔记数据</text><rect x="726" y="430" width="112" height="48" rx="6" fill="#fff0f1"/><text x="748" y="462" font-size="21" font-weight="600" fill="#d43d51">按规模</text><rect x="850" y="430" width="100" height="48" rx="6" fill="#f7f7f7"/><text x="872" y="462" font-size="21" fill="#555">按成本</text><rect x="1658" y="430" width="218" height="48" rx="6" fill="#f7f7f7"/><rect x="1664" y="436" width="112" height="36" rx="5" fill="#fff" stroke="#eee"/><text x="1680" y="461" font-size="20" fill="#262626">日常笔记</text><text x="1788" y="461" font-size="20" fill="#777">合作笔记</text>
+<text x="726" y="528" font-size="21" fill="#666">曝光中位数</text><line x1="726" y1="535" x2="840" y2="535" stroke="#999" stroke-dasharray="5 5"/><text x="726" y="574" font-size="31" font-weight="700" fill="#111">${t(e.exposureText)}</text><text x="726" y="608" font-size="19" fill="#777">${t(e.exposurePeerText)}</text><line x1="1078" y1="506" x2="1078" y2="608" stroke="#ddd"/><text x="1110" y="528" font-size="21" fill="#666">阅读中位数</text><line x1="1110" y1="535" x2="1224" y2="535" stroke="#999" stroke-dasharray="5 5"/><text x="1110" y="574" font-size="31" font-weight="700" fill="#111">${t(e.readText)}</text><text x="1110" y="608" font-size="19" fill="#777">${t(e.readPeerText)}</text><line x1="1500" y1="506" x2="1500" y2="608" stroke="#ddd"/><text x="1532" y="528" font-size="21" fill="#666">互动中位数</text><line x1="1532" y1="535" x2="1646" y2="535" stroke="#999" stroke-dasharray="5 5"/><text x="1532" y="574" font-size="31" font-weight="700" fill="#111">${t(e.interactionText)}</text><text x="1532" y="608" font-size="19" fill="#777">${t(e.interactionPeerText)}</text>
+<rect x="700" y="662" width="574" height="240" rx="9" fill="#fff" stroke="#e8e8e8"/><rect x="726" y="690" width="34" height="34" rx="8" fill="#e8f4ff"/><text x="738" y="715" font-size="19" fill="#4a91d8">◇</text><text x="778" y="716" font-size="27" font-weight="600" fill="#262626">服务表现</text><text x="726" y="778" font-size="21" fill="#666">近7天活跃天数</text><line x1="726" y1="786" x2="862" y2="786" stroke="#999" stroke-dasharray="5 5"/><text x="726" y="826" font-size="31" font-weight="700" fill="#111">${t(e.activeDaysText)}</text><rect x="726" y="846" width="70" height="29" fill="#eef2ff"/><text x="736" y="868" font-size="18" fill="#5273b4">${t(e.activeLabelText)}</text><line x1="986" y1="758" x2="986" y2="866" stroke="#ddd"/><text x="1020" y="778" font-size="21" fill="#666">邀约48小时回复率</text><line x1="1020" y1="786" x2="1180" y2="786" stroke="#999" stroke-dasharray="5 5"/><text x="1020" y="826" font-size="31" font-weight="700" fill="#111">${t(e.replyRateText)}</text><rect x="1020" y="846" width="82" height="29" fill="#eef2ff"/><text x="1030" y="868" font-size="18" fill="#5273b4">${t(e.replyLabelText)}</text>
+<rect x="1300" y="662" width="598" height="240" rx="9" fill="#fff" stroke="#e8e8e8"/><rect x="1326" y="690" width="34" height="34" rx="8" fill="#e8f7f4"/><line x1="1335" y1="713" x2="1335" y2="701" stroke="#58aa9b" stroke-width="2"/><line x1="1335" y1="713" x2="1351" y2="713" stroke="#58aa9b" stroke-width="2"/><polyline points="1338,709 1343,704 1348,707 1353,698" fill="none" stroke="#58aa9b" stroke-width="2"/><text x="1378" y="716" font-size="27" font-weight="600" fill="#262626">成长表现</text><text x="1326" y="778" font-size="21" fill="#666">粉丝量变化幅度</text><line x1="1326" y1="786" x2="1464" y2="786" stroke="#999" stroke-dasharray="5 5"/><text x="1326" y="826" font-size="31" font-weight="700" fill="#111">${t(e.fansGrowthText)}</text><text x="1326" y="868" font-size="19" fill="#777">${t(e.fansGrowthPeerText)}</text>
+</g></svg>`;
+}
+
+async function buildPgyBloggerChartFields(a, e, t, n, d, B) {
   const s = {}, i = [];
   if (pgyHasSelectedField(n, PYG_CHART_FIELDS.province)) {
     const o = pgyTopPercentRows(e.provinces);
@@ -18611,6 +19024,7 @@ async function buildPgyBloggerChartFields(a, e, t, n, d) {
     o.length >= 2 && i.push({ field: "fansGrowthTrendChart", type: "trend", rows: o, output: pgyChartFile("trend", a, "trend") });
   }
   pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePerformance) && i.push({ field: "dailyNotePerformanceChart", type: "daily-note-performance", data: d ?? {}, output: pgyChartFile("daily-note", a, "daily-note-performance") });
+  pgyHasSelectedField(n, PYG_CHART_FIELDS.bloggerOverview) && i.push({ field: "bloggerOverviewChart", type: "blogger-overview", data: B ?? {}, output: pgyChartFile("blogger-overview", a, "blogger-overview") });
   if (!i.length) return s;
   try {
     const o = await pgyRenderChartsWithPython(i);
@@ -18623,7 +19037,7 @@ async function buildPgyBloggerChartFields(a, e, t, n, d) {
   for (const o of i)
     if (!s[o.field]) {
       let r = "";
-      o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "trend" ? r = pgyWriteTrendChartPng(o.rows ?? [], o.output) : o.type === "daily-note-performance" && (r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);
+      o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "trend" ? r = pgyWriteTrendChartPng(o.rows ?? [], o.output) : o.type === "daily-note-performance" ? r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output) : o.type === "blogger-overview" && (r = pgyWriteSvgPng(pgyBloggerOverviewSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);
     }
   if (Object.keys(s).length)
     j.info(`[pgy-chart] 已生成 ${Object.keys(s).length}/${i.length} 张图表`);
@@ -19120,7 +19534,7 @@ class hm {
     let S = 0, C = {};
     for (const Q of b)
       Q.percent > S && (S = Q.percent, C = Q);
-    const _ = p.gender ?? {}, k = p.provinces ?? [], P = p.cities ?? [], T = p.interests ?? [], L = p.devices ?? [], z = s.liveSign, G = s.noteSign, Q = await buildPgyBloggerChartFields(e, p, (((t.fansTrend == null ? void 0 : t.fansTrend.data) ?? {}).list) ?? [], I, o);
+    const _ = p.gender ?? {}, k = p.provinces ?? [], P = p.cities ?? [], T = p.interests ?? [], L = p.devices ?? [], z = s.liveSign, G = s.noteSign, Q = await buildPgyBloggerChartFields(e, p, (((t.fansTrend == null ? void 0 : t.fansTrend.data) ?? {}).list) ?? [], I, o, pgyBuildBloggerOverviewData({ bloggerId: e, profile: s, effective: i, daily30: o, fansSummary: l, avatar: n }));
     return {
       platformBloggerId: e,
       nickname: s.name,

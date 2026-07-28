@@ -9,6 +9,8 @@ const preloadPath = path.join(projectRoot, "app-source", "dist-electron", "prelo
 const chartRendererSourcePath = path.join(projectRoot, "tools", "pgy_chart_renderer.py");
 const dailyNoteSvgSourcePath = path.join(projectRoot, "tools", "pgy_daily_note_svg.js");
 const dailyNoteSvgSource = fs.readFileSync(dailyNoteSvgSourcePath, "utf8").trim();
+const bloggerOverviewSvgSourcePath = path.join(projectRoot, "tools", "pgy_blogger_overview_svg.js");
+const bloggerOverviewSvgSource = fs.readFileSync(bloggerOverviewSvgSourcePath, "utf8").trim();
 
 function replaceOnce(source, from, to, label) {
   const fromCrLf = from.replace(/\n/g, "\r\n");
@@ -1385,7 +1387,155 @@ async function buildPgyBloggerChartFields(a, e, t, n, d) {`,
   );
 }
 
+if (!main.includes('bloggerOverview: "bloggerOverviewChart"')) {
+  main = replaceOnce(
+    main,
+    `  dailyNotePerformanceChart: ["dailyNotePerformanceChart"]
+}, mm = {`,
+    `  dailyNotePerformanceChart: ["dailyNotePerformanceChart"],
+  bloggerOverviewChart: ["bloggerOverviewChart"]
+}, mm = {`,
+    "pgy blogger overview chart field dependency",
+  );
+
+  main = replaceOnce(
+    main,
+    `    "tags",
+    "priceJson"
+  ],
+  effective: [`,
+    `    "tags",
+    "priceJson",
+    "bloggerOverviewChart"
+  ],
+  effective: [`,
+    "pgy blogger overview profile endpoint dependency",
+  );
+
+  main = replaceOnce(
+    main,
+    `    "estimateVideoCpuv",
+    "priceJson"
+  ],
+  daily30: [`,
+    `    "estimateVideoCpuv",
+    "priceJson",
+    "bloggerOverviewChart"
+  ],
+  daily30: [`,
+    "pgy blogger overview effective endpoint dependency",
+  );
+
+  main = replaceOnce(
+    main,
+    `    "interactRate",
+    "dailyNotePerformanceChart"
+  ],`,
+    `    "interactRate",
+    "dailyNotePerformanceChart",
+    "bloggerOverviewChart"
+  ],`,
+    "pgy blogger overview daily30 endpoint dependency",
+  );
+
+  main = replaceOnce(
+    main,
+    `  fansSummary: ["activeFansRate", "fansIncreaseNum", "fansGrowthRate", "engageFansRate"],`,
+    `  fansSummary: ["activeFansRate", "fansIncreaseNum", "fansGrowthRate", "engageFansRate", "bloggerOverviewChart"],`,
+    "pgy blogger overview fans summary endpoint dependency",
+  );
+
+  main = replaceOnce(
+    main,
+    `  trend: "fansGrowthTrendChart",
+  dailyNotePerformance: "dailyNotePerformanceChart"
+};`,
+    `  trend: "fansGrowthTrendChart",
+  dailyNotePerformance: "dailyNotePerformanceChart",
+  bloggerOverview: "bloggerOverviewChart"
+};`,
+    "pgy blogger overview image field",
+  );
+
+  main = replaceOnce(
+    main,
+    `            elif chart_type == "daily-note-performance":
+                ok = save_daily_note_performance(chart)`,
+    `            elif chart_type == "daily-note-performance":
+                ok = save_daily_note_performance(chart)
+            elif chart_type == "blogger-overview":
+                ok = save_blogger_overview(chart)`,
+    "pgy blogger overview Python renderer route",
+  );
+
+  main = replaceOnce(
+    main,
+    `async function buildPgyBloggerChartFields(a, e, t, n, d) {`,
+    `${bloggerOverviewSvgSource}
+async function buildPgyBloggerChartFields(a, e, t, n, d, B) {`,
+    "pgy blogger overview JS fallback helpers",
+  );
+
+  main = replaceOnce(
+    main,
+    `  pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePerformance) && i.push({ field: "dailyNotePerformanceChart", type: "daily-note-performance", data: d ?? {}, output: pgyChartFile("daily-note", a, "daily-note-performance") });
+  if (!i.length) return s;`,
+    `  pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePerformance) && i.push({ field: "dailyNotePerformanceChart", type: "daily-note-performance", data: d ?? {}, output: pgyChartFile("daily-note", a, "daily-note-performance") });
+  pgyHasSelectedField(n, PYG_CHART_FIELDS.bloggerOverview) && i.push({ field: "bloggerOverviewChart", type: "blogger-overview", data: B ?? {}, output: pgyChartFile("blogger-overview", a, "blogger-overview") });
+  if (!i.length) return s;`,
+    "pgy blogger overview chart generation queue",
+  );
+
+  main = replaceOnce(
+    main,
+    `o.type === "daily-note-performance" && (r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);`,
+    `o.type === "daily-note-performance" ? r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output) : o.type === "blogger-overview" && (r = pgyWriteSvgPng(pgyBloggerOverviewSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);`,
+    "pgy blogger overview JS fallback route",
+  );
+
+  main = replaceOnce(
+    main,
+    `Q = await buildPgyBloggerChartFields(e, p, (((t.fansTrend == null ? void 0 : t.fansTrend.data) ?? {}).list) ?? [], I, o);`,
+    `Q = await buildPgyBloggerChartFields(e, p, (((t.fansTrend == null ? void 0 : t.fansTrend.data) ?? {}).list) ?? [], I, o, pgyBuildBloggerOverviewData({ bloggerId: e, profile: s, effective: i, daily30: o, fansSummary: l, avatar: n }));`,
+    "pgy blogger overview chart data input",
+  );
+}
+
 const chartRendererSource = fs.readFileSync(chartRendererSourcePath, "utf8");
+if (!main.includes("import urllib.request")) {
+  main = replaceOnce(
+    main,
+    `import json
+import math
+import os
+import sys`,
+    `import base64
+import io
+import json
+import math
+import os
+import sys
+import urllib.request`,
+    "pgy embedded Python overview renderer imports",
+  );
+}
+main = main
+  .replace(
+    /import base64\r?\nimport io\r?\n(?:import base64\r?\nimport io\r?\n)+/,
+    "import base64\nimport io\n",
+  )
+  .replace(
+    /import urllib\.request\r?\n(?:import urllib\.request\r?\n)+/,
+    "import urllib.request\n",
+  );
+if (!main.includes("from PIL import Image, ImageDraw, ImageFont, ImageOps")) {
+  main = replaceOnce(
+    main,
+    "from PIL import Image, ImageDraw, ImageFont",
+    "from PIL import Image, ImageDraw, ImageFont, ImageOps",
+    "pgy embedded Python overview renderer ImageOps import",
+  );
+}
 const pythonDailyStart = chartRendererSource.indexOf("def format_integer(value):");
 const pythonDailyEnd = chartRendererSource.indexOf("def save_trend(chart):", pythonDailyStart);
 if (pythonDailyStart < 0 || pythonDailyEnd < 0)
@@ -1405,8 +1555,8 @@ main = replaceSection(
   main,
   dailyNoteSvgStart,
   "async function buildPgyBloggerChartFields",
-  dailyNoteSvgSource,
-  "pgy daily note SVG renderer synchronization",
+  `${dailyNoteSvgSource}\n\n${bloggerOverviewSvgSource}`,
+  "pgy chart SVG renderer synchronization",
 );
 
 main = replaceOnce(

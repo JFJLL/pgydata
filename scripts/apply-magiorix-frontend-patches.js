@@ -75,32 +75,68 @@ const directChunk = `index-${"BxFWMnhZ"}.js`;
 const directTemplate = `xhs_${"direct"}_blogger_template-CGkXo9G3.xlsx`;
 const directTabLabel = `小红书${"直采"}`;
 
+if (!fs.readFileSync(mainBundle, "utf8").includes('field:"dailyNotePerformanceChart",headerName:"日常笔记表现图"')) {
+  replaceOnce(
+    mainBundle,
+    '{field:"fansGrowthTrendChart",headerName:"粉丝增长趋势图",width:320}],Bs=',
+    '{field:"fansGrowthTrendChart",headerName:"粉丝增长趋势图",width:320},{field:"dailyNotePerformanceChart",headerName:"日常笔记表现图",width:320}],Bs=',
+    "append daily note chart after fan chart columns",
+  );
+}
+
+if (!fs.readFileSync(mainBundle, "utf8").includes('{group:"日常30天",label:"日常笔记表现图",key:"dailyNotePerformanceChart"}')) {
+  replaceOnce(
+    mainBundle,
+    '{group:"粉丝图表",label:"粉丝增长趋势图",key:"fansGrowthTrendChart"}],fr=',
+    '{group:"粉丝图表",label:"粉丝增长趋势图",key:"fansGrowthTrendChart"},{group:"日常30天",label:"日常笔记表现图",key:"dailyNotePerformanceChart"}],fr=',
+    "add daily note chart to blogger export fields",
+  );
+}
+
+if (!fs.readFileSync(mainBundle, "utf8").includes('{key:"dailyNotePerformanceChart",label:"日常笔记表现图"}')) {
+  replaceOnce(
+    mainBundle,
+    '{key:"shareMedian",label:"中位分享量"}]},{groupKey:"daily-90"',
+    '{key:"shareMedian",label:"中位分享量"},{key:"dailyNotePerformanceChart",label:"日常笔记表现图"}]},{groupKey:"daily-90"',
+    "add optional daily note chart selector",
+  );
+}
+
+if (!fs.readFileSync(urlValidatorBundle, "utf8").includes('"dailyNotePerformanceChart"')) {
+  replaceOnce(
+    urlValidatorBundle,
+    'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart"])',
+    'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart"])',
+    "include daily note chart in duration estimate",
+  );
+}
+
 replaceOnce(
   mainBundle,
-  '{field:"fansGrowthTrendChart",headerName:"粉丝增长趋势图",width:320}],Bs=',
-  '{field:"fansGrowthTrendChart",headerName:"粉丝增长趋势图",width:320},{field:"dailyNotePerformanceChart",headerName:"日常笔记表现图",width:320}],Bs=',
-  "append daily note chart after fan chart columns",
+  '{field:"dailyNotePerformanceChart",headerName:"日常笔记表现图",width:320}],Bs=',
+  '{field:"dailyNotePerformanceChart",headerName:"日常笔记表现图",width:320},{field:"bloggerOverviewChart",headerName:"博主数据概览图",width:320}],Bs=',
+  "append blogger overview chart after daily note chart column",
 );
 
 replaceOnce(
   mainBundle,
-  '{group:"粉丝图表",label:"粉丝增长趋势图",key:"fansGrowthTrendChart"}],fr=',
-  '{group:"粉丝图表",label:"粉丝增长趋势图",key:"fansGrowthTrendChart"},{group:"日常30天",label:"日常笔记表现图",key:"dailyNotePerformanceChart"}],fr=',
-  "add daily note chart to blogger export fields",
+  '{group:"日常30天",label:"日常笔记表现图",key:"dailyNotePerformanceChart"}],fr=',
+  '{group:"日常30天",label:"日常笔记表现图",key:"dailyNotePerformanceChart"},{group:"日常30天",label:"博主数据概览图",key:"bloggerOverviewChart"}],fr=',
+  "append blogger overview chart after daily note export field",
 );
 
 replaceOnce(
   mainBundle,
-  '{key:"shareMedian",label:"中位分享量"}]},{groupKey:"daily-90"',
-  '{key:"shareMedian",label:"中位分享量"},{key:"dailyNotePerformanceChart",label:"日常笔记表现图"}]},{groupKey:"daily-90"',
-  "add optional daily note chart selector",
+  '{key:"dailyNotePerformanceChart",label:"日常笔记表现图"}]},{groupKey:"daily-90"',
+  '{key:"dailyNotePerformanceChart",label:"日常笔记表现图"},{key:"bloggerOverviewChart",label:"博主数据概览图"}]},{groupKey:"daily-90"',
+  "append optional blogger overview chart selector",
 );
 
 replaceOnce(
   urlValidatorBundle,
-  'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart"])',
   'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart"])',
-  "include daily note chart in duration estimate",
+  'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart","bloggerOverviewChart"])',
+  "include blogger overview chart in duration estimate",
 );
 
 replaceOnce(
@@ -629,6 +665,7 @@ replaceAllIfExists(mainBundle, '"1.1.2"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, '"1.1.3"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, '"1.1.4"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, '"1.1.5"', `"${assetVersion}"`);
+replaceAllIfExists(mainBundle, '"1.1.6"', `"${assetVersion}"`);
 replaceAllIfExists(mainBundle, previousServerBaseUrl, serverBaseUrl);
 
 replaceOnce(

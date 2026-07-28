@@ -59,18 +59,55 @@ function Get-RendererBuildHash {
 
 function Invoke-RendererSmokeTest([string]$RendererPath, [string]$WorkRoot) {
   $pngPath = Join-Path $WorkRoot "daily-note-smoke.png"
+  $overviewPngPath = Join-Path $WorkRoot "blogger-overview-smoke.png"
   $payload = [ordered]@{
-    charts = @([ordered]@{
-      field = "dailyNotePerformanceChart"
-      type = "daily-note-performance"
-      data = [ordered]@{
-        noteNumber = 7
-        noteType = @([ordered]@{ contentTag = "美食"; percent = "100" })
-        impMedian = 80586
-        readMedian = 9287
+    charts = @(
+      [ordered]@{
+        field = "dailyNotePerformanceChart"
+        type = "daily-note-performance"
+        data = [ordered]@{
+          noteNumber = 7
+          noteType = @([ordered]@{ contentTag = "美食"; percent = "100" })
+          impMedian = 80586
+          readMedian = 9287
+        }
+        output = $pngPath
+      },
+      [ordered]@{
+        field = "bloggerOverviewChart"
+        type = "blogger-overview"
+        data = [ordered]@{
+          nickname = "测试博主"
+          avatar = "-"
+          redId = "123456789"
+          location = "上海"
+          mcn = "测试机构"
+          categoryTags = @("文化艺术")
+          fansText = "8.3w"
+          likeCollectText = "87.3w"
+          picturePriceText = "¥15,000"
+          videoPriceText = "¥20,000"
+          updatedAtText = "2026-07-26"
+          advantageText = "品效型博主"
+          publishedNotesText = "3篇"
+          contentCategoriesText = "文化艺术、运动健身"
+          cooperationIndustryText = "暂无"
+          exposureText = "79,464"
+          exposurePeerText = "优于 91.67% 同行"
+          readText = "17,506"
+          readPeerText = "优于 87.37% 同行"
+          interactionText = "1,773"
+          interactionPeerText = "优于 92% 同行"
+          activeDaysText = "7天"
+          activeLabelText = "活跃"
+          replyRateText = "91.2%"
+          replyLabelText = "好联系"
+          fansGrowthText = "1.9%"
+          fansGrowthPeerText = "优于 96.0% 同行"
+        }
+        output = $overviewPngPath
       }
-      output = $pngPath
-    })
+    )
   } | ConvertTo-Json -Depth 8 -Compress
 
   $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
@@ -107,21 +144,33 @@ function Invoke-RendererSmokeTest([string]$RendererPath, [string]$WorkRoot) {
   if (-not (Test-Path -LiteralPath $pngPath -PathType Leaf)) {
     throw "PGY chart renderer did not create the daily note PNG: $pngPath"
   }
-  $bytes = [System.IO.File]::ReadAllBytes($pngPath)
-  $signature = [byte[]](0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
-  $validSignature = $bytes.Length -ge 24
-  for ($index = 0; $validSignature -and $index -lt $signature.Length; $index++) {
-    $validSignature = $bytes[$index] -eq $signature[$index]
+  if ([string]$result.paths.bloggerOverviewChart -ne $overviewPngPath) {
+    throw "PGY chart renderer did not return bloggerOverviewChart: $resultLine"
   }
-  if (-not $validSignature) {
-    throw "PGY chart renderer created an invalid PNG: $pngPath"
+  if (-not (Test-Path -LiteralPath $overviewPngPath -PathType Leaf)) {
+    throw "PGY chart renderer did not create the blogger overview PNG: $overviewPngPath"
   }
-  [Array]::Reverse($bytes, 16, 4)
-  [Array]::Reverse($bytes, 20, 4)
-  $width = [BitConverter]::ToUInt32($bytes, 16)
-  $height = [BitConverter]::ToUInt32($bytes, 20)
-  if ($width -ne 808 -or $height -ne 378) {
-    throw "PGY daily note chart has unexpected dimensions: ${width}x${height}"
+
+  foreach ($expected in @(
+    [ordered]@{ Path = $pngPath; Width = 808; Height = 378; Label = "daily note" },
+    [ordered]@{ Path = $overviewPngPath; Width = 2048; Height = 1066; Label = "blogger overview" }
+  )) {
+    $bytes = [System.IO.File]::ReadAllBytes($expected.Path)
+    $signature = [byte[]](0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+    $validSignature = $bytes.Length -ge 24
+    for ($index = 0; $validSignature -and $index -lt $signature.Length; $index++) {
+      $validSignature = $bytes[$index] -eq $signature[$index]
+    }
+    if (-not $validSignature) {
+      throw "PGY chart renderer created an invalid $($expected.Label) PNG: $($expected.Path)"
+    }
+    [Array]::Reverse($bytes, 16, 4)
+    [Array]::Reverse($bytes, 20, 4)
+    $width = [BitConverter]::ToUInt32($bytes, 16)
+    $height = [BitConverter]::ToUInt32($bytes, 20)
+    if ($width -ne $expected.Width -or $height -ne $expected.Height) {
+      throw "PGY $($expected.Label) chart has unexpected dimensions: ${width}x${height}"
+    }
   }
 }
 
