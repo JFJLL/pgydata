@@ -1,6 +1,6 @@
 # red-magic-api
 
-这是 magiorix 的 Express + SQLite 云端服务，1.1.9 增加短信注册/重置密码、四档积分充值、支付宝电脑网站支付与微信 Native 支付。
+这是 magiorix 的 Express + SQLite 云端服务，1.1.10 提供短信注册/重置密码、四档积分充值、支付宝电脑网站支付与微信 Native 支付。
 
 当前部署建议同时保留 `https://xhs.red-magic.cn` 入口，供尚未同步 Windows 域名修改的 mac 客户端继续使用；两个域名都代理到同一个 Node 服务。
 

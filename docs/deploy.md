@@ -95,7 +95,7 @@ https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-<version>-wind
 
 三个接口统一读取 `public/releases/windows/latest.json`。文件不存在时保留 1.1.3 旧常量兼容；新版本正式发布必须提供 manifest。
 
-1.1.9 还提供 `/api/auth/register`、`/api/auth/password/reset`、`/pay/:token`、`POST /order` 与 `/order/alipay/notify`。无新商户真实密钥时只允许部署到候选环境，不得宣称真实支付已通，也不得晋升 `latest.json`。
+1.1.10 还提供 `/api/auth/register`、`/api/auth/password/reset`、`/pay/:token`、`POST /order` 与 `/order/alipay/notify`。无新商户真实密钥时只允许部署到候选环境，不得宣称真实支付已通，也不得晋升 `latest.json`。
 
 下载页故意不显示安装包大小，因为安装包正式放在 OSS，不一定存在于服务器本地文件系统。
 

@@ -184,6 +184,53 @@ function Escape-NsisPath([string]$Path) {
   return $Path.Replace('\', '\\')
 }
 
+function Assert-PublishedCandidateMatches {
+  $published = Get-Content -LiteralPath $publishedVersionManifest -Raw -Encoding UTF8 | ConvertFrom-Json
+  $release = Get-Content -LiteralPath $releaseInfoPath -Raw -Encoding UTF8 | ConvertFrom-Json
+  $preparedAssets = Join-Path $projectRoot "red-magic-api\public\assets\desktop\$assetsVersion\assets.zip"
+
+  foreach ($requiredFile in @($setupExe, $outAssetsZip, $releaseInfoPath, $preparedAssets)) {
+    if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
+      throw "Published $version manifest exists but Candidate evidence is missing: $requiredFile"
+    }
+  }
+
+  $desktopHash = (Get-FileHash -LiteralPath $setupExe -Algorithm SHA256).Hash.ToUpperInvariant()
+  $assetsHash = (Get-FileHash -LiteralPath $outAssetsZip -Algorithm SHA256).Hash.ToUpperInvariant()
+  $preparedAssetsHash = (Get-FileHash -LiteralPath $preparedAssets -Algorithm SHA256).Hash.ToUpperInvariant()
+  $desktopSize = (Get-Item -LiteralPath $setupExe).Length
+  $assetsSize = (Get-Item -LiteralPath $outAssetsZip).Length
+
+  $checks = @(
+    @("manifest desktop version", [string]$published.desktop.version, $version),
+    @("manifest assets version", [string]$published.assets.version, $assetsVersion),
+    @("release desktop version", [string]$release.desktop.version, $version),
+    @("release assets version", [string]$release.assets.version, $assetsVersion),
+    @("manifest desktop file", [string]$published.desktop.fileName, $setupFileName),
+    @("manifest assets file", [string]$published.assets.fileName, $assetsZipFileName),
+    @("release desktop file", [string]$release.desktop.fileName, $setupFileName),
+    @("release assets file", [string]$release.assets.fileName, $assetsZipFileName),
+    @("manifest desktop size", [string]$published.desktop.size, [string]$desktopSize),
+    @("manifest assets size", [string]$published.assets.size, [string]$assetsSize),
+    @("release desktop size", [string]$release.desktop.size, [string]$desktopSize),
+    @("release assets size", [string]$release.assets.size, [string]$assetsSize),
+    @("manifest desktop SHA256", ([string]$published.desktop.sha256).ToUpperInvariant(), $desktopHash),
+    @("manifest assets SHA256", ([string]$published.assets.sha256).ToUpperInvariant(), $assetsHash),
+    @("release desktop SHA256", ([string]$release.desktop.sha256).ToUpperInvariant(), $desktopHash),
+    @("release assets SHA256", ([string]$release.assets.sha256).ToUpperInvariant(), $assetsHash),
+    @("prepared assets SHA256", $preparedAssetsHash, $assetsHash)
+  )
+  foreach ($check in $checks) {
+    if ($check[1] -cne $check[2]) {
+      throw "Immutable Candidate verification failed for $($check[0]): '$($check[1])' != '$($check[2])'"
+    }
+  }
+
+  Write-Output "Immutable Candidate verified without rebuild: $version"
+  Write-Output "Installer SHA256: $desktopHash"
+  Write-Output "Assets SHA256: $assetsHash"
+}
+
 if (-not (Test-Path -LiteralPath $sourceAppDir)) {
   throw "Source app directory not found: $sourceAppDir"
 }
@@ -207,14 +254,18 @@ if (-not $node) {
   throw "node executable not found; cannot patch frontend assets or pack app.asar"
 }
 
-if (Test-Path -LiteralPath $publishedVersionManifest -PathType Leaf) {
-  throw "Version $version already has a published manifest and is immutable. Bump the patch version."
-}
 if (Test-Path -LiteralPath $publishedLatestManifest -PathType Leaf) {
   $publishedLatest = Get-Content -LiteralPath $publishedLatestManifest -Raw -Encoding UTF8 | ConvertFrom-Json
   if ([string]$publishedLatest.desktop.version -eq $version) {
     throw "Version $version is already latest and is immutable. Bump the patch version."
   }
+}
+if (Test-Path -LiteralPath $publishedVersionManifest -PathType Leaf) {
+  if (-not $OverwriteCandidate) {
+    throw "Version $version already has a published manifest and is immutable. Bump the patch version."
+  }
+  Assert-PublishedCandidateMatches
+  return
 }
 if ((Test-Path -LiteralPath $outDir) -and -not $OverwriteCandidate) {
   $existingCandidate = @($setupExe, $outAssetsZip, $releaseInfoPath) | Where-Object { Test-Path -LiteralPath $_ }

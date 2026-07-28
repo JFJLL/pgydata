@@ -26,3 +26,20 @@
 25. 第2轮修复后专项 21/21 pass、skipped 0：所有写库请求在 parser/webhook 前串行；并发20错误码为5×400+15×429+0×500；支付宝使用订单剩余有效期。
 26. R3 第三轮复核仍 FAIL：正常并发与支付宝/微信剩余有效期通过，但客户端在事务期间断连会因 `res.close` 提前释放串行锁；下一请求可交叉 `BEGIN/ROLLBACK`，且若干 GET 会经 `ensureAccount`/token 清理隐式写库而未纳入队列。按最多 3 轮硬规则停止修复，转入当前最优交付。
 27. 最终 R3 verifier 第 1 次：static 全过；unit 14/15（唯一失败为只读判据硬编码 1.1.8）；build 按不可变保护拒绝已有 1.1.9 manifest；smoke 通过；integration 13/13 与 publish-prepare 通过；agent-review FAIL，故 receipt 为 fail。专项 `npm test` 21/21、skipped 0。
+28. 外部授权恢复：允许第 4、5 轮并将 1.1.9 正式标记为 Abandoned Candidate；blocked 快照 `e7c1628252243372bf09c0d8e5398b5faec3c100` 已推送为 `origin/codex/magiorix-1.1.9-pay-sms`，未删除、覆盖、发布或 Promote 任何 1.1.9 产物。
+29. 已从 `e7c1628` 新建并切换 `codex/magiorix-1.1.10-pay-sms`。新增测试白名单的实际改动目标仅为 `tests/unit/collection-runtime-contract.test.js`：原测试标题、资产路径和四条断言重复硬编码 `1.1.8`；将改为以 `app-source/package.json` 的 `version` 为唯一期望值，并继续严格核对 `assetsVersion`、后端版本、`assets/<version>/version.json`、构建脚本和 Candidate 目录，原因是支持 1.1.10 且不降低断言强度。除该版本一致性测试外不修改其他既有业务测试。
+30. 第 4 轮资金事务 RED→GREEN：新增断连注册回归后，临时恢复旧 `res.close` 立即释放逻辑，目标测试 exit 1、`0/1 pass`，第二注册实得 HTTP `500`（期望 `200`）；恢复为仅标记断连并在异步路由 settle 后释放，exit 0、`1/1 pass`、skipped 0。GET `/api/*` 与 `/pay/*` 同步纳入队列，覆盖 `ensureAccount` 和过期 token 的隐式写库。
+31. 1.1.10 从只读 `assets/1.1.8` 新建（未复制或重建废弃的 1.1.9 Candidate）；frontend patch 第 1 次失败于既有“树苗余额不足”变体，第 2 次失败于既有 `fetchBalance` 的“刷新树苗余额失败”变体，补充严格旧锚点后第 3 次 exit 0，立即重复执行仍 exit 0。充值 bundle 现使用 `window.bridge.system.shell.openExternal`。
+32. 第 4 轮后端全套 `npm test` exit 0：22/22 pass、fail 0、skipped 0、todo 0；含断连事务、验证码锁定、两渠道非法签名/错金额余额不变及合法通知重放两次仅到账一次。
+33. 1.1.10 canonical build 完成：NSIS 生成 EXE `106587966` bytes / SHA256 `DD4B3D64…F429BA`，assets.zip `2533031` bytes / SHA256 `B85ABBDB…CDC63D`；来源为 1.1.10 资产，未覆盖 1.1.8/1.1.9/runtime tracked app.asar，尚未 Promote。
+34. 版本一致性强制 RED→GREEN：严格测试先 GREEN `1/1`；临时将后端版本改成 `1.1.11` 后 exit 1、`0/1 pass`，明确报 `'1.1.11' !== '1.1.10'`；恢复后 exit 0、`1/1 pass`、skipped 0。测试以 desktop version 为唯一期望，仍严格核对 assetsVersion、backend、assets/version.json、构建脚本和 Candidate release-info。
+35. `publish-magiorix-windows-release.ps1 -Stage Prepare` exit 0：原子生成 `public/assets/desktop/1.1.10/assets.zip` 与不可变 `public/releases/windows/1.1.10.json`；未上传、未部署、未执行 Promote，`latest.json` 未改。
+36. 为兼容 Prepare 后的 R3 build lane，构建脚本在已有 manifest 且传 `-OverwriteCandidate` 时改为只读不可变校验，不执行重建：逐项核对本地 EXE/assets.zip/release-info、public assets 与 manifest 的版本、文件名、大小、SHA256。实际 exit 0，输出 `Immutable Candidate verified without rebuild: 1.1.10` 及两项上述 SHA；任一缺失或不一致仍抛错。
+37. 第 4 轮确定性 R3 预检全绿：static JS 5 files、PowerShell 8 files；unit 15/15；build immutable verify exit 0；smoke 1.1.10 pass；integration 13/13 与 publish-prepare pass；所有测试 skipped 0、todo 0。下一步为 fresh-context agent-review，尚未写 pass evidence。
+38. GUI 证据：本会话未暴露 `computer-use` 工具，`playwright-interactive` 的必需 `js_repl` 也不可用，无法按安全技能流程启动/控制 Electron 并保存三张实机截图；未用旧安装版或静态 HTML 冒充，实际限制已写入 `docs/1.1.10-candidate-evidence.md`。
+39. 第 4 轮 fresh-context 审查 FAIL：复现请求体解析阶段断连会永久占用 mutation queue；指出版本测试可整体回退且未核对 prepared assets/manifest，并确认生产漏配 `ADMIN_PASSWORD` 会启用公开默认值。其余支付幂等、1.1.10 bridge、Candidate 哈希和历史不可变性审查通过。
+40. 第 5 轮修复：mutation queue 同时监听 `req.aborted/error`，解析期无活动 handler 时立即释放、事务期仍等 handler settle；首次目标测试保持 RED（后续请求 2 秒超时），补齐请求流事件后 `3/3 pass`。生产缺少不少于 12 字符管理员密码现 fail-fast；版本测试锁定 `1.1.10` 并核对后端常量、manifest、release-info、Candidate/prepared assets 大小与 SHA256。
+41. 第 5 轮后端全套 `npm test` exit 0：24/24 pass、fail 0、skipped 0、todo 0；合法通知重放仍只到账一次。
+42. 第 5 轮确定性 R3 预检全绿：static JS 5 files、PowerShell 8 files；unit 15/15；immutable build verify、smoke、integration 13/13、publish-prepare 均 pass；skipped 0、todo 0。
+43. 第 5 轮 fresh-context 最终审查仍 FAIL（High）：合法签名、正确商户/应用/订单/金额的微信通知缺失 `transaction_id` 时实际返回 HTTP 200 SUCCESS，余额 `100→150`；支付宝空 `trade_no` 走同一未校验路径。其余断连队列、管理员 fail-fast、版本/哈希/bridge、历史不可变与敏感材料审查通过。已用完新增两轮授权，按硬规则停止，不进入第 6 轮；1.1.10 标记为 Blocked Candidate，禁止发布/Promote。
+44. 最终 `verify-change.ps1` 实际 exit 1：static 全过；unit 15/15；immutable build verify、smoke、integration 13/13、publish-prepare 全过；agent-review evidence 为 FAIL，因此 receipt 正确为 fail。没有修改验收脚本或手工编辑 receipt。

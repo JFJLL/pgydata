@@ -1,8 +1,10 @@
 const assert = require("node:assert/strict");
 const crypto = require("crypto");
+const http = require("node:http");
+const net = require("node:net");
 const { after, before, describe, test } = require("node:test");
 const { alipayCanonicalPayload } = require("../lib/payment-crypto");
-const { startApi } = require("./api-test-helpers");
+const { startApi, startApiExpectFailure } = require("./api-test-helpers");
 
 let fixture;
 let phoneSequence = 10;
@@ -66,7 +68,58 @@ function alipayBody(params, validSignature = true) {
   return new URLSearchParams({ ...params, sign: validSignature ? sign : `${sign.slice(0, -2)}xx`, sign_type: "RSA2" }).toString();
 }
 
-describe("magiorix 1.1.9 auth and payment", { concurrency: false }, () => {
+function abortJsonRequest(pathname, body, delayMs = 40) {
+  const target = new URL(pathname, fixture.baseUrl);
+  return new Promise((resolve, reject) => {
+    let deliberatelyAborted = false;
+    const payload = JSON.stringify(body);
+    const request = http.request({
+      hostname: target.hostname,
+      port: target.port,
+      path: target.pathname,
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) },
+    }, (response) => {
+      response.resume();
+      response.once("end", resolve);
+    });
+    request.once("error", (error) => {
+      if (deliberatelyAborted && new Set(["ECONNRESET", "ECONNABORTED"]).has(error.code)) return resolve();
+      return reject(error);
+    });
+    request.end(payload);
+    setTimeout(() => {
+      deliberatelyAborted = true;
+      request.destroy();
+      resolve();
+    }, delayMs);
+  });
+}
+
+function abortIncompleteJson(pathname) {
+  const target = new URL(pathname, fixture.baseUrl);
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host: target.hostname, port: Number(target.port) });
+    socket.once("error", reject);
+    socket.once("connect", () => {
+      socket.write([
+        `POST ${target.pathname} HTTP/1.1`,
+        `Host: ${target.host}`,
+        "Content-Type: application/json",
+        "Content-Length: 100",
+        "Connection: close",
+        "",
+        '{"phone":"139',
+      ].join("\r\n"));
+      setTimeout(() => {
+        socket.destroy();
+        resolve();
+      }, 40);
+    });
+  });
+}
+
+describe("magiorix 1.1.10 auth and payment", { concurrency: false }, () => {
   before(async () => { fixture = await startApi(); });
   after(async () => { await fixture.stop(); });
 
@@ -129,6 +182,40 @@ describe("magiorix 1.1.9 auth and payment", { concurrency: false }, () => {
     assert.equal(codes.filter((codeValue) => codeValue === 500).length, 0);
     const correct = await fixture.api("/api/auth/register", { method: "POST", body: { phone, code: "1234", password } });
     assert.equal(correct.data.code, 429);
+  });
+
+  test("客户端在注册事务期间断连不会提前释放队列或回滚其他请求", async () => {
+    const disconnectedPhone = nextPhone();
+    const followingPhone = nextPhone();
+    assert.equal((await sendCode(disconnectedPhone)).data.code, 200);
+    assert.equal((await sendCode(followingPhone)).data.code, 200);
+
+    await abortJsonRequest("/api/auth/register", { phone: disconnectedPhone, code: "1234", password });
+    const following = await fixture.api("/api/auth/register", {
+      method: "POST",
+      body: { phone: followingPhone, code: "1234", password },
+    });
+    assert.equal(following.response.status, 200);
+    assert.equal(following.data.code, 200);
+    assert.equal((await fixture.api("/api/auth/login", {
+      method: "POST",
+      body: { phone: disconnectedPhone, password },
+    })).data.code, 200);
+  });
+
+  test("请求体解析期间断连不会永久锁死后续 API", async () => {
+    await abortIncompleteJson("/api/auth/login");
+    const followup = await fixture.api("/api/desktop-versions/check?currentVersion=1.1.10", {
+      signal: AbortSignal.timeout(2000),
+    });
+    assert.equal(followup.response.status, 200);
+    assert.equal(followup.data.code, 200);
+  });
+
+  test("生产环境缺少强管理员密码时拒绝启动", async () => {
+    const failed = await startApiExpectFailure();
+    assert.notEqual(failed.exitCode, 0);
+    assert.match(failed.output, /ADMIN_PASSWORD 必须在生产环境配置且不少于 12 个字符/);
   });
 
   test("验证码一次性且重置密码撤销旧 token", async () => {

@@ -54,7 +54,7 @@ async function createWechatNativeOrder({ orderNo, amountCents, description, expi
       Accept: "application/json",
       "Content-Type": "application/json",
       Authorization: authorization,
-      "User-Agent": "magiorix-red-magic-api/1.1.9",
+      "User-Agent": "magiorix-red-magic-api/1.1.10",
     },
     body,
     signal: AbortSignal.timeout(15000),

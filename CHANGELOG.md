@@ -2,14 +2,25 @@
 
 本文件保存版本历史、发布记录、安装包路径与校验信息，不放长期维护规则。
 
-## 1.1.9 (Candidate)
+## 1.1.10 (Blocked Candidate — 禁止发布)
+
+- 账号与短信：默认手机号密码登录，短信仅用于 4 位码注册与重置密码；5 分钟一次性、同手机号 60 秒限发、5 次错误锁定，新用户赠 100 积分，旧接口不再无验证码建号。
+- 支付：提供 10/100/500/1000 元四档，浏览器支付页选择支付宝电脑网站支付或微信 Native；双渠道验签并核对订单、渠道、整数分金额、商户与应用，`BEGIN IMMEDIATE` 幂等入账。
+- 资金安全：修复客户端在异步事务期间断连时提前释放 SQLite 串行队列的问题，并将可能隐式写库的 API/payment GET 纳入队列；合法通知重放两次只增加一次积分。
+- 桌面端：充值页四卡单行展示，使用 `window.bridge.system.shell.openExternal` 打开系统浏览器，每 3 秒、窗口聚焦与手动刷新读取云端订单和余额；用户可见文案统一为“积分”。
+- 验证：后端专项测试 22 个、skipped=0；使用本地测试密钥完成签名夹具、非法签名、错金额、过期订单和重放验证。尚未使用新商户真实密钥联调，不得声称真实支付已通。
+- 发布状态：Blocked Candidate；最终审查发现空平台交易号仍可入账，禁止上传、部署、发布、Promote 或更新 `latest.json`。
+- Windows 安装包：`desktop-versions/windows/1.1.10/magiorix-desktop-1.1.10-windows.exe`，大小 `106587966`，SHA256 `DD4B3D64E3CC5BE8354ECF264586E93992139C2A66325B106C231C2342F429BA`。
+- 前端资源包：`desktop-versions/windows/1.1.10/magiorix-desktop-1.1.10-assets.zip`，大小 `2533031`，SHA256 `B85ABBDB73C2357F427F0FFA85B143D0A9ABA9E8125DA250AD8BE7A35BCDC63D`。
+
+## 1.1.9 (Abandoned Candidate — 禁止发布)
 
 - 账号：登录页默认手机号+密码，新增 4 位短信码注册与找回密码；验证码 5 分钟一次性、同手机号 60 秒限发，新用户赠 100 积分，旧短信登录接口不再建号。
 - 充值：启用 10元=50、100元=550、500元=2800、1000元=6000 四档；支付页再选支付宝电脑网站支付或微信 Native，凭证有效 30 分钟。
 - 资金安全：微信 API v3 原始报文验签解密、支付宝官方公钥验签；核对商户/应用/订单/渠道/整数分金额，并用 `BEGIN IMMEDIATE` 原子幂等入账。
 - 桌面端：充值四卡单行横向滚动，系统浏览器打开 `payUrl`，每 3 秒、窗口聚焦和手动刷新读取云端订单与余额；用户文案统一为“积分”。
 - 验证：专项自动测试 21 个、skipped=0；包含验证码并发错误锁定、支付配置 fail-fast、平台有效期对齐、非法签名、错金额、过期订单、并发/顺序通知重放。签名夹具通过，但尚无新商户真实支付联调结论。
-- 发布状态：Candidate；未使用新商户真实密钥联调，不得更新 `latest.json`。
+- 发布状态：Abandoned Candidate；存在 SQLite 断连事务安全和桌面 `openExternal` bridge 路径缺陷，禁止发布、禁止 Promote、禁止更新 `latest.json`，不得删除、覆盖或重建现有 1.1.9 产物。
 - Windows 安装包：`desktop-versions/windows/1.1.9/magiorix-desktop-1.1.9-windows.exe`，大小 `106581567`，SHA256 `DE57855386BB0F4C7321EE30AAC02C9D0B221A20301485E8884A626095B67202`。
 - 前端资源包：`desktop-versions/windows/1.1.9/magiorix-desktop-1.1.9-assets.zip`，大小 `2533037`，SHA256 `DFFBE81F122519070AE89E7C7DE9FADF92A925E57216F930EE6F5C3AD74BB420`。
 

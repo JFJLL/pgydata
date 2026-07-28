@@ -48,3 +48,24 @@
 - 语法检查覆盖 server/lib/test 共 7 个 JS 文件，0 失败；未发现真实短信/支付密钥或敏感请求内容写入日志。
 
 达到最多 3 轮限制后停止修复。整体发布仍因上述 SQLite 断连事务、桌面 bridge、不可变 1.1.9 manifest 和根级 unit 门禁保持 FAIL。
+
+## 第四轮（1.1.10 fresh-context，只读）
+
+结论：FAIL。1.1.10 支付幂等、正确 Electron bridge、Candidate 哈希和历史不可变性通过；新发现不完整 JSON 在 body parser 阶段断连时没有进入 `asyncHandler`，后续 API 实测 2 秒超时。版本测试虽统一读取 desktop version，但未锁定 1.1.10 且未核对 prepared assets/manifest；生产仍有公开管理员默认密码。
+
+## 第五轮修复
+
+- mutation queue 增加请求流 `aborted/error` 释放路径；无活动 handler 的解析期断连立即释放，有活动事务时仍等待所有异步 handler settle，避免交叉回滚。
+- 新增解析期断连回归与生产管理员密码 fail-fast 回归；后端专项增至 24/24、skipped 0。
+- 生产 `ADMIN_PASSWORD` 缺失或短于 12 字符时拒绝启动，测试环境显式使用 test-only 密码。
+- 版本契约明确锁定 1.1.10，并校验后端 ASSET_VERSION、版本 manifest、release-info、Candidate EXE/assets.zip、prepared assets 的大小与 SHA256，以及 Electron bridge。
+
+第五轮完成后必须由新的 fresh-context reviewer 复核；若仍 FAIL，按授权停止，不再扩轮。
+
+## 第五轮 fresh-context 最终复核（只读）
+
+结论：FAIL，R3 阻塞。审查者用合法测试 RSA 签名、正确微信商户/应用/订单/金额且省略 `transaction_id`，实际得到 `{"notifyStatus":200,"notify":{"code":"SUCCESS","message":"成功"},"balance":150}`；支付宝缺少 `trade_no` 会进入同一空交易号结算路径。该 High 直接阻止 Candidate 发布。
+
+其余复核通过：不完整/畸形/超大请求体和未知 POST 后队列可继续处理 API、注册与支付；生产管理员密码缺失/过短均 exit 1；版本与 Candidate 哈希严格一致；正确 bridge 存在；不可变 build 不改文件且篡改/缺失会失败；历史 1.1.8/1.1.9/latest diff=0；无敏感材料。后端 24/24、根测试、确定性 R3 通道均为绿色，但不能覆盖上述 High。
+
+新增两轮授权已用完，按硬规则停止，不进入第六轮。

@@ -26,15 +26,18 @@ const DEFAULT_GIFT_BALANCE = Number(process.env.DEFAULT_GIFT_BALANCE || 100);
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "red-magic-api.sqlite");
 const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, "logs");
-const ASSET_VERSION = "1.1.9";
-const INSTALLER_FILE_NAME = "magiorix-desktop-1.1.9-windows.exe";
-const INSTALLER_DOWNLOAD_URL = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.9-windows.exe";
-const INSTALLER_SHA256 = (process.env.INSTALLER_SHA256 || "C874C2166E7C0EBBC2AD427028FB3060441D9A20D33239077B30F3887C5E16BA").trim();
+const ASSET_VERSION = "1.1.10";
+const INSTALLER_FILE_NAME = "magiorix-desktop-1.1.10-windows.exe";
+const INSTALLER_DOWNLOAD_URL = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.10-windows.exe";
+const INSTALLER_SHA256 = (process.env.INSTALLER_SHA256 || "DD4B3D64E3CC5BE8354ECF264586E93992139C2A66325B106C231C2342F429BA").trim();
 const RELEASE_MANIFEST_PATH = process.env.RELEASE_MANIFEST_PATH
   || path.join(__dirname, "public", "releases", "windows", "latest.json");
 const RELEASE_MANIFEST = loadReleaseManifest(RELEASE_MANIFEST_PATH);
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "redmagic2026";
+const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || "");
+if (process.env.NODE_ENV !== "test" && ADMIN_PASSWORD.length < 12) {
+  throw new Error("ADMIN_PASSWORD 必须在生产环境配置且不少于 12 个字符");
+}
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const SMS_CODE_TTL_MS = 5 * 60 * 1000;
 const SMS_SEND_INTERVAL_MS = 60 * 1000;
@@ -137,7 +140,17 @@ function fail(res, code, message, data = null) {
 }
 
 function asyncHandler(fn) {
-  return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+  return (req, res, next) => {
+    req.databaseMutationActiveHandlers = Number(req.databaseMutationActiveHandlers || 0) + 1;
+    return Promise.resolve(fn(req, res, next))
+      .catch(next)
+      .finally(() => {
+        req.databaseMutationActiveHandlers = Math.max(0, Number(req.databaseMutationActiveHandlers || 0) - 1);
+        if (req.databaseMutationConnectionClosed && req.databaseMutationActiveHandlers === 0) {
+          req.releaseDatabaseMutationSlot?.();
+        }
+      });
+  };
 }
 
 function nowIso() {
@@ -742,8 +755,9 @@ const adminRequired = asyncHandler(async (req, res, next) => {
 
 function serializeDatabaseMutations(req, res, next) {
   const methodWrites = !new Set(["GET", "HEAD", "OPTIONS"]).has(req.method);
-  const getWrites = /^\/pay\/[^/]+\/(?:alipay|wechat)$/.test(req.path)
-    || /^\/api\/shumiao\/order\//.test(req.path);
+  // Authentication may revoke expired tokens and account reads may lazily create
+  // a balance row, so every API/payment GET must share the mutation queue too.
+  const getWrites = req.method === "GET" && (/^\/api\//.test(req.path) || /^\/pay\//.test(req.path));
   if (!methodWrites && !getWrites) return next();
 
   let releaseSlot;
@@ -755,10 +769,26 @@ function serializeDatabaseMutations(req, res, next) {
     const release = () => {
       if (released) return;
       released = true;
+      req.databaseMutationSlotReleased = true;
       releaseSlot();
     };
+    req.releaseDatabaseMutationSlot = release;
     res.once("finish", release);
-    res.once("close", release);
+    const markConnectionClosed = () => {
+      req.databaseMutationConnectionClosed = true;
+      if (Number(req.databaseMutationActiveHandlers || 0) === 0) release();
+    };
+    // An incomplete request body aborts the IncomingMessage before Express
+    // creates a route handler or response, so response events alone cannot
+    // release the queue slot.
+    req.once("aborted", markConnectionClosed);
+    req.once("error", markConnectionClosed);
+    // `close` can fire while an async route still owns a SQLite transaction.
+    // Mark the disconnect and let asyncHandler release only after that route
+    // settles; releasing here would allow another request to ROLLBACK it.
+    res.once("close", () => {
+      if (!res.writableEnded) markConnectionClosed();
+    });
     next();
   }).catch(next);
 }

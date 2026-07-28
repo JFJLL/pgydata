@@ -29,7 +29,7 @@ function dbRun(dbPath, sql, params = []) {
 }
 
 async function startApi(envOverrides = {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "magiorix-1.1.9-test-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "magiorix-1.1.10-test-"));
   const dbPath = path.join(root, "api.sqlite");
   const logDir = path.join(root, "logs");
   const privateKeyPath = path.join(root, "private.pem");
@@ -43,6 +43,7 @@ async function startApi(envOverrides = {}) {
   const env = {
     ...process.env,
     NODE_ENV: "test",
+    ADMIN_PASSWORD: "test-only-admin-password",
     PORT: String(port),
     BASE_URL: `http://127.0.0.1:${port}`,
     PAY_BASE_URL: `http://127.0.0.1:${port}`,
@@ -107,4 +108,35 @@ async function startApi(envOverrides = {}) {
   };
 }
 
-module.exports = { startApi };
+async function startApiExpectFailure(envOverrides = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "magiorix-1.1.10-startup-failure-"));
+  const port = await freePort();
+  const apiDir = path.resolve(__dirname, "..");
+  const serverPath = process.env.MAGIORIX_SERVER_PATH || path.join(apiDir, "server.js");
+  const child = spawn(process.execPath, [serverPath], {
+    cwd: path.dirname(serverPath),
+    env: {
+      ...process.env,
+      NODE_ENV: "production",
+      PORT: String(port),
+      DB_PATH: path.join(root, "api.sqlite"),
+      LOG_DIR: path.join(root, "logs"),
+      ADMIN_PASSWORD: "",
+      ...envOverrides,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let output = "";
+  child.stdout.on("data", (chunk) => { output += chunk.toString(); });
+  child.stderr.on("data", (chunk) => { output += chunk.toString(); });
+  const exitCode = await Promise.race([
+    new Promise((resolve) => child.once("exit", resolve)),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("API unexpectedly kept running")), 3000)),
+  ]).finally(() => {
+    if (child.exitCode === null) child.kill();
+  });
+  fs.rmSync(root, { recursive: true, force: true });
+  return { exitCode, output };
+}
+
+module.exports = { startApi, startApiExpectFailure };
