@@ -79,7 +79,7 @@
       "modes": ["local", "ci"],
       "minExecuted": 1,
       "commands": [
-        {"id": "node-unit", "program": "node", "args": ["--test", "tests/unit/release-manifest.test.js", "tests/unit/collection-history-store.test.mjs", "tests/unit/collection-runtime-contract.test.js"], "required": true}
+        {"id": "node-unit", "program": "node", "args": ["--test", "tests/unit/release-manifest.test.js", "tests/unit/collection-history-store.test.mjs", "tests/unit/collection-runtime-contract.test.js", "tests/unit/collection-history-export.test.mjs"], "required": true}
       ]
     },
     "build": {

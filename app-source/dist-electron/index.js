@@ -3,6 +3,7 @@ var wr = (a, e, t) => e in a ? br(a, e, { enumerable: !0, configurable: !0, writ
 var w = (a, e, t) => wr(a, typeof e != "symbol" ? e + "" : e, t);
 import { ipcMain as F, BrowserWindow as Dt, app as ye, screen as Gi, shell as Ji, dialog as Ki, net as Jt, Notification as Et, session as Pn, nativeImage as PgyNativeImage } from "electron";
 import { CollectionHistoryStore } from "../electron-main/collection-history-store.mjs";
+import { buildCollectionHistoryExportPayload } from "../electron-main/collection-export-headers.mjs";
 import * as Xi from "path";
 import Yi, { join as Oe, dirname as Ja } from "path";
 import jn, { fileURLToPath as Ka } from "url";
@@ -22279,7 +22280,7 @@ function vf(a) {
       throw new Error("历史任务不存在");
     if (s.length === 0)
       throw new Error("该任务暂无可导出的成功内容");
-    return ff({ taskId: t.taskId, fileName: n.fileName || `${t.taskId}.xlsx`, data: s });
+    return ff(buildCollectionHistoryExportPayload(n, s));
   }), F.handle(W.history.resumeTask, async (e, t) => {
     const n = await pgyCollectionHistory.getResumePlan(t.taskId);
     if (n.payload.urls.length === 0) {

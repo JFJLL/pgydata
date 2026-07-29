@@ -55,6 +55,14 @@ main = insertAfterOnce(
   "collection history store import",
 );
 
+main = insertAfterOnce(
+  main,
+  'import { CollectionHistoryStore } from "../electron-main/collection-history-store.mjs";',
+  'import { buildCollectionHistoryExportPayload } from "../electron-main/collection-export-headers.mjs";',
+  'import { buildCollectionHistoryExportPayload }',
+  "collection export headers import",
+);
+
 if (!main.includes("const pgyCollectionHistory")) {
   main = replaceOnce(
     main,
@@ -2445,6 +2453,16 @@ if (!main.includes("await pgyCollectionHistory.initialize()")) {
     "initialize collection history before desktop handlers",
   );
 }
+
+// 历史导出补齐规范表头：命中 Schema 时以 mode:"two-row" + headers 调用 ff，
+// 与正常任务面板导出保持一致（含图片嵌入）；未命中 Schema 的 legacy 任务保持单行兼容导出。
+// 解析/过滤逻辑见 app-source/electron-main/collection-export-headers.mjs。
+main = replaceOnce(
+  main,
+  'return ff({ taskId: t.taskId, fileName: n.fileName || `${t.taskId}.xlsx`, data: s });',
+  'return ff(buildCollectionHistoryExportPayload(n, s));',
+  "history export uses schema headers and image embedding",
+);
 
 if (!main.includes("const pgySourceIndexes")) {
   main = replaceOnce(

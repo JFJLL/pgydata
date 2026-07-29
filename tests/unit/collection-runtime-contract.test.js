@@ -41,14 +41,30 @@ test("preload and assistant expose persistent history, partial export, resume, a
   assert.doesNotMatch(assistant, /MAX_EXPORT_ROWS_PER_TASK/);
 });
 
-test("source package, asset version, and backend package stay aligned at 1.1.8", () => {
+test("history export handler builds schema payload instead of raw single-row data", () => {
+  const main = read("app-source/dist-electron/index.js");
+  assert.ok(
+    main.includes('import { buildCollectionHistoryExportPayload } from "../electron-main/collection-export-headers.mjs";'),
+    "main bundle must import buildCollectionHistoryExportPayload",
+  );
+  assert.ok(
+    main.includes("return ff(buildCollectionHistoryExportPayload(n, s));"),
+    "history export handler must pass schema headers via buildCollectionHistoryExportPayload",
+  );
+  assert.ok(
+    !main.includes("return ff({ taskId: t.taskId, fileName: n.fileName ||"),
+    "legacy raw history export call must not remain in the bundle",
+  );
+});
+
+test("source package, asset version, and backend package stay aligned at 1.1.11", () => {
   const desktop = JSON.parse(read("app-source/package.json"));
   const backend = JSON.parse(read("red-magic-api/package.json"));
-  const assets = JSON.parse(read("assets/1.1.8/version.json"));
-  assert.equal(desktop.version, "1.1.8");
-  assert.equal(desktop.assetsVersion, "1.1.8");
-  assert.equal(backend.version, "1.1.8");
-  assert.equal(assets.version, "1.1.8");
+  const assets = JSON.parse(read("assets/1.1.11/version.json"));
+  assert.equal(desktop.version, "1.1.11");
+  assert.equal(desktop.assetsVersion, "1.1.11");
+  assert.equal(backend.version, "1.1.11");
+  assert.equal(assets.version, "1.1.11");
 });
 
 test("admin password reset dialog requires matching passwords and task transaction filter", () => {
