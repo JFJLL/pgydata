@@ -2,21 +2,21 @@
   "schemaVersion": 1,
   "channel": "stable",
   "desktop": {
-    "version": "1.1.8",
-    "fileName": "magiorix-desktop-1.1.8-windows.exe",
-    "downloadUrl": "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.8-windows.exe",
-    "size": 105511542,
-    "sha256": "366B281D3F658FBEE731DCD0EB9753CBF3FCEBF0102511812E8AC615B15B447F"
+    "version": "1.1.11",
+    "fileName": "magiorix-desktop-1.1.11-windows.exe",
+    "downloadUrl": "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.11-windows.exe",
+    "size": 105522893,
+    "sha256": "0314115E826D7A81AEE71B92B6D047804B63328E5E4E9F1825571DD4CCAA366C"
   },
   "assets": {
-    "version": "1.1.8",
-    "fileName": "magiorix-desktop-1.1.8-assets.zip",
-    "downloadUrl": "https://magiorix.red-magic.cn/assets/desktop/1.1.8/assets.zip",
-    "size": 2537174,
-    "sha256": "EE1A69718569099876B32C178EDCDAC7A131F93EDF3E2A77E53A2ABE05BE66E9"
+    "version": "1.1.11",
+    "fileName": "magiorix-desktop-1.1.11-assets.zip",
+    "downloadUrl": "https://magiorix.red-magic.cn/assets/desktop/1.1.11/assets.zip",
+    "size": 2537177,
+    "sha256": "2A22EFF12543F84008223345992D27B5C9C567FCB62FA8CC65AA2173D8B25A75"
   },
   "releaseNotes": [
-    "magiorix 1.1.8 update"
+    "magiorix 1.1.11 update"
   ],
-  "generatedAt": "2026-07-28T03:37:28.8105928Z"
+  "generatedAt": "2026-07-29T09:35:40.2918657Z"
 }
