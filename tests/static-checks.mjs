@@ -63,12 +63,16 @@ assert.match(runtimePatch, /pgy_daily_note_svg\.js/, "runtime patch must load th
 assert.match(runtimePatch, /bloggerOverviewChart/, "runtime patch must generate the blogger overview chart");
 assert.match(runtimePatch, /blogger-overview/, "runtime patch must route the blogger overview renderer");
 assert.match(runtimePatch, /pgy_blogger_overview_svg\.js/, "runtime patch must load the maintained blogger overview SVG source");
+assert.match(runtimePatch, /data_summary\?userId=\\\$\{a\}&business=0/, "runtime patch must request the web overview data_summary endpoint");
+assert.match(runtimePatch, /overviewSummary: \["bloggerOverviewChart"\]/, "overview summary endpoint must stay scoped to the overview chart");
 assert.match(dailyNoteSvgSource, /width="808" height="378"/, "daily note SVG must use the web-layout canvas");
 assert.match(dailyNoteSvgSource, /pgyDailyNoteEllipsize/, "daily note SVG must bound long category text");
 assert.match(dailyNoteSvgSource, /pgyNoteTypeLabel/, "daily note SVG must render its selected note type");
 assert.match(bloggerOverviewSvgSource, /width="2048" height="1066"/, "blogger overview SVG must match the approved crop");
 assert.match(bloggerOverviewSvgSource, /function pgyBuildBloggerOverviewData/, "blogger overview must normalize raw PGY fields");
 assert.match(bloggerOverviewSvgSource, /interactionPeerText/, "blogger overview must preserve peer percentile metrics");
+assert.match(bloggerOverviewSvgSource, /kolAdvantage/, "blogger overview must read the web kolAdvantage field");
+assert.match(bloggerOverviewSvgSource, /无机构/, "blogger overview must fall back to 无机构 like the web page");
 
 const chartRendererBuild = readFileSync("scripts/build-pgy-chart-renderer.ps1", "utf8");
 assert.match(chartRendererBuild, /tools\\pgy_chart_renderer\.py/, "chart renderer build must use the maintained Python source");

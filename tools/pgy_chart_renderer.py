@@ -347,6 +347,8 @@ def save_blogger_overview(chart):
     width, height = 2048, 1066
     img = Image.new("RGB", (width, height), "#f7f7f9")
     draw = ImageDraw.Draw(img)
+    font_15 = load_font(15)
+    font_16 = load_font(16)
     font_18 = load_font(18)
     font_19 = load_font(19)
     font_20 = load_font(20)
@@ -405,12 +407,30 @@ def save_blogger_overview(chart):
     avatar = load_overview_avatar(data.get("avatar"), 104)
     if avatar:
         img.paste(avatar, (126, 164), avatar)
-    put(252, 168, value("nickname"), font_24_bold, max_width=230)
-    draw.ellipse((378, 176, 402, 200), fill="#e9f1ff")
-    if bool(data.get("verified")):
-        draw.ellipse((415, 176, 439, 200), fill="#edf9ef", outline="#5ab76b", width=2)
-        line(421, 188, 425, 192, "#5ab76b", 2)
-        line(425, 192, 432, 183, "#5ab76b", 2)
+    nickname_text = ellipsize(draw, value("nickname"), font_24_bold, 236)
+    put(252, 168, nickname_text, font_24_bold)
+    icon_x = 252 + text_width(draw, nickname_text, font_24_bold) + 14
+    gender = value("genderText")
+    if gender in ("女", "男"):
+        gender_fill = "#f8a0bb" if gender == "女" else "#8ab6ee"
+        draw.ellipse((icon_x, 174, icon_x + 24, 198), fill=gender_fill)
+        put(icon_x + 5, 176, "♀" if gender == "女" else "♂", font_16, "white")
+        icon_x += 34
+    health_state = value("healthLevelState")
+    if health_state in ("healthy", "abnormal"):
+        hx, hy = icon_x, 174
+        fill = "#02B940" if health_state == "healthy" else "#FF7D03"
+        shield = [
+            (hx + 11, hy), (hx + 22, hy + 5), (hx + 22, hy + 14),
+            (hx + 18, hy + 19), (hx + 14, hy + 23), (hx + 11, hy + 26),
+            (hx + 8, hy + 23), (hx + 4, hy + 19), (hx, hy + 14), (hx, hy + 5),
+        ]
+        draw.polygon(shield, fill=fill)
+        if health_state == "healthy":
+            draw.line([(hx + 6, hy + 13), (hx + 9, hy + 17), (hx + 16, hy + 8)], fill="white", width=2, joint="curve")
+        else:
+            draw.line([(hx + 11, hy + 6), (hx + 11, hy + 15)], fill="white", width=2)
+            draw.ellipse((hx + 10, hy + 18, hx + 12, hy + 20), fill="white")
     put(252, 216, "小红书号：", font_19, "#999999")
     put(354, 216, value("redId"), font_20, "#5273b4", 190)
     put(252, 256, f"● {value('location')}", font_18, "#999999", 150)
@@ -418,11 +438,22 @@ def save_blogger_overview(chart):
     line(424, 263, 424, 271, "#777777")
     line(428, 263, 428, 271, "#777777")
     put(440, 256, value("mcn"), font_18, "#5273b4", 130)
+    travel_area = value("travelAreaText")
+    has_travel = travel_area != "-"
+    if has_travel:
+        draw.polygon([(252, 306), (272, 294), (262, 310)], fill="#b9bec7")
+        put(280, 290, travel_area, font_18, "#595959", 220)
+    tag_y = 336 if has_travel else 303
     tags = data.get("categoryTags") if isinstance(data.get("categoryTags"), list) else []
-    for index, tag in enumerate(tags[:3]):
-        x = 126 + index * 112
-        box((x, 303, x + 92, 333), 4, "#f2f2f2")
-        put(x + 10, 307, str(tag), font_18, "#595959", 72)
+    tag_x = 126
+    for tag in tags[:5]:
+        tag_label = ellipsize(draw, str(tag), font_18, 120)
+        tag_width = text_width(draw, tag_label, font_18) + 20
+        if tag_x + tag_width > 590:
+            break
+        box((tag_x, tag_y, tag_x + tag_width, tag_y + 30), 4, "#f2f2f2")
+        put(tag_x + 10, tag_y + 4, tag_label, font_18, "#595959")
+        tag_x += tag_width + 12
     put(198, 382, "粉丝数", font_22)
     put(402, 382, "获赞与收藏", font_22)
     put(192, 425, value("fansText"), font_32_bold)
@@ -497,14 +528,20 @@ def save_blogger_overview(chart):
     put(726, 755, "近7天活跃天数", font_21, "#666666")
     dashed(726, 786, 862)
     put(726, 800, value("activeDaysText"), font_31_bold, "#111111")
-    box((726, 846, 806, 875), 0, "#eef2ff")
-    put(736, 846, value("activeLabelText"), font_18, "#5273b4", 62)
+    active_label = value("activeLabelText")
+    if active_label != "-":
+        active_width = text_width(draw, active_label, font_18) + 20
+        box((726, 846, 726 + active_width, 875), 0, "#eef2ff")
+        put(736, 850, active_label, font_18, "#5273b4")
     line(986, 758, 986, 866)
     put(1020, 755, "邀约48小时回复率", font_21, "#666666")
     dashed(1020, 786, 1180)
     put(1020, 800, value("replyRateText"), font_31_bold, "#111111")
-    box((1020, 846, 1112, 875), 0, "#eef2ff")
-    put(1030, 846, value("replyLabelText"), font_18, "#5273b4", 72)
+    reply_label = value("replyLabelText")
+    if reply_label != "-":
+        reply_width = text_width(draw, reply_label, font_18) + 20
+        box((1020, 846, 1020 + reply_width, 875), 0, "#eef2ff")
+        put(1030, 850, reply_label, font_18, "#5273b4")
 
     box((1300, 662, 1898, 902), 9, "white", "#e8e8e8")
     box((1326, 690, 1360, 724), 8, "#e8f7f4")

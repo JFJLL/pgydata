@@ -135,6 +135,9 @@ test("blogger overview normalization preserves PGY formatting and missing-value 
   assert.match(runtimeSource, /effective: \[[\s\S]*?"bloggerOverviewChart"[\s\S]*?daily30: \[/);
   assert.match(runtimeSource, /daily30: \[[\s\S]*?"bloggerOverviewChart"[\s\S]*?daily90: \[/);
   assert.match(runtimeSource, /fansSummary: \[[^\]]*"bloggerOverviewChart"[^\]]*\]/);
+  assert.match(runtimeSource, /overviewSummary: \(a\) => `[^`]+data_summary\?userId=\$\{a\}&business=0`/);
+  assert.match(runtimeSource, /overviewSummary: \["bloggerOverviewChart"\]/);
+  assert.match(runtimeSource, /overview: \(\(t\.overviewSummary == null \? void 0 : t\.overviewSummary\.data\) \?\? \{\}\)/);
   const overview = jsHelpers.pgyBuildBloggerOverviewData({
     avatar: "https://example.test/avatar.png",
     profile: {
@@ -183,7 +186,9 @@ test("blogger overview normalization preserves PGY formatting and missing-value 
     redId: "4289451266",
     location: "广东 广州",
     mcn: "六月星河",
-    verified: true,
+    genderText: "-",
+    healthLevelState: "",
+    travelAreaText: "-",
     categoryTags: ["文化艺术"],
     fansText: "8.3w",
     likeCollectText: "87.3w",
@@ -228,6 +233,94 @@ test("blogger overview normalization preserves PGY formatting and missing-value 
   assert.equal(missing.picturePriceText, "-");
   assert.equal(missing.exposurePeerText, "优于 - 同行");
   assert.equal(missing.cooperationIndustryText, "暂无");
+  assert.equal(missing.mcn, "无机构");
+  const missingSvg = jsHelpers.pgyBloggerOverviewSvg(missing);
+  assert.doesNotMatch(missingSvg, /fill="#eef2ff"/, "empty service labels must not render badge boxes");
+});
+
+test("blogger overview prefers the web data_summary source over legacy guesses", () => {
+  const overview = jsHelpers.pgyBuildBloggerOverviewData({
+    avatar: "https://example.test/avatar.png",
+    profile: {
+      name: "满满Dangdang～（孕期）",
+      redId: "180103955",
+      location: "福建 漳州 龙海区",
+      travelAreaList: ["福建", "广东"],
+      contentTags: [{ taxonomy1Tag: "母婴", taxonomy2Tags: ["婴童用品"] }],
+      featureTags: ["露营徒步", "ootd", "氛围感", "plog"],
+      gender: "女",
+      currentLevel: 2,
+      noteSign: null,
+      liveSign: null,
+      fansCount: 13273,
+      likeCollectCountInfo: 120640,
+      picturePrice: 3000,
+      videoPrice: 4000,
+    },
+    overview: {
+      dateKey: "2026-07-29",
+      kolAdvantage: "品效型博主",
+      noteNumber: 10,
+      noteType: [
+        { contentTag: "母婴", percent: "90.0" },
+        { contentTag: "出行旅游", percent: "10.0" },
+      ],
+      tradeNames: ["食品饮料", "母婴"],
+      mAccumImpNum: 81258,
+      mAccumImpCompare: 94.35,
+      mValidRawReadFeedNum: 9378,
+      mValidRawReadFeedCompare: 90.59,
+      mEngagementNum: 574,
+      mEngagementNumCompare: 88.32,
+      activeDayInLast7: 7,
+      isActive: true,
+      responseRate: "95.5",
+      easyConnect: true,
+      fans30GrowthRate: "4.9",
+      fans30GrowthBeyondRate: "96.3",
+    },
+    daily30: { noteNumber: 1, impMedian: 81212, readMedian: 9374, interactionMedian: 541 },
+    fansSummary: { fansGrowthRate: "4.9", fansGrowthBeyondRate: "96.3" },
+  });
+  assert.equal(overview.updatedAtText, "2026-07-29");
+  assert.equal(overview.advantageText, "品效型博主");
+  assert.equal(overview.publishedNotesText, "10篇");
+  assert.equal(overview.contentCategoriesText, "母婴、出行旅游");
+  assert.equal(overview.cooperationIndustryText, "食品饮料、母婴");
+  assert.equal(overview.exposureText, "81,258");
+  assert.equal(overview.exposurePeerText, "优于 94.35% 同行");
+  assert.equal(overview.readText, "9,378");
+  assert.equal(overview.readPeerText, "优于 90.59% 同行");
+  assert.equal(overview.interactionText, "574");
+  assert.equal(overview.interactionPeerText, "优于 88.32% 同行");
+  assert.equal(overview.activeDaysText, "7天");
+  assert.equal(overview.activeLabelText, "活跃");
+  assert.equal(overview.replyRateText, "95.5%");
+  assert.equal(overview.replyLabelText, "好联系");
+  assert.equal(overview.fansGrowthText, "4.9%");
+  assert.equal(overview.fansGrowthPeerText, "优于 96.3% 同行");
+  assert.equal(overview.mcn, "无机构");
+  assert.equal(overview.genderText, "女");
+  assert.equal(overview.healthLevelState, "healthy");
+  assert.equal(overview.travelAreaText, "福建、广东");
+  assert.deepEqual(overview.categoryTags, ["母婴", "露营徒步", "ootd", "氛围感", "plog"]);
+
+  const svg = jsHelpers.pgyBloggerOverviewSvg(overview);
+  for (const expected of [
+    "数据更新至： 2026-07-29",
+    "品效型博主",
+    "无机构",
+    ">福建、广东</text>",
+    "fill=\"#02B940\"",
+    "♀",
+    "plog",
+    "优于 94.35% 同行",
+    "优于 96.3% 同行",
+    ">活跃</text>",
+    ">好联系</text>",
+  ]) {
+    assert.ok(svg.includes(expected), `overview SVG is missing ${expected}`);
+  }
 });
 
 test("typed daily note charts use independent endpoints and visible filter labels", () => {

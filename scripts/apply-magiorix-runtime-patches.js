@@ -1608,12 +1608,71 @@ main = replaceOnce(
     `const s = ((O = t.profile) == null ? void 0 : O.data) ?? {}, i = ((le = t.effective) == null ? void 0 : le.data) ?? {}, o = ((de = t.daily30) == null ? void 0 : de.data) ?? {}, dailyPicture = (t.daily30Picture == null ? void 0 : t.daily30Picture.data) ?? {}, dailyVideo = (t.daily30Video == null ? void 0 : t.daily30Video.data) ?? {}, r = ((H = t.daily90) == null ? void 0 : H.data) ?? {},`,
     "pgy typed daily note response data",
   );
-  main = replaceOnce(
-    main,
-    `I, o, pgyBuildBloggerOverviewData({ bloggerId: e, profile: s, effective: i, daily30: o, fansSummary: l, avatar: n }));`,
-    `I, o, pgyBuildBloggerOverviewData({ bloggerId: e, profile: s, effective: i, daily30: o, fansSummary: l, avatar: n }), dailyPicture, dailyVideo);`,
-    "pgy typed daily note chart data input",
-  );
+  // 后续 overview 数据源补丁会改写本补丁的产物，已注入 overview 时跳过以保持可重入
+  if (!main.includes("overview: ((t.overviewSummary == null")) {
+    main = replaceOnce(
+      main,
+      `I, o, pgyBuildBloggerOverviewData({ bloggerId: e, profile: s, effective: i, daily30: o, fansSummary: l, avatar: n }));`,
+      `I, o, pgyBuildBloggerOverviewData({ bloggerId: e, profile: s, effective: i, daily30: o, fansSummary: l, avatar: n }), dailyPicture, dailyVideo);`,
+      "pgy typed daily note chart data input",
+    );
+  }
+
+// 数据概览卡片真实数据源：网页同源 data_summary?business=0 接口（博主优势、发布笔记、内容类目、合作行业、中位数及优于同行、服务表现、更新日期）
+main = replaceOnce(
+  main,
+  `  fansSummary: (a) => \`\${Re}/api/solar/kol/data_v3/fans_summary?userId=\${a}\`,
+  /** 粉丝分布 */`,
+  `  fansSummary: (a) => \`\${Re}/api/solar/kol/data_v3/fans_summary?userId=\${a}\`,
+  /** 数据概览汇总（网页数据概览卡片同源接口） */
+  overviewSummary: (a) => \`\${Re}/api/pgy/kol/data/data_summary?userId=\${a}&business=0\`,
+  /** 粉丝分布 */`,
+  "pgy overview summary endpoint",
+);
+
+main = replaceOnce(
+  main,
+  `  "fansSummary",
+  "fansProfile",`,
+  `  "fansSummary",
+  "overviewSummary",
+  "fansProfile",`,
+  "pgy overview summary endpoint list",
+);
+
+main = replaceOnce(
+  main,
+  `  fansSummary: ["activeFansRate", "fansIncreaseNum", "fansGrowthRate", "engageFansRate", "bloggerOverviewChart"],
+  fansProfile: [`,
+  `  fansSummary: ["activeFansRate", "fansIncreaseNum", "fansGrowthRate", "engageFansRate", "bloggerOverviewChart"],
+  overviewSummary: ["bloggerOverviewChart"],
+  fansProfile: [`,
+  "pgy overview summary field dependency",
+);
+
+main = replaceOnce(
+  main,
+  `              if (h[b].key === "fansTrend") {
+                j.warn(
+                  \`[blogger] 粉丝趋势图接口无数据，跳过趋势图: code=\${S.value.code}, msg=\${S.value.msg ?? ""}, bloggerId=\${p}\`
+                ), f[h[b].key] = null;
+                continue;
+              }`,
+  `              if (h[b].key === "fansTrend" || h[b].key === "overviewSummary") {
+                j.warn(
+                  \`[blogger] 可选接口无数据，跳过: api=\${h[b].key}, code=\${S.value.code}, msg=\${S.value.msg ?? ""}, bloggerId=\${p}\`
+                ), f[h[b].key] = null;
+                continue;
+              }`,
+  "pgy overview summary tolerant failure",
+);
+
+main = replaceOnce(
+  main,
+  `I, o, pgyBuildBloggerOverviewData({ bloggerId: e, profile: s, effective: i, daily30: o, fansSummary: l, avatar: n }), dailyPicture, dailyVideo);`,
+  `I, o, pgyBuildBloggerOverviewData({ bloggerId: e, profile: s, effective: i, daily30: o, fansSummary: l, overview: ((t.overviewSummary == null ? void 0 : t.overviewSummary.data) ?? {}), avatar: n }), dailyPicture, dailyVideo);`,
+  "pgy overview summary chart data input",
+);
 
 const chartRendererSource = fs.readFileSync(chartRendererSourcePath, "utf8");
 if (!main.includes("import urllib.request")) {

@@ -2,6 +2,14 @@
 
 本文件保存版本历史、发布记录、安装包路径与校验信息，不放长期维护规则。
 
+## 1.1.12 (Candidate)
+
+- 修复：博主数据概览图此前多处字段显示为 `-`（数据更新时间、博主优势、发布笔记数、内容类目、合作行业、三个中位数“优于 xx% 同行”、近 7 天活跃天数、活跃/好联系标签、粉丝量变化幅度“优于 xx% 同行”），根因是取数字段名与真实接口不符且未抓取网页数据源。
+- 采集：新增抓取网页“数据概览”卡片同源接口 `GET /api/pgy/kol/data/data_summary?userId=x&business=0`（命名 overviewSummary），仅用于概览图，接口无数据时容错跳过，不影响其他字段与采集主流程。
+- 取数：`pgyBuildBloggerOverviewData` 改按真实字段映射（kolAdvantage/noteNumber/noteType/tradeNames/mAccumImpNum 等及对应 Compare、activeDayInLast7/isActive/responseRate/easyConnect、fans30GrowthRate/BeyondRate），并对齐网页展示。
+- 渲染：概览图机构为空时兜底“无机构”，昵称旁改为性别图标与健康等级图标（健康=绿盾对勾 #02B940、异常=橙盾叹号 #FF7D03，按 currentLevel 判定：0 为异常，其余为健康），新增常驻地行，内容标签合并类目与特色标签并扩展到 5 个自适应宽度，活跃/好联系标签按布尔值绘制；Python 渲染器与 JS 兜底同步。
+- 构建：桌面端、前端资源与后端包版本统一升级为 `1.1.12`；不改动支付、短信、登录、积分与采集逻辑。1.1.9/1.1.10 为支付短信分支保留版本号，本分支不使用。
+
 ## 1.1.11 (Candidate)
 
 - 修复：采集助手“历史记录 → 导出已成功内容”此前丢失 `mode/headers` 参数，导出为原始英文字段单行表头；现命中规范 Schema（pgy/blogger、pgy/notebook、starmap、douyin）时按中文两行分组表头导出，与任务面板正常导出一致。
