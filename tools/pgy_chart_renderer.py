@@ -4,6 +4,7 @@ import io
 import json
 import math
 import os
+import re
 import sys
 import urllib.request
 
@@ -310,6 +311,59 @@ def save_daily_note_performance(chart):
     return True
 
 
+PGY_OVERVIEW_SHIELD_PNG = {
+    2: "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",
+    0: "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",
+}
+
+
+EMOJI_SEQUENCE = re.compile(
+    "[\U0001F000-\U0001FAFF\u2600-\u27BF\U0001F1E6-\U0001F1FF]"
+    "(?:[\uFE0F\U0001F3FB-\U0001F3FF])?"
+    "(?:\u200D[\U0001F000-\U0001FAFF\u2600-\u27BF](?:[\uFE0F\U0001F3FB-\U0001F3FF])?)*"
+)
+
+
+def load_inline_image(source, size):
+    try:
+        if not str(source).startswith("data:image/"):
+            return None
+        raw = base64.b64decode(str(source).split(",", 1)[1])
+        icon = Image.open(io.BytesIO(raw)).convert("RGBA")
+        resampling = getattr(Image, "Resampling", Image)
+        return icon.resize((size, size), getattr(resampling, "LANCZOS"))
+    except Exception:
+        return None
+
+
+def draw_nickname_with_emoji(img, draw, text, x, y, font, emoji_images):
+    # 与 JS 端 pgyOverviewNicknameSvg 对齐：emoji 命中内嵌图则贴图，否则回退字体绘制
+    images = emoji_images if isinstance(emoji_images, dict) else {}
+    size = 24
+    cursor = x
+    last = 0
+    value = str(text or "-")
+    for match in EMOJI_SEQUENCE.finditer(value):
+        head = value[last:match.start()]
+        if head:
+            draw.text((cursor, y), head, font=font, fill="#262626")
+            cursor += draw.textbbox((0, 0), head, font=font)[2]
+        segment = match.group(0)
+        icon = load_inline_image(images.get(segment), size)
+        if icon is not None:
+            img.paste(icon, (int(cursor), y + 2), icon)
+            cursor += size
+        else:
+            draw.text((cursor, y), segment, font=font, fill="#262626")
+            cursor += max(size, draw.textbbox((0, 0), segment, font=font)[2])
+        last = match.end()
+    tail = value[last:]
+    if tail:
+        draw.text((cursor, y), tail, font=font, fill="#262626")
+        cursor += draw.textbbox((0, 0), tail, font=font)[2]
+    return int(cursor)
+
+
 def load_overview_avatar(source, size):
     if not source or source == "-":
         return None
@@ -407,57 +461,56 @@ def save_blogger_overview(chart):
     avatar = load_overview_avatar(data.get("avatar"), 104)
     if avatar:
         img.paste(avatar, (126, 164), avatar)
-    nickname_text = ellipsize(draw, value("nickname"), font_24_bold, 236)
-    put(252, 168, nickname_text, font_24_bold)
-    icon_x = 252 + text_width(draw, nickname_text, font_24_bold) + 14
+    nickname_text = ellipsize(draw, value("nickname"), font_24_bold, 278)
+    icon_x = draw_nickname_with_emoji(img, draw, nickname_text, 252, 168, font_24_bold, data.get("nicknameEmojiImages")) + 16
     gender = value("genderText")
     if gender in ("女", "男"):
-        gender_fill = "#f8a0bb" if gender == "女" else "#8ab6ee"
-        draw.ellipse((icon_x, 174, icon_x + 24, 198), fill=gender_fill)
-        put(icon_x + 5, 176, "♀" if gender == "女" else "♂", font_16, "white")
-        icon_x += 34
-    health_state = value("healthLevelState")
-    if health_state in ("healthy", "abnormal"):
-        hx, hy = icon_x, 174
-        fill = "#02B940" if health_state == "healthy" else "#FF7D03"
-        shield = [
-            (hx + 11, hy), (hx + 22, hy + 5), (hx + 22, hy + 14),
-            (hx + 18, hy + 19), (hx + 14, hy + 23), (hx + 11, hy + 26),
-            (hx + 8, hy + 23), (hx + 4, hy + 19), (hx, hy + 14), (hx, hy + 5),
-        ]
-        draw.polygon(shield, fill=fill)
-        if health_state == "healthy":
-            draw.line([(hx + 6, hy + 13), (hx + 9, hy + 17), (hx + 16, hy + 8)], fill="white", width=2, joint="curve")
-        else:
-            draw.line([(hx + 11, hy + 6), (hx + 11, hy + 15)], fill="white", width=2)
-            draw.ellipse((hx + 10, hy + 18, hx + 12, hy + 20), fill="white")
+        person_color = "#ff6f91" if gender == "女" else "#4d7ed8"
+        person_background = "#fff0f4" if gender == "女" else "#e9f1ff"
+        draw.ellipse((icon_x - 12, 173, icon_x + 12, 197), fill=person_background)
+        draw.ellipse((icon_x - 4, 176, icon_x + 4, 184), fill=person_color)
+        draw.pieslice((icon_x - 7, 185, icon_x + 7, 199), 180, 360, fill=person_color)
+        icon_x += 36
+    health_level = data.get("healthLevel")
+    if isinstance(health_level, (int, float)):
+        shield_b64 = PGY_OVERVIEW_SHIELD_PNG.get(2 if int(health_level) == 2 else 0)
+        shield_icon = load_inline_image("data:image/png;base64," + shield_b64, 22)
+        if shield_icon is not None:
+            img.paste(shield_icon, (int(icon_x - 11), 173), shield_icon)
     put(252, 216, "小红书号：", font_19, "#999999")
-    put(354, 216, value("redId"), font_20, "#5273b4", 190)
-    put(252, 256, f"● {value('location')}", font_18, "#999999", 150)
-    draw.rectangle((420, 260, 432, 274), outline="#777777", width=2)
-    line(424, 263, 424, 271, "#777777")
-    line(428, 263, 428, 271, "#777777")
-    put(440, 256, value("mcn"), font_18, "#5273b4", 130)
+    put(354, 216, value("redId"), font_20, "#2878ff", 165)
+    draw.rectangle((530, 222, 541, 234), outline="#999999")
+    draw.rectangle((526, 226, 537, 238), outline="#999999")
+    summary_text = value("profileSummaryText")
+    has_summary = summary_text != "-"
+    if has_summary:
+        put(252, 257, summary_text, font_18, "#999999", 210)
+    info_y = 289 if has_summary else 258
+    put(252, info_y, f"● {value('location')}", font_18, "#999999", 150)
+    draw.rectangle((420, info_y + 4, 432, info_y + 18), outline="#777777", width=2)
+    line(424, info_y + 7, 424, info_y + 15, "#777777")
+    line(428, info_y + 7, 428, info_y + 15, "#777777")
+    put(440, info_y, value("mcn"), font_18, "#5273b4", 130)
     travel_area = value("travelAreaText")
     has_travel = travel_area != "-"
     if has_travel:
-        draw.polygon([(252, 306), (272, 294), (262, 310)], fill="#b9bec7")
-        put(280, 290, travel_area, font_18, "#595959", 220)
-    tag_y = 336 if has_travel else 303
+        draw.polygon([(252, info_y + 48), (272, info_y + 36), (262, info_y + 52)], fill="#b9bec7")
+        put(280, info_y + 32, travel_area, font_18, "#595959", 200)
+    tag_y = info_y + (65 if has_travel else 35)
     tags = data.get("categoryTags") if isinstance(data.get("categoryTags"), list) else []
     tag_x = 126
-    for tag in tags[:5]:
-        tag_label = ellipsize(draw, str(tag), font_18, 120)
-        tag_width = text_width(draw, tag_label, font_18) + 20
-        if tag_x + tag_width > 590:
+    for tag in tags[:6]:
+        tag_label = ellipsize(draw, str(tag), font_18, 76)
+        tag_width = max(48, min(98, text_width(draw, tag_label, font_18) + 20))
+        if tag_x + tag_width > 586:
             break
         box((tag_x, tag_y, tag_x + tag_width, tag_y + 30), 4, "#f2f2f2")
         put(tag_x + 10, tag_y + 4, tag_label, font_18, "#595959")
-        tag_x += tag_width + 12
-    put(198, 382, "粉丝数", font_22)
-    put(402, 382, "获赞与收藏", font_22)
-    put(192, 425, value("fansText"), font_32_bold)
-    put(402, 425, value("likeCollectText"), font_32_bold)
+        tag_x += tag_width + 10
+    put(198, 400, "粉丝数", font_22)
+    put(402, 400, "获赞与收藏", font_22)
+    put(192, 433, value("fansText"), font_32_bold)
+    put(402, 433, value("likeCollectText"), font_32_bold)
     line(126, 500, 586, 500, "#f1f1f1")
     box((126, 530, 336, 586), 6, "#f7f7f7")
     box((352, 530, 586, 586), 6, "#f23b49")

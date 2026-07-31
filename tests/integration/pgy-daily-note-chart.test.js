@@ -36,14 +36,23 @@ const jsHelpers = new Function(
 
 function runPython(source, payload) {
   const failures = [];
-  for (const candidate of [["python"], ["py", "-3"]]) {
-    const result = spawnSync(candidate[0], [...candidate.slice(1), "-c", source], {
-      input: JSON.stringify(payload),
-      encoding: "utf8",
-      windowsHide: true,
-    });
-    if (!result.error && result.status === 0) return result.stdout.trim();
-    failures.push(result.error?.message || result.stderr || result.stdout || `${candidate[0]} exited ${result.status}`);
+  // 源码含内嵌 base64（头像/图标）体积较大，写入临时文件运行，避免 python -c 命令行超长
+  const scriptDir = mkdtempSync(path.join(os.tmpdir(), "magiorix-pychart-"));
+  const scriptPath = path.join(scriptDir, "renderer.py");
+  writeFileSync(scriptPath, source, "utf8");
+  try {
+    for (const candidate of [["python"], ["py", "-3"]]) {
+      const result = spawnSync(candidate[0], [...candidate.slice(1), scriptPath], {
+        input: JSON.stringify(payload),
+        encoding: "utf8",
+        windowsHide: true,
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      if (!result.error && result.status === 0) return result.stdout.trim();
+      failures.push(result.error?.message || result.stderr || result.stdout || `${candidate[0]} exited ${result.status}`);
+    }
+  } finally {
+    rmSync(scriptDir, { recursive: true, force: true });
   }
   assert.fail(`Python chart renderer did not execute successfully: ${failures.join(" | ")}`);
 }
@@ -187,9 +196,10 @@ test("blogger overview normalization preserves PGY formatting and missing-value 
     location: "广东 广州",
     mcn: "六月星河",
     genderText: "-",
-    healthLevelState: "",
+    healthLevel: null,
+    profileSummaryText: "文化艺术",
     travelAreaText: "-",
-    categoryTags: ["文化艺术"],
+    categoryTags: [],
     fansText: "8.3w",
     likeCollectText: "87.3w",
     picturePriceText: "¥15,000",
@@ -301,7 +311,8 @@ test("blogger overview prefers the web data_summary source over legacy guesses",
   assert.equal(overview.fansGrowthPeerText, "优于 96.3% 同行");
   assert.equal(overview.mcn, "无机构");
   assert.equal(overview.genderText, "女");
-  assert.equal(overview.healthLevelState, "healthy");
+  assert.equal(overview.healthLevel, 2);
+  assert.equal(overview.profileSummaryText, "-");
   assert.equal(overview.travelAreaText, "福建、广东");
   assert.deepEqual(overview.categoryTags, ["母婴", "露营徒步", "ootd", "氛围感", "plog"]);
 
@@ -311,8 +322,8 @@ test("blogger overview prefers the web data_summary source over legacy guesses",
     "品效型博主",
     "无机构",
     ">福建、广东</text>",
-    "fill=\"#02B940\"",
-    "♀",
+    "AAAJgUlEQVR4",
+    'fill="#ff6f91"',
     "plog",
     "优于 94.35% 同行",
     "优于 96.3% 同行",
@@ -321,6 +332,13 @@ test("blogger overview prefers the web data_summary source over legacy guesses",
   ]) {
     assert.ok(svg.includes(expected), `overview SVG is missing ${expected}`);
   }
+  assert.ok(svg.includes('width="22" height="22"'), "health shield must render as official 22px icon");
+  const abnormalSvg = jsHelpers.pgyBloggerOverviewSvg({ ...overview, healthLevel: 0 });
+  assert.ok(abnormalSvg.includes("AAAJIUlEQVR4"), "abnormal level must render the official orange shield icon");
+  const normalSvg = jsHelpers.pgyBloggerOverviewSvg({ ...overview, healthLevel: 1 });
+  assert.ok(normalSvg.includes("AAAJIUlEQVR4"), "non-healthy (level 1) must fall back to the official abnormal icon");
+  const noLevelSvg = jsHelpers.pgyBloggerOverviewSvg({ ...overview, healthLevel: null });
+  assert.ok(!noLevelSvg.includes("AAAJgUlEQVR4") && !noLevelSvg.includes("AAAJIUlEQVR4"), "missing level must not render any shield");
 });
 
 test("typed daily note charts use independent endpoints and visible filter labels", () => {

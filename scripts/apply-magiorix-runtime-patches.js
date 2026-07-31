@@ -1674,6 +1674,14 @@ main = replaceOnce(
   "pgy overview summary chart data input",
 );
 
+// 概览图入队前内嵌头像与昵称 emoji（弱网/失败自动降级为原 URL/字体渲染）；保持单行形态以免破坏上游补丁锚点
+main = replaceOnce(
+  main,
+  `pgyHasSelectedField(n, PYG_CHART_FIELDS.bloggerOverview) && i.push({ field: "bloggerOverviewChart", type: "blogger-overview", data: B ?? {}, output: pgyChartFile("blogger-overview", a, "blogger-overview") });`,
+  `pgyHasSelectedField(n, PYG_CHART_FIELDS.bloggerOverview) && i.push({ field: "bloggerOverviewChart", type: "blogger-overview", data: await pgyPrepareOverviewData(B), output: pgyChartFile("blogger-overview", a, "blogger-overview") });`,
+  "pgy overview inline avatar and emoji",
+);
+
 const chartRendererSource = fs.readFileSync(chartRendererSourcePath, "utf8");
 if (!main.includes("import urllib.request")) {
   main = replaceOnce(
@@ -1701,6 +1709,19 @@ main = main
     /import urllib\.request\r?\n(?:import urllib\.request\r?\n)+/,
     "import urllib.request\n",
   );
+if (!/import os\r?\nimport re\r?\nimport sys/.test(main)) {
+  main = replaceOnce(
+    main,
+    `import os
+import sys
+import urllib.request`,
+    `import os
+import re
+import sys
+import urllib.request`,
+    "pgy embedded Python overview renderer re import",
+  );
+}
 if (!main.includes("from PIL import Image, ImageDraw, ImageFont, ImageOps")) {
   main = replaceOnce(
     main,
