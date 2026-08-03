@@ -486,9 +486,9 @@
             </p>
             <div class="actions">
               <a id="windowsDownloadBtn" class="download" href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.6-windows.exe">下载 Windows 版</a>
-              <a id="macDownloadBtn" class="ghost" href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.6-mac.dmg">下载 Mac 版</a>
+              <a id="macDownloadBtn" class="ghost" href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.13-mac.dmg">下载 Mac 版</a>
             </div>
-            <div id="downloadMeta" class="meta">正在读取 Windows 最新版本 · Mac 版 1.1.6</div>
+            <div id="downloadMeta" class="meta">正在读取 Windows 最新版本 · Mac 版 1.1.13</div>
           </div>
 
           <div class="preview">
@@ -608,7 +608,7 @@
             <article class="guide-card">
               <span class="guide-index">1</span>
               <strong>拖入应用程序</strong>
-              <p>下载 <a href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.6-mac.dmg">magiorix.dmg</a> 后双击打开，把 magiorix 拖到 Applications 文件夹完成安装。</p>
+              <p>下载 <a href="https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.13-mac.dmg">magiorix.dmg</a> 后双击打开，把 magiorix 拖到 Applications 文件夹完成安装。</p>
             </article>
             <article class="guide-card">
               <span class="guide-index">2</span>
@@ -682,10 +682,10 @@
           if (body.code !== 200) throw new Error("desktop download metadata unavailable");
           const data = body.data;
           windowsBtn.href = data.downloadUrl || windowsBtn.href;
-          meta.textContent = `Windows 最新版本 ${data.version} · Mac 版 1.1.6`;
+          meta.textContent = `Windows 最新版本 ${data.version} · Mac 版 1.1.13`;
         })
         .catch(() => {
-          meta.textContent = "Windows 最新版本 1.1.6 · Mac 版 1.1.6";
+          meta.textContent = "Windows 最新版本 1.1.6 · Mac 版 1.1.13";
         });
     </script>
   </body>
