@@ -18,6 +18,29 @@ for (const file of javascriptFiles) {
 for (const file of ["verification-policy.json", "app-source/package.json", "red-magic-api/package.json"]) {
   assert.doesNotThrow(() => JSON.parse(readFileSync(file, "utf8")), `${file} must contain valid JSON`);
 }
+const backendPackage = JSON.parse(readFileSync("red-magic-api/package.json", "utf8"));
+const backendLock = JSON.parse(readFileSync("red-magic-api/package-lock.json", "utf8"));
+const backendServer = readFileSync("red-magic-api/server.js", "utf8");
+const envExample = readFileSync("red-magic-api/.env.example", "utf8");
+assert.match(backendServer, /ADMIN_PASSWORD\.length < 16/, "admin password must have a minimum length");
+assert.match(backendServer, /ADMIN_PASSWORD_PLACEHOLDERS/, "public admin password placeholders must be rejected");
+assert.match(backendServer, /createHmac\("sha256", LOG_IP_HASH_SECRET\)/, "request IP redaction must use a keyed HMAC");
+assert.match(backendServer, /AUTH_FAILURE_MESSAGE/, "password authentication failures must not enumerate accounts");
+assert.match(backendServer, /REGISTRATION_FAILURE_MESSAGE/, "registration failures must not enumerate accounts");
+assert.match(backendServer, /NODE_ENV === "test" \? \{ error: err\.message \} : null/, "production errors must not expose internal messages");
+assert.match(backendServer, /if \(\/\^\\d\+\$\/\.test\(TRUST_PROXY\)\) return false/, "numeric trust proxy hops must not be accepted");
+assert.match(envExample, /^ADMIN_PASSWORD=\s*$/m, "environment example must not contain a usable admin password");
+assert.equal(backendPackage.dependencies["alipay-sdk"], "4.14.0", "official Alipay SDK must be exact-pinned");
+assert.equal(backendLock.packages[""]?.dependencies?.["alipay-sdk"], "4.14.0", "lockfile root must pin Alipay SDK");
+assert.equal(backendLock.packages["node_modules/alipay-sdk"]?.version, "4.14.0", "lockfile must resolve the pinned Alipay SDK");
+assert.ok(readFileSync("tools/rcedit-x64.exe").length > 0, "pinned rcedit binary must be tracked");
+const rceditMetadata = JSON.parse(readFileSync("tools/rcedit-x64.exe.metadata.json", "utf8"));
+assert.deepEqual(
+  { package: rceditMetadata.package, version: rceditMetadata.version, artifact: rceditMetadata.artifact },
+  { package: "rcedit", version: "5.0.2", artifact: "rcedit-x64.exe" },
+  "rcedit provenance must be pinned",
+);
+assert.match(readFileSync("tools/rcedit-x64.exe.sha256", "utf8"), /^[0-9a-f]{64}\s+rcedit-x64\.exe\s*$/i, "rcedit checksum must be present");
 
 const buildScript = readFileSync("scripts/build-magiorix-windows-installer.ps1", "utf8");
 assert.match(buildScript, /app-source\\package\.json/, "build must derive versions from package.json");
@@ -33,6 +56,13 @@ assert.ok(rootOutPathIndex > stageOutPathIndex, "installer must leave the stagin
 assert.ok(promoteAssetsIndex > rootOutPathIndex, "installer must release the staging directory before renaming it");
 assert.match(buildScript, /publishedVersionManifest/, "build must reject rebuilding a published version");
 assert.match(buildScript, /version_pointer_failed/, "installer must roll back assets when the version pointer fails");
+assert.match(buildScript, /Assert-Rcedit/, "Candidate build must require the pinned rcedit tool");
+assert.match(buildScript, /rcedit-x64\.exe\.sha256/, "Candidate build must verify the pinned rcedit checksum");
+assert.match(buildScript, /--set-file-version/, "Candidate build must write FileVersion");
+assert.match(buildScript, /--set-product-version/, "Candidate build must write ProductVersion");
+assert.match(buildScript, /VIProductVersion/, "NSIS installer must carry a product version resource");
+assert.match(buildScript, /VIAddVersionKey \/LANG=2052 "FileDescription"/, "NSIS installer must carry FileDescription");
+assert.doesNotMatch(buildScript, /Write-Warning [^\n]*rcedit/, "missing rcedit must fail instead of warning");
 
 const runtimePatch = readFileSync("scripts/apply-magiorix-runtime-patches.js", "utf8");
 const frontendPatch = readFileSync("scripts/apply-magiorix-frontend-patches.js", "utf8");
@@ -91,6 +121,18 @@ const packageConfig = JSON.parse(readFileSync("app-source/package.json", "utf8")
 const assetRoot = `assets/${packageConfig.assetsVersion}`;
 const integrityManifest = JSON.parse(readFileSync(`${assetRoot}/integrity-manifest.json`, "utf8"));
 assert.equal(integrityManifest.version, packageConfig.assetsVersion, "asset manifest version must match package.json");
+const frontendBundleSources = readdirSync(`${assetRoot}/assets`)
+  .filter((file) => /\.(?:js|css|html|svg)$/i.test(file))
+  .map((file) => readFileSync(`${assetRoot}/assets/${file}`, "utf8"))
+  .join("\n");
+const legacyFrontendBrandPattern = /(?:\bzs\.|@zsdesktop|PYGdata|Emagic(?:DataCrawler| Data Crawler)?|易美(?:传播|数据抓取)?)/i;
+assert.doesNotMatch(frontendBundleSources, legacyFrontendBrandPattern, "1.2.0 frontend bundle must not contain legacy brand residue");
+assert.match(frontendBundleSources, /magiorix\.login\.method/, "frontend auth storage must use magiorix.login.method");
+assert.doesNotMatch(frontendBundleSources, /\/api\/statistics\/admin-dashboard/, "ordinary frontend must not call the admin dashboard endpoint");
+assert.match(frontendBundleSources, /\/api\/statistics\/dashboard/, "ordinary frontend must call the safe dashboard endpoint");
+for (const field of ["e.users.total", "e.bloggers.xhs.total", "e.finance", "totalAmountYuan", "totalProfitYuan"]) {
+  assert.match(frontendBundleSources, new RegExp(field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `dashboard UI must tolerate the safe response shape: ${field}`);
+}
 const aboutBundle = readdirSync(`${assetRoot}/assets`)
   .filter((file) => file.endsWith(".js"))
   .map((file) => readFileSync(`${assetRoot}/assets/${file}`, "utf8"))

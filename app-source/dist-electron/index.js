@@ -36,7 +36,8 @@ import JSZip from "jszip";
 import * as Da from "node-cron";
 const Fe = {
   shell: {
-    openExternal: "system:shell:open-external"
+    openExternal: "system:shell:open-external",
+    openSafeExternal: "system:shell:open-safe-external"
   },
   window: {
     minimize: "system:window:minimize",
@@ -222,9 +223,62 @@ function Hr(a) {
     e && clearTimeout(e), t();
   });
 }
+const pgyPaymentExternalOrigin = (() => {
+  try {
+    const t = new URL(process.env.MAGIORIX_PAYMENT_ORIGIN || "https://magiorix.red-magic.cn");
+    const n = /^(?:\d{1,3}\.){3}\d{1,3}$/.test(t.hostname) || t.hostname.includes(":");
+    if (t.protocol !== "https:" || t.port || t.username || t.password || n) return "https://magiorix.red-magic.cn";
+    return t.origin;
+  } catch {
+    return "https://magiorix.red-magic.cn";
+  }
+})();
+const pgyPaymentExternalOrigins = new Set([pgyPaymentExternalOrigin]);
+const pgySafeExternalOrigins = new Set([
+  "https://pgy.xiaohongshu.com",
+  "https://www.xiaohongshu.com",
+  "https://xiaohongshu.com",
+  "https://xhslink.com",
+  "https://www.xhslink.com",
+  "https://www.douyin.com",
+  "https://douyin.com",
+  "https://v.douyin.com",
+  "https://www.iesdouyin.com",
+  "https://www.xingtu.cn",
+  "https://xingtu.cn"
+]);
+function pgyResolveExternal(value, allowedOrigins) {
+  try {
+    const t = new URL(String(value));
+    if (t.protocol !== "https:" || t.username || t.password || !allowedOrigins.has(t.origin)) return null;
+    return t.href;
+  } catch {
+    return null;
+  }
+}
+function pgyIsMainWindowNavigationAllowed(value, allowedFilePath) {
+  try {
+    const t = new URL(String(value));
+    if (t.protocol === "file:") {
+      const targetPath = Xi.resolve(Ka(t));
+      const allowedPath = Xi.resolve(String(allowedFilePath || ""));
+      return process.platform === "win32"
+        ? targetPath.toLowerCase() === allowedPath.toLowerCase()
+        : targetPath === allowedPath;
+    }
+    const dev = process.env.VITE_DEV_SERVER_URL ? new URL(process.env.VITE_DEV_SERVER_URL) : null;
+    return Boolean(dev && t.origin === dev.origin);
+  } catch {
+    return false;
+  }
+}
 const Wr = (a) => {
   F.on(Fe.shell.openExternal, (t, n) => {
-    Ji.openExternal(n);
+    const s = pgyResolveExternal(n, pgyPaymentExternalOrigins);
+    if (s) void Ji.openExternal(s);
+  }), F.on(Fe.shell.openSafeExternal, (t, n) => {
+    const s = pgyResolveExternal(n, pgySafeExternalOrigins);
+    if (s) void Ji.openExternal(s);
   }), F.on(Fe.window.minimize, () => {
     var t;
     (t = a()) == null || t.minimize();
@@ -16334,7 +16388,7 @@ const W = {
       return 0;
     const i = await this.request("GET", `/api/shumiao/check-balance?count=${encodeURIComponent(String(s))}`), o = Number(i.data?.balance ?? 0), r = Number(i.data?.required ?? s), c = Number(i.data?.shortage ?? Math.max(0, r - o));
     if (!i.data?.sufficient)
-      throw new Error(`树苗余额不足：当前 ${o}，本次待采集需要 ${r}，还差 ${c}`);
+      throw new Error(`积分余额不足：当前 ${o}，本次待采集需要 ${r}，还差 ${c}`);
     return o;
   }
   async consumeShumiaoForItem(e, t, n = t) {
@@ -16353,7 +16407,7 @@ const W = {
       count: 1,
       taskId: e.taskId,
       itemIndex: o + 1,
-      remark: `采集成功扣减 1 树苗`,
+      remark: `采集成功扣减 1 积分`,
       detail: r
     });
     return Number(i.data?.balance ?? 0);
@@ -24469,7 +24523,11 @@ function Ga(a) {
       contextIsolation: !0,
       webSecurity: !0
     }
-  }), Hr(Z), Xt) {
+  }), Hr(Z), Z.webContents.setWindowOpenHandler(() => ({ action: "deny" })), Z.webContents.on("will-navigate", (t, n) => {
+    if (!pgyIsMainWindowNavigationAllowed(n, Oe(a, "index.html"))) t.preventDefault();
+  }), Z.webContents.on("will-redirect", (t, n) => {
+    if (!pgyIsMainWindowNavigationAllowed(n, Oe(a, "index.html"))) t.preventDefault();
+  }), Xt) {
     const t = process.env.VITE_DEV_SERVER_URL || "http://127.0.0.1:4000";
     Z.loadURL(t), process.env.ELECTRON_OPEN_DEVTOOLS === "true" && Z.webContents.openDevTools();
   } else {

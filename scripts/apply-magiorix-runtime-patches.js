@@ -47,6 +47,44 @@ function insertAfterOnce(source, marker, insert, already, label) {
 let main = fs.readFileSync(mainPath, "utf8");
 let preload = fs.readFileSync(preloadPath, "utf8");
 
+main = main.split("薯苗").join("积分");
+main = main.split("树苗").join("积分");
+
+main = replaceAllIfExists(
+  main,
+  `function pgyIsMainWindowNavigationAllowed(value) {
+  try {
+    const t = new URL(String(value));
+    if (t.protocol === "file:") return true;
+    const dev = process.env.VITE_DEV_SERVER_URL ? new URL(process.env.VITE_DEV_SERVER_URL) : null;
+    return Boolean(dev && t.origin === dev.origin);
+  } catch {
+    return false;
+  }
+}`,
+  `function pgyIsMainWindowNavigationAllowed(value, allowedFilePath) {
+  try {
+    const t = new URL(String(value));
+    if (t.protocol === "file:") {
+      const targetPath = Xi.resolve(Ka(t));
+      const allowedPath = Xi.resolve(String(allowedFilePath || ""));
+      return process.platform === "win32"
+        ? targetPath.toLowerCase() === allowedPath.toLowerCase()
+        : targetPath === allowedPath;
+    }
+    const dev = process.env.VITE_DEV_SERVER_URL ? new URL(process.env.VITE_DEV_SERVER_URL) : null;
+    return Boolean(dev && t.origin === dev.origin);
+  } catch {
+    return false;
+  }
+}`,
+);
+main = replaceAllIfExists(
+  main,
+  "pgyIsMainWindowNavigationAllowed(n))",
+  'pgyIsMainWindowNavigationAllowed(n, Oe(a, "index.html")))',
+);
+
 main = insertAfterOnce(
   main,
   'import { ipcMain as F, BrowserWindow as Dt, app as ye, screen as Gi, shell as Ji, dialog as Ki, net as Jt, Notification as Et, session as Pn, nativeImage as PgyNativeImage } from "electron";',
@@ -82,12 +120,160 @@ const pgyCollectionHistory = new CollectionHistoryStore({ baseDir: Oe(pgyUserDat
 const legacyHost = `https://${"api"}.red-magic.cn`;
 main = main.split(legacyHost).join("https://magiorix.red-magic.cn");
 
+if (!main.includes("pgyPaymentExternalOrigin")) {
+  main = replaceOnce(
+    main,
+    `const Fe = {
+  shell: {
+    openExternal: "system:shell:open-external"
+  },`,
+    `const Fe = {
+  shell: {
+    openExternal: "system:shell:open-external",
+    openSafeExternal: "system:shell:open-safe-external"
+  },`,
+    "payment external IPC channel",
+  );
+
+  main = replaceOnce(
+    main,
+    `const Wr = (a) => {
+  F.on(Fe.shell.openExternal, (t, n) => {
+    Ji.openExternal(n);
+  }), F.on(Fe.window.minimize, () => {`,
+    `const pgyPaymentExternalOrigin = (() => {
+  try {
+    const t = new URL(process.env.MAGIORIX_PAYMENT_ORIGIN || "https://magiorix.red-magic.cn");
+    const n = /^(?:\\d{1,3}\\.){3}\\d{1,3}$/.test(t.hostname) || t.hostname.includes(":");
+    if (t.protocol !== "https:" || t.port || t.username || t.password || n) return "https://magiorix.red-magic.cn";
+    return t.origin;
+  } catch {
+    return "https://magiorix.red-magic.cn";
+  }
+})();
+const pgyPaymentExternalOrigins = new Set([pgyPaymentExternalOrigin]);
+const pgySafeExternalOrigins = new Set([
+  "https://pgy.xiaohongshu.com",
+  "https://www.xiaohongshu.com",
+  "https://xiaohongshu.com",
+  "https://xhslink.com",
+  "https://www.xhslink.com",
+  "https://www.douyin.com",
+  "https://douyin.com",
+  "https://v.douyin.com",
+  "https://www.iesdouyin.com",
+  "https://www.xingtu.cn",
+  "https://xingtu.cn"
+]);
+function pgyResolveExternal(value, allowedOrigins) {
+  try {
+    const t = new URL(String(value));
+    if (t.protocol !== "https:" || t.username || t.password || !allowedOrigins.has(t.origin)) return null;
+    return t.href;
+  } catch {
+    return null;
+  }
+}
+function pgyIsMainWindowNavigationAllowed(value, allowedFilePath) {
+  try {
+    const t = new URL(String(value));
+    if (t.protocol === "file:") {
+      const targetPath = Xi.resolve(Ka(t));
+      const allowedPath = Xi.resolve(String(allowedFilePath || ""));
+      return process.platform === "win32"
+        ? targetPath.toLowerCase() === allowedPath.toLowerCase()
+        : targetPath === allowedPath;
+    }
+    const dev = process.env.VITE_DEV_SERVER_URL ? new URL(process.env.VITE_DEV_SERVER_URL) : null;
+    return Boolean(dev && t.origin === dev.origin);
+  } catch {
+    return false;
+  }
+}
+const Wr = (a) => {
+  F.on(Fe.shell.openExternal, (t, n) => {
+    const s = pgyResolveExternal(n, pgyPaymentExternalOrigins);
+    if (s) void Ji.openExternal(s);
+  }), F.on(Fe.shell.openSafeExternal, (t, n) => {
+    const s = pgyResolveExternal(n, pgySafeExternalOrigins);
+    if (s) void Ji.openExternal(s);
+  }), F.on(Fe.window.minimize, () => {`,
+    "payment external IPC allowlist",
+  );
+}
+
+preload = replaceOnce(
+  preload,
+  'shell:{openExternal:"system:shell:open-external"}',
+  'shell:{openExternal:"system:shell:open-external",openSafeExternal:"system:shell:open-safe-external"}',
+  "safe external preload channel",
+);
 preload = replaceOnce(
   preload,
   "onStatusChanged:e=>{r.ipcRenderer.on(s.auth.statusChanged,(n,a)=>{e(a)})}",
   "onStatusChanged:e=>{const n=(a,t)=>e(t);return r.ipcRenderer.on(s.auth.statusChanged,n),()=>r.ipcRenderer.removeListener(s.auth.statusChanged,n)}",
   "scraper auth status listener cleanup",
 );
+
+if (!preload.includes("openSafeExternal:e=>")) {
+  preload = replaceOnce(
+    preload,
+    'openExternal:e=>{r.ipcRenderer.send(i.shell.openExternal,e)}',
+    'openExternal:e=>{r.ipcRenderer.send(i.shell.openExternal,e)},openSafeExternal:e=>{r.ipcRenderer.send(i.shell.openSafeExternal,e)}',
+    "safe external preload method",
+  );
+}
+preload = preload.replace(
+  'openExternal:e=>{r.ipcRenderer.send(i.shell.openExternal,e)},openSafeExternal:e=>{r.ipcRenderer.send(i.shell.openSafeExternal,e)},openSafeExternal:e=>{r.ipcRenderer.send(i.shell.openSafeExternal,e)}',
+  'openExternal:e=>{r.ipcRenderer.send(i.shell.openExternal,e)},openSafeExternal:e=>{r.ipcRenderer.send(i.shell.openSafeExternal,e)}',
+);
+
+if (!main.includes("pgyIsMainWindowNavigationAllowed")) {
+  main = replaceOnce(
+    main,
+    "const Wr = (a) => {",
+    `function pgyIsMainWindowNavigationAllowed(value, allowedFilePath) {
+  try {
+    const t = new URL(String(value));
+    if (t.protocol === "file:") {
+      const targetPath = Xi.resolve(Ka(t));
+      const allowedPath = Xi.resolve(String(allowedFilePath || ""));
+      return process.platform === "win32"
+        ? targetPath.toLowerCase() === allowedPath.toLowerCase()
+        : targetPath === allowedPath;
+    }
+    const dev = process.env.VITE_DEV_SERVER_URL ? new URL(process.env.VITE_DEV_SERVER_URL) : null;
+    return Boolean(dev && t.origin === dev.origin);
+  } catch {
+    return false;
+  }
+}
+const Wr = (a) => {`,
+    "main-window navigation validator",
+  );
+}
+
+if (!main.includes("setWindowOpenHandler(() => ({ action: \"deny\" }))")) {
+  main = replaceOnce(
+    main,
+    "  }), Hr(Z), Xt) {",
+    "  }), Hr(Z), Z.webContents.setWindowOpenHandler(() => ({ action: \"deny\" })), Xt) {",
+    "deny renderer window.open bypass",
+  );
+}
+
+if (!main.includes('Z.webContents.on("will-navigate"')) {
+  main = replaceOnce(
+    main,
+    "  }), Hr(Z), Z.webContents.setWindowOpenHandler(() => ({ action: \"deny\" })), Xt) {",
+    `  }), Hr(Z), Z.webContents.setWindowOpenHandler(() => ({ action: "deny" })), Z.webContents.on("will-navigate", (t, n) => {
+    if (!pgyIsMainWindowNavigationAllowed(n, Oe(a, "index.html"))) t.preventDefault();
+  }), Z.webContents.on("will-redirect", (t, n) => {
+    if (!pgyIsMainWindowNavigationAllowed(n, Oe(a, "index.html"))) t.preventDefault();
+  }), Xt) {`,
+    "block main-window external navigation",
+  );
+}
 
 if (!main.includes("采集任务启动 plugin=")) {
   main = replaceOnce(
@@ -407,7 +593,7 @@ if (!main.includes("checkShumiaoBalanceForTask(e)")) {
       return 0;
     const i = await this.request("GET", \`/api/shumiao/check-balance?count=\${encodeURIComponent(String(s))}\`), o = Number(i.data?.balance ?? 0), r = Number(i.data?.required ?? s), c = Number(i.data?.shortage ?? Math.max(0, r - o));
     if (!i.data?.sufficient)
-      throw new Error(\`树苗余额不足：当前 \${o}，本次待采集需要 \${r}，还差 \${c}\`);
+      throw new Error(\`积分余额不足：当前 \${o}，本次待采集需要 \${r}，还差 \${c}\`);
     return o;
   }
   async consumeShumiaoForItem(e, t) {
@@ -424,7 +610,7 @@ if (!main.includes("checkShumiaoBalanceForTask(e)")) {
       url: n
     }, i = await this.request("POST", "/api/shumiao/consume", {
       count: 1,
-      remark: \`采集成功扣减 1 树苗\`,
+      remark: \`采集成功扣减 1 积分\`,
       detail: s
     });
     return Number(i.data?.balance ?? 0);
@@ -2408,7 +2594,7 @@ if (!main.includes("async consumeShumiaoForItem(e, t, n = t)")) {
       url: n
     }, i = await this.request("POST", "/api/shumiao/consume", {
       count: 1,
-      remark: \`采集成功扣减 1 树苗\`,
+      remark: \`采集成功扣减 1 积分\`,
       detail: s
     });
     return Number(i.data?.balance ?? 0);
@@ -2429,7 +2615,7 @@ if (!main.includes("async consumeShumiaoForItem(e, t, n = t)")) {
       count: 1,
       taskId: e.taskId,
       itemIndex: o + 1,
-      remark: \`采集成功扣减 1 树苗\`,
+      remark: \`采集成功扣减 1 积分\`,
       detail: r
     });
     return Number(i.data?.balance ?? 0);
@@ -2457,7 +2643,7 @@ main = replaceOnce(
       throw new Error("未登录，无法判定积分余额");
     const n = await this.request("GET", \`/api/shumiao/check-balance?count=\${encodeURIComponent(String(t))}\`), s = Number(n.data?.balance ?? 0), i = Number(n.data?.required ?? t), o = Number(n.data?.shortage ?? Math.max(0, i - s));
     if (!n.data?.sufficient)
-      throw new Error(\`树苗余额不足：当前 \${s}，本次需要 \${i}，还差 \${o}\`);
+      throw new Error(\`积分余额不足：当前 \${s}，本次需要 \${i}，还差 \${o}\`);
     return s;
   }`,
   `  async checkShumiaoBalanceForTask(e) {
@@ -2470,7 +2656,7 @@ main = replaceOnce(
       return 0;
     const i = await this.request("GET", \`/api/shumiao/check-balance?count=\${encodeURIComponent(String(s))}\`), o = Number(i.data?.balance ?? 0), r = Number(i.data?.required ?? s), c = Number(i.data?.shortage ?? Math.max(0, r - o));
     if (!i.data?.sufficient)
-      throw new Error(\`树苗余额不足：当前 \${o}，本次待采集需要 \${r}，还差 \${c}\`);
+      throw new Error(\`积分余额不足：当前 \${o}，本次待采集需要 \${r}，还差 \${c}\`);
     return o;
   }`,
   "pending charge reconciliation does not overstate required balance",

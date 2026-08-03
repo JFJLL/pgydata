@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -176,6 +177,7 @@ test("legacy consume records migrate safely and admin task view is idempotent", 
   const dbPath = path.join(tempDir, "legacy.sqlite");
   const logDir = path.join(tempDir, "logs");
   const port = 38000 + Math.floor(Math.random() * 1000);
+  const adminPassword = crypto.randomBytes(24).toString("base64url");
   await seedLegacyDatabase(dbPath);
 
   const child = spawn(process.execPath, ["server.js"], {
@@ -187,7 +189,7 @@ test("legacy consume records migrate safely and admin task view is idempotent", 
       LOG_DIR: logDir,
       NODE_ENV: "test",
       ADMIN_USERNAME: "admin",
-      ADMIN_PASSWORD: "redmagic2026",
+      ADMIN_PASSWORD: adminPassword,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -226,7 +228,7 @@ test("legacy consume records migrate safely and admin task view is idempotent", 
 
   const adminLogin = await requestJson(baseUrl, "/api/admin/login", {
     method: "POST",
-    body: { username: "admin", password: "redmagic2026" },
+    body: { username: "admin", password: adminPassword },
   });
   assert.equal(adminLogin.code, 200, adminLogin.message);
   const adminHeaders = { Authorization: `Bearer ${adminLogin.data.token}` };

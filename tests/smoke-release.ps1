@@ -26,6 +26,22 @@ foreach ($entry in @(
   if ($hash -ne ([string]$entry.Artifact.sha256).ToLowerInvariant()) { throw "$($entry.Name) SHA256 mismatch" }
 }
 
+$desktopPath = Join-Path $releaseDir ([string]$release.desktop.fileName)
+$versionInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($desktopPath)
+foreach ($expected in @{
+  FileVersion = $version
+  ProductVersion = $version
+  ProductName = "magiorix"
+  FileDescription = "magiorix"
+}.GetEnumerator()) {
+  if ([string]$versionInfo.($expected.Key) -ne [string]$expected.Value) {
+    throw "Desktop EXE metadata mismatch for $($expected.Key): $($versionInfo.($expected.Key))"
+  }
+}
+Add-Type -AssemblyName System.Drawing
+$icon = [Drawing.Icon]::ExtractAssociatedIcon($desktopPath)
+if ($null -eq $icon) { throw "Desktop EXE icon could not be extracted" }
+
 $runtimeSource = Get-Content -LiteralPath (Join-Path $projectRoot "app-source\dist-electron\index.js") -Raw -Encoding UTF8
 foreach ($marker in @("pgyHasSingleInstanceLock", "pgyDesktopUpdateActive", ".partial-", "pgyAssetExpectedChecksum", "pgyVersionPointerBackup")) {
   if (-not $runtimeSource.Contains($marker)) { throw "Runtime build is missing marker: $marker" }

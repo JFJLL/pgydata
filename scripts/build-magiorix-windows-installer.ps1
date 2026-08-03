@@ -31,6 +31,7 @@ $setupFileName = "$appId-$version-$platform.exe"
 $setupExe = Join-Path $outDir $setupFileName
 $assetsZipFileName = "$appId-$assetsVersion-assets.zip"
 $appDisplayName = "magiorix"
+$appFileDescription = "magiorix"
 $appInstallDirName = "magiorix"
 $shortcutName = "magiorix"
 $sourceExeName = "magiorix.exe"
@@ -82,10 +83,7 @@ function Find-Makensis {
 
 function Find-Rcedit {
   $candidates = @(
-    $env:RCEDIT_PATH,
-    (Join-Path $projectRoot "tools\rcedit-x64.exe"),
-    (Join-Path $env:TEMP "magiorix-rcedit\node_modules\rcedit\bin\rcedit-x64.exe"),
-    (Join-Path $env:TEMP "magiorix-rcedit\node_modules\rcedit\bin\rcedit.exe")
+    (Join-Path $projectRoot "tools\rcedit-x64.exe")
   ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 
   foreach ($candidate in $candidates) {
@@ -97,12 +95,38 @@ function Find-Rcedit {
   return $null
 }
 
-function Set-ExeBrand([string]$ExePath, [string]$IconPath) {
+function Assert-Rcedit {
   $rcedit = Find-Rcedit
   if (-not $rcedit) {
-    Write-Warning "rcedit not found; skipping executable icon and version metadata update."
-    return
+    throw "Pinned rcedit is required at tools\rcedit-x64.exe; refusing to build an unbranded Candidate."
   }
+  $checksumPath = Join-Path $projectRoot "tools\rcedit-x64.exe.sha256"
+  if (-not (Test-Path -LiteralPath $checksumPath -PathType Leaf)) {
+    throw "Pinned rcedit checksum is missing: $checksumPath"
+  }
+  $checksumText = Get-Content -LiteralPath $checksumPath -Raw -Encoding ASCII
+  $expected = [regex]::Match($checksumText, '(?i)\b[0-9a-f]{64}\b').Value.ToLowerInvariant()
+  if ($expected -notmatch '^[0-9a-f]{64}$') {
+    throw "Pinned rcedit checksum is invalid: $checksumPath"
+  }
+  $actual = (Get-FileHash -LiteralPath $rcedit -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($actual -ne $expected) {
+    throw "Pinned rcedit checksum mismatch. Expected $expected, got $actual"
+  }
+  $metadataPath = Join-Path $projectRoot "tools\rcedit-x64.exe.metadata.json"
+  if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) {
+    throw "Pinned rcedit provenance is missing: $metadataPath"
+  }
+  $metadata = Get-Content -LiteralPath $metadataPath -Raw -Encoding UTF8 | ConvertFrom-Json
+  $metadataHash = ([string]$metadata.sha256).ToLowerInvariant()
+  if ([string]$metadata.package -ne "rcedit" -or [string]$metadata.version -ne "5.0.2" -or [string]$metadata.artifact -ne "rcedit-x64.exe" -or $metadataHash -ne $actual) {
+    throw "Pinned rcedit provenance does not match the checked binary"
+  }
+  return $rcedit
+}
+
+function Set-ExeBrand([string]$ExePath, [string]$IconPath, [string]$OriginalFilename = $installedExeName) {
+  $rcedit = Assert-Rcedit
   if (-not (Test-Path -LiteralPath $ExePath)) {
     throw "Executable not found for branding: $ExePath"
   }
@@ -113,16 +137,39 @@ function Set-ExeBrand([string]$ExePath, [string]$IconPath) {
   $args = @(
     $ExePath,
     "--set-icon", $IconPath,
-    "--set-version-string", "FileDescription", $appDisplayName,
+    "--set-version-string", "FileDescription", $appFileDescription,
     "--set-version-string", "ProductName", $appDisplayName,
     "--set-version-string", "InternalName", $appDisplayName,
-    "--set-version-string", "OriginalFilename", $installedExeName
+    "--set-version-string", "OriginalFilename", $OriginalFilename,
+    "--set-file-version", $version,
+    "--set-product-version", $version
   )
   $process = Start-Process -FilePath $rcedit -ArgumentList $args -WindowStyle Hidden -PassThru
   $process.WaitForExit()
   if ($process.ExitCode -ne 0) {
     throw "rcedit failed for $ExePath with exit code $($process.ExitCode)"
   }
+  $versionInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($ExePath)
+  $metadata = @{
+    FileVersion = [string]$versionInfo.FileVersion
+    ProductVersion = [string]$versionInfo.ProductVersion
+    ProductName = [string]$versionInfo.ProductName
+    FileDescription = [string]$versionInfo.FileDescription
+  }
+  if ($metadata.FileVersion -ne $version -or $metadata.ProductVersion -ne $version) {
+    throw "Executable version metadata mismatch: FileVersion=$($metadata.FileVersion), ProductVersion=$($metadata.ProductVersion), expected $version"
+  }
+  if ($metadata.ProductName -ne $appDisplayName -or $metadata.FileDescription -ne $appFileDescription) {
+    throw "Executable product metadata mismatch: ProductName=$($metadata.ProductName), FileDescription=$($metadata.FileDescription)"
+  }
+  Write-Output ("Validated executable metadata: {0}" -f (@{
+      file = [System.IO.Path]::GetFileName($ExePath)
+      FileVersion = $metadata.FileVersion
+      ProductVersion = $metadata.ProductVersion
+      ProductName = $metadata.ProductName
+      FileDescription = $metadata.FileDescription
+      OriginalFilename = [string]$versionInfo.OriginalFilename
+    } | ConvertTo-Json -Compress))
 }
 
 function New-IntegrityManifest([string]$AssetsDir) {
@@ -206,6 +253,8 @@ if (-not $node) {
 if (-not $node) {
   throw "node executable not found; cannot patch frontend assets or pack app.asar"
 }
+
+Assert-Rcedit | Out-Null
 
 if (Test-Path -LiteralPath $publishedVersionManifest -PathType Leaf) {
   throw "Version $version already has a published manifest and is immutable. Bump the patch version."
@@ -318,6 +367,14 @@ Unicode true
 
 Name "$appDisplayName"
 OutFile "$setupExeNsis"
+VIProductVersion "$version.0"
+VIAddVersionKey /LANG=2052 "ProductName" "$appDisplayName"
+VIAddVersionKey /LANG=2052 "FileDescription" "$appFileDescription"
+VIAddVersionKey /LANG=2052 "LegalCopyright" "magiorix"
+VIAddVersionKey /LANG=2052 "FileVersion" "$version"
+VIAddVersionKey /LANG=2052 "ProductVersion" "$version"
+VIAddVersionKey /LANG=2052 "InternalName" "$appDisplayName"
+VIAddVersionKey /LANG=2052 "OriginalFilename" "$setupFileName"
 InstallDir "`$LOCALAPPDATA\Programs\$appInstallDirName"
 RequestExecutionLevel user
 ShowInstDetails show
