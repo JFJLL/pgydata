@@ -1,0 +1,96 @@
+{
+  "code": 0,
+  "data": {
+    "automotiveIndustryTag": [
+      {
+        "value": 1001,
+        "label": "日化家清",
+        "children": [
+          {
+            "value": 2001,
+            "label": "纸品",
+            "children": [
+              {
+                "value": 3001,
+                "label": "场景",
+                "children": [
+                  {
+                    "value": 19188199,
+                    "label": "纸品-留子跨国囤货党",
+                    "disabled": false
+                  }
+                ]
+              },
+              {
+                "value": 3002,
+                "label": "人群属性",
+                "children": [
+                  {
+                    "value": 3003,
+                    "label": "纸品-囤货党"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "value": 1002,
+        "label": "美妆个护",
+        "children": [
+          {
+            "value": 2002,
+            "label": "场景",
+            "children": [
+              {
+                "value": 3004,
+                "label": "美妆-日常妆"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "value": 1003,
+        "label": "家居生活",
+        "children": [
+          {
+            "value": 2003,
+            "label": "场景",
+            "children": [
+              {
+                "value": 3005,
+                "label": "家居-收纳"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "audience20": [
+      {
+        "value": 101,
+        "label": "18-24岁 女性"
+      },
+      {
+        "value": 102,
+        "label": "25-29岁"
+      },
+      {
+        "value": 103,
+        "label": "30-39岁 女性"
+      }
+    ],
+    "contentTheme": [
+      {
+        "value": 501,
+        "label": "美妆教程"
+      },
+      {
+        "value": 502,
+        "label": "家居好物"
+      }
+    ]
+  }
+}

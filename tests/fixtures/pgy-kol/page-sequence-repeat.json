@@ -1,0 +1,24 @@
+{
+  "pages": [
+    {
+      "pageNum": 1,
+      "newUidCount": 20
+    },
+    {
+      "pageNum": 2,
+      "newUidCount": 20
+    },
+    {
+      "pageNum": 3,
+      "newUidCount": 0
+    },
+    {
+      "pageNum": 4,
+      "newUidCount": 0
+    },
+    {
+      "pageNum": 5,
+      "newUidCount": 3
+    }
+  ]
+}

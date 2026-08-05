@@ -1,0 +1,30 @@
+{
+  "code": 0,
+  "data": {
+    "kols": [
+      {
+        "userId": "kol_0101",
+        "nickname": "虚构博主一零一",
+        "fansNum": 32000,
+        "location": "成都",
+        "gender": "女"
+      },
+      {
+        "userId": "kol_0102",
+        "nickname": "虚构博主一零二",
+        "fansNum": 41000,
+        "location": "武汉",
+        "gender": "男"
+      },
+      {
+        "userId": "kol_0103",
+        "nickname": "虚构博主一零三",
+        "fansNum": 5000,
+        "location": "杭州",
+        "gender": "女"
+      }
+    ],
+    "total": 4820
+  },
+  "msg": ""
+}

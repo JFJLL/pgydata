@@ -1,0 +1,38 @@
+{
+  "cases": [
+    {
+      "name": "code902",
+      "body": {
+        "code": 902,
+        "msg": "登录失效",
+        "data": null
+      }
+    },
+    {
+      "name": "code461",
+      "body": {
+        "code": 461,
+        "msg": "风控",
+        "data": null
+      }
+    },
+    {
+      "name": "code500",
+      "body": {
+        "code": 500,
+        "msg": "服务器错误",
+        "data": null
+      }
+    },
+    {
+      "name": "bad-shape",
+      "body": {
+        "code": 0,
+        "data": {
+          "kols": "not-array",
+          "total": 1
+        }
+      }
+    }
+  ]
+}

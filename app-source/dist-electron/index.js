@@ -4,6 +4,7 @@ var w = (a, e, t) => wr(a, typeof e != "symbol" ? e + "" : e, t);
 import { ipcMain as F, BrowserWindow as Dt, app as ye, screen as Gi, shell as Ji, dialog as Ki, net as Jt, Notification as Et, session as Pn, nativeImage as PgyNativeImage } from "electron";
 import { CollectionHistoryStore } from "../electron-main/collection-history-store.mjs";
 import { buildCollectionHistoryExportPayload } from "../electron-main/collection-export-headers.mjs";
+import { createPgyKolService, registerPgyKolIpc } from "../pgy-kol/pgy-kol-service.mjs";
 import * as Xi from "path";
 import Yi, { join as Oe, dirname as Ja } from "path";
 import jn, { fileURLToPath as Ka } from "url";
@@ -22523,6 +22524,7 @@ function xf(a) {
 }
 const Qe = Y("Scraper");
 let ge = null;
+let pgyKolIpcDispose = null;
 function vf(a) {
   ge = new Xd(a), ge.registerPlugin(new gm()), ge.registerPlugin(new Bm()), ge.registerPlugin(new nf()), Qe.info("采集平台初始化完成"), F.handle(W.auth.check, async (e, t) => ge.checkAuth(t.pluginId)), F.handle(
     W.auth.login,
@@ -22592,9 +22594,33 @@ function vf(a) {
     });
     return { ok: !0, remaining: n.payload.urls.length };
   }), F.handle(W.history.migrateLegacy, async (e, t) => pgyCollectionHistory.importLegacyHistory(t?.history));
+  try {
+    const pgyKolService = createPgyKolService({
+      transport: (opts) => gt.request({ ...opts, timeout: opts.timeoutMs }),
+      getHeaders: () => {
+        const pgyPlugin = ge.getPlugin("pgy");
+        return {
+          ...(pgyPlugin && pgyPlugin.authService ? pgyPlugin.authService.getRequestHeaders() : {}),
+          ...getLocalPgyRequestHeaders()
+        };
+      },
+      sign: (path, body) => sm.encryptSign(path, body),
+      sessionProvider: () => Pn.defaultSession,
+      baseDir: Oe(ye.getPath("userData"), "pgy-kol-schema"),
+      logger: {
+        info: (...args) => Qe.info("[pgy-kol]", ...args),
+        warn: (...args) => Qe.warn("[pgy-kol]", ...args),
+        error: (...args) => Qe.error("[pgy-kol]", ...args)
+      }
+    });
+    pgyKolIpcDispose = registerPgyKolIpc({ ipcMain: F, service: pgyKolService });
+    Qe.info("[pgy-kol] 找博主底座初始化完成");
+  } catch (err) {
+    Qe.error("[pgy-kol] 找博主底座初始化失败:", err);
+  }
 }
 function yf() {
-  ge == null || ge.dispose(), ge = null;
+  ge == null || ge.dispose(), ge = null, pgyKolIpcDispose == null || pgyKolIpcDispose(), pgyKolIpcDispose = null;
 }
 function bf() {
   return ge ? ge.getAllPlugins() : /* @__PURE__ */ new Map();

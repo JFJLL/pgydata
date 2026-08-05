@@ -8,6 +8,13 @@ const javascriptFiles = [
   "scripts/apply-magiorix-frontend-patches.js",
   "scripts/apply-magiorix-runtime-patches.js",
   "app-source/dist-electron/index.js",
+  "app-source/pgy-kol/pgy-kol-ipc.mjs",
+  "app-source/pgy-kol/pgy-kol-service.mjs",
+  "app-source/pgy-kol/pgy-session-request.mjs",
+  "app-source/pgy-kol/pgy-filter-schema.mjs",
+  "app-source/pgy-kol/pgy-payload-builder.mjs",
+  "app-source/pgy-kol/pgy-kol-search-client.mjs",
+  "app-source/pgy-kol/pgy-pagination-planner.mjs",
 ];
 
 for (const file of javascriptFiles) {

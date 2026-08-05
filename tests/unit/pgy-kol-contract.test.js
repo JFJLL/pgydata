@@ -1,0 +1,109 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const root = path.resolve(__dirname, "../..");
+
+function read(relativePath) {
+  return fs.readFileSync(path.join(root, relativePath), "utf8");
+}
+
+function listFiles(dir) {
+  const full = path.join(root, dir);
+  if (!fs.existsSync(full)) return [];
+  return fs.readdirSync(full).filter((name) => name.endsWith(".mjs") || name.endsWith(".json"));
+}
+
+test("desktop main wires the pgy-kol base service and read-only IPC", () => {
+  const main = read("app-source/dist-electron/index.js");
+  assert.ok(
+    main.includes('import { createPgyKolService, registerPgyKolIpc } from "../pgy-kol/pgy-kol-service.mjs";'),
+    "main bundle must import the pgy-kol service",
+  );
+  assert.ok(
+    main.includes("transport: (opts) => gt.request({ ...opts, timeout: opts.timeoutMs })"),
+    "transport must reuse the existing net.request wrapper and map timeoutMs to gt.request timeout",
+  );
+  assert.ok(main.includes("sign: (path, body) => sm.encryptSign(path, body)"), "signing must reuse the existing X-s/X-t implementation");
+  assert.ok(main.includes("sessionProvider: () => Pn.defaultSession"), "session must reuse the default Electron session");
+  assert.ok(main.includes("registerPgyKolIpc({ ipcMain: F, service: pgyKolService })"), "IPC must be registered with the composed service");
+  assert.ok(main.includes("pgyKolIpcDispose = registerPgyKolIpc("), "IPC dispose must be retained for teardown");
+  assert.ok(main.includes("pgyKolIpcDispose == null || pgyKolIpcDispose()"), "IPC dispose must run during plugin teardown");
+  const ipcModule = read("app-source/pgy-kol/pgy-kol-ipc.mjs");
+  for (const channel of ["pgy-kol:status", "pgy-kol:schema-status", "pgy-kol:search-first-page"]) {
+    assert.ok(ipcModule.includes(channel), `ipc module must define channel ${channel}`);
+  }
+});
+
+test("preload exposes the minimal read-only pgyKol bridge", () => {
+  const preload = read("app-source/dist-electron/preload.mjs");
+  assert.match(preload, /pgyKol:\{getStatus:\(\)=>r\.ipcRenderer\.invoke\("pgy-kol:status"\)/);
+  assert.match(preload, /getSchemaStatus:\(\)=>r\.ipcRenderer\.invoke\("pgy-kol:schema-status"\)/);
+  assert.match(preload, /searchFirstPage:e=>r\.ipcRenderer\.invoke\("pgy-kol:search-first-page",e\)/);
+  assert.ok(
+    !/n\),pgyKol:\{/.test(preload),
+    "pgyKol must not be nested directly inside the onAuthExpired handler",
+  );
+  assert.match(
+    preload,
+    /removeListener\(d\.authExpired,n\)\}\},pgyKol:\{/,
+    "pgyKol must sit at the bridge top level right after the scrapingScheduler block",
+  );
+});
+
+test("existing PGY detail GET fetch path is untouched", () => {
+  const main = read("app-source/dist-electron/index.js");
+  assert.ok(main.includes("async fetchPgyApiInPage"), "window fetch helper must remain");
+  assert.match(main, /method: 'GET',\s+credentials: 'include'/);
+  assert.match(main, /method: 'GET',\s+credentials: 'include'[\s\S]*AbortSignal\.timeout\(12000\)/);
+});
+
+test("pgy-kol sources and fixtures stay desensitized and brand-free", () => {
+  const forbidden = ["6438f862000000000e01e59a", "token.txt", "local_config"];
+  const brandPatterns = [
+    /(^|[^A-Za-z0-9_])zs([^A-Za-z0-9_]|$)/i,
+    /PYGdata/i,
+    /@zsdesktop/i,
+    /Emagic/i,
+    /易美/,
+  ];
+  for (const name of listFiles("app-source/pgy-kol")) {
+    const source = read(`app-source/pgy-kol/${name}`);
+    for (const needle of forbidden) {
+      assert.ok(!source.includes(needle), `app-source/pgy-kol/${name} must not contain ${needle}`);
+    }
+    for (const pattern of brandPatterns) {
+      assert.ok(!pattern.test(source), `app-source/pgy-kol/${name} must not match ${pattern}`);
+    }
+  }
+  for (const name of listFiles("tests/fixtures/pgy-kol")) {
+    const source = read(`tests/fixtures/pgy-kol/${name}`);
+    for (const needle of forbidden) {
+      assert.ok(!source.includes(needle), `tests/fixtures/pgy-kol/${name} must not contain ${needle}`);
+    }
+    for (const pattern of brandPatterns) {
+      assert.ok(!pattern.test(source), `tests/fixtures/pgy-kol/${name} must not match ${pattern}`);
+    }
+  }
+});
+
+test("version stays at 1.2.0 without touching payment/sms release state", () => {
+  const desktop = JSON.parse(read("app-source/package.json"));
+  assert.equal(desktop.version, "1.2.0");
+  assert.equal(desktop.assetsVersion, "1.2.0");
+  const policy = JSON.parse(read("verification-policy.json"));
+  assert.ok(policy.lanes.unit, "unit lane must exist");
+  const unitArgs = JSON.stringify(policy.lanes.unit.commands.find((c) => c.id === "node-unit")?.args ?? []);
+  for (const testFile of [
+    "tests/unit/pgy-kol-session-request.test.mjs",
+    "tests/unit/pgy-kol-filter-schema.test.mjs",
+    "tests/unit/pgy-kol-payload-builder.test.mjs",
+    "tests/unit/pgy-kol-search-client.test.mjs",
+    "tests/unit/pgy-kol-pagination-planner.test.mjs",
+    "tests/unit/pgy-kol-ipc.test.mjs",
+    "tests/unit/pgy-kol-contract.test.js",
+  ]) {
+    assert.ok(unitArgs.includes(testFile), `unit lane must run ${testFile}`);
+  }
+});
