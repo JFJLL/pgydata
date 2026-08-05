@@ -214,6 +214,28 @@ export class PgyKolSearchClient {
     const result = await this._request.requestJson(requestOptions);
     const { raw, httpStatusCode } = unwrapResponse(result);
 
+    // 纵深防御：request 层返回 wrapped 形态且携带 HTTP 状态码时，非 2xx 一律拒绝，
+    // 即使 body.code=0（网关兜底）也不得伪装成成功列表。
+    if (httpStatusCode !== undefined && httpStatusCode !== null) {
+      const invalidStatus =
+        typeof httpStatusCode !== "number" ||
+        !Number.isFinite(httpStatusCode) ||
+        httpStatusCode < 200 ||
+        httpStatusCode >= 300;
+      if (invalidStatus) {
+        const kind =
+          httpStatusCode === 401
+            ? "auth-expired"
+            : httpStatusCode === 461
+              ? "risk-control"
+              : "http";
+        throw createPgyRequestError(
+          kind,
+          `蒲公英搜索请求失败: HTTP ${String(httpStatusCode)} (${kind})`,
+        );
+      }
+    }
+
     if (
       raw === null ||
       typeof raw !== "object" ||

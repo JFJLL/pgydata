@@ -8,14 +8,58 @@
 import { randomUUID } from "node:crypto";
 
 export const BASE_PAYLOAD = Object.freeze({
-  searchType: 0,
+  // 官网契约（2026-08-05 真实登录会话实证，phase2-online-compare/evidence.json G1-G10）：
+  // searchType 恒为 1，且默认查询携带全套默认字段（tradeType/flagList 等）。
+  searchType: 1,
   column: "comprehensiverank",
   sort: "desc",
   pageNum: 1,
   pageSize: 20,
+  marketTarget: null,
+  audienceGroup: [],
+  personalTags: [],
+  gender: null,
+  location: null,
+  signed: -1,
+  featureTags: [],
+  fansAge: 0,
+  fansGender: 0,
+  fansLocation: null,
+  fansMaritalStatus: -1,
+  fansConsumptionLevel: -1,
+  fansChildAgeInfo: [],
+  fansDevicePrice: [],
+  fansDeviceBrand: [],
+  accumCommonImpMedinNum30d: [],
+  readMidNor30: [],
+  interMidNor30: [],
+  thousandLikePercent30: [],
+  noteType: 0,
+  progressOrderCnt: [],
+  tradeType: "不限",
+  tradeReportBrandIdSet: [],
+  excludedTradeReportBrandId: false,
+  estimateCpuv30d: [],
+  inStar: 0,
+  firstIndustry: "",
+  secondIndustry: "",
+  newHighQuality: 0,
+  filterIntention: false,
+  flagList: [
+    { flagType: "HAS_BRAND_COOP_BUYER_AUTH", flagValue: "0" },
+    { flagType: "IS_HIGH_QUALITY", flagValue: "0" },
+  ],
+  activityCodes: [],
+  excludeLowActive: false,
+  fansNumUp: 0,
+  excludedTradeReportBrand: false,
+  excludedTradeInviteReportBrand: false,
+  filterList: [],
+  contentSceneLabel: [],
 });
 
 export const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100;
 
 export class PgyPayloadError extends Error {
   /**
@@ -61,31 +105,47 @@ export class PgyPayloadBuilder {
    * @param {{ pageNum?: number, pageSize?: number, trackId?: string }} [options]
    * @returns {object} 纯 JSON payload
    */
-  build(filterState, { pageNum = 1, pageSize = DEFAULT_PAGE_SIZE, trackId } = {}) {
+  build(filterState, options = {}) {
     if (filterState === null || typeof filterState !== "object" || Array.isArray(filterState)) {
       throw new PgyPayloadError("[pgy-payload-builder] filterState 必须是普通对象", {
         kind: "invalid-state",
       });
     }
 
+    const pageNum = normalizePageValue(options.pageNum, 1, "pageNum");
+    const pageSize = normalizePageValue(options.pageSize, DEFAULT_PAGE_SIZE, "pageSize");
+    if (pageSize > MAX_PAGE_SIZE) {
+      throw new PgyPayloadError(
+        `[pgy-payload-builder] pageSize 超过上限 ${MAX_PAGE_SIZE}`,
+        { kind: "invalid-state" },
+      );
+    }
+
     const payload = {
       ...BASE_PAYLOAD,
       pageNum,
       pageSize,
-      trackId: trackId || this.trackIdFactory(),
+      trackId: options.trackId || this.trackIdFactory(),
     };
 
     // brandUserId 是特殊键：只在显式提供非空字符串时写入，绝不默认写入。
     if (Object.hasOwn(filterState, "brandUserId")) {
       const brandUserId = filterState.brandUserId;
       if (typeof brandUserId === "string" && brandUserId.trim().length > 0) {
-        payload.brandUserId = brandUserId;
+        payload.brandUserId = brandUserId.trim();
       }
     }
 
     for (const [key, value] of Object.entries(filterState)) {
       if (key === "brandUserId") {
         continue;
+      }
+      // 未知字段无论值是否为空都必须显式报错，禁止空值绕过契约检查。
+      const field = this.schema.getField(key);
+      if (!field) {
+        throw new PgyPayloadError(`[pgy-payload-builder] 未知筛选字段: ${key}`, {
+          kind: "unknown-field",
+        });
       }
       if (
         value === null ||
@@ -96,15 +156,26 @@ export class PgyPayloadBuilder {
       ) {
         continue;
       }
-      const field = this.schema.getField(key);
-      if (!field) {
-        throw new PgyPayloadError(`[pgy-payload-builder] 未知筛选字段: ${key}`, {
-          kind: "unknown-field",
-        });
-      }
       payload[key] = this.schema.serialize({ payloadField: key, value });
     }
 
     return payload;
   }
+}
+
+/**
+ * 分页参数归一化：undefined/null 回落默认值；其余必须是正整数，
+ * 否则抛 PgyPayloadError kind=invalid-state，避免 NaN/小数/负数/字符串穿透到 payload。
+ */
+function normalizePageValue(value, fallback, label) {
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+  if (typeof value === "number" && Number.isInteger(value) && value >= 1) {
+    return value;
+  }
+  throw new PgyPayloadError(
+    `[pgy-payload-builder] ${label} 必须是正整数（收到 ${String(value)}）`,
+    { kind: "invalid-state" },
+  );
 }

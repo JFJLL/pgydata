@@ -396,6 +396,26 @@ test("redactText：多段 Cookie 头整段脱敏，后续分段不泄漏", () =>
   assert.ok(!json.includes("b=2"), "JSON 形态多段 Cookie 必须整体脱敏");
 });
 
+test("redactText：敏感键分号形态补强——值吞掉后续 ; 分段，非敏感赋值分段保留", () => {
+  const colon = PgySessionRequest.redactText("session: SECRET; tail");
+  assert.ok(!colon.includes("SECRET"), "session: 值中的 SECRET 必须脱敏");
+  assert.ok(!colon.includes("tail"), "session: 值后的 ; 分段必须被吞掉，不能只脱敏第一段");
+
+  const eq = PgySessionRequest.redactText("token=a; keep=1");
+  assert.ok(!eq.includes("token=a"), "token= 值必须脱敏");
+  assert.ok(eq.includes("keep=1"), "非敏感键赋值分段必须保留");
+
+  const multiSensitive = PgySessionRequest.redactText("token=a; session=b; keep=1");
+  assert.ok(!multiSensitive.includes("token=a"), "第一个敏感值必须脱敏");
+  assert.ok(!multiSensitive.includes("session=b"), "后续敏感值必须脱敏");
+  assert.ok(multiSensitive.includes("keep=1"), "非敏感分段保留");
+
+  const colonEqMixed = PgySessionRequest.redactText("session: SECRET; token=x; keep=1");
+  assert.ok(!colonEqMixed.includes("SECRET"), "冒号形态敏感值必须脱敏");
+  assert.ok(!colonEqMixed.includes("token=x"), "后续敏感赋值必须脱敏");
+  assert.ok(colonEqMixed.includes("keep=1"), "非敏感分段保留");
+});
+
 test("redactText：超长文本截断到 800 字符", () => {
   const long = `x=${"b".repeat(900)}`;
   const out = PgySessionRequest.redactText(long);

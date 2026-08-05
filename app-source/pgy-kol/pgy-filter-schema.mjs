@@ -111,7 +111,7 @@ export const FIELD_REGISTRY = Object.freeze([
   freezeRegistryEntry({ payloadField: "contentSceneLabel", label: "内容场景", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [] }),
   freezeRegistryEntry({ payloadField: "industrySpecificCrowdsMotorDom", label: "行业特色画像", controlType: "tree-multi", multiSelect: "multi", exclusive: false, serializer: "flatten-leaf-values", defaultValue: [], optionProvider: { provider: "kolTagsV2", section: "automotiveIndustryTag" } }),
   freezeRegistryEntry({ payloadField: "top20CrowdsLabel", label: "二十大人群", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "top20-transform", defaultValue: [], optionProvider: { provider: "kolTagsV2", section: "audience20" } }),
-  freezeRegistryEntry({ payloadField: "contentThemeLabel", label: "内容题材", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [], optionProvider: { provider: "kolTagsV2", section: "contentTheme" } }),
+  freezeRegistryEntry({ payloadField: "contentThemeLabel", label: "内容题材", controlType: "tree-multi", multiSelect: "multi", exclusive: false, serializer: "path-space", defaultValue: [], optionProvider: { provider: "kolTagsV2", section: "contentTheme" } }),
   freezeRegistryEntry({ payloadField: "kolInfoConsumBehaviorLabel", label: "预估消费行为", controlType: "tree-multi", multiSelect: "multi", exclusive: false, serializer: "path-or-label", defaultValue: [], optionProvider: { provider: "consumeBehavior" } }),
 ]);
 
@@ -342,7 +342,24 @@ export class PgyFilterSchema {
         }
         break;
       }
-      case "consumeBehavior":
+      case "consumeBehavior": {
+        // 线上真实形状（2026-08-05 真实响应实证）：data 是对象，根键 consumeBehaviorTag 为数组。
+        if (typeof data !== "object" || Array.isArray(data)) {
+          errors.push("raw.data 期望对象（consumeBehavior，含 consumeBehaviorTag 数组）");
+          break;
+        }
+        const tag = data.consumeBehaviorTag;
+        if (!Array.isArray(tag)) {
+          errors.push("raw.data.consumeBehaviorTag 期望数组");
+          break;
+        }
+        tag.forEach((element, index) => {
+          if (element === null || typeof element !== "object" || Array.isArray(element)) {
+            errors.push(`raw.data.consumeBehaviorTag[${index}] 期望对象`);
+          }
+        });
+        break;
+      }
       case "contentTagTree":
       case "industryTags": {
         if (!Array.isArray(data)) {
@@ -357,15 +374,21 @@ export class PgyFilterSchema {
         break;
       }
       case "areas": {
-        if (Array.isArray(data)) {
-          data.forEach((element, index) => {
-            if (element === null || typeof element !== "object" || Array.isArray(element)) {
-              errors.push(`raw.data[${index}] 期望对象`);
-            }
-          });
-        } else if (typeof data !== "object") {
-          errors.push("raw.data 期望数组或树根对象（areas）");
+        // 线上真实形状（2026-08-05 真实响应实证）：data 是对象，根键 list 为数组（国家/省/市/区树）。
+        if (typeof data !== "object" || Array.isArray(data)) {
+          errors.push("raw.data 期望对象（areas，含 list 数组）");
+          break;
         }
+        const list = data.list;
+        if (!Array.isArray(list)) {
+          errors.push("raw.data.list 期望数组");
+          break;
+        }
+        list.forEach((element, index) => {
+          if (element === null || typeof element !== "object" || Array.isArray(element)) {
+            errors.push(`raw.data.list[${index}] 期望对象`);
+          }
+        });
         break;
       }
       default:
@@ -373,6 +396,32 @@ export class PgyFilterSchema {
     }
 
     return { ok: errors.length === 0, errors };
+  }
+
+  /**
+   * 线上 get_areas / consume_behavior 不返回空格连接 path，而官网 Payload 契约为空格连接
+   * （如 "中国 广东 广州"、"内容行为预估 汽车 预估车主作者 Porsche 保时捷911"）。
+   * 仅当节点 path 等于 fullPath（即线上无独立 path，path 由规范化派生）时按 fullPath
+   * 空格化；显式 path（如测试 fixture 提供）保留原样。
+   *
+   * @param {object[]} nodes
+   * @returns {object[]}
+   */
+  deriveSpacePaths(nodes) {
+    const walk = (list) => {
+      for (const node of list) {
+        if (node !== null && typeof node === "object") {
+          if (node.path === node.fullPath) {
+            node.path = String(node.fullPath).replace(/\s*>\s*/g, " ").trim();
+          }
+          if (Array.isArray(node.children)) {
+            walk(node.children);
+          }
+        }
+      }
+      return list;
+    };
+    return walk(nodes);
   }
 
   /**
@@ -404,19 +453,52 @@ export class PgyFilterSchema {
             : String(node?.path ?? node?.fullPath ?? node?.label ?? "").trim();
         return Array.isArray(value) ? value.map(trim) : trim(value);
       }
+      case "path-space": {
+        // 官网契约（2026-08-05 真实会话实证）：内容题材发送空格连接的全路径字符串，
+        // 如 ["汽车特色 沉浸式开车"]；" > " 分隔的 fullPath 统一转换为空格连接。
+        const toSpacePath = (node) => {
+          if (typeof node === "string") {
+            return node.trim();
+          }
+          const raw = node?.path || node?.fullPath || node?.label || String(node);
+          return String(raw).replace(/\s*>\s*/g, " ").trim();
+        };
+        return Array.isArray(value) ? value.map(toSpacePath) : toSpacePath(value);
+      }
       case "top20-transform": {
         if (!Array.isArray(value)) {
           throw new PgySchemaError("[pgy-filter-schema] top20-transform 需要字符串数组", { kind: "serializer" });
         }
-        return value.map((item) => {
-          const text =
-            item !== null && typeof item === "object"
-              ? String(item.label ?? item.value ?? item)
-              : String(item);
+        // 官网契约（2026-08-05 真实会话实证）：选中项按空格分词，>=2 段时
+        // 生成 `${首段} ${首段}-${其余段}`，例如 "自在户外 挑战极限者" →
+        // "自在户外 自在户外-挑战极限者"。
+        const officialTransform = (text) => {
           const parts = text.split(/\s+/);
           return parts.length >= 2
             ? `${parts[0]} ${parts[0]}-${parts.slice(1).join(" ")}`
             : text;
+        };
+        return value.map((item) => {
+          if (item !== null && typeof item === "object") {
+            // 父节点（含 children）只负责展开，不得作为最终 Payload 值：
+            // 显式拒绝，避免把父级标签误发到官网。
+            if (Array.isArray(item.children) && item.children.length > 0) {
+              throw new PgySchemaError(
+                "[pgy-filter-schema] top20 父节点不能直接作为 Payload 值，请选择叶子",
+                { kind: "serializer" },
+              );
+            }
+            // 两层树叶子：空格连接全路径后套官网变换。真实 audience20 叶子为纯名
+            // （G5 实证："自在户外 > 挑战极限者" → "自在户外 挑战极限者" → 官网变换 →
+            // "自在户外 自在户外-挑战极限者"）。注意：若叶子 label 已带父前缀
+            // （"自在户外-挑战极限者"），变换会对两段文本再次拼前缀产生双重前缀，
+            // 因此不得以带父前缀的 label 构造节点。
+            const pathText = String(item.path ?? item.fullPath ?? item.label ?? item)
+              .replace(/\s*>\s*/g, " ")
+              .trim();
+            return officialTransform(pathText);
+          }
+          return officialTransform(String(item));
         });
       }
       default:
@@ -448,7 +530,9 @@ export class PgyFilterSchema {
         }
         return this._loadWithFallback({
           provider,
-          lkgKey: "kolTagsV2",
+          // 三个 section 必须各自独立快照：并行加载时最后一次 save 不得覆盖其它
+          // section，回退时也不得拿到错误 section 的配置树。
+          lkgKey: `kolTagsV2.${section}`,
           url: `${PGY_ORIGIN}${PROVIDER_ENDPOINTS.kolTagsV2}`,
           session,
           timeoutMs,
@@ -470,11 +554,13 @@ export class PgyFilterSchema {
           timeoutMs,
           validate: (raw) => this.validateConfigStructure(raw, "consumeBehavior"),
           normalize: (raw) =>
-            this.normalizeOptionTree({
-              rawNodes: raw.data,
-              payloadField: "kolInfoConsumBehaviorLabel",
-              provider: "consumeBehavior",
-            }),
+            this.deriveSpacePaths(
+              this.normalizeOptionTree({
+                rawNodes: raw.data.consumeBehaviorTag,
+                payloadField: "kolInfoConsumBehaviorLabel",
+                provider: "consumeBehavior",
+              }),
+            ),
         });
       case "areas":
         return this._loadWithFallback({
@@ -485,14 +571,15 @@ export class PgyFilterSchema {
           timeoutMs,
           validate: (raw) => this.validateConfigStructure(raw, "areas"),
           normalize: (raw) => {
-            const roots = Array.isArray(raw.data) ? raw.data : [raw.data];
-            return this.normalizeOptionTree({
-              rawNodes: roots,
-              payloadField: "location",
-              provider: "areas",
-              valueKey: "name",
-              labelKey: "name",
-            });
+            return this.deriveSpacePaths(
+              this.normalizeOptionTree({
+                rawNodes: raw.data.list,
+                payloadField: "location",
+                provider: "areas",
+                valueKey: "name",
+                labelKey: "name",
+              }),
+            );
           },
         });
       default:
@@ -552,7 +639,7 @@ export class PgyFilterSchema {
           source: "live",
           version: SCHEMA_VERSION,
           nodes,
-          warning: `[pgy-filter-schema] ${provider} LKG 快照保存失败，继续使用线上结果（${saveError?.message ?? saveError}）`,
+          warning: `[pgy-filter-schema] ${provider} LKG 快照保存失败，继续使用线上结果（${PgySessionRequest.redactText(String(saveError?.message ?? saveError))}）`,
         };
       }
     }

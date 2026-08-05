@@ -5,6 +5,11 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "../..");
 
+// A5 记录（只读，禁止修改 assets/1.2.0/integrity-manifest.json）：
+// 该 manifest 文件整体使用 CRLF 行尾（实测 306 个 CRLF、0 个 LF-only，末字节 0x0A）。
+// 若未来工具按 LF 规范化后重算/重写 manifest 文本，会出现行尾噪声 diff；
+// 文件内各条目的 sha256 为既有发布哈希，与本问题无关，不得改动。
+
 function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), "utf8");
 }
@@ -31,7 +36,13 @@ test("desktop main wires the pgy-kol base service and read-only IPC", () => {
   assert.ok(main.includes("pgyKolIpcDispose = registerPgyKolIpc("), "IPC dispose must be retained for teardown");
   assert.ok(main.includes("pgyKolIpcDispose == null || pgyKolIpcDispose()"), "IPC dispose must run during plugin teardown");
   const ipcModule = read("app-source/pgy-kol/pgy-kol-ipc.mjs");
-  for (const channel of ["pgy-kol:status", "pgy-kol:schema-status", "pgy-kol:search-first-page"]) {
+  for (const channel of [
+    "pgy-kol:status",
+    "pgy-kol:schema-status",
+    "pgy-kol:search-first-page",
+    "pgy-kol:config",
+    "pgy-kol:payload-preview",
+  ]) {
     assert.ok(ipcModule.includes(channel), `ipc module must define channel ${channel}`);
   }
 });

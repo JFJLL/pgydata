@@ -4,7 +4,11 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { FIELD_REGISTRY, PgyFilterSchema } from "../../app-source/pgy-kol/pgy-filter-schema.mjs";
+import {
+  FIELD_REGISTRY,
+  PgyFilterSchema,
+  PgySchemaError,
+} from "../../app-source/pgy-kol/pgy-filter-schema.mjs";
 import {
   BASE_PAYLOAD,
   DEFAULT_PAGE_SIZE,
@@ -63,6 +67,36 @@ test("空字符串 trackId 视为未提供，由工厂生成非空值", () => {
   assert.equal(payload.trackId, "factory-id-001");
 });
 
+test("pageNum/pageSize 边界：null/undefined 用默认；0/负数/小数/NaN/字符串抛 invalid-state；pageSize 上限 100", () => {
+  const builder = makeBuilder();
+
+  assert.equal(builder.build({}, { pageNum: null, pageSize: null, trackId: "t" }).pageNum, 1);
+  assert.equal(builder.build({}, { pageNum: null, pageSize: null, trackId: "t" }).pageSize, 20);
+  assert.equal(builder.build({}, { pageNum: undefined, pageSize: undefined, trackId: "t" }).pageNum, 1);
+  assert.equal(builder.build({}, { trackId: "t" }).pageSize, 20);
+
+  for (const bad of [0, -1, 1.5, Number.NaN, "5"]) {
+    assert.throws(
+      () => builder.build({}, { pageNum: bad, trackId: "t" }),
+      (err) => err instanceof PgyPayloadError && err.kind === "invalid-state",
+      `pageNum=${String(bad)} 必须抛 invalid-state`,
+    );
+    assert.throws(
+      () => builder.build({}, { pageSize: bad, trackId: "t" }),
+      (err) => err instanceof PgyPayloadError && err.kind === "invalid-state",
+      `pageSize=${String(bad)} 必须抛 invalid-state`,
+    );
+  }
+
+  assert.throws(
+    () => builder.build({}, { pageSize: 500, trackId: "t" }),
+    (err) => err instanceof PgyPayloadError && err.kind === "invalid-state",
+    "pageSize=500 必须因超上限抛 invalid-state",
+  );
+  assert.equal(builder.build({}, { pageSize: 100, trackId: "t" }).pageSize, 100);
+  assert.equal(builder.build({}, { pageNum: 250, pageSize: 20, trackId: "t" }).pageNum, 250);
+});
+
 test("brandUserId：仅显式非空字符串才写入", () => {
   const builder = makeBuilder();
   const withBrand = builder.build({ brandUserId: "brand_1001" }, { trackId: "t" });
@@ -80,7 +114,13 @@ test("brandUserId：纯空白字符串与普通字段口径一致，不写入", 
   assert.ok(!("brandUserId" in out), "纯空白 brandUserId 不得写入");
 });
 
-test("地域字段 path-trim；行业特色画像展开叶子（含 19188199）；消费行为 path||label；top20 官网变换；题材直传", async () => {
+test("brandUserId：写入前 trim 首尾空白，保留中间内容", () => {
+  const builder = makeBuilder();
+  const out = builder.build({ brandUserId: "  brand_1001  " }, { trackId: "t" });
+  assert.equal(out.brandUserId, "brand_1001", "brandUserId 必须以 trim 后的值写入");
+});
+
+test("地域字段 path-trim；行业特色画像展开叶子（含 19188199）；消费行为 path||label；top20 官网变换；题材空格路径", async () => {
   const builder = makeBuilder();
   const areas = await loadFixture("areas-tree.json");
   const cfg = await loadFixture("kol-tags-v2-config.json");
@@ -88,14 +128,26 @@ test("地域字段 path-trim；行业特色画像展开叶子（含 19188199）�
   const top20 = await loadFixture("top20-options.json");
   const themes = await loadFixture("content-theme-list.json");
 
-  const guangdong = areas.data.children[0];
-  const zhejiang = areas.data.children[1];
+  // 线上真实形状（2026-08-05 实证）：areas=data.list、consumeBehavior=data.consumeBehaviorTag，
+  // 节点无独立 path；先规范化派生空格 path 再交给 builder。
+  const schema0 = makeSchema();
+  const areasNodes = schema0.deriveSpacePaths(
+    schema0.normalizeOptionTree({
+      rawNodes: areas.data.list,
+      payloadField: "location",
+      provider: "areas",
+      valueKey: "name",
+      labelKey: "name",
+    }),
+  );
+  const guangdong = areasNodes[0].children[0];
+  const zhejiang = areasNodes[0].children[1];
 
   const locationOut = builder.build({ location: guangdong }, { trackId: "t" });
-  assert.equal(locationOut.location, "中国 > 广东省");
+  assert.equal(locationOut.location, "中国 广东");
 
   const fansLocationOut = builder.build({ fansLocation: [guangdong, zhejiang] }, { trackId: "t" });
-  assert.deepEqual(fansLocationOut.fansLocation, ["中国 > 广东省", "中国 > 浙江省"]);
+  assert.deepEqual(fansLocationOut.fansLocation, ["中国 广东", "中国 浙江"]);
 
   const rawScene = cfg.data.automotiveIndustryTag[0].children[0].children[0];
   const crowdOut = builder.build({ industrySpecificCrowdsMotorDom: [rawScene] }, { trackId: "t" });
@@ -112,12 +164,20 @@ test("地域字段 path-trim；行业特色画像展开叶子（含 19188199）�
   const normalizedOut = builder.build({ industrySpecificCrowdsMotorDom: [scene] }, { trackId: "t" });
   assert.deepEqual(normalizedOut.industrySpecificCrowdsMotorDom, ["19188199"]);
 
+  const consumeNodes = schema0.deriveSpacePaths(
+    schema0.normalizeOptionTree({
+      rawNodes: consume.data.consumeBehaviorTag,
+      payloadField: "kolInfoConsumBehaviorLabel",
+      provider: "consumeBehavior",
+    }),
+  );
+  // 真实树：美妆个护 > 护肤 > 洁面；选择叶子 洁面（path=空格连接全路径）。
   const consumeOut = builder.build(
-    { kolInfoConsumBehaviorLabel: [consume.data[1], consume.data[2]] },
+    { kolInfoConsumBehaviorLabel: [consumeNodes[2].children[0].children[0], consumeNodes[3]] },
     { trackId: "t" },
   );
   assert.deepEqual(consumeOut.kolInfoConsumBehaviorLabel, [
-    "美妆个护 > 护肤 > 洁面",
+    "美妆个护 护肤 洁面",
     "只有标签的消费行为",
   ]);
 
@@ -130,11 +190,50 @@ test("地域字段 path-trim；行业特色画像展开叶子（含 19188199）�
     "50岁以上 50岁以上-女性",
   ]);
 
-  const themeOut = builder.build(
-    { contentThemeLabel: themes.data.map((n) => n.value) },
+  // 两层树叶子节点（真实形态）：fullPath 空格化 + 官网变换（G5 实证）。
+  const audNodes = makeSchema().normalizeOptionTree({
+    rawNodes: cfg.data.audience20,
+    payloadField: "top20CrowdsLabel",
+    provider: "kolTagsV2",
+  });
+  const leafOut = builder.build(
+    { top20CrowdsLabel: [audNodes[0].children[0]] },
     { trackId: "t" },
   );
-  assert.deepEqual(themeOut.contentThemeLabel, [501, 502, 503]);
+  assert.deepEqual(leafOut.top20CrowdsLabel, ["自在户外 自在户外-挑战极限者"]);
+  const multiLeafOut = builder.build(
+    { top20CrowdsLabel: [audNodes[0].children[0], audNodes[1].children[0], audNodes[2]] },
+    { trackId: "t" },
+  );
+  assert.deepEqual(multiLeafOut.top20CrowdsLabel, [
+    "自在户外 自在户外-挑战极限者",
+    "时尚穿搭 时尚穿搭-潮流先锋",
+    "25-29岁",
+  ]);
+  // 父节点（含 children）不得作为最终 Payload 值，builder 必须显式失败。
+  assert.throws(
+    () => builder.build({ top20CrowdsLabel: [audNodes[0]] }, { trackId: "t" }),
+    (err) => err instanceof PgySchemaError && err.kind === "serializer",
+  );
+
+  // 官网契约（真实会话实证）：contentThemeLabel 发送空格连接路径，如 ["汽车特色 沉浸式开车"]。
+  const themeOut = builder.build(
+    { contentThemeLabel: [themes.data[0].children[0], themes.data[1]] },
+    { trackId: "t" },
+  );
+  assert.deepEqual(themeOut.contentThemeLabel, ["汽车特色 沉浸式开车", "美妆教程"]);
+
+  // 规范化节点（fullPath 以 " > " 连接）同样转换为空格路径。
+  const themeNodes = schema.normalizeOptionTree({
+    rawNodes: themes.data,
+    payloadField: "contentThemeLabel",
+    provider: "kolTagsV2",
+  });
+  const themeNormalizedOut = builder.build(
+    { contentThemeLabel: [themeNodes[0].children[0], themeNodes[1]] },
+    { trackId: "t" },
+  );
+  assert.deepEqual(themeNormalizedOut.contentThemeLabel, ["汽车特色 沉浸式开车", "美妆教程"]);
 });
 
 test("范围字段：只传 lower 只写 lower；都传则都写", () => {
@@ -169,10 +268,11 @@ test("空值跳过：null/undefined/空串/空数组不写入", () => {
     },
     { trackId: "t" },
   );
-  assert.ok(!("gender" in out));
-  assert.ok(!("signed" in out));
-  assert.ok(!("location" in out));
-  assert.ok(!("personalTags" in out));
+  // BASE_PAYLOAD 携带官网默认字段：filterState 的空值不覆盖默认值。
+  assert.equal(out.gender, null);
+  assert.equal(out.signed, -1);
+  assert.equal(out.location, null);
+  assert.deepEqual(out.personalTags, []);
   assert.equal(out.marketTarget, "有效值");
 });
 
@@ -182,8 +282,8 @@ test("纯空白字符串视为未提供，不写入 payload", () => {
     { location: "   ", fansNumberLower: "  ", marketTarget: "有效值" },
     { trackId: "t" },
   );
-  assert.ok(!("location" in out), "纯空白 location 不得写入");
-  assert.ok(!("fansNumberLower" in out), "纯空白 fansNumberLower 不得写入");
+  assert.equal(out.location, null, "纯空白 location 不得写入（保持默认 null）");
+  assert.ok(!("fansNumberLower" in out), "纯空白 fansNumberLower 不得写入（官网默认 payload 无此字段）");
   assert.equal(out.marketTarget, "有效值");
 });
 
@@ -191,6 +291,14 @@ test("未知字段 → PgyPayloadError kind=unknown-field", () => {
   const builder = makeBuilder();
   assert.throws(
     () => builder.build({ bogusField: 1 }, { trackId: "t" }),
+    (err) => err instanceof PgyPayloadError && err.kind === "unknown-field",
+  );
+});
+
+test("未知字段空值（null）同样报 unknown-field，不允许空值绕过", () => {
+  const builder = makeBuilder();
+  assert.throws(
+    () => builder.build({ bogus: null }, { trackId: "t" }),
     (err) => err instanceof PgyPayloadError && err.kind === "unknown-field",
   );
 });
@@ -210,8 +318,18 @@ test("确定性：相同输入 + 相同 trackId → 深相等且键序稳定", a
   const areas = await loadFixture("areas-tree.json");
   const cfg = await loadFixture("kol-tags-v2-config.json");
   const top20 = await loadFixture("top20-options.json");
+  const schema0 = makeSchema();
+  const areasNodes = schema0.deriveSpacePaths(
+    schema0.normalizeOptionTree({
+      rawNodes: areas.data.list,
+      payloadField: "location",
+      provider: "areas",
+      valueKey: "name",
+      labelKey: "name",
+    }),
+  );
   const state = {
-    location: areas.data.children[0],
+    location: areasNodes[0].children[0],
     industrySpecificCrowdsMotorDom: [cfg.data.automotiveIndustryTag[0].children[0].children[0]],
     top20CrowdsLabel: top20,
     fansNumberLower: 1000,

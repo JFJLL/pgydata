@@ -1,37 +1,93 @@
 {
   "code": 0,
-  "data": [
-    {
-      "path": "母婴亲子 > 婴幼儿用品",
-      "label": "母婴亲子",
-      "children": [
-        {
-          "path": "母婴亲子 > 婴幼儿用品 > 纸尿裤",
-          "label": "婴幼儿用品",
-          "children": [
-            {
-              "path": "母婴亲子 > 婴幼儿用品 > 纸尿裤 > 日用纸尿裤",
-              "label": "纸尿裤",
-              "children": [
-                {
-                  "path": "母婴亲子 > 婴幼儿用品 > 纸尿裤 > 日用纸尿裤 > 日用款",
-                  "label": "日用款"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "path": "母婴亲子 > 婴幼儿用品 > 奶粉",
-          "label": "奶粉"
-        }
-      ]
-    },
-    {
-      "path": "美妆个护 > 护肤 > 洁面"
-    },
-    {
-      "label": "只有标签的消费行为"
-    }
-  ]
+  "msg": "ok",
+  "success": true,
+  "data": {
+    "consumeBehaviorTag": [
+      {
+        "disabled": false,
+        "value": "内容行为预估",
+        "label": "内容行为预估",
+        "children": [
+          {
+            "value": "汽车",
+            "label": "汽车",
+            "children": [
+              {
+                "value": "预估车主作者",
+                "label": "预估车主作者",
+                "children": [
+                  {
+                    "value": "Porsche",
+                    "label": "Porsche",
+                    "children": [
+                      {
+                        "value": "保时捷911",
+                        "label": "保时捷911",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "value": "母婴亲子",
+        "label": "母婴亲子",
+        "children": [
+          {
+            "value": "婴幼儿用品",
+            "label": "婴幼儿用品",
+            "children": [
+              {
+                "value": "纸尿裤",
+                "label": "纸尿裤",
+                "children": [
+                  {
+                    "value": "日用纸尿裤",
+                    "label": "日用纸尿裤",
+                    "children": [
+                      {
+                        "value": "日用款",
+                        "label": "日用款",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "value": "奶粉",
+            "label": "奶粉",
+            "children": []
+          }
+        ]
+      },
+      {
+        "value": "美妆个护",
+        "label": "美妆个护",
+        "children": [
+          {
+            "value": "护肤",
+            "label": "护肤",
+            "children": [
+              {
+                "value": "洁面",
+                "label": "洁面",
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "label": "只有标签的消费行为"
+      }
+    ]
+  }
 }

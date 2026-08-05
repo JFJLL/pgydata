@@ -237,6 +237,24 @@ test("requestJson 返回 { httpStatusCode, body } 包装时透传状态码", asy
   assert.equal(result.total, 4820);
 });
 
+test("wrapped 响应携带非 2xx httpStatusCode 时纵深防御：401/461/其余按状态拒绝", async () => {
+  const body = await loadFixture("search-first-page-normal");
+  const cases = [
+    { httpStatusCode: 401, kind: "auth-expired" },
+    { httpStatusCode: 461, kind: "risk-control" },
+    { httpStatusCode: 500, kind: "http" },
+    { httpStatusCode: 503, kind: "http" },
+  ];
+  for (const { httpStatusCode, kind } of cases) {
+    const { client } = makeClient(() => ({ httpStatusCode, body: { code: 0, data: { kols: [], total: 0 } } }));
+    await assert.rejects(
+      client.searchPage({ payload: { pageNum: 1, pageSize: 20 } }),
+      (err) => err.kind === kind,
+      `wrapped httpStatusCode=${httpStatusCode} 必须拒绝 kind=${kind}，不得因 body.code=0 伪装成功`,
+    );
+  }
+});
+
 test("payload 非 object 时抛出 TypeError", async () => {
   const body = await loadFixture("search-first-page-normal");
   const { client } = makeClient(() => body);

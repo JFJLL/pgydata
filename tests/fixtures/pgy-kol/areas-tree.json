@@ -1,36 +1,53 @@
 {
   "code": 0,
+  "msg": "成功",
+  "guid": null,
+  "success": true,
   "data": {
-    "name": "中国",
-    "path": " 中国 ",
-    "children": [
+    "list": [
       {
-        "name": "广东省",
-        "path": " 中国 > 广东省 ",
+        "code": "中国",
+        "name": "中国",
+        "level": 0,
         "children": [
           {
-            "name": "广州市",
-            "path": " 中国 > 广东省 > 广州市 ",
+            "code": "广东",
+            "name": "广东",
+            "level": 0,
             "children": [
               {
-                "name": "天河区",
-                "path": " 中国 > 广东省 > 广州市 > 天河区 "
+                "code": "广州",
+                "name": "广州",
+                "level": 0,
+                "children": [
+                  {
+                    "code": "天河区",
+                    "name": "天河区",
+                    "level": 0,
+                    "children": null
+                  }
+                ]
+              },
+              {
+                "code": "深圳",
+                "name": "深圳",
+                "level": 0,
+                "children": null
               }
             ]
           },
           {
-            "name": "深圳市",
-            "path": " 中国 > 广东省 > 深圳市 "
-          }
-        ]
-      },
-      {
-        "name": "浙江省",
-        "path": " 中国 > 浙江省 ",
-        "children": [
-          {
-            "name": "杭州市",
-            "path": " 中国 > 浙江省 > 杭州市 "
+            "code": "浙江",
+            "name": "浙江",
+            "level": 0,
+            "children": [
+              {
+                "code": "杭州",
+                "name": "杭州",
+                "level": 0,
+                "children": null
+              }
+            ]
           }
         ]
       }

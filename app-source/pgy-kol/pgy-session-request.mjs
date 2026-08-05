@@ -18,6 +18,8 @@ export const PGY_HTTP_AUTH_STATUSES = new Set([401, 461]);
 const DEFAULT_REFERER = `${PGY_ORIGIN}/solar/pre-trade/note/kol`;
 const MAX_MESSAGE_LENGTH = 800;
 const SENSITIVE_HEADER_KEY = /cookie|authorization|token|x-s|x-t|password|secret|session/i;
+const SENSITIVE_VALUE_KEY_PATTERN =
+  "cookie|authorization|token|password|secret|session|x-s|x-t";
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -39,14 +41,21 @@ function redactText(text) {
       (match, keyQuote, key, valueQuote) =>
         `${keyQuote}${key}${keyQuote}: ${valueQuote}[redacted]${valueQuote}`
     )
-    // 键=值 形态：key=value
+    // 键=值 形态：key=value。值允许 `;` 分段（防 `session=SECRET; tail` 只脱敏第一段），
+    // 但停在下一个“键=值/键: 值”形态分段前，非敏感赋值分段（如 keep=1）保留。
     .replace(
-      /(cookie|authorization|token|password|secret|session|x-s|x-t)\s*=\s*([^;&\n\r]+)/gi,
+      new RegExp(
+        `(${SENSITIVE_VALUE_KEY_PATTERN})\\s*=\\s*((?:.)(?:(?!;\\s*[A-Za-z0-9_-]+\\s*[:=]).)*)`,
+        "gi",
+      ),
       (match, key) => `${key}=[redacted]`
     )
-    // 键: 值 形态：key: value
+    // 键: 值 形态：key: value。同上吞掉后续 `;` 分段；`,}` 停界保留（JSON 形态由上方规则处理）。
     .replace(
-      /(cookie|authorization|token|password|secret|session|x-s|x-t)\s*:\s*([^;\n\r,}]+)/gi,
+      new RegExp(
+        `(${SENSITIVE_VALUE_KEY_PATTERN})\\s*:\\s*((?:[^,}\\n\\r])(?:(?!;\\s*[A-Za-z0-9_-]+\\s*[:=]|[,}\\n\\r]).)*)`,
+        "gi",
+      ),
       (match, key) => `${key}: [redacted]`
     );
   return redacted.length > MAX_MESSAGE_LENGTH ? redacted.slice(0, MAX_MESSAGE_LENGTH) : redacted;

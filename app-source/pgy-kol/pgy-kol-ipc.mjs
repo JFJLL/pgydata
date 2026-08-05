@@ -1,16 +1,20 @@
 /**
  * 蒲公英“找博主”底座最小只读 IPC。
  *
- * 第一阶段只提供只读能力：状态查询、Schema 状态查询、第一页搜索。
- * 不提供任何写入本地、导出、任务管理的通道；不在正式 UI 中展示。
+ * 第一阶段提供只读能力：状态查询、Schema 状态查询、第一页搜索。
+ * 第二阶段新增面向 UI 的只读能力：config（动态配置节点）、payload-preview（纯 JSON 预览）。
+ * 全部通道只读，不提供任何写入本地、导出、任务管理的通道。
  */
 
 import { PgySessionRequest } from "./pgy-session-request.mjs";
+import { validateConfigRequest, validateFilterState } from "./pgy-ipc-guard.mjs";
 
 export const PGY_KOL_IPC_CHANNELS = Object.freeze({
   status: "pgy-kol:status",
   schemaStatus: "pgy-kol:schema-status",
   searchFirstPage: "pgy-kol:search-first-page",
+  config: "pgy-kol:config",
+  payloadPreview: "pgy-kol:payload-preview",
 });
 
 /**
@@ -42,10 +46,45 @@ export function registerPgyKolIpc({ ipcMain, service }) {
   });
 
   ipcMain.handle(PGY_KOL_IPC_CHANNELS.searchFirstPage, async (_event, filterState) => {
+    // 与 payload-preview 一致：入口强制深度/数组/字符串/键数边界。
     try {
+      const check = validateFilterState(filterState);
+      if (!check.ok) {
+        return { ok: false, error: check.error };
+      }
       const data = await service.searchFirstPage({
-        filterState: normalizeFilterState(filterState),
+        filterState: check.value,
       });
+      return { ok: true, data };
+    } catch (err) {
+      return { ok: false, error: toErrorPayload(err) };
+    }
+  });
+
+  ipcMain.handle(PGY_KOL_IPC_CHANNELS.config, async (_event, input) => {
+    try {
+      const check = validateConfigRequest(input);
+      if (!check.ok) {
+        return { ok: false, error: check.error };
+      }
+      const data = await service.loadConfig({
+        provider: check.provider,
+        ...(check.section === undefined ? {} : { section: check.section }),
+      });
+      return { ok: true, data };
+    } catch (err) {
+      return { ok: false, error: toErrorPayload(err) };
+    }
+  });
+
+  ipcMain.handle(PGY_KOL_IPC_CHANNELS.payloadPreview, async (_event, input) => {
+    // 与 searchFirstPage 一致：入参即裸 filterState（页面经 preload 直接透传）。
+    try {
+      const check = validateFilterState(input);
+      if (!check.ok) {
+        return { ok: false, error: check.error };
+      }
+      const data = await service.previewPayload({ filterState: check.value });
       return { ok: true, data };
     } catch (err) {
       return { ok: false, error: toErrorPayload(err) };
@@ -59,16 +98,6 @@ export function registerPgyKolIpc({ ipcMain, service }) {
       }
     }
   };
-}
-
-function normalizeFilterState(value) {
-  if (value === undefined || value === null) {
-    return {};
-  }
-  if (typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("filterState 必须是普通对象");
-  }
-  return value;
 }
 
 function toErrorPayload(err) {

@@ -79,7 +79,7 @@
       "modes": ["local", "ci"],
       "minExecuted": 1,
       "commands": [
-        {"id": "node-unit", "program": "node", "args": ["--test", "tests/unit/release-manifest.test.js", "tests/unit/collection-history-store.test.mjs", "tests/unit/collection-runtime-contract.test.js", "tests/unit/collection-history-export.test.mjs", "tests/unit/magiorix-frontend-contract.test.js", "tests/unit/pgy-kol-session-request.test.mjs", "tests/unit/pgy-kol-filter-schema.test.mjs", "tests/unit/pgy-kol-payload-builder.test.mjs", "tests/unit/pgy-kol-search-client.test.mjs", "tests/unit/pgy-kol-pagination-planner.test.mjs", "tests/unit/pgy-kol-ipc.test.mjs", "tests/unit/pgy-kol-contract.test.js"], "required": true}
+        {"id": "node-unit", "program": "node", "args": ["--test", "tests/unit/release-manifest.test.js", "tests/unit/collection-history-store.test.mjs", "tests/unit/collection-runtime-contract.test.js", "tests/unit/collection-history-export.test.mjs", "tests/unit/magiorix-frontend-contract.test.js", "tests/unit/pgy-kol-session-request.test.mjs", "tests/unit/pgy-kol-filter-schema.test.mjs", "tests/unit/pgy-kol-payload-builder.test.mjs", "tests/unit/pgy-kol-search-client.test.mjs", "tests/unit/pgy-kol-pagination-planner.test.mjs", "tests/unit/pgy-kol-ipc.test.mjs", "tests/unit/pgy-kol-contract.test.js", "tests/unit/pgy-kol-ipc-guard.test.mjs", "tests/unit/pgy-kol-frontend-contract.test.js"], "required": true}
       ]
     },
     "build": {
