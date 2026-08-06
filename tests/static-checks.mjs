@@ -15,6 +15,10 @@ const javascriptFiles = [
   "app-source/pgy-kol/pgy-payload-builder.mjs",
   "app-source/pgy-kol/pgy-kol-search-client.mjs",
   "app-source/pgy-kol/pgy-pagination-planner.mjs",
+  "app-source/pgy-kol/pgy-kol-task-store.mjs",
+  "app-source/pgy-kol/pgy-kol-batch-runner.mjs",
+  "app-source/pgy-kol/pgy-kol-column-registry.mjs",
+  "app-source/pgy-kol/pgy-kol-batch-export.mjs",
 ];
 
 for (const file of javascriptFiles) {
@@ -97,6 +101,13 @@ assert.doesNotMatch(
 assert.match(runtimePatch, /daily-note-performance/, "runtime patch must route the daily note chart renderer");
 assert.match(runtimePatch, /replaceSection/, "runtime patch must migrate an existing daily note renderer section");
 assert.match(runtimePatch, /pgy_daily_note_svg\.js/, "runtime patch must load the maintained daily note SVG source");
+// Phase 4 可复现构建（fresh reviewer H1/H2）：runtime 补丁必须自带
+// redactLocalPathText import 与 pgy-kol 批量主进程/preload 接线步骤，
+// 干净重建不得产生未定义引用或静默丢失批量功能。
+assert.match(runtimePatch, /pgyRedactLocalPath/, "runtime patch must reference the redaction helper used by the export log step");
+assert.match(runtimePatch, /pgy-kol Phase 4 preload bridge methods/, "runtime patch must wire the pgy-kol preload bridge");
+assert.match(runtimePatch, /pgy-kol Phase 4 task store and exporter wiring/, "runtime patch must wire taskBaseDir/exporter");
+assert.match(runtimePatch, /pgy-kol Phase 4 batch event broadcast wiring/, "runtime patch must wire the batch event broadcast");
 assert.match(runtimePatch, /bloggerOverviewChart/, "runtime patch must generate the blogger overview chart");
 assert.match(runtimePatch, /blogger-overview/, "runtime patch must route the blogger overview renderer");
 assert.match(runtimePatch, /pgy_blogger_overview_svg\.js/, "runtime patch must load the maintained blogger overview SVG source");

@@ -32,7 +32,8 @@ test("desktop main wires the pgy-kol base service and read-only IPC", () => {
   );
   assert.ok(main.includes("sign: (path, body) => sm.encryptSign(path, body)"), "signing must reuse the existing X-s/X-t implementation");
   assert.ok(main.includes("sessionProvider: () => Pn.defaultSession"), "session must reuse the default Electron session");
-  assert.ok(main.includes("registerPgyKolIpc({ ipcMain: F, service: pgyKolService })"), "IPC must be registered with the composed service");
+  assert.ok(main.includes("pgyKolIpcDispose = registerPgyKolIpc({"), "IPC must be registered with the composed service");
+  assert.ok(main.includes("ipcMain: F,") && main.includes("service: pgyKolService,"), "IPC must be registered with the composed service");
   assert.ok(main.includes("pgyKolIpcDispose = registerPgyKolIpc("), "IPC dispose must be retained for teardown");
   assert.ok(main.includes("pgyKolIpcDispose == null || pgyKolIpcDispose()"), "IPC dispose must run during plugin teardown");
   const ipcModule = read("app-source/pgy-kol/pgy-kol-ipc.mjs");
@@ -116,5 +117,73 @@ test("version stays at 1.2.0 without touching payment/sms release state", () => 
     "tests/unit/pgy-kol-contract.test.js",
   ]) {
     assert.ok(unitArgs.includes(testFile), `unit lane must run ${testFile}`);
+  }
+});
+
+test("Phase 4：批量任务 IPC 通道、preload bridge 与主进程接线", () => {
+  const ipcModule = read("app-source/pgy-kol/pgy-kol-ipc.mjs");
+  for (const channel of [
+    "pgy-kol:batch-start",
+    "pgy-kol:batch-list",
+    "pgy-kol:batch-get",
+    "pgy-kol:batch-pause",
+    "pgy-kol:batch-resume",
+    "pgy-kol:batch-cancel",
+    "pgy-kol:batch-export",
+    "pgy-kol:columns",
+    "pgy-kol:batch-event",
+  ]) {
+    assert.ok(ipcModule.includes(channel), `ipc module must define channel ${channel}`);
+  }
+
+  const preload = read("app-source/dist-electron/preload.mjs");
+  assert.match(preload, /batchStart:e=>r\.ipcRenderer\.invoke\("pgy-kol:batch-start",e\)/);
+  assert.match(preload, /batchList:\(\)=>r\.ipcRenderer\.invoke\("pgy-kol:batch-list"\)/);
+  assert.match(preload, /batchGet:e=>r\.ipcRenderer\.invoke\("pgy-kol:batch-get",e\)/);
+  assert.match(preload, /batchPause:e=>r\.ipcRenderer\.invoke\("pgy-kol:batch-pause",e\)/);
+  assert.match(preload, /batchResume:e=>r\.ipcRenderer\.invoke\("pgy-kol:batch-resume",e\)/);
+  assert.match(preload, /batchCancel:e=>r\.ipcRenderer\.invoke\("pgy-kol:batch-cancel",e\)/);
+  assert.match(preload, /batchExport:e=>r\.ipcRenderer\.invoke\("pgy-kol:batch-export",e\)/);
+  assert.match(preload, /getColumns:\(\)=>r\.ipcRenderer\.invoke\("pgy-kol:columns"\)/);
+  // 事件订阅必须返回 dispose（removeListener）。
+  assert.match(
+    preload,
+    /onBatchEvent:e=>\{const n=\(a,t\)=>e\(t\);return r\.ipcRenderer\.on\("pgy-kol:batch-event",n\),\(\)=>r\.ipcRenderer\.removeListener\("pgy-kol:batch-event",n\)\}/,
+    "onBatchEvent must register a listener and return a dispose function",
+  );
+
+  const main = read("app-source/dist-electron/index.js");
+  assert.ok(
+    main.includes('taskBaseDir: Oe(ye.getPath("userData"), "pgy-kol-tasks")'),
+    "main must wire the pgy-kol task store directory",
+  );
+  assert.ok(
+    main.includes("exporter: (payload) => ff(payload)"),
+    "main must wire the pgy-kol Excel exporter through the existing save-dialog flow",
+  );
+  assert.ok(
+    main.includes("broadcast: (channel, payload) => Dt.getAllWindows().forEach((window) => window.webContents.send(channel, payload))"),
+    "main must broadcast batch events to all renderer windows",
+  );
+});
+
+test("Phase 4：verification policy 登记批量任务测试与 R3 路由", () => {
+  const policy = JSON.parse(read("verification-policy.json"));
+  const unitArgs = JSON.stringify(policy.lanes.unit.commands.find((c) => c.id === "node-unit")?.args ?? []);
+  for (const testFile of [
+    "tests/unit/pgy-kol-batch-contract.test.mjs",
+    "tests/unit/pgy-kol-batch-runner.test.mjs",
+    "tests/unit/pgy-kol-task-store.test.mjs",
+    "tests/unit/pgy-kol-column-registry.test.mjs",
+    "tests/unit/pgy-kol-batch-export.test.mjs",
+    "tests/unit/pgy-kol-batch-integration.test.mjs",
+  ]) {
+    assert.ok(unitArgs.includes(testFile), `unit lane must run ${testFile}`);
+  }
+  const route = policy.routes.find((item) => item.id === "pgy-kol-batch-state");
+  assert.ok(route, "policy must define the pgy-kol-batch-state route");
+  assert.equal(route.risk, "R3");
+  for (const lane of ["integration", "data", "agent-review"]) {
+    assert.ok(route.addLanes.includes(lane), `route must add ${lane}`);
   }
 });

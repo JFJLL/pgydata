@@ -61,6 +61,21 @@ function redactText(text) {
   return redacted.length > MAX_MESSAGE_LENGTH ? redacted.slice(0, MAX_MESSAGE_LENGTH) : redacted;
 }
 
+// 本地绝对路径脱敏：Windows 盘符路径与 UNC 路径替换为占位符。
+// 用于磁盘/权限错误消息（fs 错误常携带绝对路径），防止本地敏感路径
+// 泄漏进 IPC 错误详情、日志或任务元数据。
+const LOCAL_WINDOWS_PATH_PATTERN =
+  /(?:[A-Za-z]:[\\/][^\s'"<>|]*(?:[\\/][^\s'"<>|]*)*|\\\\(?:[^\\\s'"<>|]+)\\(?:[^\\\s'"<>|]*(?:\\[^\s'"<>|]*)*))/g;
+export function redactLocalPathText(text) {
+  const input = typeof text === "string" ? text : String(text ?? "");
+  return input
+    // 引号包裹的 Windows/UNC 绝对路径整体脱敏（可含空格，如 'C:\Users\my folder\...'；
+    // fresh reviewer M1）。
+    .replace(/(["'])((?:[A-Za-z]:[\\/]|\\\\)(?:[^"'])*?)\1/g, "$1[local-path-redacted]$1")
+    // 未加引号的盘符/UNC 路径（不含空白，保持原语义）。
+    .replace(LOCAL_WINDOWS_PATH_PATTERN, "[local-path-redacted]");
+}
+
 function redactDetails(value, key = "") {
   if (typeof value === "string") {
     return SENSITIVE_HEADER_KEY.test(key) ? "[redacted]" : redactText(value);
@@ -120,6 +135,10 @@ export class PgySessionRequest {
 
   static redactText(text) {
     return redactText(text);
+  }
+
+  static redactLocalPathText(text) {
+    return redactLocalPathText(text);
   }
 
   static redactHeaders(headers) {

@@ -93,7 +93,7 @@ test("status channel reports the base module and schema version", async (t) => {
     const status = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.status)();
     assert.equal(status.ok, true);
     assert.equal(status.data.module, "pgy-kol");
-    assert.equal(status.data.phase, 2);
+    assert.equal(status.data.phase, 4);
     assert.equal(typeof status.data.schemaVersion, "string");
   } finally {
     disposeIpc();
@@ -281,13 +281,22 @@ test("schema-status without an LKG store still reports empty availability", asyn
   }
 });
 
-test("PGY_KOL_IPC_CHANNELS 契约：5 个只读通道", () => {
+test("PGY_KOL_IPC_CHANNELS 契约：5 个只读通道 + Phase 4 批量通道", () => {
   assert.deepEqual(Object.values(PGY_KOL_IPC_CHANNELS), [
     "pgy-kol:status",
     "pgy-kol:schema-status",
     "pgy-kol:search-first-page",
     "pgy-kol:config",
     "pgy-kol:payload-preview",
+    "pgy-kol:batch-start",
+    "pgy-kol:batch-list",
+    "pgy-kol:batch-get",
+    "pgy-kol:batch-pause",
+    "pgy-kol:batch-resume",
+    "pgy-kol:batch-cancel",
+    "pgy-kol:batch-export",
+    "pgy-kol:columns",
+    "pgy-kol:batch-event",
   ]);
 });
 
@@ -528,6 +537,307 @@ test("IPC 入口校验异常也统一返回 ok:false（Proxy getter 抛错不绕
       assert.equal(result.ok, false, channel);
       assert.ok(result.error && result.error.code, channel);
     }
+  } finally {
+    disposeIpc();
+  }
+});
+
+// ---------- Phase 4 批量采集 IPC ----------
+
+function createBatchHarness({ transportImpl, t, broadcast }) {
+  const ipcMain = createFakeIpcMain();
+  const taskBaseDir = fs.mkdtempSync(path.join(os.tmpdir(), "pgy-kol-batch-ipc-"));
+  if (t) {
+    t.after(() => fs.rmSync(taskBaseDir, { recursive: true, force: true }));
+  }
+  const service = createPgyKolService({
+    transport: transportImpl,
+    getHeaders: () => ({}),
+    sign: () => ({ "X-s": "sig", "X-t": 1 }),
+    sessionProvider: () => ({ kind: "fake-session" }),
+    baseDir: taskBaseDir,
+    taskBaseDir,
+  });
+  const receivedEvents = [];
+  const disposeIpc = registerPgyKolIpc({
+    ipcMain,
+    service,
+    broadcast: broadcast ?? ((channel, payload) => receivedEvents.push({ channel, payload })),
+  });
+  return { ipcMain, service, taskBaseDir, disposeIpc, receivedEvents };
+}
+
+function twoPageTransport(total = 25) {
+  return async (opts) => {
+    const payload = JSON.parse(opts.body);
+    const page = payload.pageNum;
+    const startIndex = (page - 1) * 20;
+    const count = Math.min(20, total - startIndex);
+    const rows = Array.from({ length: count }, (_, index) => ({
+      userId: `batch-u-${startIndex + index + 1}`,
+      nickname: `博主${startIndex + index + 1}`,
+      fansNum: 1000 + startIndex + index,
+    }));
+    return jsonResponse({ code: 0, data: { kols: rows, total }, msg: "" });
+  };
+}
+
+async function waitForTaskStatus(service, taskId, statuses, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const task = await service.batchGet({ taskId });
+    if (statuses.includes(task.status)) {
+      return task;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`等待任务状态超时: ${task.status}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+test("batch-start/list/get/export：两页任务完成、完整性与全量导出 Payload", async (t) => {
+  const { ipcMain, service, disposeIpc, receivedEvents } = createBatchHarness({
+    t,
+    transportImpl: twoPageTransport(35),
+  });
+  try {
+    const start = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
+      filterState: { gender: "女", fansNumberLower: 10000, fansNumberUpper: 50000 },
+      columns: ["userId", "nickname", "fansNum"],
+    });
+    assert.equal(start.ok, true);
+    assert.match(start.data.taskId, /^pgykol-[A-Za-z0-9_-]+$/);
+
+    let task = await waitForTaskStatus(service, start.data.taskId, ["completed"]);
+    // finalize 顺序为 status → completeness（两写之间有空窗），等完整性落定。
+    for (let i = 0; i < 40 && task.completeness === "not-started"; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      task = await service.batchGet({ taskId: start.data.taskId });
+    }
+    assert.equal(task.status, "completed");
+    assert.equal(task.completeness, "complete");
+    assert.equal(task.counts.raw, 35);
+    assert.equal(task.counts.unique, 35);
+    assert.equal(task.counts.dup, 0);
+    assert.equal(task.counts.missingUid, 0);
+
+    // 事件推送：至少收到 progress 与 done（done 在状态翻转后微秒级到达，轮询等待）。
+    assert.ok(receivedEvents.some((event) => event.channel === PGY_KOL_IPC_CHANNELS.batchEvent && event.payload.type === "progress"));
+    let sawDone = receivedEvents.some((event) => event.channel === PGY_KOL_IPC_CHANNELS.batchEvent && event.payload.type === "done");
+    for (let i = 0; i < 40 && !sawDone; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      sawDone = receivedEvents.some((event) => event.channel === PGY_KOL_IPC_CHANNELS.batchEvent && event.payload.type === "done");
+    }
+    assert.ok(sawDone, "必须收到 done 事件");
+
+    const list = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchList)();
+    assert.equal(list.ok, true);
+    assert.ok(list.data.some((item) => item.taskId === start.data.taskId));
+
+    const exported = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchExport)({}, { taskId: start.data.taskId });
+    assert.equal(exported.ok, true);
+    assert.equal(exported.data.mode, "two-row");
+    assert.deepEqual(exported.data.headers.map((header) => header.key), ["userId", "nickname", "fansNum"]);
+    assert.equal(exported.data.data.length, 35, "导出必须覆盖持久化全量行");
+  } finally {
+    disposeIpc();
+  }
+});
+
+test("batch IPC 入参校验：未知列、非法 taskId、超预算全部拒绝", async (t) => {
+  const { ipcMain, disposeIpc } = createBatchHarness({ t, transportImpl: twoPageTransport(5) });
+  try {
+    const unknownColumn = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
+      filterState: {},
+      columns: ["userId", "cookie"],
+    });
+    assert.equal(unknownColumn.ok, false);
+    assert.equal(unknownColumn.error.code, "unknown-column");
+
+    const emptyColumns = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
+      filterState: {},
+      columns: [],
+    });
+    assert.equal(emptyColumns.ok, false);
+    assert.equal(emptyColumns.error.code, "invalid-columns");
+
+    const badBudgets = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
+      filterState: {},
+      columns: ["userId"],
+      budgets: { queryBudget: 999999 },
+    });
+    assert.equal(badBudgets.ok, false);
+    assert.equal(badBudgets.error.code, "invalid-budgets");
+
+    for (const taskId of ["../escape", "CON", "", "a".repeat(97), "bad id"]) {
+      const result = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchGet)({}, { taskId });
+      assert.equal(result.ok, false, `taskId ${JSON.stringify(taskId)} must be rejected`);
+      assert.equal(result.error.code, "invalid-task-id");
+    }
+
+    const badFilter = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
+      filterState: { notAField: "x" },
+      columns: ["userId"],
+    });
+    assert.equal(badFilter.ok, false);
+  } finally {
+    disposeIpc();
+  }
+});
+
+test("batchStart 快照规范化：Payload 形态值不二次序列化，节点形态值只序列化一次", async (t) => {
+  // 回归：Phase 3 实证的 top20CrowdsLabel 叶子字符串（"自在户外 自在户外-挑战极限者"）
+  // 已是 Payload 形态，若再次经过 top20-transform 会产生双重前缀
+  // （"自在户外 自在户外-自在户外-挑战极限者"），真实接口返回 total=0。
+  const bodies = [];
+  const { ipcMain, service, disposeIpc } = createBatchHarness({
+    t,
+    transportImpl: async (opts) => {
+      bodies.push(JSON.parse(opts.body));
+      return jsonResponse({ code: 0, data: { kols: [], total: 0 }, msg: "" });
+    },
+  });
+  try {
+    const start = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
+      filterState: {
+        gender: "女",
+        fansNumberLower: 10000,
+        fansNumberUpper: 50000,
+        top20CrowdsLabel: ["自在户外 自在户外-挑战极限者"],
+        contentThemeLabel: ["通用 干货分享"],
+        location: [{ path: " 中国 广东 广州 ", children: [] }],
+      },
+      columns: ["userId", "nickname"],
+    });
+    assert.equal(start.ok, true);
+    await waitForTaskStatus(service, start.data.taskId, ["completed"]);
+
+    const task = await service.batchGet({ taskId: start.data.taskId });
+    assert.deepEqual(task.filterState.top20CrowdsLabel, ["自在户外 自在户外-挑战极限者"], "Payload 形态的 top20 值必须原样保留");
+    assert.deepEqual(task.filterState.contentThemeLabel, ["通用 干货分享"], "Payload 形态的内容题材值必须原样保留");
+    assert.deepEqual(task.filterState.location, ["中国 广东 广州"], "节点形态的地域值必须序列化为空格路径数组");
+    assert.equal(task.filterState.gender, "女");
+
+    // 实际发出的请求体同样必须是单前缀（不经过二次序列化）。
+    const firstBody = bodies.find((body) => body.top20CrowdsLabel);
+    assert.ok(firstBody, "至少发过一次请求");
+    assert.deepEqual(firstBody.top20CrowdsLabel, ["自在户外 自在户外-挑战极限者"]);
+    assert.deepEqual(firstBody.location, ["中国 广东 广州"]);
+
+    // 快照值清洗（fresh reviewer M2）：字符串值中的本地路径/敏感形态文本不得落盘。
+    const start2 = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
+      filterState: { gender: "女 token=abc C:\\Users\\x\\secret" },
+      columns: ["userId", "nickname"],
+    });
+    assert.equal(start2.ok, true);
+    const task2 = await service.batchGet({ taskId: start2.data.taskId });
+    assert.ok(
+      !task2.filterState.gender.includes("C:\\Users"),
+      `快照泄漏本地路径: ${task2.filterState.gender}`,
+    );
+    assert.ok(!task2.filterState.gender.includes("token=abc"), `快照泄漏敏感形态文本: ${task2.filterState.gender}`);
+  } finally {
+    disposeIpc();
+  }
+});
+
+test("IPC 错误详情不得泄漏本地绝对路径（fresh reviewer M1）", async (t) => {
+  const { ipcMain, service, taskBaseDir, disposeIpc } = createBatchHarness({
+    t,
+    transportImpl: twoPageTransport(5),
+  });
+  try {
+    const start = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
+      filterState: {},
+      columns: ["userId"],
+    });
+    assert.equal(start.ok, true);
+    const taskId = start.data.taskId;
+    // 破坏任务目录：目录替换为普通文件 → getTask 的 readJson 抛 ENOTDIR
+    // （消息携带绝对路径），IPC 错误封装必须脱敏。
+    const taskDir = path.join(taskBaseDir, taskId);
+    fs.rmSync(taskDir, { recursive: true, force: true });
+    fs.writeFileSync(taskDir, "not-a-dir", "utf8");
+
+    const result = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchGet)({}, { taskId });
+    assert.equal(result.ok, false);
+    assert.ok(result.error && typeof result.error.message === "string");
+    assert.ok(
+      !result.error.message.includes(taskBaseDir),
+      `IPC 错误泄漏本地路径: ${result.error.message}`,
+    );
+    // 不允许出现任何盘符绝对路径形态（无论错误被吞为“任务不存在”还是脱敏后的 fs 错误）。
+    assert.ok(
+      !/[A-Za-z]:\\/.test(result.error.message),
+      `IPC 错误仍包含盘符路径: ${result.error.message}`,
+    );
+  } finally {
+    disposeIpc();
+  }
+});
+
+test("batch-pause/resume/cancel 通道存在且作用于任务", async (t) => {
+  // 门控传输：第 2、3 页请求会挂起等待放行，使暂停/继续/取消时序完全确定。
+  // total=100（<5000 不触顶，5 页），每页 UID 互不相同（避免重复页信号）。
+  let currentGateResolve = null;
+  let fetchIndex = 0;
+  const { ipcMain, service, disposeIpc } = createBatchHarness({
+    t,
+    transportImpl: async (opts) => {
+      fetchIndex += 1;
+      if (fetchIndex >= 2) {
+        await new Promise((resolve) => {
+          currentGateResolve = resolve;
+        });
+      }
+      const payload = JSON.parse(opts.body);
+      const page = payload.pageNum;
+      const kols = Array.from({ length: 20 }, (_, index) => ({
+        userId: `loop-u-${page}-${index + 1}`,
+        nickname: `n${page}-${index + 1}`,
+      }));
+      return jsonResponse({ code: 0, data: { kols, total: 100 }, msg: "" });
+    },
+  });
+  try {
+    const start = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
+      filterState: {},
+      columns: ["userId"],
+      budgets: { queryBudget: 1000 },
+    });
+    assert.equal(start.ok, true);
+    const taskId = start.data.taskId;
+
+    // 等待第 2 页请求挂起（第 1 页已提交）。
+    for (let i = 0; i < 200 && fetchIndex < 2; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(fetchIndex, 2, "第 2 页请求必须已挂起");
+    const paused = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchPause)({}, { taskId });
+    assert.equal(paused.ok, true);
+    currentGateResolve();
+    const pausedTask = await waitForTaskStatus(service, taskId, ["paused"]);
+    assert.equal(pausedTask.counts.raw, 40);
+
+    const resumed = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchResume)({}, { taskId });
+    assert.equal(resumed.ok, true);
+    for (let i = 0; i < 200 && fetchIndex < 3; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(fetchIndex, 3, "继续后第 3 页请求必须已挂起");
+    const cancelled = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchCancel)({}, { taskId });
+    assert.equal(cancelled.ok, true);
+    currentGateResolve();
+    const cancelledTask = await waitForTaskStatus(service, taskId, ["cancelled"]);
+    assert.equal(cancelledTask.counts.raw, 60);
+
+    const columns = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.columns)();
+    assert.equal(columns.ok, true);
+    assert.ok(columns.data.length >= 10, "columns 通道必须返回 confirmed 列数组");
+    const defaults = columns.data.filter((column) => column.defaultDisplay === true).map((column) => column.id);
+    assert.ok(defaults.includes("userId"));
+    assert.ok(defaults.includes("nickname"));
   } finally {
     disposeIpc();
   }

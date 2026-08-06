@@ -7,6 +7,8 @@
  * 纯 ESM，只依赖 Node 内置能力，不 import electron、不发起网络请求。
  */
 
+import { listPgyKolConfirmedColumns } from "./pgy-kol-column-registry.mjs";
+
 // 深度只累计非 children 容器：filterState(1) + 字段数组(1) + 树节点层级。
 // 官网行业画像树最深约 4 层节点（depth 3-6），预留余量取 8。
 export const PGY_KOL_IPC_MAX_DEPTH = 8;
@@ -14,6 +16,16 @@ export const PGY_KOL_IPC_MAX_ARRAY_LENGTH = 200;
 export const PGY_KOL_IPC_MAX_STRING_LENGTH = 512;
 export const PGY_KOL_IPC_MAX_FILTER_FIELDS = 64;
 export const PGY_KOL_IPC_MAX_TOTAL_NODES = 5000;
+
+// Phase 4 批量采集通道的输入边界。
+export const PGY_KOL_BATCH_MAX_COLUMNS = 64;
+export const PGY_KOL_BATCH_MAX_COLUMN_LENGTH = 64;
+export const PGY_KOL_BATCH_PAGE_SIZE_LIMIT = 100;
+
+// 任务 ID 与 collection-history-store 同口径：字母数字开头、1-96 字符、
+// 只允许 [A-Za-z0-9_-]，并拒绝 Windows 保留名（路径穿越与命名冲突防护）。
+export const PGY_KOL_TASK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/;
+const WINDOWS_RESERVED_TASK_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
 // config 通道 provider 白名单：只允许这三类，且 section 规则各不相同。
 // kolTagsV2：section 必填且只能是三个已确认节；consumeBehavior/areas：section 必须省略。
@@ -67,6 +79,114 @@ export function validateConfigRequest(input) {
     return invalid("unknown-section", `${provider} 不允许携带 section`);
   }
   return { ok: true, provider };
+}
+
+/**
+ * 校验批量采集任务 ID 请求 { taskId }。
+ *
+ * @returns {{ ok: true, taskId: string } | { ok: false, error: { code: string, message: string } }}
+ */
+export function validateTaskIdRequest(input) {
+  if (!isRecord(input)) {
+    return invalid("invalid-input", "任务请求必须是普通对象");
+  }
+  const taskId = input.taskId;
+  if (
+    typeof taskId !== "string" ||
+    !PGY_KOL_TASK_ID_PATTERN.test(taskId) ||
+    WINDOWS_RESERVED_TASK_NAMES.test(taskId)
+  ) {
+    return invalid("invalid-task-id", "非法任务 ID");
+  }
+  return { ok: true, taskId };
+}
+
+/**
+ * 校验批量采集启动请求 { filterState, columns, pageSize?, budgets? }。
+ *
+ * - filterState 复用现有筛选状态边界校验；
+ * - columns 必须是 1-64 项字符串数组、无重复、每项 1-64 字符，
+ *   且每一项都必须命中列注册表的 confirmed 白名单（未证实字段继续隔离）；
+ * - pageSize 缺省 20，必须是 1-100 的整数（与 builder 上限一致）；
+ * - budgets 可选：maxLeaves/maxDepth/maxPagesPerLeaf/queryBudget 必须是
+ *   正整数且不超过硬上限（防渲染进程放大查询预算）。
+ *
+ * @returns {{ ok: true, value: object } | { ok: false, error: { code: string, message: string } }}
+ */
+export function validateBatchStartRequest(input) {
+  if (!isRecord(input)) {
+    return invalid("invalid-input", "批量采集请求必须是普通对象");
+  }
+  const filterCheck = validateFilterState(input.filterState);
+  if (!filterCheck.ok) {
+    return filterCheck;
+  }
+
+  const columns = input.columns;
+  if (!Array.isArray(columns) || columns.length === 0 || columns.length > PGY_KOL_BATCH_MAX_COLUMNS) {
+    return invalid(
+      "invalid-columns",
+      `columns 必须是 1-${PGY_KOL_BATCH_MAX_COLUMNS} 项的数组`,
+    );
+  }
+  const confirmedIds = new Set(listPgyKolConfirmedColumns().map((column) => column.id));
+  const seen = new Set();
+  for (const column of columns) {
+    if (
+      typeof column !== "string" ||
+      column.length === 0 ||
+      column.length > PGY_KOL_BATCH_MAX_COLUMN_LENGTH
+    ) {
+      return invalid("invalid-columns", "列名必须是 1-64 字符的字符串");
+    }
+    if (seen.has(column)) {
+      return invalid("invalid-columns", "列名重复");
+    }
+    seen.add(column);
+    if (!confirmedIds.has(column)) {
+      return invalid("unknown-column", `未知或未确认列: ${column}`);
+    }
+  }
+
+  const value = { filterState: filterCheck.value, columns };
+  const pageSize = input.pageSize === undefined || input.pageSize === null ? 20 : input.pageSize;
+  if (
+    typeof pageSize !== "number" ||
+    !Number.isInteger(pageSize) ||
+    pageSize < 1 ||
+    pageSize > PGY_KOL_BATCH_PAGE_SIZE_LIMIT
+  ) {
+    return invalid("invalid-page-size", `pageSize 必须是 1-${PGY_KOL_BATCH_PAGE_SIZE_LIMIT} 的整数`);
+  }
+  value.pageSize = pageSize;
+
+  const BUDGET_LIMITS = Object.freeze({
+    maxLeaves: 64,
+    maxDepth: 10,
+    maxPagesPerLeaf: 250,
+    queryBudget: 1000,
+  });
+  if (input.budgets !== undefined && input.budgets !== null) {
+    if (!isRecord(input.budgets)) {
+      return invalid("invalid-budgets", "budgets 必须是普通对象");
+    }
+    const budgets = {};
+    for (const key of Object.keys(BUDGET_LIMITS)) {
+      const raw = input.budgets[key];
+      if (raw === undefined || raw === null) {
+        continue;
+      }
+      if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1 || raw > BUDGET_LIMITS[key]) {
+        return invalid("invalid-budgets", `budgets.${key} 必须是 1-${BUDGET_LIMITS[key]} 的整数`);
+      }
+      budgets[key] = raw;
+    }
+    if (Object.keys(budgets).length > 0) {
+      value.budgets = budgets;
+    }
+  }
+
+  return { ok: true, value };
 }
 
 /**

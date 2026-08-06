@@ -147,9 +147,39 @@ test("patch script wires route, menu merge, and dev switch with idempotent guard
   assert.ok(script.includes('localStorage.getItem("magiorix-pgy-kol-enabled")==="1"'), "dev switch must gate the page");
 
   // 幂等守卫：三个注入点都带 exists 检查，重复运行不重复注入。
-  assert.ok(script.includes('!fs.readFileSync(mainBundle, "utf8").includes("function PgyKolSearchPage")'), "component injection must be guarded");
+  // Phase 4 起组件守卫使用内容级 SHA-1 对比：源码漂移时必然重建 bundle，
+  // 防止“标记存在但函数体已更新导致产物陈旧”（fresh reviewer C1/C2 根因）。
+  assert.ok(script.includes('const crypto = require("crypto")'), "patch script must require crypto for the content guard");
+  assert.ok(script.includes("normalizeSource(pgyKolSearchPageSource)"), "content guard must hash the embedded page source");
+  assert.ok(script.includes("existingSha1 !== sourceSha1"), "content guard must compare existing block hash with source hash");
+  assert.ok(
+    script.includes('normalizeSource(existingBlock).replace(/\\n$/, "")'),
+    "content guard must strip the trailing separator newline before hashing (idempotent skip)",
+  );
+  assert.ok(
+    script.includes('bundleBefore.indexOf("V1=new Map;function pgyKolDevEnabled")'),
+    "patch script must remove the pre-Phase-4 page source before upgrading",
+  );
+  assert.ok(
+    script.includes('bundleBefore.indexOf("function si(e){", oldStart)'),
+    "upgrade path must locate the end of the old injected source block",
+  );
   assert.ok(script.includes("!fs.readFileSync(mainBundle, \"utf8\").includes(pgyKolRouteMarker)"), "route injection must be guarded");
   assert.ok(script.includes("!fs.readFileSync(mainBundle, \"utf8\").includes(pgyKolStoreTo)"), "store injection must be guarded");
+
+  // 产物漂移防线（fresh reviewer M2）：已发布 bundle 必须与补丁脚本内嵌源码一致。
+  // 四状态「继续」条件与 interrupted 文案都必须真实存在于 bundle 中。
+  assert.match(
+    bundle,
+    /\(t\.status==="paused"\|\|t\.status==="auth-expired"\|\|t\.status==="interrupted"\|\|t\.status==="failed"\)&&o\.jsx\(\$,\{size:"small",variant:"outlined",onClick:p\.onResume,children:"继续"\}\)/,
+    "published bundle must contain the four-state resume condition",
+  );
+  assert.ok(bundle.includes('s==="interrupted"'), "published bundle must carry the interrupted status copy");
+  assert.doesNotMatch(
+    bundle,
+    /\(t\.status==="paused"\|\|t\.status==="auth-expired"\)&&o\.jsx\(\$,\{size:"small",variant:"outlined",onClick:p\.onResume,children:"继续"\}\)/,
+    "published bundle must not carry the stale two-state resume condition",
+  );
 
   // 页面必须通过 preload bridge 调用 Core 的 IPC（getConfig/previewPayload/searchFirstPage）。
   assert.ok(script.includes("bridge.getConfig("), "page must load filter config via bridge.pgyKol.getConfig");
@@ -267,4 +297,179 @@ test("the other six filter controls keep their existing renderers", () => {
   // 粉丝数上下限输入框保持不变。
   assert.match(pageSource, /type:"number",label:"粉丝数下限"/, "fansNumberLower input must stay");
   assert.match(pageSource, /type:"number",label:"粉丝数上限"/, "fansNumberUpper input must stay");
+});
+
+test("Phase 4：任务面板对 paused/auth-expired/interrupted/failed 都提供「继续」入口", () => {
+  // fresh reviewer H1：崩溃恢复（interrupted）与失败（failed）任务必须能从 UI 继续，
+  // 与后端 RESUMABLE_TASK_STATUSES 对齐。
+  assert.match(
+    pageSource,
+    /\(t\.status==="paused"\|\|t\.status==="auth-expired"\|\|t\.status==="interrupted"\|\|t\.status==="failed"\)&&o\.jsx\(\$,\{size:"small",variant:"outlined",onClick:p\.onResume,children:"继续"\}\)/,
+    "继续 button must cover paused/auth-expired/interrupted/failed",
+  );
+  assert.doesNotMatch(
+    pageSource,
+    /\(t\.status==="paused"\|\|t\.status==="auth-expired"\)&&o\.jsx\(\$,\{size:"small",variant:"outlined",onClick:p\.onResume,children:"继续"\}\)/,
+    "继续 button must no longer be limited to paused/auth-expired",
+  );
+});
+
+// ===========================================================================
+// Phase 4：批量采集前端 UI 增量（列选择 / 开始采集 / 进度面板 / 任务历史 /
+// 事件订阅 / 预览边界）。本组断言只读页面源码（pgyKolSearchPageSource）与补丁
+// 脚本文本；preload 新方法由主代理接线，本文件不断言 preload 内容。
+// ===========================================================================
+
+test("phase-4 page source ships the batch UI copy and status texts", () => {
+  for (const needle of [
+    "开始采集",
+    "暂停",
+    "继续",
+    "取消",
+    "导出",
+    "完整性无法证明",
+    "已持久化",
+    "预览 ",
+    "原始条数",
+    "唯一博主数",
+    "重复数",
+    "缺UID异常数",
+    "任务进度",
+    "任务历史",
+    "请至少选择一个导出字段",
+  ]) {
+    assert.ok(pageSource.includes(needle), `page source must contain: ${needle}`);
+  }
+  // 状态六态中文文案（running/paused/auth-expired/risk-control/cancelled/failed/completed）。
+  for (const [status, text] of [
+    ["running", "采集中"],
+    ["paused", "已暂停"],
+    ["auth-expired", "登录已失效"],
+    ["risk-control", "触发风控"],
+    ["cancelled", "已取消"],
+    ["failed", "采集失败"],
+    ["completed", "已完成"],
+  ]) {
+    assert.ok(pageSource.includes(`if(s==="${status}")return "${text}"`), `status text for ${status} must exist`);
+  }
+});
+
+test("phase-4 page source maps completeness and error copy", () => {
+  assert.ok(pageSource.includes('if(t.completeness==="complete")return "完整性已证明"'));
+  assert.ok(
+    pageSource.includes(
+      'if(t.completeness==="cannot-prove")return "完整性无法证明（原因："+(t.summary&&t.summary.stopReason||t.warning||"无法证明")+"）"',
+    ),
+  );
+  assert.ok(pageSource.includes('if(e.code==="auth-expired")return "蒲公英登录已失效，请重新授权"'));
+  assert.ok(pageSource.includes('if(e.code==="risk-control")return "触发风控，采集已停止"'));
+  assert.ok(
+    pageSource.includes(
+      'if(e.code==="failed"||e.kind==="failed")return "采集失败（错误码 "+(e.code||"unknown")+"）："+(e.message||"未知错误")',
+    ),
+  );
+});
+
+test("phase-4 page source calls the batch bridge methods with the right payloads", () => {
+  for (const method of [
+    "getColumns",
+    "batchStart",
+    "batchGet",
+    "batchList",
+    "batchPause",
+    "batchResume",
+    "batchCancel",
+    "batchExport",
+    "onBatchEvent",
+  ]) {
+    assert.match(pageSource, new RegExp(`bridge\\.${method}\\(`), `page source must call bridge.${method}`);
+  }
+  assert.match(
+    pageSource,
+    /batchStart\(\{filterState:pgyKolToFilterState\(filter\),columns:selectedColumns\}\)/,
+    "batchStart must submit filterState and the selected columns",
+  );
+  assert.match(pageSource, /batchGet\(\{taskId:tid\}\)/);
+  assert.match(pageSource, /batchPause\(\{taskId:tid\}\)/);
+  assert.match(pageSource, /batchResume\(\{taskId:tid\}\)/);
+  assert.match(pageSource, /batchCancel\(\{taskId:tid\}\)/);
+  assert.match(pageSource, /batchExport\(\{taskId:tid\}\)/);
+  // 默认勾选契约：defaultDisplay=true 的列默认选中。
+  assert.match(
+    pageSource,
+    /res\.data\.filter\(function\(c\)\{return c\.defaultDisplay===true\}\)\.map\(function\(c\)\{return c\.id\}\)/,
+    "columns with defaultDisplay=true must be pre-selected",
+  );
+  // 采集进行中禁用重复开始。
+  assert.match(pageSource, /disabled:batchBusy\|\|batchRunning/, "start button must be disabled while busy or running");
+});
+
+test("phase-4 page source subscribes to batch events and disposes on unmount", () => {
+  assert.match(pageSource, /bridge\.onBatchEvent\(function\(ev\)\{/);
+  assert.match(pageSource, /if\(currentTaskId\)loadTask\(currentTaskId\)/, "batch events must refresh the current task detail");
+  assert.match(
+    pageSource,
+    /return function\(\)\{if\(dispose&&typeof dispose==="function"\)dispose\(\)\}/,
+    "onBatchEvent subscription must return a dispose cleanup",
+  );
+  assert.match(pageSource, /\[currentTaskId\]/, "event effect must re-subscribe when the current task changes");
+});
+
+test("phase-4 preview boundary keeps a limited DOM and shows persisted counts", () => {
+  assert.match(
+    pageSource,
+    /预览 "\+\(result\.kols\?result\.kols\.length:0\)\+" 条 \/ 已持久化 "\+pgyKolCount\(currentTask,"raw"\)\+" 条（完整数据以导出为准）"/,
+    "preview caption must state preview count vs persisted count",
+  );
+  // 禁止把任务全量行渲染进 DOM：页面源码不得遍历任务行数据渲染表格。
+  assert.doesNotMatch(pageSource, /\.rows\.map\(function|task\.leaves\.map\(function/);
+  assert.match(pageSource, /result\.kols\.map\(function\(k\)/, "preview must keep rendering only the first-page result cards");
+});
+
+test("no phase-4 handler may be embedded inside an MUI sx object", () => {
+  // 历史教训（React #185，见 artifacts/verification/phase2-electron-compare/
+  // final-ui-verification.json）：sx 内的函数值会被 MUI 当作样式函数以 theme 调用，
+  // 渲染期触发 setState → 无限循环，页面挂载即卡死。所有 handler 必须作为组件
+  // props 位于 sx 之外。
+  const onClickRe = /onClick:function/g;
+  let m;
+  while ((m = onClickRe.exec(pageSource)) !== null) {
+    const before = pageSource.slice(0, m.index);
+    const sxAt = before.lastIndexOf("sx:{");
+    if (sxAt < 0) continue;
+    let depth = 1;
+    let i = sxAt + 4;
+    let inside = true;
+    while (i < m.index) {
+      const ch = pageSource[i];
+      if (ch === '"') {
+        i += 1;
+        while (i < m.index && pageSource[i] !== '"') {
+          if (pageSource[i] === "\\") i += 1;
+          i += 1;
+        }
+        i += 1;
+        continue;
+      }
+      if (ch === "{") depth += 1;
+      else if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          inside = false;
+          break;
+        }
+      }
+      i += 1;
+    }
+    assert.ok(!inside, `onClick handler at offset ${m.index} must not live inside an sx object`);
+  }
+
+  // 更强扫描：任何扁平 sx:{...} 对象体不得包含 onClick: 键。
+  const sxRe = /sx:\{/g;
+  while ((m = sxRe.exec(pageSource)) !== null) {
+    const bodyEnd = pageSource.indexOf("}", m.index + 4);
+    assert.ok(bodyEnd >= 0, `sx object at offset ${m.index} must close`);
+    const body = pageSource.slice(m.index + 4, bodyEnd);
+    assert.ok(!body.includes("onClick:"), `sx object at offset ${m.index} must not contain a click handler`);
+  }
 });

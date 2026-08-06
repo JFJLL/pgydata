@@ -5,6 +5,7 @@ import { ipcMain as F, BrowserWindow as Dt, app as ye, screen as Gi, shell as Ji
 import { CollectionHistoryStore } from "../electron-main/collection-history-store.mjs";
 import { buildCollectionHistoryExportPayload } from "../electron-main/collection-export-headers.mjs";
 import { createPgyKolService, registerPgyKolIpc } from "../pgy-kol/pgy-kol-service.mjs";
+import { redactLocalPathText as pgyRedactLocalPath } from "../pgy-kol/pgy-session-request.mjs";
 import * as Xi from "path";
 import Yi, { join as Oe, dirname as Ja } from "path";
 import jn, { fileURLToPath as Ka } from "url";
@@ -22442,9 +22443,9 @@ async function ff(a) {
     return { success: !1 };
   try {
     const i = a.data ?? [], n = a.mode === "two-row" ? gf(a.headers ?? [], pgyDataWithoutImageText(a.headers ?? [], i)) : hf(i), s = Ve.utils.book_new();
-    return Ve.utils.book_append_sheet(s, n, "Sheet1"), Ve.writeFile(s, t), a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, a.headers ?? [], i), $i.info(`Excel 已导出: ${t}`), { success: !0, filePath: t };
+    return Ve.utils.book_append_sheet(s, n, "Sheet1"), Ve.writeFile(s, t), a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, a.headers ?? [], i), $i.info(`Excel 已导出: ${pgyRedactLocalPath(String(t))}`), { success: !0, filePath: t };
   } catch (n) {
-    throw $i.error("Excel 导出失败:", n), n;
+    throw $i.error("Excel 导出失败:", pgyRedactLocalPath(n instanceof Error ? n.message : String(n))), n;
   }
 }
 function hf(a) {
@@ -22607,13 +22608,19 @@ function vf(a) {
       sign: (path, body) => sm.encryptSign(path, body),
       sessionProvider: () => Pn.defaultSession,
       baseDir: Oe(ye.getPath("userData"), "pgy-kol-schema"),
+      taskBaseDir: Oe(ye.getPath("userData"), "pgy-kol-tasks"),
+      exporter: (payload) => ff(payload),
       logger: {
         info: (...args) => Qe.info("[pgy-kol]", ...args),
         warn: (...args) => Qe.warn("[pgy-kol]", ...args),
         error: (...args) => Qe.error("[pgy-kol]", ...args)
       }
     });
-    pgyKolIpcDispose = registerPgyKolIpc({ ipcMain: F, service: pgyKolService });
+    pgyKolIpcDispose = registerPgyKolIpc({
+      ipcMain: F,
+      service: pgyKolService,
+      broadcast: (channel, payload) => Dt.getAllWindows().forEach((window) => window.webContents.send(channel, payload))
+    });
     Qe.info("[pgy-kol] 找博主底座初始化完成");
   } catch (err) {
     Qe.error("[pgy-kol] 找博主底座初始化失败:", err);

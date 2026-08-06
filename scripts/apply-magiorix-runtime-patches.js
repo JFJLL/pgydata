@@ -2099,8 +2099,8 @@ main = replaceOnce(
 
 main = replaceOnce(
   main,
-  'return Ve.utils.book_append_sheet(s, n, "Sheet1"), Ve.writeFile(s, t), a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, a.headers ?? [], a.data ?? []), $i.info(`Excel 已导出: ${t}`), { success: !0, filePath: t };',
   'return Ve.utils.book_append_sheet(s, n, "Sheet1"), Ve.writeFile(s, t), a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, a.headers ?? [], i), $i.info(`Excel 已导出: ${t}`), { success: !0, filePath: t };',
+  'return Ve.utils.book_append_sheet(s, n, "Sheet1"), Ve.writeFile(s, t), a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, a.headers ?? [], i), $i.info(`Excel 已导出: ${pgyRedactLocalPath(String(t))}`), { success: !0, filePath: t };',
   "excel export embeds images from original data",
 );
 
@@ -3004,6 +3004,44 @@ if (!main.includes('if (existingTask) {\n      await pgyCollectionHistory.setSta
       await pgyCollectionHistory.setStatus(t, "interrupted");
       this.sendToRenderer(W.task.error, {`,
     "finalize blocked collection task",
+  );
+}
+
+// ===== Phase 4：蒲公英批量采集主进程/preload 接线（可复现构建，全部幂等）=====
+// preload：pgyKol bridge 追加批量通道与事件订阅（to 已存在则跳过）。
+if (!preload.includes('"pgy-kol:batch-start"')) {
+  preload = replaceOnce(
+    preload,
+    'previewPayload:e=>r.ipcRenderer.invoke("pgy-kol:payload-preview",e)}});',
+    'previewPayload:e=>r.ipcRenderer.invoke("pgy-kol:payload-preview",e),batchStart:e=>r.ipcRenderer.invoke("pgy-kol:batch-start",e),batchList:()=>r.ipcRenderer.invoke("pgy-kol:batch-list"),batchGet:e=>r.ipcRenderer.invoke("pgy-kol:batch-get",e),batchPause:e=>r.ipcRenderer.invoke("pgy-kol:batch-pause",e),batchResume:e=>r.ipcRenderer.invoke("pgy-kol:batch-resume",e),batchCancel:e=>r.ipcRenderer.invoke("pgy-kol:batch-cancel",e),batchExport:e=>r.ipcRenderer.invoke("pgy-kol:batch-export",e),getColumns:()=>r.ipcRenderer.invoke("pgy-kol:columns"),onBatchEvent:e=>{const n=(a,t)=>e(t);return r.ipcRenderer.on("pgy-kol:batch-event",n),()=>r.ipcRenderer.removeListener("pgy-kol:batch-event",n)}}});',
+    "pgy-kol Phase 4 preload bridge methods",
+  );
+}
+// main：redactLocalPathText import（Excel 导出日志脱敏依赖，先于导出替换步骤生效）。
+if (!main.includes("redactLocalPathText as pgyRedactLocalPath")) {
+  main = replaceOnce(
+    main,
+    'import { createPgyKolService, registerPgyKolIpc } from "../pgy-kol/pgy-kol-service.mjs";',
+    'import { createPgyKolService, registerPgyKolIpc } from "../pgy-kol/pgy-kol-service.mjs";\nimport { redactLocalPathText as pgyRedactLocalPath } from "../pgy-kol/pgy-session-request.mjs";',
+    "pgy-kol Phase 4 redactLocalPathText import",
+  );
+}
+// main：批量任务存储目录与 Excel 导出器接线。
+if (!main.includes('taskBaseDir: Oe(ye.getPath("userData"), "pgy-kol-tasks")')) {
+  main = replaceOnce(
+    main,
+    'baseDir: Oe(ye.getPath("userData"), "pgy-kol-schema"),',
+    'baseDir: Oe(ye.getPath("userData"), "pgy-kol-schema"),\n      taskBaseDir: Oe(ye.getPath("userData"), "pgy-kol-tasks"),\n      exporter: (payload) => ff(payload),',
+    "pgy-kol Phase 4 task store and exporter wiring",
+  );
+}
+// main：批量任务事件广播接线（BrowserWindow.getAllWindows → webContents.send）。
+if (!main.includes("broadcast: (channel, payload) => Dt.getAllWindows()")) {
+  main = replaceOnce(
+    main,
+    'pgyKolIpcDispose = registerPgyKolIpc({ ipcMain: F, service: pgyKolService });',
+    'pgyKolIpcDispose = registerPgyKolIpc({\n      ipcMain: F,\n      service: pgyKolService,\n      broadcast: (channel, payload) => Dt.getAllWindows().forEach((window) => window.webContents.send(channel, payload))\n    });',
+    "pgy-kol Phase 4 batch event broadcast wiring",
   );
 }
 
