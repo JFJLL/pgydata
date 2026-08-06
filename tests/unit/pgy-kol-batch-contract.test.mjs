@@ -468,9 +468,10 @@ test("批量引擎：无安全切分维度 / 预算耗尽 / 重复页 → cannot
     });
     await runner.start("pgykol-nosplit-1");
     const task = await store.getTask("pgykol-nosplit-1");
-    assert.equal(task.status, "completed");
+    assert.equal(task.status, "incomplete");
     assert.equal(task.completeness, "cannot-prove");
     assert.equal(task.leaves[0].status, "capped-unprovable");
+    assert.equal(task.summary.stopReason, "capped-unprovable");
   }
   // 重复页信号：连续 newUidCount=0 页达到阈值 → 停止。
   {
@@ -493,7 +494,7 @@ test("批量引擎：无安全切分维度 / 预算耗尽 / 重复页 → cannot
     });
     await runner.start("pgykol-repeat-1");
     const task = await store.getTask("pgykol-repeat-1");
-    assert.equal(task.status, "completed");
+    assert.equal(task.status, "incomplete");
     assert.equal(task.completeness, "cannot-prove");
     assert.equal(task.summary.stopReason, "repeat-page");
     assert.ok(pagesServed < 250, "重复页信号后必须停止翻页");
@@ -522,7 +523,7 @@ test("批量引擎：无安全切分维度 / 预算耗尽 / 重复页 → cannot
     });
     await runner.start("pgykol-budget-1");
     const task = await store.getTask("pgykol-budget-1");
-    assert.equal(task.status, "completed");
+    assert.equal(task.status, "incomplete");
     assert.equal(task.completeness, "cannot-prove");
     assert.equal(task.summary.stopReason, "budget-exhausted");
     // 预算跨实例持久化（fresh reviewer I1）：queryBudget 消耗必须落盘，
@@ -562,7 +563,7 @@ test("批量引擎：持续短页打到页数上限 → cannot-prove（max-pages
   });
   await runner.start("pgykol-maxpages-1");
   const task = await store.getTask("pgykol-maxpages-1");
-  assert.equal(task.status, "completed");
+  assert.equal(task.status, "incomplete");
   assert.equal(task.completeness, "cannot-prove");
   assert.equal(task.summary.stopReason, "max-pages-reached");
   assert.equal(task.counts.raw, 3);
@@ -610,7 +611,7 @@ test("批量引擎：重复行撑满 rawCount 但唯一数 < total → cannot-pr
   // raw = 50 >= total=35，但唯一数 = 25 < 35 → 覆盖不可证明。
   assert.equal(task.counts.raw, 50);
   assert.equal(task.counts.unique, 25);
-  assert.equal(task.status, "completed");
+  assert.equal(task.status, "incomplete");
   assert.equal(task.completeness, "cannot-prove", "重复撑满 rawCount 不得判 complete");
   assert.equal(task.summary.stopReason, "max-pages-reached");
 });
@@ -802,10 +803,11 @@ test("批量引擎：planSplit 形状非法（3 个区间）→ 拒绝切分并 
   });
   await runner.start("pgykol-splitshape-1");
   const task = await store.getTask("pgykol-splitshape-1");
-  assert.equal(task.status, "completed");
+  assert.equal(task.status, "incomplete");
   assert.equal(task.completeness, "cannot-prove");
   assert.equal(task.leaves[0].status, "capped-unprovable");
   assert.equal(task.leaves.length, 1, "形状非法时不得创建任何子叶子");
+  assert.equal(task.summary.stopReason, "capped-unprovable");
 });
 
 test("批量引擎：split 叶子无子叶子（切分后崩溃窗口）→ 恢复后 cannot-prove（fresh reviewer H1）", async () => {
@@ -838,7 +840,7 @@ test("批量引擎：split 叶子无子叶子（切分后崩溃窗口）→ 恢�
   });
   await runner.start("pgykol-h1-1");
   const task = await store.getTask("pgykol-h1-1");
-  assert.equal(task.status, "completed");
+  assert.equal(task.status, "incomplete");
   assert.equal(task.completeness, "cannot-prove", "split 无子叶子不得判 complete");
   assert.ok(task.summary.warnings.some((warning) => warning.includes("capped")), "summary 必须保留 capped 警告");
 });

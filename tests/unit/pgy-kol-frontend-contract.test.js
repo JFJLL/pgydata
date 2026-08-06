@@ -340,7 +340,7 @@ test("phase-4 page source ships the batch UI copy and status texts", () => {
   ]) {
     assert.ok(pageSource.includes(needle), `page source must contain: ${needle}`);
   }
-  // 状态六态中文文案（running/paused/auth-expired/risk-control/cancelled/failed/completed）。
+  // 状态中文文案（running/paused/auth-expired/risk-control/cancelled/failed/incomplete/completed）。
   for (const [status, text] of [
     ["running", "采集中"],
     ["paused", "已暂停"],
@@ -348,6 +348,7 @@ test("phase-4 page source ships the batch UI copy and status texts", () => {
     ["risk-control", "触发风控"],
     ["cancelled", "已取消"],
     ["failed", "采集失败"],
+    ["incomplete", "采集未完整"],
     ["completed", "已完成"],
   ]) {
     assert.ok(pageSource.includes(`if(s==="${status}")return "${text}"`), `status text for ${status} must exist`);
@@ -391,7 +392,11 @@ test("phase-4 page source calls the batch bridge methods with the right payloads
   );
   assert.match(pageSource, /batchGet\(\{taskId:tid\}\)/);
   assert.match(pageSource, /batchPause\(\{taskId:tid\}\)/);
-  assert.match(pageSource, /batchResume\(\{taskId:tid\}\)/);
+  assert.match(
+    pageSource,
+    /bridge\.batchResume\(budgets\?\{taskId:tid,budgets:budgets\}:\{taskId:tid\}\)/,
+    "batchResume must forward budgets when provided",
+  );
   assert.match(pageSource, /batchCancel\(\{taskId:tid\}\)/);
   assert.match(pageSource, /batchExport\(\{taskId:tid\}\)/);
   // 默认勾选契约：defaultDisplay=true 的列默认选中。
@@ -472,4 +477,86 @@ test("no phase-4 handler may be embedded inside an MUI sx object", () => {
     const body = pageSource.slice(m.index + 4, bodyEnd);
     assert.ok(!body.includes("onClick:"), `sx object at offset ${m.index} must not contain a click handler`);
   }
+});
+
+test("Phase 4.1：incomplete 显示“采集未完整/需要处理”，绿色仅留给完整证明", () => {
+  // 徽章：completed 且完整性已证明才绿色；incomplete 一律 warning。
+  assert.match(
+    pageSource,
+    /color:t\.status==="completed"&&t\.completeness==="complete"\?"success":incompleteShown\?"warning":/,
+    "green badge must require completed AND complete",
+  );
+  assert.match(pageSource, /label:incompleteShown\?"采集未完整\/需要处理":statusText/);
+  // 面板文案与旧版 completed+cannot-prove 的防御性展示。
+  assert.match(
+    pageSource,
+    /采集未完整\/需要处理："\+\(resumePlan&&resumePlan\.reasonText\|\|completenessText\)/,
+    "incomplete panel must show a concrete reason",
+  );
+  assert.match(pageSource, /legacyUnproven=t\.status==="completed"&&t\.completeness!=="complete"/);
+  // 状态机：completed 且完整性未证明（历史任务）也走不可继续 + warning。
+  assert.match(
+    pageSource,
+    /if\(t\.status==="completed"&&t\.completeness!=="complete"\)return \{kind:"blocked"/,
+    "legacy completed+cannot-prove tasks must not offer a blind continue",
+  );
+  // 禁止把 incomplete 显示成“已完成”成功色。
+  assert.doesNotMatch(
+    pageSource,
+    /color:t\.status==="completed"\?"success"/,
+    "badge must not be green for completed alone",
+  );
+});
+
+test("Phase 4.1：budget-exhausted 显示预算/已消费/允许范围与输入门控；不可继续原因只有说明+导出", () => {
+  // 可继续分支：显示当前预算、已消费请求数、允许新值范围，并要求用户输入。
+  assert.match(
+    pageSource,
+    /"当前"\+resumePlan\.label\+"："\+resumePlan\.current\+"；已消费请求数："\+resumePlan\.used\+"；允许新值："\+resumePlan\.min\+"～"\+resumePlan\.max/,
+    "budget resume hint must show current/consumed/allowed range",
+  );
+  assert.match(pageSource, /if\(reason==="budget-exhausted"\)\{var curB=Number\.isInteger\(cur\.queryBudget\)/);
+  assert.match(pageSource, /min=Math\.max\(curB,used\)\+1/);
+  assert.match(pageSource, /if\(min>1000\)return \{kind:"blocked"/);
+  assert.match(pageSource, /children:resumePlan\.kind==="maxPages"\?"增加页数并继续":"增加预算并继续"/);
+  assert.match(pageSource, /disabled:!inputValid/);
+  assert.match(pageSource, /Number\.isInteger\(parsedInput\)&&parsedInput>=resumePlan\.min&&parsedInput<=resumePlan\.max/);
+  // 按钮只出现在 eligible（budget/maxPages）时；blocked 只显示原因。
+  assert.match(pageSource, /resumeEligible=resumePlan&&\(resumePlan\.kind==="budget"\|\|resumePlan\.kind==="maxPages"\)/);
+  assert.match(pageSource, /resumePlan&&resumePlan\.kind==="blocked"&&o\.jsx\(w,\{variant:"body2"/);
+  // 不可继续原因全覆盖。
+  for (const reason of [
+    "repeat-page",
+    "capped-unprovable",
+    "checkpoint-desync",
+    "已到官方安全页数上限",
+    "已消费请求数已达预算上限",
+  ]) {
+    assert.ok(pageSource.includes(reason), `page source must carry the blocked reason: ${reason}`);
+  }
+  // maxPages 单调门控：min=curM+1、max=250。
+  assert.match(pageSource, /if\(reason==="max-pages-reached"\)\{var curM=Number\.isInteger\(cur\.maxPagesPerLeaf\)/);
+  assert.match(pageSource, /curM>=250\)return \{kind:"blocked"/);
+  assert.match(pageSource, /min:curM\+1,max:250/);
+  // incomplete 不显示取消（已停止）；导出始终可用。
+  assert.match(
+    pageSource,
+    /t\.status==="cancelled"\|\|t\.status==="failed"\|\|t\.status==="completed"\|\|t\.status==="incomplete"\)\?null:o\.jsx\(\$,\{size:"small",variant:"outlined",color:"error",onClick:p\.onCancel,children:"取消"\}\)/,
+    "cancel must be hidden for incomplete",
+  );
+  // 继续入口对 paused/auth-expired/interrupted/failed 保持（不得退化）。
+  assert.match(
+    pageSource,
+    /\(t\.status==="paused"\|\|t\.status==="auth-expired"\|\|t\.status==="interrupted"\|\|t\.status==="failed"\)&&o\.jsx\(\$,\{size:"small",variant:"outlined",onClick:p\.onResume,children:"继续"\}\)/,
+    "plain resume must stay for paused/auth-expired/interrupted/failed",
+  );
+});
+
+test("Phase 4.1：任务历史对 incomplete 使用 warning 徽章", () => {
+  assert.match(
+    pageSource,
+    /color:t\.status==="completed"&&t\.completeness==="complete"\?"success":t\.status==="incomplete"\?"warning":"default"/,
+    "history badge must warn for incomplete",
+  );
+  assert.match(pageSource, /label:t\.status==="incomplete"\?"采集未完整":pgyKolStatusText\(t\.status\)/);
 });

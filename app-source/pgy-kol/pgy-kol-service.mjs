@@ -23,7 +23,11 @@ import { PgyKolSearchClient } from "./pgy-kol-search-client.mjs";
 import { PgyPaginationPlanner } from "./pgy-pagination-planner.mjs";
 import { PGY_KOL_IPC_CHANNELS, registerPgyKolIpc } from "./pgy-kol-ipc.mjs";
 import { PgyKolTaskStore } from "./pgy-kol-task-store.mjs";
-import { createPgyKolBatchRunner } from "./pgy-kol-batch-runner.mjs";
+import {
+  createPgyKolBatchRunner,
+  evaluateResumeEligibility,
+  validateResumeBudgets,
+} from "./pgy-kol-batch-runner.mjs";
 import { buildPgyKolBatchExportPayload } from "./pgy-kol-batch-export.mjs";
 import {
   listPgyKolConfirmedColumns,
@@ -44,11 +48,13 @@ export const PGY_KOL_DEFAULT_TASK_BUDGETS = Object.freeze({
 });
 
 // 允许继续/恢复的任务状态（与 runner 的 RESUME_REJECTED_STATUSES 互补，
-// 供 IPC 层同步预检；risk-control/cancelled/completed 不可恢复）。
+// 供 IPC 层同步预检；risk-control/cancelled/completed 不可恢复；
+// incomplete 必须携带严格增加的 budgets 才能继续）。
 const RESUMABLE_TASK_STATUSES = new Set([
   "running",
   "interrupted",
   "paused",
+  "incomplete",
   "failed",
   "auth-expired",
 ]);
@@ -341,7 +347,7 @@ export function createPgyKolService({
     return ensureBatchRunner().pause(taskId);
   }
 
-  async function batchResume({ taskId } = {}) {
+  async function batchResume({ taskId, budgets } = {}) {
     await ensureTaskStore();
     const task = await taskStore.getTask(taskId);
     if (!task) {
@@ -350,9 +356,77 @@ export function createPgyKolService({
     // runner.resume 的返回 Promise 会等整个采集循环结束；IPC 层不能阻塞等待，
     // 因此这里先做状态预检（同步错误路径），再把循环 Promise 分离执行。
     if (!RESUMABLE_TASK_STATUSES.has(task.status)) {
-      throw new Error(`任务状态 ${task.status} 不允许恢复`);
+      const error = new Error(`任务状态 ${task.status} 不允许恢复`);
+      error.kind = "resume-not-allowed";
+      throw error;
     }
-    const loopPromise = ensureBatchRunner().resume(taskId);
+    let mergedBudgets = null;
+    if (task.status === "incomplete") {
+      // Phase 4.1：incomplete 必须满足安全恢复资格，且用户显式提供严格增加的预算。
+      const eligibility = evaluateResumeEligibility(task);
+      if (!eligibility.eligible) {
+        const error = new Error(eligibility.reason);
+        error.kind = "resume-not-allowed";
+        error.code = eligibility.code ?? "resume-not-allowed";
+        throw error;
+      }
+      const check = validateResumeBudgets(task, budgets, { strict: true });
+      if (!check.ok) {
+        const error = new Error(check.message);
+        error.kind = check.code;
+        error.code = check.code;
+        throw error;
+      }
+      mergedBudgets = check.value;
+      // 先原子持久化新预算，再启动循环：崩溃/重启后仍带新预算从原检查点继续，
+      // 且绝不重置 budgetUsed / counts / pagesCompleted。
+      await taskStore.setTaskBudgets(taskId, mergedBudgets);
+      const resumeDelta = pickResumeDelta(budgets);
+      const loopPromise = ensureBatchRunner().resume(taskId, resumeDelta);
+      attachResumeLoopCatch(loopPromise, taskId);
+      return {
+        taskId,
+        status: "running",
+        budgets: mergedBudgets,
+        budgetUsed: Number.isFinite(task.budgetUsed) ? task.budgetUsed : 0,
+      };
+    } else if (budgets !== undefined && budgets !== null && Object.keys(budgets).length > 0) {
+      const check = validateResumeBudgets(task, budgets, { strict: true });
+      if (!check.ok) {
+        const error = new Error(check.message);
+        error.kind = check.code;
+        error.code = check.code;
+        throw error;
+      }
+      mergedBudgets = check.value;
+      await taskStore.setTaskBudgets(taskId, mergedBudgets);
+    }
+    const loopPromise = ensureBatchRunner().resume(taskId, pickResumeDelta(budgets));
+    attachResumeLoopCatch(loopPromise, taskId);
+    return {
+      taskId,
+      status: "running",
+      budgets: mergedBudgets ?? { ...(task.budgets ?? {}) },
+      budgetUsed: Number.isFinite(task.budgetUsed) ? task.budgetUsed : 0,
+    };
+  }
+
+  // runner 只接受用户显式提供的增量键（queryBudget/maxPagesPerLeaf）；
+  // 合并后的完整预算对象（含 maxLeaves/maxDepth）只用于原子持久化。
+  function pickResumeDelta(budgets) {
+    if (budgets === null || typeof budgets !== "object" || Array.isArray(budgets)) {
+      return undefined;
+    }
+    const delta = {};
+    for (const key of ["queryBudget", "maxPagesPerLeaf"]) {
+      if (budgets[key] !== undefined && budgets[key] !== null) {
+        delta[key] = budgets[key];
+      }
+    }
+    return Object.keys(delta).length > 0 ? delta : undefined;
+  }
+
+  function attachResumeLoopCatch(loopPromise, taskId) {
     if (loopPromise && typeof loopPromise.then === "function") {
       void loopPromise.catch((err) => {
         logger.error &&
@@ -365,7 +439,6 @@ export function createPgyKolService({
         taskStore.setStatus(taskId, "failed").catch(() => {});
       });
     }
-    return { taskId, status: "running" };
   }
 
   async function batchCancel({ taskId } = {}) {

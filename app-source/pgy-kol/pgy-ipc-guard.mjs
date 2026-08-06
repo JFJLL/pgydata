@@ -22,6 +22,17 @@ export const PGY_KOL_BATCH_MAX_COLUMNS = 64;
 export const PGY_KOL_BATCH_MAX_COLUMN_LENGTH = 64;
 export const PGY_KOL_BATCH_PAGE_SIZE_LIMIT = 100;
 
+// 预算硬上限（渲染进程不可突破；runner 恢复校验复用同一口径）。
+export const PGY_KOL_BUDGET_LIMITS = Object.freeze({
+  maxLeaves: 64,
+  maxDepth: 10,
+  maxPagesPerLeaf: 250,
+  queryBudget: 1000,
+});
+
+// resume 只允许这两个可单调增加的预算键（未知键一律拒绝，防拼写绕过校验）。
+export const PGY_KOL_RESUME_BUDGET_KEYS = Object.freeze(["queryBudget", "maxPagesPerLeaf"]);
+
 // 任务 ID 与 collection-history-store 同口径：字母数字开头、1-96 字符、
 // 只允许 [A-Za-z0-9_-]，并拒绝 Windows 保留名（路径穿越与命名冲突防护）。
 export const PGY_KOL_TASK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/;
@@ -160,24 +171,26 @@ export function validateBatchStartRequest(input) {
   }
   value.pageSize = pageSize;
 
-  const BUDGET_LIMITS = Object.freeze({
-    maxLeaves: 64,
-    maxDepth: 10,
-    maxPagesPerLeaf: 250,
-    queryBudget: 1000,
-  });
   if (input.budgets !== undefined && input.budgets !== null) {
     if (!isRecord(input.budgets)) {
       return invalid("invalid-budgets", "budgets 必须是普通对象");
     }
     const budgets = {};
-    for (const key of Object.keys(BUDGET_LIMITS)) {
+    for (const key of Object.keys(PGY_KOL_BUDGET_LIMITS)) {
       const raw = input.budgets[key];
       if (raw === undefined || raw === null) {
         continue;
       }
-      if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1 || raw > BUDGET_LIMITS[key]) {
-        return invalid("invalid-budgets", `budgets.${key} 必须是 1-${BUDGET_LIMITS[key]} 的整数`);
+      if (
+        typeof raw !== "number" ||
+        !Number.isInteger(raw) ||
+        raw < 1 ||
+        raw > PGY_KOL_BUDGET_LIMITS[key]
+      ) {
+        return invalid(
+          "invalid-budgets",
+          `budgets.${key} 必须是 1-${PGY_KOL_BUDGET_LIMITS[key]} 的整数`,
+        );
       }
       budgets[key] = raw;
     }
@@ -186,6 +199,56 @@ export function validateBatchStartRequest(input) {
     }
   }
 
+  return { ok: true, value };
+}
+
+/**
+ * 校验批量继续请求 { taskId, budgets? }。
+ *
+ * budgets 可选（paused/interrupted/failed 可不传）；传了就必须是只含
+ * queryBudget/maxPagesPerLeaf 的普通对象，值必须是正整数且不超 IPC 上限。
+ * 单调性（严格大于旧预算与已消费数）由 service/runner 依据任务状态校验。
+ *
+ * @returns {{ ok: true, value: { taskId: string, budgets?: object } } | { ok: false, error: { code: string, message: string } }}
+ */
+export function validateBatchResumeRequest(input) {
+  if (!isRecord(input)) {
+    return invalid("invalid-input", "批量继续请求必须是普通对象");
+  }
+  const taskIdCheck = validateTaskIdRequest(input);
+  if (!taskIdCheck.ok) {
+    return taskIdCheck;
+  }
+  const value = { taskId: taskIdCheck.taskId };
+  if (input.budgets === undefined || input.budgets === null) {
+    return { ok: true, value };
+  }
+  if (!isRecord(input.budgets)) {
+    return invalid("invalid-budgets", "budgets 必须是普通对象");
+  }
+  const budgets = {};
+  for (const key of Object.keys(input.budgets)) {
+    if (!PGY_KOL_RESUME_BUDGET_KEYS.includes(key)) {
+      return invalid("invalid-budgets", `不支持的预算字段: ${key}`);
+    }
+    const raw = input.budgets[key];
+    if (
+      typeof raw !== "number" ||
+      !Number.isInteger(raw) ||
+      raw < 1 ||
+      raw > PGY_KOL_BUDGET_LIMITS[key]
+    ) {
+      return invalid(
+        "invalid-budgets",
+        `budgets.${key} 必须是 1-${PGY_KOL_BUDGET_LIMITS[key]} 的整数`,
+      );
+    }
+    budgets[key] = raw;
+  }
+  if (Object.keys(budgets).length === 0) {
+    return { ok: true, value };
+  }
+  value.budgets = budgets;
   return { ok: true, value };
 }
 

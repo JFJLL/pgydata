@@ -38,6 +38,7 @@ const TASK_STATUSES = new Set([
   "running",
   "paused",
   "interrupted",
+  "incomplete",
   "completed",
   "cancelled",
   "auth-expired",
@@ -46,6 +47,7 @@ const TASK_STATUSES = new Set([
 ]);
 const TERMINAL_STATUSES = new Set([
   "interrupted",
+  "incomplete",
   "completed",
   "cancelled",
   "auth-expired",
@@ -816,6 +818,40 @@ export class PgyKolTaskStore {
       metadata.budgetUsed = Number(budgetUsed);
       metadata.updatedAt = iso(this.now());
       await atomicWriteJson(taskPaths.metadata, metadata);
+      return clone(metadata);
+    });
+  }
+
+  /**
+   * 原子更新任务预算（Phase 4.1：增加预算继续）。只接受正整数字段，
+   * 缺失字段保留原值；写盘失败整体回滚（tmp+rename）。
+   */
+  async setTaskBudgets(taskId, budgets = {}) {
+    return this.withLock(taskId, async () => {
+      const taskPaths = this.paths(taskId);
+      const metadata = await readJson(taskPaths.metadata, null);
+      if (!metadata) throw new Error("任务不存在");
+      if (budgets === null || typeof budgets !== "object" || Array.isArray(budgets)) {
+        throw new Error("非法预算");
+      }
+      const next = { ...(metadata.budgets ?? {}) };
+      let changed = false;
+      for (const key of ["queryBudget", "maxPagesPerLeaf", "maxLeaves", "maxDepth"]) {
+        const raw = budgets[key];
+        if (raw === undefined || raw === null) continue;
+        if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1) {
+          throw new Error(`非法预算字段: ${key}`);
+        }
+        if (next[key] !== raw) {
+          next[key] = raw;
+          changed = true;
+        }
+      }
+      if (changed) {
+        metadata.budgets = next;
+        metadata.updatedAt = iso(this.now());
+        await atomicWriteJson(taskPaths.metadata, metadata);
+      }
       return clone(metadata);
     });
   }

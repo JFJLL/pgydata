@@ -6,10 +6,13 @@ import {
   PGY_KOL_IPC_MAX_ARRAY_LENGTH,
   PGY_KOL_IPC_MAX_STRING_LENGTH,
   PGY_KOL_IPC_MAX_FILTER_FIELDS,
+  PGY_KOL_BUDGET_LIMITS,
+  PGY_KOL_RESUME_BUDGET_KEYS,
   PGY_KOL_CONFIG_PROVIDERS,
   PGY_KOL_CONFIG_SECTIONS,
   validateConfigRequest,
   validateFilterState,
+  validateBatchResumeRequest,
 } from "../../app-source/pgy-kol/pgy-ipc-guard.mjs";
 
 test("导出常量：边界值与白名单精确匹配", () => {
@@ -18,6 +21,8 @@ test("导出常量：边界值与白名单精确匹配", () => {
   assert.equal(PGY_KOL_IPC_MAX_STRING_LENGTH, 512);
   assert.equal(PGY_KOL_IPC_MAX_FILTER_FIELDS, 64);
   assert.deepEqual(PGY_KOL_CONFIG_PROVIDERS, ["kolTagsV2", "consumeBehavior", "areas"]);
+  assert.deepEqual(PGY_KOL_BUDGET_LIMITS, { maxLeaves: 64, maxDepth: 10, maxPagesPerLeaf: 250, queryBudget: 1000 });
+  assert.deepEqual(PGY_KOL_RESUME_BUDGET_KEYS, ["queryBudget", "maxPagesPerLeaf"]);
   assert.deepEqual(PGY_KOL_CONFIG_SECTIONS, [
     "automotiveIndustryTag",
     "audience20",
@@ -214,4 +219,37 @@ test("validateFilterState：嵌套对象键数同样受限（每层 too-many-fie
   const result = validateFilterState({ field: nested });
   assert.equal(result.ok, false);
   assert.equal(result.error.code, "too-many-fields");
+});
+
+test("validateBatchResumeRequest：taskId 边界与 budgets 形状/上限/未知键", () => {
+  assert.equal(validateBatchResumeRequest(null).error.code, "invalid-input");
+  assert.equal(validateBatchResumeRequest([]).error.code, "invalid-input");
+  assert.equal(validateBatchResumeRequest({ taskId: "../escape" }).error.code, "invalid-task-id");
+  // budgets 可省略（paused/interrupted/failed 不传）。
+  assert.deepEqual(validateBatchResumeRequest({ taskId: "pgykol-ok-1" }), { ok: true, value: { taskId: "pgykol-ok-1" } });
+  assert.deepEqual(validateBatchResumeRequest({ taskId: "pgykol-ok-1", budgets: null }), { ok: true, value: { taskId: "pgykol-ok-1" } });
+  // 合法预算原样返回。
+  assert.deepEqual(
+    validateBatchResumeRequest({ taskId: "pgykol-ok-1", budgets: { queryBudget: 5, maxPagesPerLeaf: 250 } }),
+    { ok: true, value: { taskId: "pgykol-ok-1", budgets: { queryBudget: 5, maxPagesPerLeaf: 250 } } },
+  );
+  // 非法：非对象 / 未知键 / 超上限 / 非整数 / 0 / 负数 / 超长字符串值。
+  for (const budgets of [
+    "x",
+    5,
+    ["queryBudget"],
+    { bogus: 1 },
+    { queryBudget: 1001 },
+    { maxPagesPerLeaf: 251 },
+    { queryBudget: 1.5 },
+    { queryBudget: 0 },
+    { queryBudget: -1 },
+    { queryBudget: "5" },
+  ]) {
+    const result = validateBatchResumeRequest({ taskId: "pgykol-ok-1", budgets });
+    assert.equal(result.ok, false, JSON.stringify(budgets));
+    assert.equal(result.error.code, "invalid-budgets", JSON.stringify(budgets));
+  }
+  // 边界值通过（上限含端点）。
+  assert.equal(validateBatchResumeRequest({ taskId: "pgykol-ok-1", budgets: { queryBudget: 1000, maxPagesPerLeaf: 250 } }).ok, true);
 });

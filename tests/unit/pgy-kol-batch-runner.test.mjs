@@ -136,6 +136,9 @@ class FakeStore {
     task.counts.missingUid += summary.missingUidCount;
     leaf.pagesCompleted.push(pageNum);
     leaf.nextPageNum = pageNum + 1;
+    if (Number.isFinite(summary.budgetUsed)) {
+      task.budgetUsed = Number(summary.budgetUsed);
+    }
     this.calls.commitPage.push({ taskId, leafId, pageNum, summary: { ...summary } });
     this.calls.order.push({ type: "commitPage", pageNum, leafId });
   }
@@ -148,6 +151,16 @@ class FakeStore {
     this.getResumeStateCalls += 1;
     const task = this.requireTask(taskId);
     return { leaves: structuredClone(task.leaves) };
+  }
+
+  async setTaskBudget(taskId, budgetUsed) {
+    const task = this.requireTask(taskId);
+    task.budgetUsed = Number(budgetUsed);
+  }
+
+  async setTaskBudgets(taskId, budgets) {
+    const task = this.requireTask(taskId);
+    task.budgets = { ...(task.budgets ?? {}), ...structuredClone(budgets) };
   }
 
   requireTask(taskId) {
@@ -655,10 +668,10 @@ test("无安全维度（无 fans 区间）触顶 → capped-unprovable / cannot-
   await runner.start("t-nosplit");
 
   const task = await store.getTask("t-nosplit");
-  assert.equal(task.status, "completed");
+  assert.equal(task.status, "incomplete");
   assert.equal(task.completeness, "cannot-prove");
   assert.equal(task.leaves[0].status, "capped-unprovable");
-  assert.equal(task.summary.stopReason, null);
+  assert.equal(task.summary.stopReason, "capped-unprovable");
 });
 
 test("区间收敛到单点仍触顶 → capped-unprovable / cannot-prove", async () => {
@@ -674,7 +687,7 @@ test("区间收敛到单点仍触顶 → capped-unprovable / cannot-prove", asyn
   await runner.start("t-single-point");
 
   const task = await store.getTask("t-single-point");
-  assert.equal(task.status, "completed");
+  assert.equal(task.status, "incomplete");
   assert.equal(task.completeness, "cannot-prove");
   assert.ok(task.leaves.some((leaf) => leaf.status === "capped-unprovable"), "单点区间仍触顶必须 capped-unprovable");
   assert.ok(task.leaves.some((leaf) => leaf.range && leaf.range[0] === leaf.range[1]), "必须产生单点子区间");
@@ -696,7 +709,7 @@ test("预算耗尽：queryBudget 用尽停止，stopReason=budget-exhausted", as
   await runner.start("t-budget");
 
   const task = await store.getTask("t-budget");
-  assert.equal(task.status, "completed");
+  assert.equal(task.status, "incomplete");
   assert.equal(task.completeness, "cannot-prove");
   assert.equal(task.summary.stopReason, "budget-exhausted");
   assert.ok(store.calls.appendPageRows.length <= 2, "预算耗尽后不得继续抓页");
@@ -719,7 +732,7 @@ test("重复页：连续 newUidCount=0 达到阈值 → 停止，stopReason=repe
   await runner.start("t-repeat");
 
   const task = await store.getTask("t-repeat");
-  assert.equal(task.status, "completed");
+  assert.equal(task.status, "incomplete");
   assert.equal(task.completeness, "cannot-prove");
   assert.equal(task.summary.stopReason, "repeat-page");
   assert.equal(pagesServed, 3, "第 3 页连续 2 次零新增后停止");
@@ -911,6 +924,149 @@ test("sessionProvider 注入的 session 传给 searchPage", async () => {
   await runner.start("t-session");
 
   assert.deepEqual(received, [session], "session 必须透传给 searchPage");
+});
+
+test("budget-exhausted → incomplete；resume 不带/未增加/非法预算全部拒绝且不发请求；增加后从检查点继续", async () => {
+  const store = new FakeStore();
+  await createStoreTask(store, "t-budget-resume", {
+    filterState: { fansNumberLower: 1, fansNumberUpper: 100000 },
+    budgets: { maxLeaves: 16, maxDepth: 6, maxPagesPerLeaf: 250, queryBudget: 2 },
+  });
+  let pagesServed = 0;
+  const runner = makeRunner({
+    store,
+    planSplitImpl: splitPlanner,
+    searchImpl: async ({ payload }) => {
+      pagesServed += 1;
+      return okPage({ total: 100, kols: makeKols(pagesServed * 100, 20), pageNum: payload.pageNum });
+    },
+  });
+
+  await runner.start("t-budget-resume");
+  let task = await store.getTask("t-budget-resume");
+  assert.equal(task.status, "incomplete");
+  assert.equal(task.completeness, "cannot-prove");
+  assert.equal(task.summary.stopReason, "budget-exhausted");
+  assert.deepEqual(store.calls.appendPageRows.map((call) => call.pageNum), [1, 2], "两页提交后预算耗尽");
+
+  // 小于 / 等于已消费 / 非法预算 → 拒绝，不得发出新请求（严格单调由 service 层强制）。
+  for (const budgets of [{ queryBudget: 2 }, { queryBudget: 1 }, { queryBudget: 1.5 }, { queryBudget: 1001 }, { queryBudget: 3, bogus: 1 }]) {
+    await assert.rejects(
+      runner.resume("t-budget-resume", budgets),
+      (err) => ["invalid-budgets", "budget-not-increased", "budget-below-consumed"].includes(err.kind),
+      JSON.stringify(budgets),
+    );
+  }
+  assert.equal(pagesServed, 2, "拒绝路径不得发出任何新请求");
+
+  // 不带预算 / 空预算：runner 幂等 no-op（预算仍耗尽，不发请求，状态保持 incomplete）。
+  for (const budgets of [undefined, {}]) {
+    await runner.resume("t-budget-resume", budgets);
+    const after = await store.getTask("t-budget-resume");
+    assert.equal(after.status, "incomplete");
+    assert.equal(pagesServed, 2, "无增量预算不得发出请求");
+  }
+
+  // 严格增加 queryBudget → 从原检查点继续（第 3 页起），已提交页不重抓。
+  await runner.resume("t-budget-resume", { queryBudget: 5 });
+  task = await store.getTask("t-budget-resume");
+  assert.equal(task.status, "completed");
+  assert.equal(task.completeness, "complete");
+  assert.deepEqual(store.calls.appendPageRows.map((call) => call.pageNum), [1, 2, 3, 4, 5], "第 1、2 页不得重抓");
+  assert.equal(task.counts.raw, 100, "累计计数不清零");
+  assert.equal(store.rows.length, 100, "行不得重复写入");
+});
+
+test("incomplete：repeat-page / capped-unprovable / checkpoint-desync 拒绝继续", async () => {
+  const cases = [
+    ["repeat-page", "t-nc-repeat"],
+    ["capped-unprovable", "t-nc-capped"],
+    ["checkpoint-desync", "t-nc-desync"],
+  ];
+  for (const [stopReason, taskId] of cases) {
+    const store = new FakeStore();
+    await createStoreTask(store, taskId, { budgets: { maxLeaves: 16, maxDepth: 6, maxPagesPerLeaf: 250, queryBudget: 400 } });
+    await store.setStatus(taskId, "incomplete");
+    const task = await store.getTask(taskId);
+    task.summary = { stopReason };
+    store.tasks.set(taskId, task);
+    let pagesServed = 0;
+    const runner = makeRunner({
+      store,
+      searchImpl: async ({ payload }) => {
+        pagesServed += 1;
+        return okPage({ total: 100, kols: makeKols(pagesServed * 100, 20), pageNum: payload.pageNum });
+      },
+    });
+    await assert.rejects(
+      runner.resume(taskId, { queryBudget: 500 }),
+      (err) => err.kind === "resume-not-allowed",
+      `${stopReason} 必须拒绝继续`,
+    );
+    assert.equal(pagesServed, 0, `${stopReason} 不得发出请求`);
+  }
+});
+
+test("max-pages-reached：maxPages 严格增加可继续，等于/减少/超 250 拒绝，到 250 后不可继续", async () => {
+  const store = new FakeStore();
+  await createStoreTask(store, "t-maxpages-resume", {
+    budgets: { maxLeaves: 16, maxDepth: 6, maxPagesPerLeaf: 3, queryBudget: 100 },
+  });
+  let pagesServed = 0;
+  const runner = makeRunner({
+    store,
+    searchImpl: async ({ payload }) => {
+      pagesServed += 1;
+      // 每页只有 1 条新数据 → unique < total，持续到 maxPages 上限。
+      return okPage({ total: 1000, kols: [{ userId: `p-${payload.pageNum}`, nickname: `n${payload.pageNum}` }], pageNum: payload.pageNum });
+    },
+  });
+
+  await runner.start("t-maxpages-resume");
+  let task = await store.getTask("t-maxpages-resume");
+  assert.equal(task.status, "incomplete");
+  assert.equal(task.summary.stopReason, "max-pages-reached");
+  assert.equal(task.leaves[0].status, "max-pages-unprovable");
+  assert.equal(pagesServed, 3);
+
+  for (const budgets of [{ maxPagesPerLeaf: 2 }, { maxPagesPerLeaf: 251 }]) {
+    await assert.rejects(
+      runner.resume("t-maxpages-resume", budgets),
+      (err) => ["invalid-budgets", "budget-not-increased"].includes(err.kind),
+      JSON.stringify(budgets),
+    );
+  }
+  assert.equal(pagesServed, 3, "拒绝路径不得发出请求");
+
+  // 等值 maxPages：runner 幂等 no-op（叶子再次立即停止，不发请求）。
+  await runner.resume("t-maxpages-resume", { maxPagesPerLeaf: 3 });
+  assert.equal(pagesServed, 3, "等值页数预算不得发出请求");
+  assert.equal((await store.getTask("t-maxpages-resume")).status, "incomplete");
+
+  // 严格增加到 4 → 从第 4 页继续。
+  await runner.resume("t-maxpages-resume", { maxPagesPerLeaf: 4 });
+  task = await store.getTask("t-maxpages-resume");
+  assert.equal(pagesServed, 4);
+  assert.equal(task.status, "incomplete", "页数上限再次触顶仍为 incomplete");
+  assert.deepEqual(task.leaves[0].pagesCompleted, [1, 2, 3, 4]);
+  assert.equal(task.leaves[0].status, "max-pages-unprovable");
+
+  // 已到 250 的 incomplete 任务：无继续资格（UI 也不显示继续按钮）。
+  const store250 = new FakeStore();
+  await createStoreTask(store250, "t-maxpages-250", {
+    budgets: { maxLeaves: 16, maxDepth: 6, maxPagesPerLeaf: 250, queryBudget: 100 },
+  });
+  await store250.setStatus("t-maxpages-250", "incomplete");
+  const task250 = await store250.getTask("t-maxpages-250");
+  task250.summary = { stopReason: "max-pages-reached" };
+  task250.budgetUsed = 1;
+  store250.tasks.set("t-maxpages-250", task250);
+  const runner250 = makeRunner({ store: store250, searchImpl: async () => okPage({ total: 100, kols: [], pageNum: 1 }) });
+  await assert.rejects(
+    runner250.resume("t-maxpages-250", { maxPagesPerLeaf: 250 }),
+    (err) => err.kind === "resume-not-allowed",
+    "已到 250 页上限必须拒绝继续",
+  );
 });
 
 test("模块源码扫描：纯 ESM、不 import electron、不发起网络", async () => {

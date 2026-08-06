@@ -10,6 +10,7 @@
 import { PgySessionRequest } from "./pgy-session-request.mjs";
 import {
   validateBatchStartRequest,
+  validateBatchResumeRequest,
   validateConfigRequest,
   validateFilterState,
   validateTaskIdRequest,
@@ -148,9 +149,21 @@ export function registerPgyKolIpc({ ipcMain, service, broadcast }) {
     }
   });
 
+  ipcMain.handle(PGY_KOL_IPC_CHANNELS.batchResume, async (_event, input) => {
+    try {
+      const check = validateBatchResumeRequest(input);
+      if (!check.ok) {
+        return { ok: false, error: check.error };
+      }
+      const data = await service.batchResume(check.value);
+      return { ok: true, data };
+    } catch (err) {
+      return { ok: false, error: toErrorPayload(err) };
+    }
+  });
+
   for (const [channel, method] of [
     [PGY_KOL_IPC_CHANNELS.batchPause, "batchPause"],
-    [PGY_KOL_IPC_CHANNELS.batchResume, "batchResume"],
     [PGY_KOL_IPC_CHANNELS.batchCancel, "batchCancel"],
     [PGY_KOL_IPC_CHANNELS.batchExport, "batchExport"],
   ]) {

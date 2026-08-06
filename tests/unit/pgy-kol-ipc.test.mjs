@@ -587,7 +587,17 @@ async function waitForTaskStatus(service, taskId, statuses, timeoutMs = 3000) {
   for (;;) {
     const task = await service.batchGet({ taskId });
     if (statuses.includes(task.status)) {
-      return task;
+      // finalize 先写 status 再写 completeness（两写之间有空窗）：
+      // completed/incomplete 必须等完整性落定，避免断言到中间态。
+      const settled =
+        task.status === "completed"
+          ? task.completeness === "complete"
+          : task.status === "incomplete"
+            ? task.completeness === "cannot-prove"
+            : true;
+      if (settled) {
+        return task;
+      }
     }
     if (Date.now() > deadline) {
       throw new Error(`等待任务状态超时: ${task.status}`);
@@ -777,22 +787,51 @@ test("IPC 错误详情不得泄漏本地绝对路径（fresh reviewer M1）", as
   }
 });
 
-test("batch-pause/resume/cancel 通道存在且作用于任务", async (t) => {
-  // 门控传输：第 2、3 页请求会挂起等待放行，使暂停/继续/取消时序完全确定。
-  // total=100（<5000 不触顶，5 页），每页 UID 互不相同（避免重复页信号）。
-  let currentGateResolve = null;
-  let fetchIndex = 0;
+test("batch-pause/resume/cancel 通道存在且作用于任务（transport gate 确定性时序）", async (t) => {
+  // Phase 4.1 时序修复：不再用 fetchIndex + setTimeout(10) 轮询等待请求到达；
+  // transport 为第 2/3 页提供显式 deferred 信号（entered），测试先 await
+  // “请求已进入 transport”再执行 pause/cancel，再由测试放行（release）。
+  // 仅保留一个较长的最终防死锁 timeout，不参与正常时序同步。
+  const gates = new Map();
+  function gateFor(pageNum) {
+    let gate = gates.get(pageNum);
+    if (!gate) {
+      let enteredResolve = null;
+      let releaseResolve = null;
+      const entered = new Promise((resolve) => {
+        enteredResolve = resolve;
+      });
+      const release = new Promise((resolve) => {
+        releaseResolve = resolve;
+      });
+      gate = { entered, release, enteredResolve, releaseResolve };
+      gates.set(pageNum, gate);
+    }
+    return gate;
+  }
+  const DEADLOCK_TIMEOUT_MS = 10000;
+  const awaitGate = (gate, label) =>
+    Promise.race([
+      gate.entered,
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`${label} 等待 transport 信号超时（仅防死锁，不参与正常时序）`)),
+          DEADLOCK_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+  const secondGate = gateFor(2);
+  const thirdGate = gateFor(3);
   const { ipcMain, service, disposeIpc } = createBatchHarness({
     t,
     transportImpl: async (opts) => {
-      fetchIndex += 1;
-      if (fetchIndex >= 2) {
-        await new Promise((resolve) => {
-          currentGateResolve = resolve;
-        });
-      }
       const payload = JSON.parse(opts.body);
       const page = payload.pageNum;
+      if (page === 2 || page === 3) {
+        const gate = gateFor(page);
+        gate.enteredResolve();
+        await gate.release;
+      }
       const kols = Array.from({ length: 20 }, (_, index) => ({
         userId: `loop-u-${page}-${index + 1}`,
         nickname: `n${page}-${index + 1}`,
@@ -809,28 +848,23 @@ test("batch-pause/resume/cancel 通道存在且作用于任务", async (t) => {
     assert.equal(start.ok, true);
     const taskId = start.data.taskId;
 
-    // 等待第 2 页请求挂起（第 1 页已提交）。
-    for (let i = 0; i < 200 && fetchIndex < 2; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    assert.equal(fetchIndex, 2, "第 2 页请求必须已挂起");
+    // 第 1 页先行提交；await “第 2 页请求已进入 transport”后再暂停。
+    await awaitGate(secondGate, "第 2 页请求");
     const paused = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchPause)({}, { taskId });
     assert.equal(paused.ok, true);
-    currentGateResolve();
+    secondGate.releaseResolve();
     const pausedTask = await waitForTaskStatus(service, taskId, ["paused"]);
-    assert.equal(pausedTask.counts.raw, 40);
+    assert.equal(pausedTask.counts.raw, 40, "第 1、2 页提交后暂停");
 
     const resumed = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchResume)({}, { taskId });
     assert.equal(resumed.ok, true);
-    for (let i = 0; i < 200 && fetchIndex < 3; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    assert.equal(fetchIndex, 3, "继续后第 3 页请求必须已挂起");
+    // await “第 3 页请求已进入 transport”后再取消。
+    await awaitGate(thirdGate, "第 3 页请求");
     const cancelled = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchCancel)({}, { taskId });
     assert.equal(cancelled.ok, true);
-    currentGateResolve();
+    thirdGate.releaseResolve();
     const cancelledTask = await waitForTaskStatus(service, taskId, ["cancelled"]);
-    assert.equal(cancelledTask.counts.raw, 60);
+    assert.equal(cancelledTask.counts.raw, 60, "第 3 页提交后取消，数据保留");
 
     const columns = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.columns)();
     assert.equal(columns.ok, true);
@@ -838,6 +872,69 @@ test("batch-pause/resume/cancel 通道存在且作用于任务", async (t) => {
     const defaults = columns.data.filter((column) => column.defaultDisplay === true).map((column) => column.id);
     assert.ok(defaults.includes("userId"));
     assert.ok(defaults.includes("nickname"));
+  } finally {
+    disposeIpc();
+  }
+});
+
+test("batch-resume 携带 budgets：拒绝未增加/非法预算且不发请求，增加后从检查点继续", async (t) => {
+  const pageNums = [];
+  const { ipcMain, service, disposeIpc } = createBatchHarness({
+    t,
+    transportImpl: async (opts) => {
+      const payload = JSON.parse(opts.body);
+      pageNums.push(payload.pageNum);
+      const startIndex = (payload.pageNum - 1) * 20;
+      const kols = Array.from({ length: 20 }, (_, index) => ({
+        userId: `bu-${startIndex + index + 1}`,
+        nickname: `n${startIndex + index + 1}`,
+      }));
+      return jsonResponse({ code: 0, data: { kols, total: 100 }, msg: "" });
+    },
+  });
+  try {
+    const start = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
+      filterState: {},
+      columns: ["userId"],
+      budgets: { queryBudget: 2 },
+    });
+    assert.equal(start.ok, true);
+    const taskId = start.data.taskId;
+
+    let task = await waitForTaskStatus(service, taskId, ["incomplete"]);
+    assert.equal(task.completeness, "cannot-prove");
+    assert.equal(task.summary.stopReason, "budget-exhausted");
+    assert.deepEqual(pageNums, [1, 2], "极小预算 2 → 两页后预算耗尽");
+
+    // 未增加 / 不带预算 / 超上限 / 非法字段 → 全部拒绝，不发请求。
+    const equal = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchResume)({}, { taskId, budgets: { queryBudget: 2 } });
+    assert.equal(equal.ok, false);
+    assert.equal(equal.error.code, "budget-not-increased");
+    const noBudgets = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchResume)({}, { taskId });
+    assert.equal(noBudgets.ok, false);
+    assert.equal(noBudgets.error.code, "invalid-budgets");
+    const overCap = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchResume)({}, { taskId, budgets: { queryBudget: 1001 } });
+    assert.equal(overCap.ok, false);
+    assert.equal(overCap.error.code, "invalid-budgets");
+    const unknownKey = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchResume)({}, { taskId, budgets: { queryBudget: 5, bogus: 1 } });
+    assert.equal(unknownKey.ok, false);
+    assert.equal(unknownKey.error.code, "invalid-budgets");
+    assert.deepEqual(pageNums, [1, 2], "拒绝路径不得发出任何请求");
+
+    // 严格增加 queryBudget → 从第 3 页继续，返回预算与已消费信息。
+    const resumed = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchResume)({}, { taskId, budgets: { queryBudget: 5 } });
+    assert.equal(resumed.ok, true);
+    assert.equal(resumed.data.status, "running");
+    assert.equal(resumed.data.budgets.queryBudget, 5);
+    assert.equal(resumed.data.budgetUsed, 2);
+
+    task = await waitForTaskStatus(service, taskId, ["completed"]);
+    assert.equal(task.completeness, "complete");
+    assert.deepEqual(pageNums, [1, 2, 3, 4, 5], "从原检查点继续，已提交页不重抓");
+    assert.equal(task.counts.raw, 100, "累计计数不清零");
+    assert.equal(task.budgetUsed, 5, "预算消耗跨恢复累计");
+    assert.equal(task.budgets.queryBudget, 5, "新预算必须持久化");
+    assert.equal(task.taskId, start.data.taskId, "taskId 不得更换");
   } finally {
     disposeIpc();
   }

@@ -9,11 +9,16 @@
 //   http 5xx 有限重试（maxAttempts 次重试 + 退避 backoffMs×attempt）；其余错误
 //   叶子立即失败，任务转 failed 等待 resume。
 // - 暂停 / 取消 / 恢复、单实例防重入、进程重启恢复（getResumeState）。
+// - Phase 4.1：循环级停止（预算耗尽 / 页数上限 / 重复页 / 无法安全切分 /
+//   checkpoint-desync）统一收口为 incomplete + cannot-prove，不再伪装 completed；
+//   只有 budget-exhausted / max-pages-reached（且未到 250）可通过严格单调增加的
+//   预算安全继续，其余原因一律拒绝继续。恢复不重抓已提交页、不清零累计计数。
 //
 // 纯 ESM：不 import electron、不发起网络；searchPage 与请求层全部由外部注入。
 // 所有落盘错误信息经 PgySessionRequest.redactText 脱敏，绝不写入
 // cookie / token / Authorization / X-s / X-t / session 等敏感字段。
 
+import { PGY_KOL_BUDGET_LIMITS } from "./pgy-ipc-guard.mjs";
 import { PgySessionRequest } from "./pgy-session-request.mjs";
 
 const DEFAULT_BUDGETS = Object.freeze({
@@ -23,12 +28,174 @@ const DEFAULT_BUDGETS = Object.freeze({
   queryBudget: 400,
 });
 
-// 终态任务不允许 start 重跑。
-const NO_START_STATUSES = new Set(["cancelled", "completed", "risk-control"]);
+/**
+ * 计算任务最终停止原因：循环级 stopReason 优先；否则由叶子状态推导
+ * （checkpoint-desync 失败 > capped-unprovable），供 summary/UI/继续资格使用。
+ */
+export function computeStopReason(leaves, loopStopReason) {
+  const leafList = Array.isArray(leaves) ? leaves : [];
+  // 叶子级硬伤优先：即使循环级 stopReason 是 budget-exhausted/max-pages-reached，
+  // 只要存在 checkpoint-desync 或 capped-unprovable 叶子，任务都不可安全继续，
+  // summary/UI/资格判定必须一致地显示硬伤原因。
+  for (const leaf of leafList) {
+    if (leaf && leaf.failure && leaf.failure.kind === "checkpoint-desync") {
+      return "checkpoint-desync";
+    }
+  }
+  for (const leaf of leafList) {
+    if (leaf && leaf.status === "capped-unprovable") {
+      return "capped-unprovable";
+    }
+  }
+  if (loopStopReason) {
+    return loopStopReason;
+  }
+  return null;
+}
+
+/**
+ * 判定 incomplete 任务是否具备安全恢复资格（纯函数，runner/store/UI 共用口径）。
+ *
+ * @returns {{ eligible: boolean, kind?: "budget"|"maxPages", code?: string, reason?: string }}
+ */
+export function evaluateResumeEligibility(task) {
+  if (!task || task.status !== "incomplete") {
+    return { eligible: false, code: "resume-not-allowed", reason: "任务不在采集未完整状态" };
+  }
+  const stopReason =
+    task.summary && typeof task.summary === "object" && typeof task.summary.stopReason === "string"
+      ? task.summary.stopReason
+      : null;
+  if (stopReason === "budget-exhausted") {
+    return { eligible: true, kind: "budget", reason: null };
+  }
+  if (stopReason === "max-pages-reached") {
+    const current = Number.isInteger(task.budgets?.maxPagesPerLeaf)
+      ? task.budgets.maxPagesPerLeaf
+      : DEFAULT_BUDGETS.maxPagesPerLeaf;
+    if (current >= PGY_KOL_BUDGET_LIMITS.maxPagesPerLeaf) {
+      return {
+        eligible: false,
+        code: "max-pages-limit",
+        reason: "已到官方安全页数上限（250 页），无法继续同一查询",
+      };
+    }
+    return { eligible: true, kind: "maxPages", reason: null };
+  }
+  if (NOT_CONTINUABLE_STOP_REASONS.has(stopReason)) {
+    return {
+      eligible: false,
+      code: "resume-not-allowed",
+      reason: `停止原因 ${stopReason} 无法安全继续`,
+    };
+  }
+  return { eligible: false, code: "resume-not-allowed", reason: "该任务无法安全继续（无可用恢复路径）" };
+}
+
+/**
+ * 校验 resume 预算（纯函数）。返回 { ok, value } 或 { ok:false, code, message }。
+ *
+ * - strict=true（service 用户入口）：新值必须严格大于当前预算；
+ * - strict=false（runner 幂等重检）：允许等于当前预算（service 已先原子落盘），
+ *   但必须严格大于已消费请求数（防反复 resume 放大真实请求量）。
+ * - 上限与 IPC 守卫一致（PGY_KOL_BUDGET_LIMITS）。
+ */
+export function validateResumeBudgets(task, budgets, { strict = false } = {}) {
+  const current = {
+    ...DEFAULT_BUDGETS,
+    ...(task && task.budgets && typeof task.budgets === "object" ? task.budgets : {}),
+  };
+  const consumed = Number.isFinite(task?.budgetUsed) ? task.budgetUsed : 0;
+  if (budgets === null || typeof budgets !== "object" || Array.isArray(budgets)) {
+    return { ok: false, code: "invalid-budgets", message: "继续任务必须提供 budgets 对象" };
+  }
+  const keys = Object.keys(budgets);
+  if (keys.length === 0) {
+    return { ok: false, code: "invalid-budgets", message: "未提供任何预算增量" };
+  }
+  const next = { ...current };
+  for (const key of keys) {
+    if (!RESUME_BUDGET_KEYS.includes(key)) {
+      return { ok: false, code: "invalid-budgets", message: `不支持的预算字段: ${key}` };
+    }
+    const raw = budgets[key];
+    if (
+      typeof raw !== "number" ||
+      !Number.isInteger(raw) ||
+      raw < 1 ||
+      raw > PGY_KOL_BUDGET_LIMITS[key]
+    ) {
+      return {
+        ok: false,
+        code: "invalid-budgets",
+        message: `budgets.${key} 必须是 1-${PGY_KOL_BUDGET_LIMITS[key]} 的整数`,
+      };
+    }
+    next[key] = raw;
+  }
+  if (keys.includes("queryBudget")) {
+    const value = budgets.queryBudget;
+    if (strict && value <= current.queryBudget) {
+      return {
+        ok: false,
+        code: "budget-not-increased",
+        message: `新 queryBudget 必须严格大于当前预算 ${current.queryBudget}`,
+      };
+    }
+    if (!strict && value < current.queryBudget) {
+      return {
+        ok: false,
+        code: "budget-not-increased",
+        message: `新 queryBudget 不得小于当前预算 ${current.queryBudget}`,
+      };
+    }
+    if (value <= consumed) {
+      return {
+        ok: false,
+        code: "budget-below-consumed",
+        message: `新 queryBudget 必须严格大于已消费请求数 ${consumed}`,
+      };
+    }
+  }
+  if (keys.includes("maxPagesPerLeaf")) {
+    const value = budgets.maxPagesPerLeaf;
+    if (strict && value <= current.maxPagesPerLeaf) {
+      return {
+        ok: false,
+        code: "budget-not-increased",
+        message: `新 maxPagesPerLeaf 必须严格大于当前值 ${current.maxPagesPerLeaf}`,
+      };
+    }
+    if (!strict && value < current.maxPagesPerLeaf) {
+      return {
+        ok: false,
+        code: "budget-not-increased",
+        message: `新 maxPagesPerLeaf 不得小于当前值 ${current.maxPagesPerLeaf}`,
+      };
+    }
+  }
+  return { ok: true, value: next };
+}
+
+// 终态任务不允许 start 重跑（incomplete 也必须走带预算校验的 resume）。
+const NO_START_STATUSES = new Set(["cancelled", "completed", "risk-control", "incomplete"]);
 // resume 拒绝的状态。
 const RESUME_REJECTED_STATUSES = new Set(["risk-control", "cancelled", "completed"]);
-// 循环结束时由控制/错误分支设置的状态，finalize 不得覆盖为 completed。
-const STOP_STATUSES = new Set(["paused", "cancelled", "auth-expired", "risk-control", "failed"]);
+// 循环结束时由控制/错误分支设置的状态，finalize 不得覆盖为 completed/incomplete。
+const STOP_STATUSES = new Set([
+  "paused",
+  "cancelled",
+  "auth-expired",
+  "risk-control",
+  "failed",
+  "incomplete",
+]);
+
+// 不可安全继续的循环级停止原因（不提供任何“继续”入口）。
+const NOT_CONTINUABLE_STOP_REASONS = new Set(["repeat-page", "capped-unprovable", "checkpoint-desync"]);
+
+// resume 预算只接受这两个可单调增加的键（与 IPC 守卫白名单一致）。
+const RESUME_BUDGET_KEYS = ["queryBudget", "maxPagesPerLeaf"];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -215,12 +382,12 @@ export function createPgyKolBatchRunner({
   }
 
   // 单实例：runningLoops 在首个 await 前同步占位，防并发 start/resume 双跑。
-  function ensureLoop(taskId) {
+  function ensureLoop(taskId, resumeBudgets) {
     const existing = runningLoops.get(taskId);
     if (existing) {
       return existing;
     }
-    const promise = runTask(taskId).finally(() => {
+    const promise = runTask(taskId, resumeBudgets).finally(() => {
       runningLoops.delete(taskId);
     });
     runningLoops.set(taskId, promise);
@@ -242,7 +409,7 @@ export function createPgyKolBatchRunner({
     return ensureLoop(taskId);
   }
 
-  async function resume(taskId) {
+  async function resume(taskId, budgets) {
     const existing = runningLoops.get(taskId);
     if (existing) {
       return existing;
@@ -252,9 +419,28 @@ export function createPgyKolBatchRunner({
       throw new Error(`批量任务不存在: ${taskId}`);
     }
     if (RESUME_REJECTED_STATUSES.has(task.status)) {
-      throw new Error(`任务状态 ${task.status} 不允许恢复`);
+      const error = new Error(`任务状态 ${task.status} 不允许恢复`);
+      error.kind = "resume-not-allowed";
+      throw error;
     }
-    return ensureLoop(taskId);
+    if (task.status === "incomplete") {
+      const eligibility = evaluateResumeEligibility(task);
+      if (!eligibility.eligible) {
+        const error = new Error(eligibility.reason);
+        error.kind = "resume-not-allowed";
+        error.code = eligibility.code ?? "resume-not-allowed";
+        throw error;
+      }
+    }
+    if (budgets !== undefined && budgets !== null && Object.keys(budgets).length > 0) {
+      const check = validateResumeBudgets(task, budgets, { strict: false });
+      if (!check.ok) {
+        const error = new Error(check.message);
+        error.kind = check.code;
+        throw error;
+      }
+    }
+    return ensureLoop(taskId, budgets);
   }
 
   // 同步设置控制标志；调用方可直接 await（Promise 立即 resolve）。
@@ -266,7 +452,7 @@ export function createPgyKolBatchRunner({
     getControl(taskId).cancel = true;
   }
 
-  async function runTask(taskId) {
+  async function runTask(taskId, resumeBudgets) {
     const task = await store.getTask(taskId);
     if (!task) {
       throw new Error(`批量任务不存在: ${taskId}`);
@@ -281,6 +467,18 @@ export function createPgyKolBatchRunner({
       const root = buildRootLeaf(task);
       leaves.push(root);
       await store.addLeaf(taskId, root);
+    }
+
+    // incomplete + max-pages-reached 恢复：把 max-pages-unprovable 叶子重新置为
+    // running（循环只调度 pending/running 叶子），配合已持久化的更大 maxPages
+    // 从原检查点继续；预算未真正增加时该叶子会立即再次停止，不会发请求。
+    if (task.status === "incomplete" && task.summary?.stopReason === "max-pages-reached") {
+      for (const leaf of leaves) {
+        if (leaf.status === "max-pages-unprovable") {
+          leaf.status = "running";
+          await store.updateLeaf(taskId, leaf);
+        }
+      }
     }
 
     // resume 语义：清除失败叶子的 failure 以便重试。
@@ -304,7 +502,11 @@ export function createPgyKolBatchRunner({
       }
     }
 
-    const budgets = { ...DEFAULT_BUDGETS, ...(task.budgets ?? {}) };
+    const budgets = {
+      ...DEFAULT_BUDGETS,
+      ...(task.budgets ?? {}),
+      ...(resumeBudgets ?? {}),
+    };
     const pageSize = typeof task.pageSize === "number" && task.pageSize > 0 ? task.pageSize : 20;
     const state = {
       // 查询预算跨实例累计：resume 后继续消耗已持久化的 budgetUsed，
@@ -335,12 +537,14 @@ export function createPgyKolBatchRunner({
         await setTaskStatus(taskId, "cancelled");
         return;
       }
-      if (ctx.state.budgetUsed >= ctx.budgets.queryBudget) {
-        ctx.state.stopReason = "budget-exhausted";
-        return;
-      }
       const pending = leaves.filter((leaf) => leaf.status === "pending" || leaf.status === "running");
       if (pending.length === 0) {
+        return;
+      }
+      // 预算检查必须放在 pending 之后：预算恰好等于已消费数且已无待处理叶子时，
+      // 属于“完整收尾”（finalize 按覆盖判定 complete），不得误标 budget-exhausted。
+      if (ctx.state.budgetUsed >= ctx.budgets.queryBudget) {
+        ctx.state.stopReason = "budget-exhausted";
         return;
       }
       pending.sort((a, b) => a.depth - b.depth || leaves.indexOf(a) - leaves.indexOf(b));
@@ -586,13 +790,16 @@ export function createPgyKolBatchRunner({
 
   async function finalize(taskId, leaves, state) {
     const task = await store.getTask(taskId);
+    const completeness = computeCompleteness(leaves, state.stopReason);
+    // Phase 4.1：循环级停止（预算/页数/重复页/切分/检查点）未证明完整时，
+    // 收口为 incomplete 而非 completed——只有真正完整才显示绿色“已完成”。
+    const effectiveStopReason = computeStopReason(leaves, state.stopReason);
     let finalStatus = task ? task.status : "completed";
     if (!STOP_STATUSES.has(finalStatus)) {
-      await setTaskStatus(taskId, "completed");
-      finalStatus = "completed";
+      finalStatus = completeness === "complete" ? "completed" : "incomplete";
+      await setTaskStatus(taskId, finalStatus);
     }
-    const completeness = computeCompleteness(leaves, state.stopReason);
-    const summary = buildSummary(task, leaves, completeness, state.stopReason);
+    const summary = buildSummary(task, leaves, completeness, effectiveStopReason);
     await persistFinalization(taskId, { completeness, summary, budgetUsed: state.budgetUsed });
     emitEvent({ taskId, type: "done", status: finalStatus, completeness, summary, finishedAt: now() });
   }
@@ -692,6 +899,12 @@ export function createPgyKolBatchRunner({
     }
     if (stopReason === "max-pages-reached") {
       warnings.push("已达到单叶子最大页数但未覆盖全部结果");
+    }
+    if (stopReason === "capped-unprovable") {
+      warnings.push("无安全切分维度，无法证明完整");
+    }
+    if (stopReason === "checkpoint-desync") {
+      warnings.push("检查点与行数据不一致，禁止继续");
     }
     return {
       uniqueUidCount,
