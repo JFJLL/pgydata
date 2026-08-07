@@ -1,0 +1,11 @@
+{
+  "code": 0,
+  "data": [
+    { "taxonomy1Tag": "美妆" },
+    { "taxonomy1Tag": "护肤" },
+    { "taxonomy1Tag": "母婴" },
+    { "taxonomy1Tag": "时尚" },
+    { "taxonomy1Tag": "美食" }
+  ],
+  "msg": ""
+}

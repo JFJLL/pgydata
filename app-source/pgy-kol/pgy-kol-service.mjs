@@ -30,6 +30,7 @@ import {
 } from "./pgy-kol-batch-runner.mjs";
 import { buildPgyKolBatchExportPayload } from "./pgy-kol-batch-export.mjs";
 import {
+  PGY_KOL_COLUMN_REGISTRY,
   listPgyKolConfirmedColumns,
 } from "./pgy-kol-column-registry.mjs";
 import { BASE_PAYLOAD } from "./pgy-payload-builder.mjs";
@@ -37,7 +38,7 @@ import { BASE_PAYLOAD } from "./pgy-payload-builder.mjs";
 export { PGY_KOL_IPC_CHANNELS, registerPgyKolIpc };
 
 export const PGY_KOL_MODULE_NAME = "pgy-kol";
-export const PGY_KOL_PHASE = 4;
+export const PGY_KOL_PHASE = 5;
 
 // 批量采集默认预算：可配置且有限，未获用户确认前不做大规模真实采集。
 export const PGY_KOL_DEFAULT_TASK_BUDGETS = Object.freeze({
@@ -65,6 +66,8 @@ const LKG_PROVIDERS = [
   "kolTagsV2.contentTheme",
   "areas",
   "consumeBehavior",
+  "activities",
+  "contentTagTree",
 ];
 
 /**
@@ -144,13 +147,36 @@ export function createPgyKolService({
       batchRunner = createPgyKolBatchRunner({
         store: taskStore,
         search: searchClient,
-        buildPayload: (filterState, { pageNum, pageSize } = {}) => ({
-          ...BASE_PAYLOAD,
-          ...(filterState !== null && typeof filterState === "object" ? filterState : {}),
-          pageNum,
-          pageSize,
-          trackId: randomUUID(),
-        }),
+        buildPayload: (filterState, { pageNum, pageSize } = {}) => {
+          const state =
+            filterState !== null && typeof filterState === "object" ? filterState : {};
+          // Phase 5 纵深防御：分页 payload 直接展开持久化快照（避免二次序列化
+          // 双重前缀），但未实证字段仍然拒绝发送；trackId 优先使用任务快照中的
+          // 搜索上下文（batchStart 已 track），其次随机生成。
+          for (const key of Object.keys(state)) {
+            if (key === "searchType" || key === "keyword" || key === "trackId" || key === "brandUserId") {
+              continue;
+            }
+            const field = schema.getField(key);
+            if (!field) {
+              throw new Error(`[pgy-kol] 任务快照含未知字段: ${key}`);
+            }
+            if (field.payloadProven === false) {
+              throw new Error(
+                `[pgy-kol] 任务快照含未实证字段: ${key}（禁止发送）`,
+              );
+            }
+          }
+          return {
+            ...BASE_PAYLOAD,
+            ...state,
+            pageNum,
+            pageSize,
+            trackId: typeof state.trackId === "string" && state.trackId.length > 0
+              ? state.trackId
+              : randomUUID(),
+          };
+        },
         planSplit: (filterState) => planner.planSplit({ filterState }),
         analyzePageSequence: (options) => planner.analyzePageSequence(options),
         sessionProvider,
@@ -186,6 +212,11 @@ export function createPgyKolService({
 
   /**
    * 第一页搜索：规范化筛选状态 -> payload -> 搜索 -> 脱敏结果。
+   *
+   * Phase 5 官网契约（2026-08-06 页面最小流量捕获）：点击搜索先 POST
+   * /api/solar/cooperator/blogger/track（同一 payload），再以 track 返回的
+   * trackId 进入 /api/solar/cooperator/blogger/v2。track 未返回 trackId 时
+   * 回退随机 trackId，绝不伪造官网返回值。
    */
   async function searchFirstPage({
     filterState,
@@ -196,7 +227,7 @@ export function createPgyKolService({
   } = {}) {
     const payload = builder.build(filterState || {}, { pageNum, pageSize, trackId });
     const activeSession = session || (sessionProvider ? sessionProvider() : undefined);
-    return searchClient.searchPage({ payload, session: activeSession });
+    return searchClient.searchWithTrack({ payload, session: activeSession });
   }
 
   /**
@@ -208,10 +239,11 @@ export function createPgyKolService({
    *
    * @returns {Promise<{ source: "live"|"lkg", version: string, nodes: object[], warning?: string }>}
    */
-  async function loadConfig({ provider, section } = {}) {
+  async function loadConfig({ provider, section, keyword } = {}) {
     const result = await schema.loadOptions({
       provider,
       section,
+      ...(keyword === undefined ? {} : { keyword }),
       session: sessionProvider ? sessionProvider() : undefined,
     });
     const data = {
@@ -232,7 +264,14 @@ export function createPgyKolService({
    * @returns {{ payload: object, pageNum: number, pageSize: number, trackId: string }}
    */
   async function previewPayload({ filterState, pageNum, pageSize, trackId } = {}) {
-    const payload = builder.build(filterState || {}, { pageNum, pageSize, trackId });
+    // 预览允许未实证字段：仅展示序列化结果，绝不发起网络请求；
+    // 真实搜索/采集仍由 payloadProven 门控拒绝。
+    const payload = builder.build(filterState || {}, {
+      pageNum,
+      pageSize,
+      trackId,
+      allowUnproven: true,
+    });
     return {
       payload,
       pageNum: payload.pageNum,
@@ -263,9 +302,28 @@ export function createPgyKolService({
       // 消费行为树节点）走 builder 序列化；字符串/数字/字符串数组原样保留。
       // 快照值落盘前做值与路径脱敏（fresh reviewer M2）：已知字段的字符串值
       // 也可能携带本地路径或敏感形态文本，不得原样写入 task.json。
+      const isSpecialKey = key === "searchType" || key === "keyword" || key === "trackId";
       normalized[key] = sanitizeSnapshotValue(
-        containsNodeObject(state[key]) ? payload0[key] : state[key],
+        isSpecialKey
+          ? payload0[key]
+          : containsNodeObject(state[key])
+            ? payload0[key]
+            : state[key],
       );
+    }
+    // Phase 5：批量任务使用关键词搜索时，启动前先做一次 track，并把 trackId
+    // 写入持久化快照（随任务/叶子 filterState 保存，分页请求共用同一搜索上下文；
+    // 无关键词时不发 track，保持 Phase 4 基线流量不变）。
+    const hasKeyword =
+      typeof state.keyword === "string" && state.keyword.trim().length > 0;
+    if (hasKeyword) {
+      const tracked = await searchClient.trackSearch({
+        payload: payload0,
+        session: sessionProvider ? sessionProvider() : undefined,
+      });
+      if (typeof tracked.trackId === "string" && tracked.trackId.length > 0) {
+        normalized.trackId = sanitizeSnapshotValue(tracked.trackId);
+      }
     }
     const mergedBudgets = {
       ...PGY_KOL_DEFAULT_TASK_BUDGETS,
@@ -472,8 +530,10 @@ export function createPgyKolService({
   }
 
   function getColumns() {
-    // 契约：data 直接是列数组（UI 按 defaultDisplay 过滤默认选择）。
-    return listPgyKolConfirmedColumns();
+    // 契约：data 直接是完整列注册表（50 项：42 官网列 + 8 博主信息独立列），
+    // 含固定列/报价列/unavailable 列；UI 弹窗按 fixed/responsePath 分支渲染，
+    // 批量列校验仍走 listPgyKolConfirmedColumns（仅真实数据源列可导出）。
+    return PGY_KOL_COLUMN_REGISTRY;
   }
 
   /**

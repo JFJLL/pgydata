@@ -93,6 +93,7 @@ export function registerPgyKolIpc({ ipcMain, service, broadcast }) {
       const data = await service.loadConfig({
         provider: check.provider,
         ...(check.section === undefined ? {} : { section: check.section }),
+        ...(check.keyword === undefined ? {} : { keyword: check.keyword }),
       });
       return { ok: true, data };
     } catch (err) {

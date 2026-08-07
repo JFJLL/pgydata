@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 
 import {
   KOL_SEARCH_ENDPOINT,
+  KOL_TRACK_ENDPOINT,
   KNOWN_KOL_FIELDS,
   PgyKolSearchClient,
 } from "../../app-source/pgy-kol/pgy-kol-search-client.mjs";
@@ -276,4 +277,120 @@ test("KNOWN_KOL_FIELDS 白名单无重复项", () => {
     KNOWN_KOL_FIELDS.length,
     "展示白名单不得包含重复字段名",
   );
+});
+
+test("trackSearch 正确 POST：track 端点、同一 payload、referer", async () => {
+  const body = await loadFixture("track-response");
+  const payload = { pageNum: 1, pageSize: 20, trackId: "track-before" };
+  const { client, calls } = makeClient(() => body);
+
+  const result = await client.trackSearch({ payload });
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].url.endsWith(KOL_TRACK_ENDPOINT), "url 必须以 track 接口路径结尾");
+  assert.equal(calls[0].method, "POST");
+  assert.deepEqual(calls[0].body, payload, "track body 必须与 v2 payload 一致");
+  assert.equal(calls[0].referer, "https://pgy.xiaohongshu.com/solar/pre-trade/note/kol");
+  assert.equal(result.trackId, "track-20260806-abc123def456");
+  assert.equal(result.rawShape, "data-trackId");
+});
+
+test("trackSearch：data 字符串 / data.trackId / 缺失三种形状的 trackId 提取", async () => {
+  const { client } = makeClient(() => ({ code: 0, data: "track-string-1", msg: "" }));
+  const stringOut = await client.trackSearch({ payload: {} });
+  assert.equal(stringOut.trackId, "track-string-1");
+  assert.equal(stringOut.rawShape, "data-string");
+
+  const { client: client2 } = makeClient(() => ({ code: 0, data: { traceId: "trace-2" }, msg: "" }));
+  const traceOut = await client2.trackSearch({ payload: {} });
+  assert.equal(traceOut.trackId, "trace-2");
+  assert.equal(traceOut.rawShape, "data-traceId");
+
+  const { client: client3 } = makeClient(() => ({ code: 0, data: {}, msg: "" }));
+  const missingOut = await client3.trackSearch({ payload: {} });
+  assert.equal(missingOut.trackId, null);
+  assert.equal(missingOut.rawShape, "unknown");
+});
+
+test("trackSearch：code 902/461 分类为 auth-expired/risk-control", async () => {
+  for (const [code, kind] of [[902, "auth-expired"], [461, "risk-control"], [500, "api"]]) {
+    const { client } = makeClient(() => ({ code, data: null, msg: "err" }));
+    await assert.rejects(
+      client.trackSearch({ payload: {} }),
+      (err) => err.kind === kind && err.pgyCode === code,
+      `code ${code} 必须抛 ${kind}`,
+    );
+  }
+});
+
+test("searchWithTrack：track → v2，v2 使用 track 返回的 trackId", async () => {
+  const body = await loadFixture("search-first-page-normal");
+  const trackResponse = await loadFixture("track-response");
+  const calls = [];
+  const client = new PgyKolSearchClient({
+    request: {
+      requestJson: async (options) => {
+        calls.push(options);
+        return options.url.endsWith("/track") ? trackResponse : body;
+      },
+    },
+  });
+
+  const result = await client.searchWithTrack({
+    payload: { pageNum: 1, pageSize: 20, trackId: "orig-tid" },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].url.endsWith("/track"), true);
+  assert.equal(calls[1].url.endsWith(KOL_SEARCH_ENDPOINT), true);
+  const v2Body = calls[1].body;
+  assert.equal(v2Body.trackId, "track-20260806-abc123def456", "v2 必须携带 track 返回的 trackId");
+  assert.equal(result.total, 4820);
+  assert.equal(result.trackIdReturned, "track-20260806-abc123def456");
+  assert.equal(result.trackRawShape, "data-trackId");
+});
+
+test("searchWithTrack：track 无 trackId 时 v2 沿用 payload 自带 trackId，不伪造", async () => {
+  const body = await loadFixture("search-first-page-normal");
+  const calls = [];
+  const client = new PgyKolSearchClient({
+    request: {
+      requestJson: async (options) => {
+        calls.push(options);
+        return options.url.endsWith("/track")
+          ? { code: 0, data: {}, msg: "" }
+          : body;
+      },
+    },
+  });
+
+  const result = await client.searchWithTrack({
+    payload: { pageNum: 1, pageSize: 20, trackId: "orig-tid" },
+  });
+  assert.equal(result.trackIdReturned, null);
+  assert.equal(calls[1].body.trackId, "orig-tid");
+  assert.equal(result.total, 4820);
+});
+
+test("searchWithTrack：track 抛错时原样向上抛，绝不静默跳过", async () => {
+  const body = await loadFixture("search-first-page-normal");
+  const calls = [];
+  const client = new PgyKolSearchClient({
+    request: {
+      requestJson: async (options) => {
+        calls.push(options);
+        if (options.url.endsWith("/track")) {
+          const err = new Error("session gone");
+          err.kind = "auth-expired";
+          throw err;
+        }
+        return body;
+      },
+    },
+  });
+  await assert.rejects(
+    client.searchWithTrack({ payload: { pageNum: 1, pageSize: 20 } }),
+    (err) => err.kind === "auth-expired",
+  );
+  assert.equal(calls.length, 1, "track 失败后不得继续请求 v2");
 });

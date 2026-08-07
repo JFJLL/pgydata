@@ -50,7 +50,7 @@ async function tmpDir(t, prefix = "pgy-lkg-") {
 }
 
 test("SCHEMA_VERSION / PROVIDER_ENDPOINTS / KOL_TAGS_V2_SECTIONS 契约", () => {
-  assert.equal(SCHEMA_VERSION, "pgy-filter-schema/1.0.0");
+  assert.equal(SCHEMA_VERSION, "pgy-filter-schema/2.0.0");
   assert.equal(PROVIDER_ENDPOINTS.kolTagsV2, "/api/solar/kol/get_select_kol_tags_config_v2");
   assert.equal(PROVIDER_ENDPOINTS.areas, "/api/solar/area/get_areas?type=2");
   assert.equal(PROVIDER_ENDPOINTS.contentTagTree, "/api/solar/cooperator/content/tag_tree");
@@ -495,13 +495,129 @@ test("loadOptions：手写合法 LKG fixture 文件可直接回退", async (t) =
 test("loadOptions：未知 provider → not-implemented；未知 section → 明确失败", async () => {
   const schema = makeSchema();
   await assert.rejects(
-    schema.loadOptions({ provider: "brandSearch" }),
+    schema.loadOptions({ provider: "bogus" }),
     (err) => err instanceof PgySchemaError && err.kind === "not-implemented",
   );
   await assert.rejects(
     schema.loadOptions({ provider: "kolTagsV2", section: "bogus" }),
     (err) => err instanceof PgySchemaError,
   );
+});
+
+test("loadOptions：activities 动态加载并规范化活动节点（官网热门活动）", async (t) => {
+  const fixture = await loadFixture("activities-list.json");
+  const baseDir = await tmpDir(t);
+  const lkgStore = createJsonLkgStore({ baseDir });
+  const schema = new PgyFilterSchema({ request: makeRequest(() => fixture), lkgStore });
+  const result = await schema.loadOptions({ provider: "activities" });
+  assert.equal(result.source, "live");
+  assert.ok(Array.isArray(result.nodes) && result.nodes.length >= 4);
+  const first = result.nodes[0];
+  assert.equal(first.payloadField, "activityCodes");
+  assert.equal(first.value, "ACT_MOM_NEW_FACE");
+  assert.equal(first.label, "母婴新面孔博主团");
+  assert.equal(first.uniqueKey, "activityCodes:ACT_MOM_NEW_FACE:母婴新面孔博主团");
+  // LKG 快照独立保存。
+  const snapshot = await lkgStore.load("activities");
+  assert.ok(snapshot && snapshot.version === SCHEMA_VERSION);
+
+  // 断网回退 LKG。
+  const failing = new PgyFilterSchema({
+    request: makeRequest(() => {
+      throw new Error("network down");
+    }),
+    lkgStore,
+  });
+  const fallback = await failing.loadOptions({ provider: "activities" });
+  assert.equal(fallback.source, "lkg");
+  assert.equal(fallback.nodes[0].value, "ACT_MOM_NEW_FACE");
+});
+
+test("loadOptions：activities 容忍 data.list / data.activities 形状", async () => {
+  for (const body of [
+    { code: 0, data: { list: [{ activityCode: "A1", name: "活动一" }] }, msg: "" },
+    { code: 0, data: { activities: [{ code: "A2", name: "活动二" }] }, msg: "" },
+  ]) {
+    const schema = makeSchema(makeRequest(() => body));
+    const result = await schema.loadOptions({ provider: "activities" });
+    if (body.data.list) {
+      assert.equal(result.nodes[0].value, "A1");
+    } else if (body.data.activities) {
+      assert.equal(result.nodes[0].value, "A2");
+    }
+  }
+  // 无法识别的形状必须失败（fail-closed），不得猜测节点。
+  const bogus = makeSchema(makeRequest(() => ({ code: 0, data: { bogus: [] }, msg: "" })));
+  await assert.rejects(
+    bogus.loadOptions({ provider: "activities" }),
+    (err) => err instanceof PgySchemaError && err.kind === "unknown-structure",
+  );
+});
+
+test("loadOptions：brandSearch 必须提供 keyword；提供后按品牌节点规范化", async (t) => {
+  const fixture = await loadFixture("brand-search.json");
+  const baseDir = await tmpDir(t);
+  const lkgStore = createJsonLkgStore({ baseDir });
+  const schema = new PgyFilterSchema({ request: makeRequest(() => fixture), lkgStore });
+
+  await assert.rejects(
+    schema.loadOptions({ provider: "brandSearch" }),
+    (err) => err instanceof PgySchemaError && err.kind === "invalid-input",
+  );
+  await assert.rejects(
+    schema.loadOptions({ provider: "brandSearch", keyword: "   " }),
+    (err) => err instanceof PgySchemaError && err.kind === "invalid-input",
+  );
+
+  const result = await schema.loadOptions({ provider: "brandSearch", keyword: "测试" });
+  assert.equal(result.source, "live");
+  assert.equal(result.nodes[0].payloadField, "tradeReportBrandIdSet");
+  assert.equal(result.nodes[0].value, "brand_5b320b4f11be107b8d55891e");
+  assert.equal(result.nodes[0].label, "测试品牌甲");
+});
+
+test("loadOptions：brandSearch LKG 快照键使用 keyword 哈希（关键词不进文件名）", async (t) => {
+  const fixture = await loadFixture("brand-search.json");
+  const baseDir = await tmpDir(t);
+  const lkgStore = createJsonLkgStore({ baseDir });
+  const schema = new PgyFilterSchema({ request: makeRequest(() => fixture), lkgStore });
+  await schema.loadOptions({ provider: "brandSearch", keyword: "美妆" });
+  const files = await fs.readdir(baseDir);
+  assert.equal(files.length, 1);
+  assert.match(files[0], /^lkg-brandSearch\.[0-9a-f]{16}\.json$/, "快照文件名必须使用哈希键");
+  assert.ok(!files[0].includes("美妆"), "关键词不得进入快照文件名");
+});
+
+test("loadOptions：activities/brandSearch 元素缺标识键 → fail-closed（unknown-structure）", async () => {
+  const badActivities = makeSchema(makeRequest(() => ({
+    code: 0,
+    data: [{ displayName: "没有任何标识键的活动" }],
+    msg: "",
+  })));
+  await assert.rejects(
+    badActivities.loadOptions({ provider: "activities" }),
+    (err) => err instanceof PgySchemaError && err.kind === "unknown-structure",
+  );
+  const badBrands = makeSchema(makeRequest(() => ({
+    code: 0,
+    data: [{ brandName: "没有 id 的品牌" }],
+    msg: "",
+  })));
+  await assert.rejects(
+    badBrands.loadOptions({ provider: "brandSearch", keyword: "测试" }),
+    (err) => err instanceof PgySchemaError && err.kind === "unknown-structure",
+  );
+});
+
+test("loadOptions：contentTagTree 规范化博主类目标签（取值语义未实证，仅 UI 选项）", async () => {
+  const fixture = await loadFixture("content-tag-tree.json");
+  const schema = makeSchema(makeRequest(() => fixture));
+  const result = await schema.loadOptions({ provider: "contentTagTree" });
+  assert.equal(result.source, "live");
+  assert.ok(result.nodes.length >= 5);
+  assert.equal(result.nodes[0].payloadField, "contentTag");
+  assert.equal(result.nodes[0].value, "美妆");
+  assert.equal(result.nodes[0].label, "美妆");
 });
 
 test("createJsonLkgStore：save→load 往返、缺失/损坏返回 null、remove、目录自动创建", async (t) => {
@@ -574,6 +690,31 @@ test("FIELD_REGISTRY：包含全部必需字段且语义正确", () => {
     "top20CrowdsLabel",
     "contentThemeLabel",
     "kolInfoConsumBehaviorLabel",
+    "contentTag",
+    "coopCredit",
+    "propagationScale",
+    "estimateReadCost",
+    "estimateInteractCost",
+    "overflowCost",
+    "liveCount30d",
+    "avgLiveViewer",
+    "avgLiveGmv",
+    "noteCategory",
+    "inStar",
+    "newHighQuality",
+    "filterIntention",
+    "isIndustryRecommend",
+    "excludeLowActive",
+    "fansNumUp",
+    "excludedTradeReportBrand",
+    "excludedTradeInviteReportBrand",
+    "tradeType",
+    "excludedTradeReportBrandId",
+    "estimateCpuv30d",
+    "estimateCpuv30dLower",
+    "estimateCpuv30dUpper",
+    "firstIndustry",
+    "secondIndustry",
   ];
   const byName = new Map(FIELD_REGISTRY.map((field) => [field.payloadField, field]));
   assert.equal(FIELD_REGISTRY.length, requiredFields.length);
@@ -608,6 +749,16 @@ test("FIELD_REGISTRY：包含全部必需字段且语义正确", () => {
     "top20CrowdsLabel",
     "contentThemeLabel",
     "kolInfoConsumBehaviorLabel",
+    "contentTag",
+    "propagationScale",
+    "overflowCost",
+    "liveCount30d",
+    "avgLiveViewer",
+    "avgLiveGmv",
+    "noteCategory",
+    "estimateCpuv30d",
+    "firstIndustry",
+    "secondIndustry",
   ];
   for (const name of multiFields) {
     assert.equal(byName.get(name).multiSelect, "multi", name);
@@ -663,6 +814,56 @@ test("FIELD_REGISTRY：包含全部必需字段且语义正确", () => {
   assert.equal(byName.get("fansAge").defaultValue, 0);
   assert.deepEqual(byName.get("personalTags").defaultValue, []);
   assert.deepEqual(byName.get("industrySpecificCrowdsMotorDom").defaultValue, []);
+});
+
+test("Phase 5：payloadProven 门控——未实证字段禁止发送，已实证字段放行", () => {
+  const byName = new Map(FIELD_REGISTRY.map((field) => [field.payloadField, field]));
+  const unproven = [
+    "audienceGroup",
+    "firstIndustry",
+    "secondIndustry",
+    "contentTag",
+    "coopCredit",
+    "propagationScale",
+    "estimateReadCost",
+    "estimateInteractCost",
+    "overflowCost",
+    "liveCount30d",
+    "avgLiveViewer",
+    "avgLiveGmv",
+    "noteCategory",
+    "inStar",
+    "newHighQuality",
+    "filterIntention",
+    "isIndustryRecommend",
+    "estimateCpuv30dLower",
+    "estimateCpuv30dUpper",
+  ];
+  for (const name of unproven) {
+    const field = byName.get(name);
+    assert.ok(field, `缺少字段 ${name}`);
+    assert.equal(field.payloadProven, false, `${name} 必须未实证`);
+    assert.equal(field.evidence, "pending-live-verification", `${name} 证据必须标记待实证`);
+  }
+  // 常规剔除与官网 BASE_PAYLOAD 既有字段已实证。
+  for (const name of [
+    "excludeLowActive",
+    "fansNumUp",
+    "excludedTradeReportBrand",
+    "excludedTradeInviteReportBrand",
+    "tradeType",
+    "excludedTradeReportBrandId",
+    "estimateCpuv30d",
+    "gender",
+    "location",
+  ]) {
+    assert.equal(byName.get(name).payloadProven, true, `${name} 必须已实证`);
+  }
+  // 每个注册项都有 payloadProven 与 evidence 字段。
+  for (const field of FIELD_REGISTRY) {
+    assert.ok(Object.hasOwn(field, "payloadProven"), `${field.payloadField}.payloadProven`);
+    assert.ok(Object.hasOwn(field, "evidence"), `${field.payloadField}.evidence`);
+  }
 });
 
 test("PgyFilterSchema.getField 返回注册表项或 undefined", () => {

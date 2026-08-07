@@ -12,7 +12,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { PgySessionRequest } from "./pgy-session-request.mjs";
 
 /**
@@ -39,7 +39,7 @@ try {
   // 保持默认源，不影响本模块的纯函数能力。
 }
 
-export const SCHEMA_VERSION = "pgy-filter-schema/1.0.0";
+export const SCHEMA_VERSION = "pgy-filter-schema/2.0.0";
 
 export const PROVIDER_ENDPOINTS = Object.freeze({
   kolTagsV2: "/api/solar/kol/get_select_kol_tags_config_v2",
@@ -65,6 +65,15 @@ function freezeRegistryEntry(entry) {
   if (entry.optionProvider !== undefined) {
     entry.optionProvider = Object.freeze({ ...entry.optionProvider });
   }
+  // Phase 5：payloadProven 表示「字段名 + 取值语义已经官网真实流量实证」。
+  // 未实证字段不允许进入真实搜索/采集 payload（preview 例外，见 payload builder），
+  // 待最小流量验收逐项翻转并补充 fixture 后自动启用。
+  if (entry.payloadProven === undefined) {
+    entry.payloadProven = true;
+  }
+  if (entry.evidence === undefined) {
+    entry.evidence = "phase2-base-payload";
+  }
   return Object.freeze(entry);
 }
 
@@ -78,7 +87,8 @@ function freezeRegistryEntry(entry) {
  */
 export const FIELD_REGISTRY = Object.freeze([
   freezeRegistryEntry({ payloadField: "marketTarget", label: "投放目标", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: null }),
-  freezeRegistryEntry({ payloadField: "audienceGroup", label: "人群分组", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [] }),
+  // fresh reviewer M1：audienceGroup 取值语义（品牌依赖人群包）未实证，禁止发送。
+  freezeRegistryEntry({ payloadField: "audienceGroup", label: "人群分组", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [], payloadProven: false, evidence: "pending-live-verification" }),
   freezeRegistryEntry({ payloadField: "personalTags", label: "个人标签", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [] }),
   freezeRegistryEntry({ payloadField: "gender", label: "性别", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: null }),
   freezeRegistryEntry({ payloadField: "location", label: "博主地域", controlType: "tree-single", multiSelect: "single", exclusive: "candidate", serializer: "path-trim", defaultValue: null, optionProvider: { provider: "areas" } }),
@@ -113,6 +123,36 @@ export const FIELD_REGISTRY = Object.freeze([
   freezeRegistryEntry({ payloadField: "top20CrowdsLabel", label: "二十大人群", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "top20-transform", defaultValue: [], optionProvider: { provider: "kolTagsV2", section: "audience20" } }),
   freezeRegistryEntry({ payloadField: "contentThemeLabel", label: "内容题材", controlType: "tree-multi", multiSelect: "multi", exclusive: false, serializer: "path-space", defaultValue: [], optionProvider: { provider: "kolTagsV2", section: "contentTheme" } }),
   freezeRegistryEntry({ payloadField: "kolInfoConsumBehaviorLabel", label: "预估消费行为", controlType: "tree-multi", multiSelect: "multi", exclusive: false, serializer: "path-or-label", defaultValue: [], optionProvider: { provider: "consumeBehavior" } }),
+  // ===== Phase 5 新增筛选（官网笔记博主广场完整矩阵）=====
+  // 字段名来自官网 BASE_PAYLOAD / 真实响应字段；payloadProven=false 的字段
+  // 表示取值语义尚未最小流量实证，真实搜索/采集前必须完成定点验收。
+  freezeRegistryEntry({ payloadField: "contentTag", label: "博主类目", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [], payloadProven: false, evidence: "pending-live-verification", optionProvider: { provider: "contentTagTree" } }),
+  freezeRegistryEntry({ payloadField: "coopCredit", label: "合作信用度", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: 0, payloadProven: false, evidence: "pending-live-verification" }),
+  freezeRegistryEntry({ payloadField: "propagationScale", label: "传播规模", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [], payloadProven: false, evidence: "pending-live-verification" }),
+  freezeRegistryEntry({ payloadField: "estimateReadCost", label: "预估阅读单价", controlType: "range", multiSelect: "single", exclusive: false, serializer: "passthrough", defaultValue: [], payloadProven: false, evidence: "pending-live-verification", reason: "lossy" }),
+  freezeRegistryEntry({ payloadField: "estimateInteractCost", label: "预估互动单价", controlType: "range", multiSelect: "single", exclusive: false, serializer: "passthrough", defaultValue: [], payloadProven: false, evidence: "pending-live-verification", reason: "lossy" }),
+  freezeRegistryEntry({ payloadField: "overflowCost", label: "外溢进店单价", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [], payloadProven: false, evidence: "pending-live-verification" }),
+  freezeRegistryEntry({ payloadField: "liveCount30d", label: "近30天直播场次", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [], payloadProven: false, evidence: "pending-live-verification" }),
+  freezeRegistryEntry({ payloadField: "avgLiveViewer", label: "场均观播人数", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [], payloadProven: false, evidence: "pending-live-verification" }),
+  freezeRegistryEntry({ payloadField: "avgLiveGmv", label: "场均销售额", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [], payloadProven: false, evidence: "pending-live-verification" }),
+  freezeRegistryEntry({ payloadField: "noteCategory", label: "笔记类目", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [], payloadProven: false, evidence: "pending-live-verification" }),
+  freezeRegistryEntry({ payloadField: "inStar", label: "明星", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: 0, payloadProven: false, evidence: "pending-live-verification" }),
+  freezeRegistryEntry({ payloadField: "newHighQuality", label: "优质博主", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: 0, payloadProven: false, evidence: "pending-live-verification" }),
+  freezeRegistryEntry({ payloadField: "filterIntention", label: "意向行业匹配", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: false, payloadProven: false, evidence: "pending-live-verification" }),
+  freezeRegistryEntry({ payloadField: "isIndustryRecommend", label: "行业推荐博主", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: 0, payloadProven: false, evidence: "pending-live-verification" }),
+  // 常规剔除（字段名已在官网 BASE_PAYLOAD 实证，布尔语义明确）。
+  freezeRegistryEntry({ payloadField: "excludeLowActive", label: "剔除低活博主", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: false, payloadProven: true, evidence: "phase2-base-payload" }),
+  freezeRegistryEntry({ payloadField: "fansNumUp", label: "剔除掉粉博主", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: 0, payloadProven: true, evidence: "phase2-base-payload" }),
+  freezeRegistryEntry({ payloadField: "excludedTradeReportBrand", label: "剔除已合作博主", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: false, payloadProven: true, evidence: "phase2-base-payload" }),
+  freezeRegistryEntry({ payloadField: "excludedTradeInviteReportBrand", label: "剔除已邀约博主", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: false, payloadProven: true, evidence: "phase2-base-payload" }),
+  freezeRegistryEntry({ payloadField: "tradeType", label: "合作类型", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: "不限", payloadProven: true, evidence: "phase2-base-payload" }),
+  freezeRegistryEntry({ payloadField: "excludedTradeReportBrandId", label: "合作品牌剔除ID", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: false, payloadProven: true, evidence: "phase2-base-payload" }),
+  freezeRegistryEntry({ payloadField: "estimateCpuv30d", label: "预估CPM", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [], payloadProven: true, evidence: "phase2-base-payload" }),
+  freezeRegistryEntry({ payloadField: "estimateCpuv30dLower", label: "预估CPM下限", controlType: "range", multiSelect: "single", exclusive: false, serializer: "passthrough", defaultValue: -1, payloadProven: false, evidence: "pending-live-verification", reason: "lossy" }),
+  freezeRegistryEntry({ payloadField: "estimateCpuv30dUpper", label: "预估CPM上限", controlType: "range", multiSelect: "single", exclusive: false, serializer: "passthrough", defaultValue: -1, payloadProven: false, evidence: "pending-live-verification", reason: "lossy" }),
+  // fresh reviewer M2：近期合作行业取值语义（行业 ID vs 中文标签）未实证，禁止发送。
+  freezeRegistryEntry({ payloadField: "firstIndustry", label: "近期合作一级行业", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: "", payloadProven: false, evidence: "pending-live-verification" }),
+  freezeRegistryEntry({ payloadField: "secondIndustry", label: "近期合作二级行业", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: "", payloadProven: false, evidence: "pending-live-verification" }),
 ]);
 
 const SCHEMA_ERROR_KINDS = new Set([
@@ -122,6 +162,7 @@ const SCHEMA_ERROR_KINDS = new Set([
   "serializer",
   "unknown-field",
   "not-implemented",
+  "invalid-input",
 ]);
 
 export class PgySchemaError extends Error {
@@ -373,6 +414,54 @@ export class PgyFilterSchema {
         });
         break;
       }
+      case "activities":
+      case "brandSearch": {
+        // 容忍式形状：data 为数组，或 data.list/data.activities/data.brands 为数组。
+        if (Array.isArray(data)) {
+          data.forEach((element, index) => {
+            if (element === null || typeof element !== "object" || Array.isArray(element)) {
+              errors.push(`raw.data[${index}] 期望对象`);
+              return;
+            }
+            // fresh reviewer M4：元素必须携带可识别标识键，缺键视为结构异常
+            // （走 LKG/报错），禁止用序号伪造 value。
+            const hasKey =
+              provider === "activities"
+                ? ["activityCode", "code", "value", "name"].some((key) => element[key] !== undefined && element[key] !== null && String(element[key]).trim() !== "")
+                : ["brandUserId", "brandId", "userId", "id", "name"].some((key) => element[key] !== undefined && element[key] !== null && String(element[key]).trim() !== "");
+            if (!hasKey) {
+              errors.push(`raw.data[${index}] 缺少可识别标识键`);
+            }
+          });
+          break;
+        }
+        if (typeof data !== "object" || Array.isArray(data)) {
+          errors.push("raw.data 期望数组或对象");
+          break;
+        }
+        const list =
+          (Array.isArray(data.list) ? data.list : null) ??
+          (Array.isArray(data.activities) ? data.activities : null) ??
+          (Array.isArray(data.brands) ? data.brands : null);
+        if (!Array.isArray(list)) {
+          errors.push("raw.data.list/activities/brands 期望数组");
+          break;
+        }
+        list.forEach((element, index) => {
+          if (element === null || typeof element !== "object" || Array.isArray(element)) {
+            errors.push(`raw.data 列表[${index}] 期望对象`);
+            return;
+          }
+          const hasKey =
+            provider === "activities"
+              ? ["activityCode", "code", "value", "name"].some((key) => element[key] !== undefined && element[key] !== null && String(element[key]).trim() !== "")
+              : ["brandUserId", "brandId", "userId", "id", "name"].some((key) => element[key] !== undefined && element[key] !== null && String(element[key]).trim() !== "");
+          if (!hasKey) {
+            errors.push(`raw.data 列表[${index}] 缺少可识别标识键`);
+          }
+        });
+        break;
+      }
       case "areas": {
         // 线上真实形状（2026-08-05 真实响应实证）：data 是对象，根键 list 为数组（国家/省/市/区树）。
         if (typeof data !== "object" || Array.isArray(data)) {
@@ -518,7 +607,7 @@ export class PgyFilterSchema {
    * @param {{ provider: string, section?: string, session?: unknown, timeoutMs?: number }} options
    * @returns {Promise<{ source: "live" | "lkg", version: string, nodes: object[], warning?: string }>}
    */
-  async loadOptions({ provider, section, session, timeoutMs } = {}) {
+  async loadOptions({ provider, section, keyword, session, timeoutMs } = {}) {
     switch (provider) {
       case "kolTagsV2": {
         const payloadField = KOL_TAGS_V2_SECTIONS[section];
@@ -580,6 +669,143 @@ export class PgyFilterSchema {
                 labelKey: "name",
               }),
             );
+          },
+        });
+      case "activities":
+        // 热门活动（官网 /api/solar/cooperator/get_all_activities）。响应形状
+        // 未入库，采用容忍式规范化：data 为数组，或 data.list/data.activities
+        // 为数组；节点 value 取活动 code（activityCode/code/value/name 依次回退），
+        // label 取活动名称（name/title/activityName/label 依次回退）。
+        return this._loadWithFallback({
+          provider,
+          lkgKey: "activities",
+          url: `${PGY_ORIGIN}${PROVIDER_ENDPOINTS.activities}`,
+          session,
+          timeoutMs,
+          validate: (raw) => this.validateConfigStructure(raw, "activities"),
+          normalize: (raw) => {
+            const list = Array.isArray(raw.data)
+              ? raw.data
+              : Array.isArray(raw.data?.list)
+                ? raw.data.list
+                : Array.isArray(raw.data?.activities)
+                  ? raw.data.activities
+                  : [];
+            return list.map((item) => {
+              // fresh reviewer M4：元素缺少全部候选键时视为结构异常（fail-closed），
+              // 禁止用序号伪造 value 发送到官网。
+              const value =
+                item?.activityCode ??
+                item?.code ??
+                item?.value ??
+                item?.name;
+              if (value === undefined || value === null || String(value).trim() === "") {
+                throw new PgySchemaError(
+                  "[pgy-filter-schema] activities 元素缺少活动标识，拒绝伪造值",
+                  { kind: "unknown-structure" },
+                );
+              }
+              const label =
+                item?.name ??
+                item?.title ??
+                item?.activityName ??
+                item?.label ??
+                String(value);
+              return {
+                provider: "activities",
+                payloadField: "activityCodes",
+                value: String(value),
+                label: String(label),
+                fullPath: String(label),
+                path: String(label),
+                children: [],
+                disabled: Boolean(item?.disabled),
+                rawVersion: item,
+                uniqueKey: `activityCodes:${String(value)}:${String(label)}`,
+              };
+            });
+          },
+        });
+      case "brandSearch": {
+        const searchKeyword = typeof keyword === "string" && keyword.trim().length > 0 ? keyword.trim() : null;
+        if (!searchKeyword) {
+          throw new PgySchemaError(
+            "[pgy-filter-schema] brandSearch 必须提供 keyword",
+            { kind: "invalid-input" },
+          );
+        }
+        const url = `${PGY_ORIGIN}${PROVIDER_ENDPOINTS.brandSearch}?keyword=${encodeURIComponent(searchKeyword)}`;
+        // fresh reviewer H1/L1：LKG 快照键使用 keyword 的不可逆哈希，
+        // 关键词绝不进入文件名，也不出现在回退 warning 中。
+        const keywordHash = createHash("sha256").update(searchKeyword).digest("hex").slice(0, 16);
+        return this._loadWithFallback({
+          provider,
+          lkgKey: `brandSearch.${keywordHash}`,
+          url,
+          session,
+          timeoutMs,
+          validate: (raw) => this.validateConfigStructure(raw, "brandSearch"),
+          normalize: (raw) => {
+            const list = Array.isArray(raw.data)
+              ? raw.data
+              : Array.isArray(raw.data?.list)
+                ? raw.data.list
+                : Array.isArray(raw.data?.brands)
+                  ? raw.data.brands
+                  : [];
+            return list.map((item) => {
+              const value =
+                item?.brandUserId ??
+                item?.brandId ??
+                item?.userId ??
+                item?.id;
+              if (value === undefined || value === null || String(value).trim() === "") {
+                throw new PgySchemaError(
+                  "[pgy-filter-schema] brandSearch 元素缺少品牌标识，拒绝伪造值",
+                  { kind: "unknown-structure" },
+                );
+              }
+              const label =
+                item?.brandName ??
+                item?.name ??
+                item?.title ??
+                String(value);
+              return {
+                provider: "brandSearch",
+                payloadField: "tradeReportBrandIdSet",
+                value: String(value),
+                label: String(label),
+                fullPath: String(label),
+                path: String(label),
+                children: [],
+                disabled: Boolean(item?.disabled),
+                rawVersion: item,
+                uniqueKey: `tradeReportBrandIdSet:${String(value)}:${String(label)}`,
+              };
+            });
+          },
+        });
+      }
+      case "contentTagTree":
+        // 博主类目标签树（官网 /api/solar/cooperator/content/tag_tree）。
+        // 取值语义未实证：只供 UI 展示选项，payload 发送仍受 payloadProven 门控。
+        return this._loadWithFallback({
+          provider,
+          lkgKey: "contentTagTree",
+          url: `${PGY_ORIGIN}${PROVIDER_ENDPOINTS.contentTagTree}`,
+          session,
+          timeoutMs,
+          validate: (raw) => this.validateConfigStructure(raw, "contentTagTree"),
+          normalize: (raw) => {
+            const list = Array.isArray(raw.data) ? raw.data : Array.isArray(raw.data?.list) ? raw.data.list : [];
+            return this.normalizeOptionTree({
+              rawNodes: list,
+              payloadField: "contentTag",
+              provider: "contentTagTree",
+              valueKey: "taxonomy1Tag",
+              labelKey: "taxonomy1Tag",
+              childrenKey: "children",
+            });
           },
         });
       default:

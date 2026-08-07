@@ -29,17 +29,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-test("列注册表：confirmed 集合只包含真实证据支持的字段，全部落在 KNOWN_KOL_FIELDS 白名单内", () => {
+test("列注册表（Phase 5）：confirmed=可展示列，全部落在 KNOWN_KOL_FIELDS 白名单内", () => {
   const confirmed = listPgyKolConfirmedColumns();
-  assert.ok(confirmed.length >= 10, "confirmed 列数量不能少于 UI 卡片实证的 10 个字段");
+  assert.ok(confirmed.length >= 30, "confirmed（可展示）列数量必须覆盖真实响应字段");
   for (const column of confirmed) {
     assert.ok(KNOWN_KOL_FIELDS.includes(column.id), `列 ${column.id} 必须在 KNOWN_KOL_FIELDS 白名单内`);
     assert.equal(typeof column.label, "string");
     assert.ok(column.label.length > 0);
     assert.equal(typeof column.group, "string");
-    assert.ok(["string", "number", "array", "url"].includes(column.type));
-    assert.equal(typeof column.confirmed, "boolean");
-    assert.equal(column.confirmed, true);
+    assert.ok(["string", "number", "percent", "money", "url"].includes(column.type));
+    assert.ok(column.responsePath !== null && typeof column.responsePath === "string");
+    assert.ok(!column.responsePath.startsWith("computed:"), "可展示列不得是 computed");
     assert.equal(typeof column.defaultDisplay, "boolean");
     assert.equal(typeof column.defaultExport, "boolean");
     assert.equal(typeof column.evidence, "string");
@@ -47,24 +47,36 @@ test("列注册表：confirmed 集合只包含真实证据支持的字段，全�
   // 每个注册表条目都有稳定 id 且无重复。
   const ids = PGY_KOL_COLUMN_REGISTRY.map((column) => column.id);
   assert.equal(new Set(ids).size, ids.length, "注册表 id 不得重复");
-  // 未确认字段仍登记在注册表里（可审计），但不得出现在 confirmed 列表。
-  const unconfirmed = PGY_KOL_COLUMN_REGISTRY.filter((column) => column.confirmed === false);
-  assert.ok(unconfirmed.length > 0, "注册表必须保留未确认字段的隔离记录");
-  for (const column of unconfirmed) {
+  // 固定列/报价列/unavailable 列仍登记在注册表里（可审计），但不得出现在 confirmed 列表。
+  const notDisplayable = PGY_KOL_COLUMN_REGISTRY.filter((column) => {
+    return (
+      column.responsePath === null ||
+      (typeof column.responsePath === "string" && column.responsePath.startsWith("computed:")) ||
+      column.evidence === "unavailable"
+    );
+  });
+  assert.ok(notDisplayable.length > 0, "注册表必须保留固定列/报价列/unavailable 列");
+  for (const column of notDisplayable) {
     assert.ok(!listPgyKolConfirmedColumns().some((item) => item.id === column.id));
   }
-  // 默认列契约：默认展示列必须可导出。
-  for (const column of getPgyKolDefaultColumns()) {
-    assert.ok(column.defaultExport || column.defaultDisplay, "默认列必须至少默认展示或默认导出");
-  }
+  // Phase 5 默认展示 = 官网当前账号默认 8 项（含固定列/全部报价）。
+  assert.deepEqual(
+    getPgyKolDefaultColumns().map((column) => column.id),
+    ["kolInfo", "recentNotes", "actions", "price", "fansNum", "readMidNor30", "interMidNor30", "fansActiveIn28dLv"],
+  );
 });
 
-test("列注册表：userId 恒为默认展示+默认导出，未知 id 拒绝", () => {
+test("列注册表（Phase 5）：userId 可导出但不再默认展示（博主信息复合列替代），未知 id 拒绝", () => {
   const userId = getPgyKolColumn("userId");
   assert.ok(userId, "userId 列必须存在");
-  assert.equal(userId.confirmed, true);
-  assert.equal(userId.defaultDisplay, true);
+  assert.equal(userId.responsePath, "userId");
+  assert.equal(userId.defaultDisplay, false, "userId 由固定列 博主信息(kolInfo) 复合展示");
   assert.equal(userId.defaultExport, true);
+  const kolInfo = getPgyKolColumn("kolInfo");
+  assert.ok(kolInfo && kolInfo.fixed === true, "博主信息固定列必须存在");
+  assert.equal(kolInfo.defaultDisplay, true);
+  // 固定列不可导出。
+  assert.throws(() => getPgyKolExportHeaders(["kolInfo"]), /不可导出|未知列|未知字段|unknown/i);
   assert.equal(getPgyKolColumn("not-a-real-field"), undefined);
   // 导出表头：只接受 confirmed 列，顺序即用户选择顺序。
   const headers = getPgyKolExportHeaders(["nickname", "userId"]);

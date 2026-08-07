@@ -57,6 +57,12 @@
       "addLanes": ["integration", "data", "agent-review"]
     },
     {
+      "id": "pgy-kol-modules",
+      "risk": "R3",
+      "patterns": ["^app-source/pgy-kol/"],
+      "addLanes": ["integration", "agent-review"]
+    },
+    {
       "id": "critical-user-journey",
       "risk": "R3",
       "patterns": ["(auth|permission|tenant|credit|billing|payment|cookie|session)"],

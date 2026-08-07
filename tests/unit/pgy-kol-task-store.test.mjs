@@ -80,6 +80,42 @@ test("createTask 落盘、getTask 往返、listTasks 按 updatedAt 降序、重�
   assert.deepEqual(entries, ["pgykol-store-1", "pgykol-store-2"]);
 });
 
+test("Phase 5：搜索上下文（searchType/keyword/trackId）随任务快照与叶子持久化、重启恢复不丢", async (t) => {
+  const ctx = await fixture();
+  t.after(ctx.cleanup);
+  const searchState = {
+    searchType: 1,
+    keyword: "口红测评",
+    trackId: "track-20260806-persisted",
+    gender: "女",
+  };
+  const created = await ctx.store.createTask({
+    taskId: "pgykol-store-search",
+    filterState: searchState,
+    columns: ["userId"],
+    pageSize: 20,
+    budgets: {},
+  });
+  assert.deepEqual(created.filterState, searchState, "创建时快照必须完整保留搜索上下文");
+
+  // 叶子 filterState 携带搜索上下文（分页请求共用）。
+  await ctx.store.addLeaf("pgykol-store-search", {
+    leafId: "L0",
+    filterState: { ...searchState },
+  });
+  const resumed = await ctx.store.getResumeState("pgykol-store-search");
+  assert.equal(resumed.filterState.searchType, 1);
+  assert.equal(resumed.filterState.keyword, "口红测评");
+  assert.equal(resumed.filterState.trackId, "track-20260806-persisted");
+  assert.equal(resumed.leaves[0].filterState.keyword, "口红测评");
+
+  // 重启（新 store 实例）后搜索上下文仍完整。
+  const fresh = new PgyKolTaskStore({ baseDir: ctx.root });
+  await fresh.initialize();
+  const task = await fresh.getTask("pgykol-store-search");
+  assert.deepEqual(task.filterState, searchState, "重启后搜索上下文不得丢失");
+});
+
 test("appendPageRows 页块协议与 commitPage 提交顺序", async (t) => {
   const ctx = await fixture();
   t.after(ctx.cleanup);

@@ -9,6 +9,7 @@ import {
   registerPgyKolIpc,
   PGY_KOL_IPC_CHANNELS,
 } from "../../app-source/pgy-kol/pgy-kol-service.mjs";
+import { SCHEMA_VERSION } from "../../app-source/pgy-kol/pgy-filter-schema.mjs";
 import { PgyPayloadError } from "../../app-source/pgy-kol/pgy-payload-builder.mjs";
 
 function createFakeIpcMain() {
@@ -93,14 +94,14 @@ test("status channel reports the base module and schema version", async (t) => {
     const status = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.status)();
     assert.equal(status.ok, true);
     assert.equal(status.data.module, "pgy-kol");
-    assert.equal(status.data.phase, 4);
+    assert.equal(status.data.phase, 5);
     assert.equal(typeof status.data.schemaVersion, "string");
   } finally {
     disposeIpc();
   }
 });
 
-test("search-first-page POSTs a built payload over the shared session with signing and headers", async (t) => {
+test("search-first-page 走官网点击搜索链路：track 先行 → trackId 进入 v2（同一 payload、同一会话/签名）", async (t) => {
   const { ipcMain, calls, fakeSession, disposeIpc } = createHarness({ t, transportImpl: async () => cappedSearchResponse });
   try {
     const result = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.searchFirstPage)({}, { gender: "男", location: [{ path: " 广东 " }] });
@@ -110,21 +111,109 @@ test("search-first-page POSTs a built payload over the shared session with signi
     assert.equal(result.data.capSignal.exactTotalNotProven, true);
     assert.ok(result.data.quarantinedFields.includes("unknownFieldA"), "unknown response fields must be quarantined");
 
-    const call = calls[0];
-    assert.ok(call.url.endsWith("/api/solar/cooperator/blogger/v2"), "search must hit blogger/v2");
-    assert.equal(call.method, "POST");
-    assert.equal(call.session, fakeSession, "session must be the shared Electron session");
-    assert.equal(call.headers["X-Extra"], "h1");
-    assert.equal(call.headers["X-s"], "sig-value");
-    assert.equal(call.headers["X-t"], "123456");
-    assert.match(call.headers["Content-Type"] ?? "", /application\/json/);
-    const body = JSON.parse(call.body);
-    assert.equal(body.gender, "男");
-    assert.equal(body.location[0], "广东", "location must be path-trim serialized");
-    assert.equal(body.brandUserId, undefined, "no brandUserId without explicit selection");
-    assert.ok(body.trackId, "trackId must be present");
-    assert.equal(body.pageNum, 1);
-    assert.equal(body.pageSize, 20);
+    assert.equal(calls.length, 2, "点击搜索必须 track + v2 两次请求");
+    const trackCall = calls[0];
+    const v2Call = calls[1];
+    assert.ok(trackCall.url.endsWith("/api/solar/cooperator/blogger/track"), "first call must hit blogger/track");
+    assert.ok(v2Call.url.endsWith("/api/solar/cooperator/blogger/v2"), "second call must hit blogger/v2");
+    for (const call of [trackCall, v2Call]) {
+      assert.equal(call.method, "POST");
+      assert.equal(call.session, fakeSession, "session must be the shared Electron session");
+      assert.equal(call.headers["X-Extra"], "h1");
+      assert.equal(call.headers["X-s"], "sig-value");
+      assert.equal(call.headers["X-t"], "123456");
+      assert.match(call.headers["Content-Type"] ?? "", /application\/json/);
+    }
+    const trackBody = JSON.parse(trackCall.body);
+    const v2Body = JSON.parse(v2Call.body);
+    assert.equal(trackBody.gender, "男");
+    assert.equal(trackBody.location[0], "广东", "location must be path-trim serialized");
+    assert.equal(trackBody.brandUserId, undefined, "no brandUserId without explicit selection");
+    assert.ok(trackBody.trackId, "trackId must be present");
+    assert.equal(trackBody.pageNum, 1);
+    assert.equal(trackBody.pageSize, 20);
+    // track 未返回 trackId（测试响应为 v2 形状）时 v2 沿用同一 payload 的 trackId。
+    assert.equal(v2Body.trackId, trackBody.trackId);
+    assert.deepEqual(v2Body, trackBody);
+  } finally {
+    disposeIpc();
+  }
+});
+
+test("search-first-page：track 返回 trackId 时 v2 使用该 trackId（官网契约）", async (t) => {
+  const trackResponse = jsonResponse({
+    code: 0,
+    data: { trackId: "track-real-001" },
+    msg: "",
+  });
+  const { ipcMain, calls, disposeIpc } = createHarness({
+    t,
+    transportImpl: async (opts) => (opts.url.endsWith("/track") ? trackResponse : cappedSearchResponse),
+  });
+  try {
+    const result = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.searchFirstPage)({}, {});
+    assert.equal(result.ok, true);
+    assert.equal(calls.length, 2);
+    const v2Body = JSON.parse(calls[1].body);
+    assert.equal(v2Body.trackId, "track-real-001", "v2 必须携带 track 返回的 trackId");
+    assert.equal(result.data.trackIdReturned, "track-real-001");
+    assert.equal(result.data.trackRawShape, "data-trackId");
+  } finally {
+    disposeIpc();
+  }
+});
+
+test("search-first-page：track 返回 data 字符串时直接作为 trackId", async (t) => {
+  const trackResponse = jsonResponse({ code: 0, data: "track-string-002", msg: "" });
+  const { ipcMain, calls, disposeIpc } = createHarness({
+    t,
+    transportImpl: async (opts) => (opts.url.endsWith("/track") ? trackResponse : cappedSearchResponse),
+  });
+  try {
+    const result = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.searchFirstPage)({}, {});
+    assert.equal(result.ok, true);
+    const v2Body = JSON.parse(calls[1].body);
+    assert.equal(v2Body.trackId, "track-string-002");
+    assert.equal(result.data.trackRawShape, "data-string");
+  } finally {
+    disposeIpc();
+  }
+});
+
+test("search-first-page：track 无 trackId 时回退随机 trackId，不伪造官网返回值", async (t) => {
+  const trackResponse = jsonResponse({ code: 0, data: {}, msg: "" });
+  const { ipcMain, calls, disposeIpc } = createHarness({
+    t,
+    transportImpl: async (opts) => (opts.url.endsWith("/track") ? trackResponse : cappedSearchResponse),
+  });
+  try {
+    const result = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.searchFirstPage)({}, {});
+    assert.equal(result.ok, true);
+    assert.equal(result.data.trackIdReturned, null);
+    const v2Body = JSON.parse(calls[1].body);
+    assert.ok(v2Body.trackId && v2Body.trackId.length > 0, "v2 必须仍带非空 trackId（随机回退）");
+  } finally {
+    disposeIpc();
+  }
+});
+
+test("search-first-page：关键词链路——searchType/keyword 进入 track 与 v2", async (t) => {
+  const trackResponse = jsonResponse({ code: 0, data: { trackId: "track-kw-003" }, msg: "" });
+  const { ipcMain, calls, disposeIpc } = createHarness({
+    t,
+    transportImpl: async (opts) => (opts.url.endsWith("/track") ? trackResponse : cappedSearchResponse),
+  });
+  try {
+    const result = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.searchFirstPage)(
+      {},
+      { searchType: 1, keyword: "  口红测评  " },
+    );
+    assert.equal(result.ok, true);
+    for (const call of calls) {
+      const body = JSON.parse(call.body);
+      assert.equal(body.searchType, 1, "搜笔记 searchType=1");
+      assert.equal(body.keyword, "口红测评", "keyword 必须 trim 后进入 payload");
+    }
   } finally {
     disposeIpc();
   }
@@ -136,7 +225,7 @@ test("service.searchFirstPage：pageNum/pageSize 与 builder 同口径——null
     const nulls = await service.searchFirstPage({ filterState: {}, pageNum: null, pageSize: null });
     assert.equal(nulls.pageNum, 1, "pageNum=null 必须回落默认 1");
     assert.equal(nulls.pageSize, 20, "pageSize=null 必须回落默认 20");
-    assert.equal(calls.length, 1);
+    assert.equal(calls.length, 2, "一次成功搜索 = track + v2");
 
     await assert.rejects(
       service.searchFirstPage({ filterState: {}, pageSize: 500 }),
@@ -153,7 +242,7 @@ test("service.searchFirstPage：pageNum/pageSize 与 builder 同口径——null
       (err) => err instanceof PgyPayloadError && err.kind === "invalid-state",
       "pageNum=1.5 必须抛 invalid-state",
     );
-    assert.equal(calls.length, 1, "非法分页参数不得发起网络请求");
+    assert.equal(calls.length, 2, "非法分页参数不得发起额外网络请求");
   } finally {
     disposeIpc();
   }
@@ -197,6 +286,8 @@ test("schema-status reports last-known-good availability per provider", async (t
       "kolTagsV2.contentTheme",
       "areas",
       "consumeBehavior",
+      "activities",
+      "contentTagTree",
     ]) {
       assert.ok(provider in result.data.lkg, `lkg status must include ${provider}`);
     }
@@ -379,7 +470,7 @@ test("config channel：请求失败且有 LKG 快照 → source=lkg + warning，
   });
   try {
     await service.schema.lkgStore.save("kolTagsV2.automotiveIndustryTag", {
-      version: "pgy-filter-schema/1.0.0",
+      version: SCHEMA_VERSION,
       provider: "kolTagsV2.automotiveIndustryTag",
       savedAt: "2026-08-04T00:00:00.000Z",
       nodes: [
@@ -418,7 +509,7 @@ test("config channel：902 登录失效不得伪装成 LKG 成功", async (t) =>
   });
   try {
     await service.schema.lkgStore.save("kolTagsV2", {
-      version: "pgy-filter-schema/1.0.0",
+      version: SCHEMA_VERSION,
       provider: "kolTagsV2",
       savedAt: "2026-08-04T00:00:00.000Z",
       nodes: [],
@@ -470,6 +561,119 @@ test("payload-preview channel：返回纯 JSON payload 与默认分页，绝不�
     assert.ok(!("cookie" in result.data.payload), "payload 不得含凭据键");
     assert.ok(!("authorization" in result.data.payload), "payload 不得含凭据键");
     assert.equal(calls.length, 0, "payload-preview 绝不发网络请求");
+  } finally {
+    disposeIpc();
+  }
+});
+
+test("payload-preview channel：未实证字段允许预览（allowUnproven），真实搜索/采集被门控拒绝", async (t) => {
+  const { ipcMain, calls, disposeIpc } = createHarness({ t, transportImpl: async () => cappedSearchResponse });
+  try {
+    // 预览：未实证字段（contentTag）序列化展示，不发网络请求。
+    const preview = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.payloadPreview)(
+      {},
+      { contentTag: ["美妆", "母婴"] },
+    );
+    assert.equal(preview.ok, true);
+    assert.deepEqual(preview.data.payload.contentTag, ["美妆", "母婴"]);
+    assert.equal(calls.length, 0, "预览绝不发网络请求");
+
+    // 真实搜索：未实证字段必须拒绝，且不发任何请求（track/v2 都不发）。
+    const search = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.searchFirstPage)(
+      {},
+      { contentTag: ["美妆"] },
+    );
+    assert.equal(search.ok, false);
+    assert.equal(search.error.code, "unproven-field");
+    assert.match(search.error.message, /尚未经官网真实流量实证/);
+    assert.equal(calls.length, 0, "未实证字段不得触发 track/v2 请求");
+
+  } finally {
+    disposeIpc();
+  }
+});
+
+test("batch-start：未实证字段被门控拒绝，不发 track/分页请求", async (t) => {
+  const { ipcMain, disposeIpc } = createBatchHarness({
+    t,
+    transportImpl: async () => jsonResponse({ code: 0, data: { kols: [], total: 0 }, msg: "" }),
+  });
+  try {
+    const batch = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
+      filterState: { contentTag: ["美妆"] },
+      columns: ["userId"],
+    });
+    assert.equal(batch.ok, false);
+    assert.equal(batch.error.code, "unproven-field");
+  } finally {
+    disposeIpc();
+  }
+});
+
+test("batch-start：关键词搜索——track 先行、trackId 持久化、分页请求复用搜索上下文", async (t) => {
+  const bodies = [];
+  const { ipcMain, service, disposeIpc } = createBatchHarness({
+    t,
+    transportImpl: async (opts) => {
+      const body = JSON.parse(opts.body);
+      bodies.push({ url: opts.url, body });
+      if (opts.url.endsWith("/track")) {
+        return jsonResponse({ code: 0, data: { trackId: "track-batch-001" }, msg: "" });
+      }
+      const page = body.pageNum;
+      const kols = Array.from({ length: 20 }, (_, index) => ({
+        userId: `kw-u-${(page - 1) * 20 + index + 1}`,
+        nickname: `n${(page - 1) * 20 + index + 1}`,
+      }));
+      return jsonResponse({ code: 0, data: { kols, total: 25 }, msg: "" });
+    },
+  });
+  try {
+    const start = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
+      filterState: { searchType: 0, keyword: "  李佳琦  " },
+      columns: ["userId"],
+    });
+    assert.equal(start.ok, true);
+    await waitForTaskStatus(service, start.data.taskId, ["completed"]);
+
+    const task = await service.batchGet({ taskId: start.data.taskId });
+    assert.equal(task.filterState.keyword, "李佳琦", "keyword 必须 trim 后持久化");
+    assert.equal(task.filterState.searchType, 0, "searchType 必须持久化");
+    assert.equal(task.filterState.trackId, "track-batch-001", "trackId 必须随任务持久化");
+
+    const trackCall = bodies.find((call) => call.url.endsWith("/track"));
+    assert.ok(trackCall, "批量关键词任务必须先发 track");
+    assert.equal(trackCall.body.keyword, "李佳琦");
+    assert.equal(trackCall.body.searchType, 0);
+    const v2Calls = bodies.filter((call) => call.url.endsWith("/v2"));
+    assert.ok(v2Calls.length >= 2, "关键词任务分页请求正常进行");
+    for (const call of v2Calls) {
+      assert.equal(call.body.trackId, "track-batch-001", "分页请求必须复用搜索 trackId");
+      assert.equal(call.body.keyword, "李佳琦", "分页请求必须携带关键词");
+    }
+  } finally {
+    disposeIpc();
+  }
+});
+
+test("search-first-page：searchType/keyword/trackId 边界校验（非法值不发请求）", async (t) => {
+  const { ipcMain, calls, disposeIpc } = createHarness({ t, transportImpl: async () => cappedSearchResponse });
+  try {
+    const cases = [
+      [{ searchType: 2 }, "invalid-search-type"],
+      [{ searchType: "1" }, "invalid-search-type"],
+      [{ keyword: "x".repeat(201) }, "invalid-keyword"],
+      [{ keyword: "a\nb" }, "invalid-keyword"],
+      [{ keyword: "a\u0000b" }, "invalid-keyword"],
+      [{ trackId: "../escape" }, "invalid-track-id"],
+      [{ trackId: 42 }, "invalid-track-id"],
+    ];
+    for (const [input, code] of cases) {
+      const result = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.searchFirstPage)({}, input);
+      assert.equal(result.ok, false, JSON.stringify(input));
+      assert.equal(result.error.code, code, JSON.stringify(input));
+    }
+    assert.equal(calls.length, 0, "非法搜索上下文不得触发网络请求");
   } finally {
     disposeIpc();
   }
@@ -870,8 +1074,12 @@ test("batch-pause/resume/cancel 通道存在且作用于任务（transport gate 
     assert.equal(columns.ok, true);
     assert.ok(columns.data.length >= 10, "columns 通道必须返回 confirmed 列数组");
     const defaults = columns.data.filter((column) => column.defaultDisplay === true).map((column) => column.id);
-    assert.ok(defaults.includes("userId"));
-    assert.ok(defaults.includes("nickname"));
+    // Phase 5：默认展示 = 官网当前账号默认 8 项（固定列 + 全部报价 + 粉丝数 +
+    // 阅读/互动中位数（日常）+ 活跃粉丝占比）。
+    assert.ok(defaults.includes("kolInfo"), "固定列 博主信息 必须默认展示");
+    assert.ok(defaults.includes("fansNum"), "粉丝数 必须默认展示");
+    assert.ok(defaults.includes("fansActiveIn28dLv"), "活跃粉丝占比 必须默认展示");
+    assert.equal(defaults.length, 8);
   } finally {
     disposeIpc();
   }

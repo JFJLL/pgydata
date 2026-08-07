@@ -43,9 +43,22 @@ const WINDOWS_RESERVED_TASK_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 export const PGY_KOL_CONFIG_SECTIONS = Object.freeze(
   Object.freeze(["automotiveIndustryTag", "audience20", "contentTheme"]),
 );
-export const PGY_KOL_CONFIG_PROVIDERS = Object.freeze(["kolTagsV2", "consumeBehavior", "areas"]);
+export const PGY_KOL_CONFIG_PROVIDERS = Object.freeze([
+  "kolTagsV2",
+  "consumeBehavior",
+  "areas",
+  "activities",
+  "brandSearch",
+  "contentTagTree",
+]);
 
 const MAX_CONFIG_FIELD_LENGTH = 64;
+
+// Phase 5 搜索上下文边界：keyword 不得超过 200 字符且不含控制字符；
+// trackId 只允许 [A-Za-z0-9._:-] 1-128 字符（官网 trackId 形状未完全实证，
+// 放宽到安全字符集内，避免误伤合法搜索上下文）。
+export const PGY_KOL_KEYWORD_MAX_LENGTH = 200;
+export const PGY_KOL_TRACK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -85,6 +98,29 @@ export function validateConfigRequest(input) {
       return invalid("unknown-section", `未知 kolTagsV2 section: ${sectionRaw}`);
     }
     return { ok: true, provider, section: sectionRaw };
+  }
+  if (provider === "brandSearch") {
+    if (hasSection) {
+      return invalid("unknown-section", "brandSearch 不允许携带 section");
+    }
+    const keyword = input.keyword;
+    if (
+      typeof keyword !== "string" ||
+      keyword.trim().length === 0 ||
+      keyword.trim().length > MAX_CONFIG_FIELD_LENGTH
+    ) {
+      return invalid("invalid-keyword", "brandSearch 必须提供 1-64 字符的 keyword");
+    }
+    const trimmed = keyword.trim();
+    // 安全边界（fresh reviewer H1）：keyword 会进入 LKG 快照文件名与 URL，
+    // 拒绝控制字符与路径分隔/Windows 非法文件名字符，防止路径穿越与文件名注入。
+    if (/[\u0000-\u001f\u007f]/.test(trimmed)) {
+      return invalid("invalid-keyword", "brandSearch keyword 不得包含控制字符");
+    }
+    if (/[\\/:*?"<>|]/.test(trimmed)) {
+      return invalid("invalid-keyword", "brandSearch keyword 不得包含路径分隔或非法文件名字符");
+    }
+    return { ok: true, provider, keyword: trimmed };
   }
   if (hasSection) {
     return invalid("unknown-section", `${provider} 不允许携带 section`);
@@ -267,6 +303,33 @@ export function validateFilterState(value) {
       "too-many-fields",
       `filterState 键数超过上限 ${PGY_KOL_IPC_MAX_FILTER_FIELDS}`,
     );
+  }
+  // Phase 5 搜索上下文特殊键（searchType/keyword/trackId）边界校验。
+  if (Object.hasOwn(value, "searchType") && value.searchType !== 0 && value.searchType !== 1) {
+    return invalid("invalid-search-type", "searchType 必须是 0（搜昵称）或 1（搜笔记）");
+  }
+  if (Object.hasOwn(value, "keyword")) {
+    const keyword = value.keyword;
+    if (typeof keyword !== "string" || keyword.length > PGY_KOL_KEYWORD_MAX_LENGTH) {
+      return invalid(
+        "invalid-keyword",
+        `keyword 必须是 0-${PGY_KOL_KEYWORD_MAX_LENGTH} 字符的字符串`,
+      );
+    }
+    // 控制字符/换行禁止进入关键词（防日志注入与异常请求体）。
+    if (/[\u0000-\u001f\u007f]/.test(keyword)) {
+      return invalid("invalid-keyword", "keyword 不得包含控制字符");
+    }
+  }
+  if (Object.hasOwn(value, "trackId")) {
+    const trackId = value.trackId;
+    if (
+      trackId !== null &&
+      trackId !== undefined &&
+      (typeof trackId !== "string" || !PGY_KOL_TRACK_ID_PATTERN.test(trackId))
+    ) {
+      return invalid("invalid-track-id", "非法 trackId");
+    }
   }
   const budget = { nodes: 0 };
   const walkError = walk(value, 1, new Set(), budget);

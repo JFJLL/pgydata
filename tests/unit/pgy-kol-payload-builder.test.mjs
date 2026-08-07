@@ -371,3 +371,72 @@ test("registry defaultValue 存在且类型正确（抽查 5 个字段）", () =
   assert.deepEqual(byName.get("kolInfoConsumBehaviorLabel").defaultValue, []);
   assert.equal(byName.get("fansNumberLower").defaultValue, null);
 });
+
+test("Phase 5：searchType 特殊键——0/1 覆盖 BASE 默认，非法值拒绝", () => {
+  const builder = makeBuilder();
+  assert.equal(builder.build({}, { trackId: "t" }).searchType, 1, "缺省 searchType=1（官网契约）");
+  assert.equal(builder.build({ searchType: 1 }, { trackId: "t" }).searchType, 1);
+  assert.equal(builder.build({ searchType: 0 }, { trackId: "t" }).searchType, 0, "搜昵称 searchType=0");
+  for (const bad of [2, -1, "1", null, true]) {
+    assert.throws(
+      () => builder.build({ searchType: bad }, { trackId: "t" }),
+      (err) => err instanceof PgyPayloadError && err.kind === "invalid-state",
+      `searchType=${String(bad)} 必须抛 invalid-state`,
+    );
+  }
+});
+
+test("Phase 5：keyword 特殊键——trim 后写入，空串/纯空白省略，超长拒绝", () => {
+  const builder = makeBuilder();
+  const withKeyword = builder.build({ keyword: "  口红测评  " }, { trackId: "t" });
+  assert.equal(withKeyword.keyword, "口红测评");
+  assert.ok(!("keyword" in builder.build({ keyword: "" }, { trackId: "t" })));
+  assert.ok(!("keyword" in builder.build({ keyword: "   " }, { trackId: "t" })));
+  assert.throws(
+    () => builder.build({ keyword: "x".repeat(201) }, { trackId: "t" }),
+    (err) => err instanceof PgyPayloadError && err.kind === "invalid-state",
+    "keyword 超长必须拒绝",
+  );
+});
+
+test("Phase 5：trackId 特殊键——filterState 携带时覆盖工厂生成", () => {
+  const builder = makeBuilder({ trackIdFactory: () => "factory-001" });
+  const out = builder.build({ trackId: "persisted-track-002" }, {});
+  assert.equal(out.trackId, "persisted-track-002");
+  // 空/非字符串 trackId 不覆盖工厂。
+  assert.equal(builder.build({ trackId: "" }, {}).trackId, "factory-001");
+  assert.equal(builder.build({ trackId: 123 }, {}).trackId, "factory-001");
+  // options.trackId 优先级最高。
+  assert.equal(
+    builder.build({ trackId: "state-tid" }, { trackId: "option-tid" }).trackId,
+    "option-tid",
+  );
+});
+
+test("Phase 5：未实证字段门控——默认拒绝（unproven-field），allowUnproven 仅用于预览", () => {
+  const builder = makeBuilder();
+  for (const field of ["contentTag", "inStar", "noteCategory", "coopCredit", "audienceGroup", "firstIndustry", "secondIndustry", "estimateCpuv30dLower"]) {
+    assert.throws(
+      () => builder.build({ [field]: field === "contentTag" ? ["美妆"] : 1 }, { trackId: "t" }),
+      (err) => err instanceof PgyPayloadError && err.kind === "unproven-field",
+      `${field} 未实证必须拒绝`,
+    );
+  }
+  const preview = builder.build({ contentTag: ["美妆", "母婴"] }, { trackId: "t", allowUnproven: true });
+  assert.deepEqual(preview.contentTag, ["美妆", "母婴"]);
+  // 已实证字段不受门控影响。
+  const proven = builder.build({ excludeLowActive: true }, { trackId: "t" });
+  assert.equal(proven.excludeLowActive, true);
+});
+
+test("Phase 5：searchType/keyword/trackId 不经过 FIELD_REGISTRY（未知字段检查豁免）", () => {
+  const builder = makeBuilder();
+  const out = builder.build(
+    { searchType: 1, keyword: "测评", trackId: "track-x", gender: "女" },
+    {},
+  );
+  assert.equal(out.searchType, 1);
+  assert.equal(out.keyword, "测评");
+  assert.equal(out.trackId, "track-x");
+  assert.equal(out.gender, "女");
+});

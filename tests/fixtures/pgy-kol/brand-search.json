@@ -1,0 +1,14 @@
+{
+  "code": 0,
+  "data": [
+    {
+      "brandUserId": "brand_5b320b4f11be107b8d55891e",
+      "brandName": "测试品牌甲"
+    },
+    {
+      "brandUserId": "brand_6c431c5a22cf218c9e66902f",
+      "brandName": "测试品牌乙"
+    }
+  ],
+  "msg": ""
+}

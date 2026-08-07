@@ -20,7 +20,14 @@ test("导出常量：边界值与白名单精确匹配", () => {
   assert.equal(PGY_KOL_IPC_MAX_ARRAY_LENGTH, 200);
   assert.equal(PGY_KOL_IPC_MAX_STRING_LENGTH, 512);
   assert.equal(PGY_KOL_IPC_MAX_FILTER_FIELDS, 64);
-  assert.deepEqual(PGY_KOL_CONFIG_PROVIDERS, ["kolTagsV2", "consumeBehavior", "areas"]);
+  assert.deepEqual(PGY_KOL_CONFIG_PROVIDERS, [
+    "kolTagsV2",
+    "consumeBehavior",
+    "areas",
+    "activities",
+    "brandSearch",
+    "contentTagTree",
+  ]);
   assert.deepEqual(PGY_KOL_BUDGET_LIMITS, { maxLeaves: 64, maxDepth: 10, maxPagesPerLeaf: 250, queryBudget: 1000 });
   assert.deepEqual(PGY_KOL_RESUME_BUDGET_KEYS, ["queryBudget", "maxPagesPerLeaf"]);
   assert.deepEqual(PGY_KOL_CONFIG_SECTIONS, [
@@ -53,7 +60,7 @@ test("validateConfigRequest：非对象/provider 非法/超长 → invalid-input
 });
 
 test("validateConfigRequest：未知 provider → unknown-provider", () => {
-  for (const provider of ["bogus", "brandSearch", "kolTagsV3", "KOLTAGSV2"]) {
+  for (const provider of ["bogus", "kolTagsV3", "KOLTAGSV2"]) {
     const result = validateConfigRequest({ provider });
     assert.equal(result.ok, false, provider);
     assert.equal(result.error.code, "unknown-provider", provider);
@@ -75,13 +82,68 @@ test("validateConfigRequest：kolTagsV2 section 必填且限白名单", () => {
 });
 
 test("validateConfigRequest：consumeBehavior/areas 必须省略 section", () => {
-  for (const provider of ["consumeBehavior", "areas"]) {
+  for (const provider of ["consumeBehavior", "areas", "activities", "contentTagTree"]) {
     const ok = validateConfigRequest({ provider });
     assert.deepEqual(ok, { ok: true, provider });
     const bad = validateConfigRequest({ provider, section: "anything" });
     assert.equal(bad.ok, false, provider);
     assert.equal(bad.error.code, "unknown-section", provider);
   }
+});
+
+test("validateConfigRequest：brandSearch 必须携带 1-64 字符 keyword", () => {
+  const missing = validateConfigRequest({ provider: "brandSearch" });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.error.code, "invalid-keyword");
+  assert.equal(validateConfigRequest({ provider: "brandSearch", keyword: "" }).error.code, "invalid-keyword");
+  assert.equal(validateConfigRequest({ provider: "brandSearch", keyword: "   " }).error.code, "invalid-keyword");
+  assert.equal(validateConfigRequest({ provider: "brandSearch", keyword: "x".repeat(65) }).error.code, "invalid-keyword");
+  assert.equal(validateConfigRequest({ provider: "brandSearch", keyword: 42 }).error.code, "invalid-keyword");
+  assert.equal(
+    validateConfigRequest({ provider: "brandSearch", section: "x" }).error.code,
+    "unknown-section",
+    "brandSearch 不允许携带 section",
+  );
+  assert.deepEqual(
+    validateConfigRequest({ provider: "brandSearch", keyword: "  美妆  " }),
+    { ok: true, provider: "brandSearch", keyword: "美妆" },
+  );
+});
+
+test("validateConfigRequest：brandSearch keyword 拒绝控制字符与路径/非法文件名字符（fresh reviewer H1）", () => {
+  for (const bad of ["a\nb", "a\u0000b", "..\\..\\escape", "a/b", "a:b", "a*b", 'a"b', "a<b", "a>b", "a|b", "a?b"]) {
+    const result = validateConfigRequest({ provider: "brandSearch", keyword: bad });
+    assert.equal(result.ok, false, JSON.stringify(bad));
+    assert.equal(result.error.code, "invalid-keyword", JSON.stringify(bad));
+  }
+  // 安全字符集内仍放行。
+  assert.equal(validateConfigRequest({ provider: "brandSearch", keyword: "美妆 2026" }).ok, true);
+});
+
+test("validateFilterState：searchType/keyword/trackId 特殊键边界", () => {
+  // searchType：0/1 通过，其它拒绝。
+  for (const searchType of [0, 1]) {
+    assert.deepEqual(validateFilterState({ searchType }), { ok: true, value: { searchType } });
+  }
+  for (const searchType of [2, -1, "1", null, true]) {
+    const result = validateFilterState({ searchType });
+    assert.equal(result.ok, false, JSON.stringify(searchType));
+    assert.equal(result.error.code, "invalid-search-type", JSON.stringify(searchType));
+  }
+  // keyword：≤200 字符、无控制字符。
+  assert.equal(validateFilterState({ keyword: "" }).ok, true);
+  assert.equal(validateFilterState({ keyword: "  口红测评  " }).ok, true);
+  assert.equal(validateFilterState({ keyword: "x".repeat(200) }).ok, true);
+  assert.equal(validateFilterState({ keyword: "x".repeat(201) }).error.code, "invalid-keyword");
+  assert.equal(validateFilterState({ keyword: "a\nb" }).error.code, "invalid-keyword");
+  assert.equal(validateFilterState({ keyword: "a\u0000b" }).error.code, "invalid-keyword");
+  assert.equal(validateFilterState({ keyword: 42 }).error.code, "invalid-keyword");
+  // trackId：安全字符集内通过，非法形状拒绝。
+  assert.equal(validateFilterState({ trackId: "track-20260806-abc" }).ok, true);
+  assert.equal(validateFilterState({ trackId: null }).ok, true);
+  assert.equal(validateFilterState({ trackId: "" }).ok, false);
+  assert.equal(validateFilterState({ trackId: "../escape" }).error.code, "invalid-track-id");
+  assert.equal(validateFilterState({ trackId: "x y" }).error.code, "invalid-track-id");
 });
 
 test("validateFilterState：非对象 → invalid-input", () => {

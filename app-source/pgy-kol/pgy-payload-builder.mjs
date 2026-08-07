@@ -61,6 +61,14 @@ export const BASE_PAYLOAD = Object.freeze({
 export const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 
+// Phase 5 特殊键：不经过 FIELD_REGISTRY，由 builder 直接处理。
+// - searchType：0=搜昵称，1=搜笔记（官网契约；缺省沿用 BASE_PAYLOAD 的 1）。
+// - keyword：搜索关键词（搜笔记/搜昵称）；空串/纯空白视为未提供。
+// - trackId：搜索上下文（track 接口返回后进入 /v2 的同一 payload）。
+export const PAYLOAD_SPECIAL_KEYS = Object.freeze(["searchType", "keyword", "trackId"]);
+
+const KEYWORD_MAX_LENGTH = 200;
+
 export class PgyPayloadError extends Error {
   /**
    * @param {string} message
@@ -125,9 +133,36 @@ export class PgyPayloadBuilder {
       ...BASE_PAYLOAD,
       pageNum,
       pageSize,
-      trackId: options.trackId || this.trackIdFactory(),
+      trackId:
+        options.trackId ||
+        (typeof filterState.trackId === "string" && filterState.trackId.trim().length > 0
+          ? filterState.trackId.trim()
+          : this.trackIdFactory()),
     };
 
+    // Phase 5 搜索模式/关键词/搜索上下文（特殊键优先于 BASE_PAYLOAD 默认值）。
+    if (Object.hasOwn(filterState, "searchType")) {
+      const searchType = filterState.searchType;
+      if (searchType !== 0 && searchType !== 1) {
+        throw new PgyPayloadError(
+          `[pgy-payload-builder] searchType 必须是 0 或 1（收到 ${String(searchType)}）`,
+          { kind: "invalid-state" },
+        );
+      }
+      payload.searchType = searchType;
+    }
+    if (Object.hasOwn(filterState, "keyword")) {
+      const keyword = typeof filterState.keyword === "string" ? filterState.keyword.trim() : "";
+      if (keyword.length > KEYWORD_MAX_LENGTH) {
+        throw new PgyPayloadError(
+          `[pgy-payload-builder] keyword 长度超过上限 ${KEYWORD_MAX_LENGTH}`,
+          { kind: "invalid-state" },
+        );
+      }
+      if (keyword.length > 0) {
+        payload.keyword = keyword;
+      }
+    }
     // brandUserId 是特殊键：只在显式提供非空字符串时写入，绝不默认写入。
     if (Object.hasOwn(filterState, "brandUserId")) {
       const brandUserId = filterState.brandUserId;
@@ -137,7 +172,7 @@ export class PgyPayloadBuilder {
     }
 
     for (const [key, value] of Object.entries(filterState)) {
-      if (key === "brandUserId") {
+      if (key === "brandUserId" || PAYLOAD_SPECIAL_KEYS.includes(key)) {
         continue;
       }
       // 未知字段无论值是否为空都必须显式报错，禁止空值绕过契约检查。
@@ -155,6 +190,13 @@ export class PgyPayloadBuilder {
         (Array.isArray(value) && value.length === 0)
       ) {
         continue;
+      }
+      // Phase 5 门控：未实证字段禁止进入真实 payload（预览经 allowUnproven 豁免）。
+      if (field.payloadProven === false && options.allowUnproven !== true) {
+        throw new PgyPayloadError(
+          `[pgy-payload-builder] 字段 ${key} 尚未经官网真实流量实证，暂不可发送（待最小流量验收后启用）`,
+          { kind: "unproven-field" },
+        );
       }
       payload[key] = this.schema.serialize({ payloadField: key, value });
     }

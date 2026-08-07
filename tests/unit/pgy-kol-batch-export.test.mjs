@@ -1,7 +1,8 @@
-// 蒲公英“找博主”批量导出 Payload 测试（Phase 4 工作包 B）。
+// 蒲公英“找博主”批量导出 Payload 测试（Phase 5 工作包）。
 // 用 tests/helpers/collection-xlsx-writer.mjs 写真实 .xlsx 并解压/读回断言：
-// 全量导出（500 行）、中文两行表头、列顺序=用户选择、控制字符清洗、
-// 敏感键永不导出、任务重启后仍可导出、列选择快照不漂移。
+// 全量导出（500 行）、中文两行表头、列顺序=用户选择、percent/money 格式化、
+// 控制字符清洗、fixed/computed/unavailable 列不可导出、敏感键永不导出、
+// 任务重启后仍可导出、列选择快照不漂移、present 语义过滤。
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -86,7 +87,7 @@ async function writeWorkbook(name, payload) {
   return filePath;
 }
 
-test("全量 500 行导出：真实 xlsx、中文两行表头、列顺序=用户选择", async (t) => {
+test("全量 500 行导出：真实 xlsx、中文两行表头、列顺序=用户选择、money 格式化", async (t) => {
   const storeDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pgy-kol-batch-export-store-"));
   t.after(() => fs.rmSync(storeDir, { recursive: true, force: true }));
   const store = new PgyKolTaskStore({ baseDir: storeDir });
@@ -102,8 +103,8 @@ test("全量 500 行导出：真实 xlsx、中文两行表头、列顺序=用户
         userId: `u${index}`,
         nickname: `博主${index}`,
         fansNum: 1000 + index,
-        picturePrice: `${800 + index}元`,
-        videoPrice: `${1500 + index}元`,
+        picturePrice: 800 + index,
+        videoPrice: 1500 + index,
         location: "上海",
         gender: "女",
       },
@@ -130,8 +131,74 @@ test("全量 500 行导出：真实 xlsx、中文两行表头、列顺序=用户
   assert.deepEqual(row2.slice(0, columns.length), payload.headers.map((header) => header.label));
   assert.equal(matrix[2][0], "博主0");
   assert.equal(matrix[2][1], "u0");
+  // fansNum 为数值单元格；picturePrice/videoPrice 按 money formatter 输出“元”字符串。
+  assert.equal(matrix[2][2], 1000);
+  assert.equal(matrix[2][3], "800元");
+  assert.equal(matrix[2][4], "1500元");
   assert.equal(matrix[501][0], "博主499");
   assert.equal(matrix[501][1], "u499");
+});
+
+test("percent/money 格式化：fansActiveIn28dLv 40.6 → “40.6%”，picturePrice 800 → “800元”；number 保持数值", async (t) => {
+  const storeDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pgy-kol-batch-export-fmt-"));
+  t.after(() => fs.rmSync(storeDir, { recursive: true, force: true }));
+  const store = new PgyKolTaskStore({ baseDir: storeDir });
+  await store.initialize();
+  const taskId = "pgykol-export-fmt";
+  const columns = ["nickname", "fansActiveIn28dLv", "picturePrice", "videoPrice", "readMidNor30", "fansNum"];
+  await seedFullTask(store, taskId, {
+    columns,
+    pageSize: 1,
+    pages: 1,
+    rowFactory: (index) => ({
+      uid: `u${index}`,
+      fields: {
+        userId: `u${index}`,
+        nickname: `博主${index}`,
+        fansActiveIn28dLv: 40.6 + index,
+        picturePrice: 800 + index,
+        videoPrice: `150${index}元`,
+        readMidNor30: 1200 + index,
+        fansNum: 5000 + index,
+      },
+    }),
+  });
+
+  const payload = buildPgyKolBatchExportPayload(await store.getTask(taskId), await store.getRows(taskId));
+  assert.equal(payload.data.length, 1);
+  const row = payload.data[0];
+  assert.equal(row.nickname, "博主0");
+  assert.equal(row.fansActiveIn28dLv, "40.6%");
+  assert.equal(row.picturePrice, "800元");
+  assert.equal(row.videoPrice, "1500元");
+  assert.equal(row.readMidNor30, 1200);
+  assert.equal(row.fansNum, 5000);
+
+  const filePath = await writeWorkbook("fmt.xlsx", payload);
+  const cells = collectStringCells(filePath);
+  assert.ok(cells.includes("40.6%"), "percent 字符串必须写入 xlsx");
+  assert.ok(cells.includes("800元"), "money 字符串必须写入 xlsx");
+  assert.ok(cells.includes("1500元"), "已带“元”的字符串原样保留");
+  const matrix = readSheetMatrix(filePath);
+  assert.equal(matrix[2][5], 5000, "number 列保持 Excel 数值单元格");
+});
+
+test("fixed/computed/unavailable 列不可导出：getPgyKolExportHeaders 拒绝，绝不进入 payload", async () => {
+  for (const forbidden of ["kolInfo", "recentNotes", "actions", "price", "overflowCost", "coopCredit"]) {
+    const task = { taskId: "pgykol-export-forbidden", columns: ["nickname", forbidden] };
+    const rows = [{ leafId: "L0", pageNum: 1, uid: "u1", fields: { nickname: "甲" } }];
+    assert.throws(
+      () => buildPgyKolBatchExportPayload(task, rows),
+      /未知列|未知字段|不可导出/,
+      `列 ${forbidden} 必须被导出拒绝`,
+    );
+  }
+  // 合法任务（全部可导出列）的 headers/data 只含所选列，绝不包含 forbidden 列。
+  const task = { taskId: "pgykol-export-ok", columns: ["nickname", "fansNum"] };
+  const rows = [{ leafId: "L0", pageNum: 1, uid: "u1", fields: { nickname: "甲", fansNum: 100 } }];
+  const payload = buildPgyKolBatchExportPayload(task, rows);
+  assert.deepEqual(payload.headers.map((header) => header.key), ["nickname", "fansNum"]);
+  assert.deepEqual(Object.keys(payload.data[0]), ["nickname", "fansNum"]);
 });
 
 test("控制字符在导出前清洗，未选列绝不进入 data", async () => {

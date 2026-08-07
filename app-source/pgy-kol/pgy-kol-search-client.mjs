@@ -13,6 +13,7 @@
 import { randomUUID } from "node:crypto";
 
 export const KOL_SEARCH_ENDPOINT = "/api/solar/cooperator/blogger/v2";
+export const KOL_TRACK_ENDPOINT = "/api/solar/cooperator/blogger/track";
 export const KOL_WINDOW_TOTAL = 5000;
 export const KOL_WINDOW_MAX_PAGE = 250;
 
@@ -24,10 +25,41 @@ const KOL_PAGE_SIZE_DEFAULT = 20;
 export const KNOWN_KOL_FIELDS = Object.freeze([
   "userId",
   "nickname",
+  "name",
   "fansNum",
   "fansActiveIn28dLv",
   "readMidNor30",
   "interMidNor30",
+  "accumCommonImpMedinNum30d",
+  "accumPicCommonImpMedinNum30d",
+  "accumVideoCommonImpMedinNum30d",
+  "accumCoopImpMedinNum30d",
+  "readMidCoop30",
+  "interMidCoop30",
+  "pictureClickMidNum",
+  "videoClickMidNum",
+  "pictureInterMidNum",
+  "videoInterMidNum",
+  "pictureHundredLikePercent30",
+  "pictureThousandLikePercent30",
+  "videoHundredLikePercent30",
+  "videoThousandLikePercent30",
+  "videoFinishRate",
+  "estimatePictureCpm",
+  "estimateVideoCpm",
+  "pictureCpcPerPrice",
+  "videoCpcPerPrice",
+  "pictureReadCost",
+  "videoReadCost",
+  "fansRiseNum",
+  "fans30GrowthRate",
+  "fansEngageNum",
+  "kliveCnt30d",
+  "avgLiveViewerNum",
+  "avgAgmv90d",
+  "liveGMV",
+  "inviteReply48hNumRatio",
+  "overflowNum",
   "picturePrice",
   "videoPrice",
   "location",
@@ -296,6 +328,131 @@ export class PgyKolSearchClient {
       trackId,
       startedAt,
       durationMs: Date.now() - startedAt,
+    };
+  }
+
+  /**
+   * 官网搜索点击后的先导请求：POST /api/solar/cooperator/blogger/track。
+   *
+   * 返回 { trackId, rawShape }。trackId 提取规则（容忍式，2026-08-06 起最小流量
+   * 定点实证，见 artifacts/verification/pgy-kol-phase5-track-evidence.json）：
+   * - data 为字符串 → 直接作为 trackId；
+   * - data.trackId / data.traceId / data.id 为字符串 → 取该值；
+   * - 否则返回 null（调用方回退随机 trackId，不伪造官网返回值）。
+   *
+   * 敏感字段（cookie/token/关键词之外的 body）继续由统一请求层脱敏；
+   * 本方法不记录请求体。
+   *
+   * @param {{ payload: object, session?: unknown, timeoutMs?: number }} [options]
+   * @returns {Promise<{ trackId: string | null, rawShape: string }>}
+   */
+  async trackSearch({ payload, session, timeoutMs } = {}) {
+    if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+      throw new TypeError("payload 必须为 object");
+    }
+    const requestOptions = {
+      url: `${PGY_ORIGIN}${KOL_TRACK_ENDPOINT}`,
+      method: "POST",
+      body: payload,
+      referer: KOL_SEARCH_REFERER,
+    };
+    if (session !== undefined) {
+      requestOptions.session = session;
+    }
+    if (timeoutMs !== undefined) {
+      requestOptions.timeoutMs = timeoutMs;
+    }
+
+    const result = await this._request.requestJson(requestOptions);
+    const { raw, httpStatusCode } = unwrapResponse(result);
+
+    if (httpStatusCode !== undefined && httpStatusCode !== null) {
+      const invalidStatus =
+        typeof httpStatusCode !== "number" ||
+        !Number.isFinite(httpStatusCode) ||
+        httpStatusCode < 200 ||
+        httpStatusCode >= 300;
+      if (invalidStatus) {
+        const kind =
+          httpStatusCode === 401
+            ? "auth-expired"
+            : httpStatusCode === 461
+              ? "risk-control"
+              : "http";
+        throw createPgyRequestError(
+          kind,
+          `蒲公英 track 请求失败: HTTP ${String(httpStatusCode)} (${kind})`,
+        );
+      }
+    }
+
+    if (
+      raw === null ||
+      typeof raw !== "object" ||
+      Array.isArray(raw)
+    ) {
+      throw createPgyRequestError(
+        "invalid-response",
+        "蒲公英 track 响应结构不合法（响应体缺失）",
+      );
+    }
+    if (raw.code !== 0) {
+      const pgyCode = typeof raw.code === "number" ? raw.code : null;
+      const kind =
+        raw.code === 461
+          ? "risk-control"
+          : raw.code === 902 || raw.code === 401 || raw.code === -100
+            ? "auth-expired"
+            : "api";
+      throw createPgyRequestError(
+        kind,
+        `蒲公英 track 接口返回错误 code=${String(raw.code)}${raw.msg === undefined ? "" : `: ${String(raw.msg)}`}`,
+        pgyCode,
+      );
+    }
+
+    const data = raw.data;
+    let trackId = null;
+    let rawShape = "unknown";
+    if (typeof data === "string" && data.length > 0) {
+      trackId = data;
+      rawShape = "data-string";
+    } else if (data !== null && typeof data === "object" && !Array.isArray(data)) {
+      for (const key of ["trackId", "traceId", "id"]) {
+        if (typeof data[key] === "string" && data[key].length > 0) {
+          trackId = data[key];
+          rawShape = `data-${key}`;
+          break;
+        }
+      }
+    }
+    return { trackId, rawShape };
+  }
+
+  /**
+   * 官网点击搜索链路：track → v2（trackId 进入同一 payload 的 v2 请求）。
+   *
+   * track 返回的 trackId 为 null 时回退 payload 自带/随机 trackId，不伪造返回值。
+   *
+   * @param {{ payload: object, session?: unknown, timeoutMs?: number }} [options]
+   * @returns {Promise<object>} 与 searchPage 相同的结果结构
+   */
+  async searchWithTrack({ payload, session, timeoutMs } = {}) {
+    if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+      throw new TypeError("payload 必须为 object");
+    }
+    const tracked = await this.trackSearch({ payload, session, timeoutMs });
+    const v2Payload = {
+      ...payload,
+      ...(typeof tracked.trackId === "string" && tracked.trackId.length > 0
+        ? { trackId: tracked.trackId }
+        : {}),
+    };
+    const result = await this.searchPage({ payload: v2Payload, session, timeoutMs });
+    return {
+      ...result,
+      trackRawShape: tracked.rawShape,
+      trackIdReturned: tracked.trackId,
     };
   }
 }

@@ -18,8 +18,9 @@ export const PGY_HTTP_AUTH_STATUSES = new Set([401, 461]);
 const DEFAULT_REFERER = `${PGY_ORIGIN}/solar/pre-trade/note/kol`;
 const MAX_MESSAGE_LENGTH = 800;
 const SENSITIVE_HEADER_KEY = /cookie|authorization|token|x-s|x-t|password|secret|session/i;
+// Phase 5：搜索关键词同样属于用户输入敏感值（任务规格：关键词不得写入普通日志或错误详情）。
 const SENSITIVE_VALUE_KEY_PATTERN =
-  "cookie|authorization|token|password|secret|session|x-s|x-t";
+  "cookie|authorization|token|password|secret|session|x-s|x-t|keyword";
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -37,7 +38,7 @@ function redactText(text) {
     )
     // JSON 形态："key":"value" / 'key':'value'
     .replace(
-      /(["'])(cookie|authorization|token|password|secret|session|x-s|x-t)\1\s*:\s*(["'])((?:\\.|[^"'])*?)\3/gi,
+      /(["'])(cookie|authorization|token|password|secret|session|x-s|x-t|keyword)\1\s*:\s*(["'])((?:\\.|[^"'])*?)\3/gi,
       (match, keyQuote, key, valueQuote) =>
         `${keyQuote}${key}${keyQuote}: ${valueQuote}[redacted]${valueQuote}`
     )

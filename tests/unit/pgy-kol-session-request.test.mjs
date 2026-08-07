@@ -387,6 +387,23 @@ test("redactText：x-s/x-t 签名头值同样脱敏", () => {
   assert.ok(redacted.includes("[redacted]"));
 });
 
+test("Phase 5：搜索关键词进入脱敏模式（keyword 不得写入普通日志/错误详情）", () => {
+  const cases = [
+    'keyword="口红测评"',
+    'keyword=口红测评',
+    "keyword: 口红测评",
+    '{"payload":{"searchType":1,"keyword":"口红测评"}}',
+  ];
+  for (const input of cases) {
+    const out = PgySessionRequest.redactText(input);
+    assert.ok(!out.includes("口红测评"), `keyword 值必须脱敏: ${input}`);
+    assert.ok(out.includes("[redacted]"), `必须留下脱敏标记: ${input}`);
+  }
+  // 非敏感形态的原文本（无 keyword 键）不受影响。
+  const plain = PgySessionRequest.redactText("口红测评");
+  assert.ok(plain.includes("口红测评"), "独立字符串（无 keyword 键）不得被误伤");
+});
+
 test("redactText：多段 Cookie 头整段脱敏，后续分段不泄漏", () => {
   const out = PgySessionRequest.redactText("Cookie: webId=abc; web_session=SECRET; b=2");
   assert.ok(!out.includes("abc"), "第一段 Cookie 值必须脱敏");

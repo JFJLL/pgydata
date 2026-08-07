@@ -1,0 +1,22 @@
+{
+  "code": 0,
+  "data": [
+    {
+      "activityCode": "ACT_MOM_NEW_FACE",
+      "name": "母婴新面孔博主团"
+    },
+    {
+      "activityCode": "ACT_MOM_DARK_HORSE",
+      "name": "母婴黑马博主团"
+    },
+    {
+      "activityCode": "ACT_FOOD_ANTIQUE",
+      "name": "美食&文玩博主团"
+    },
+    {
+      "activityCode": "ACT_HOME_PARENTING",
+      "name": "家居&亲子博主团"
+    }
+  ],
+  "msg": ""
+}
