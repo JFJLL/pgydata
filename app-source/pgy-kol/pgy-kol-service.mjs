@@ -64,11 +64,16 @@ const LKG_PROVIDERS = [
   "kolTagsV2.automotiveIndustryTag",
   "kolTagsV2.audience20",
   "kolTagsV2.contentTheme",
+  "kolTagsV2.industryTags",
   "areas",
   "consumeBehavior",
   "activities",
   "contentTagTree",
+  "specialIndustryData",
 ];
+
+// 与 IPC 守卫同口径的 trackId 安全字符集（官网实测形状 kolMatch_<uuid>）。
+const PGY_TRACK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 /**
  * 创建找博主底座服务。
@@ -157,7 +162,7 @@ export function createPgyKolService({
             if (key === "searchType" || key === "keyword" || key === "trackId" || key === "brandUserId") {
               continue;
             }
-            const field = schema.getField(key);
+            const field = schema.getFieldByStateKey(key);
             if (!field) {
               throw new Error(`[pgy-kol] 任务快照含未知字段: ${key}`);
             }
@@ -207,7 +212,14 @@ export function createPgyKolService({
         };
       }
     }
-    return { schemaVersion: SCHEMA_VERSION, lkg };
+    return { schemaVersion: SCHEMA_VERSION, lkg, fields: schema.getSchemaFields() };
+  }
+
+  /**
+   * 返回字段注册表安全投影（单一权威来源；前端据此判断可用性）。
+   */
+  function schemaFields() {
+    return schema.getSchemaFields();
   }
 
   /**
@@ -303,14 +315,33 @@ export function createPgyKolService({
       // 快照值落盘前做值与路径脱敏（fresh reviewer M2）：已知字段的字符串值
       // 也可能携带本地路径或敏感形态文本，不得原样写入 task.json。
       const isSpecialKey = key === "searchType" || key === "keyword" || key === "trackId";
+      const stateField = schema.getFieldByStateKey(key);
+      const needsPayloadSerialization =
+        containsNodeObject(state[key]) ||
+        (stateField !== undefined && stateField.serializer === "percent-range-option");
       normalized[key] = sanitizeSnapshotValue(
         isSpecialKey
           ? payload0[key]
-          : containsNodeObject(state[key])
+          : // 节点形态值（树/范围对象）与百分比字段（需除以 100）取 builder 的最终
+            // Payload 值；已是 Payload 形态的值（如 top20 全路径字符串）原样保留，
+            // 避免二次序列化产生双重前缀。
+            needsPayloadSerialization
             ? payload0[key]
             : state[key],
       );
     }
+    // Phase 5.1：结构化字段（直播 filterList / 精选博主 flagList）由 builder 合并为
+    // 最终数组形态；dotted 顶层键（"filterList.kliveCnt30d" / "flagList.isHighQuality"）
+    // 不得写入快照——runner 直接展开快照，若保留顶层键会发送非法字段并静默丢失筛选。
+    for (const key of Object.keys(normalized)) {
+      if (key.startsWith("filterList.") || key.startsWith("flagList.")) {
+        delete normalized[key];
+      }
+    }
+    if (Array.isArray(payload0.filterList) && payload0.filterList.length > 0) {
+      normalized.filterList = sanitizeSnapshotValue(payload0.filterList);
+    }
+    normalized.flagList = sanitizeSnapshotValue(payload0.flagList);
     // Phase 5：批量任务使用关键词搜索时，启动前先做一次 track，并把 trackId
     // 写入持久化快照（随任务/叶子 filterState 保存，分页请求共用同一搜索上下文；
     // 无关键词时不发 track，保持 Phase 4 基线流量不变）。
@@ -322,7 +353,15 @@ export function createPgyKolService({
         session: sessionProvider ? sessionProvider() : undefined,
       });
       if (typeof tracked.trackId === "string" && tracked.trackId.length > 0) {
-        normalized.trackId = sanitizeSnapshotValue(tracked.trackId);
+        // Phase 5.1：服务端返回的 trackId 写入持久化快照前必须通过 IPC 同口径
+        // 边界校验（类型/长度/字符集/空白）；非法值拒绝写入，回退不持久化。
+        const trackId = tracked.trackId.trim();
+        if (trackId.length > 0 && PGY_TRACK_ID_PATTERN.test(trackId)) {
+          normalized.trackId = sanitizeSnapshotValue(trackId);
+        } else {
+          logger.warn &&
+            logger.warn("[pgy-kol] track 返回的 trackId 未通过边界校验，不写入任务快照");
+        }
       }
     }
     const mergedBudgets = {
@@ -556,6 +595,7 @@ export function createPgyKolService({
     taskStore,
     status,
     schemaStatus,
+    schemaFields,
     searchFirstPage,
     loadConfig,
     previewPayload,

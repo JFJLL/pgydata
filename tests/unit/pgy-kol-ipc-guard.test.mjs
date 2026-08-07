@@ -27,6 +27,7 @@ test("导出常量：边界值与白名单精确匹配", () => {
     "activities",
     "brandSearch",
     "contentTagTree",
+    "specialIndustryData",
   ]);
   assert.deepEqual(PGY_KOL_BUDGET_LIMITS, { maxLeaves: 64, maxDepth: 10, maxPagesPerLeaf: 250, queryBudget: 1000 });
   assert.deepEqual(PGY_KOL_RESUME_BUDGET_KEYS, ["queryBudget", "maxPagesPerLeaf"]);
@@ -34,6 +35,7 @@ test("导出常量：边界值与白名单精确匹配", () => {
     "automotiveIndustryTag",
     "audience20",
     "contentTheme",
+    "industryTags",
   ]);
 });
 

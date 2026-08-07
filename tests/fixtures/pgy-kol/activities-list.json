@@ -2,20 +2,56 @@
   "code": 0,
   "data": [
     {
-      "activityCode": "ACT_MOM_NEW_FACE",
-      "name": "母婴新面孔博主团"
+      "code": "6a3a40d5e4b078c8dc06b8e3",
+      "content": null,
+      "buttonName": null,
+      "buttonLink": null,
+      "activityName": "母婴新面孔博主团",
+      "priority": 1,
+      "startTime": null,
+      "endTime": null,
+      "activityLabel": "种收联动",
+      "kolDownloadStatus": 1,
+      "show": 1
     },
     {
-      "activityCode": "ACT_MOM_DARK_HORSE",
-      "name": "母婴黑马博主团"
+      "code": "6a3a4330e4b078c873a7a972",
+      "content": null,
+      "buttonName": null,
+      "buttonLink": null,
+      "activityName": "母婴黑马博主团",
+      "priority": 2,
+      "startTime": null,
+      "endTime": null,
+      "activityLabel": "",
+      "kolDownloadStatus": 1,
+      "show": 1
     },
     {
-      "activityCode": "ACT_FOOD_ANTIQUE",
-      "name": "美食&文玩博主团"
+      "code": "6a68affee4b078c80908ecb8",
+      "content": null,
+      "buttonName": null,
+      "buttonLink": null,
+      "activityName": "美食&文玩博主团",
+      "priority": 3,
+      "startTime": null,
+      "endTime": null,
+      "activityLabel": "种收联动",
+      "kolDownloadStatus": 1,
+      "show": 1
     },
     {
-      "activityCode": "ACT_HOME_PARENTING",
-      "name": "家居&亲子博主团"
+      "code": "6a3a40d5e4b078c8dc06b8e4",
+      "content": null,
+      "buttonName": null,
+      "buttonLink": null,
+      "activityName": "家居&亲子博主团",
+      "priority": 4,
+      "startTime": null,
+      "endTime": null,
+      "activityLabel": "种收联动",
+      "kolDownloadStatus": 1,
+      "show": 1
     }
   ],
   "msg": ""

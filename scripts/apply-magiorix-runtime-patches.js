@@ -3045,6 +3045,16 @@ if (!main.includes("broadcast: (channel, payload) => Dt.getAllWindows()")) {
   );
 }
 
+// ===== Phase 5.1：preload pgyKol bridge 暴露 schema-fields（前端单一 Schema 来源）=====
+if (!preload.includes('getSchemaFields:()=>r.ipcRenderer.invoke("pgy-kol:schema-fields")')) {
+  preload = replaceOnce(
+    preload,
+    'onBatchEvent:e=>{const n=(a,t)=>e(t);return r.ipcRenderer.on("pgy-kol:batch-event",n),()=>r.ipcRenderer.removeListener("pgy-kol:batch-event",n)}}});',
+    'onBatchEvent:e=>{const n=(a,t)=>e(t);return r.ipcRenderer.on("pgy-kol:batch-event",n),()=>r.ipcRenderer.removeListener("pgy-kol:batch-event",n)},getSchemaFields:()=>r.ipcRenderer.invoke("pgy-kol:schema-fields")}});',
+    "pgy-kol Phase 5.1 preload schema-fields bridge method",
+  );
+}
+
 fs.writeFileSync(mainPath, main);
 fs.writeFileSync(preloadPath, preload);
 console.log("Applied magiorix runtime patches.");

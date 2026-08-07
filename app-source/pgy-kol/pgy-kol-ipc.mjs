@@ -19,6 +19,7 @@ import {
 export const PGY_KOL_IPC_CHANNELS = Object.freeze({
   status: "pgy-kol:status",
   schemaStatus: "pgy-kol:schema-status",
+  schemaFields: "pgy-kol:schema-fields",
   searchFirstPage: "pgy-kol:search-first-page",
   config: "pgy-kol:config",
   payloadPreview: "pgy-kol:payload-preview",
@@ -63,6 +64,14 @@ export function registerPgyKolIpc({ ipcMain, service, broadcast }) {
   ipcMain.handle(PGY_KOL_IPC_CHANNELS.schemaStatus, async () => {
     try {
       return { ok: true, data: await service.schemaStatus() };
+    } catch (err) {
+      return { ok: false, error: toErrorPayload(err) };
+    }
+  });
+
+  ipcMain.handle(PGY_KOL_IPC_CHANNELS.schemaFields, async () => {
+    try {
+      return { ok: true, data: service.schemaFields() };
     } catch (err) {
       return { ok: false, error: toErrorPayload(err) };
     }

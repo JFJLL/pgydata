@@ -415,15 +415,16 @@ test("Phase 5：trackId 特殊键——filterState 携带时覆盖工厂生成",
 
 test("Phase 5：未实证字段门控——默认拒绝（unproven-field），allowUnproven 仅用于预览", () => {
   const builder = makeBuilder();
-  for (const field of ["contentTag", "inStar", "noteCategory", "coopCredit", "audienceGroup", "firstIndustry", "secondIndustry", "estimateCpuv30dLower"]) {
+  // Phase 5.1：唯一未实证字段为 audienceGroup（品牌依赖）。
+  for (const field of ["audienceGroup"]) {
     assert.throws(
-      () => builder.build({ [field]: field === "contentTag" ? ["美妆"] : 1 }, { trackId: "t" }),
+      () => builder.build({ [field]: ["test-crowd"] }, { trackId: "t" }),
       (err) => err instanceof PgyPayloadError && err.kind === "unproven-field",
       `${field} 未实证必须拒绝`,
     );
   }
-  const preview = builder.build({ contentTag: ["美妆", "母婴"] }, { trackId: "t", allowUnproven: true });
-  assert.deepEqual(preview.contentTag, ["美妆", "母婴"]);
+  const preview = builder.build({ audienceGroup: ["test-crowd"] }, { trackId: "t", allowUnproven: true });
+  assert.deepEqual(preview.audienceGroup, ["test-crowd"]);
   // 已实证字段不受门控影响。
   const proven = builder.build({ excludeLowActive: true }, { trackId: "t" });
   assert.equal(proven.excludeLowActive, true);
@@ -439,4 +440,27 @@ test("Phase 5：searchType/keyword/trackId 不经过 FIELD_REGISTRY（未知字�
   assert.equal(out.keyword, "测评");
   assert.equal(out.trackId, "track-x");
   assert.equal(out.gender, "女");
+});
+
+test("Phase 5.1：连续构建不得跨请求累积 filterList/flagList（浅拷贝共享数组回归）", () => {
+  const builder = makeBuilder();
+  const first = builder.build({ "filterList.kliveCnt30d": [[1, 5]] });
+  const second = builder.build({ "filterList.kliveCnt30d": [[1, 5]] });
+  const third = builder.build({ "filterList.avgAgmv90d": [[500000, -1]] });
+  assert.equal(first.filterList.length, 1, "首次构建必须只有一条 filterList");
+  assert.equal(second.filterList.length, 1, "第二次构建不得残留首次条目");
+  assert.deepEqual(second.filterList, [{ field: "kliveCnt30d", value: [1, 5] }]);
+  assert.equal(third.filterList.length, 1, "换字段后不得残留 kliveCnt30d 条目");
+  assert.deepEqual(third.filterList, [{ field: "avgAgmv90d", value: [500000, -1] }]);
+  // flagList 同样不得跨构建残留/共享元素。
+  const flagA = builder.build({ "flagList.isHighQuality": true });
+  const flagB = builder.build({ "flagList.hasBuyerCoopAuth": true });
+  assert.deepEqual(flagA.flagList, [
+    { flagType: "HAS_BRAND_COOP_BUYER_AUTH", flagValue: "0" },
+    { flagType: "IS_HIGH_QUALITY", flagValue: "1" },
+  ]);
+  assert.deepEqual(flagB.flagList, [
+    { flagType: "HAS_BRAND_COOP_BUYER_AUTH", flagValue: "1" },
+    { flagType: "IS_HIGH_QUALITY", flagValue: "0" },
+  ]);
 });

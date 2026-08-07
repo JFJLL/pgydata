@@ -20,7 +20,7 @@ const MAX_MESSAGE_LENGTH = 800;
 const SENSITIVE_HEADER_KEY = /cookie|authorization|token|x-s|x-t|password|secret|session/i;
 // Phase 5：搜索关键词同样属于用户输入敏感值（任务规格：关键词不得写入普通日志或错误详情）。
 const SENSITIVE_VALUE_KEY_PATTERN =
-  "cookie|authorization|token|password|secret|session|x-s|x-t|keyword";
+  "cookie|authorization|token|password|secret|session|x-s|x-t|keyword|trackid";
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -203,13 +203,19 @@ export class PgySessionRequest {
         }
       : undefined;
 
-    const mergedHeaders = {
-      ...(extraHeaders || {}),
-      ...(isRecord(headers) ? headers : {}),
-      referer: referer ?? DEFAULT_REFERER,
-      "Sec-Fetch-Mode": "no-cors",
-      ...(sigHeaders ? sigHeaders : {}),
-    };
+    const isSameOrigin = url.startsWith(PGY_ORIGIN);
+    const mergedHeaders = isSameOrigin
+      ? {
+          ...(extraHeaders || {}),
+          ...(isRecord(headers) ? headers : {}),
+          referer: referer ?? DEFAULT_REFERER,
+          "Sec-Fetch-Mode": "no-cors",
+          ...(sigHeaders ? sigHeaders : {}),
+        }
+      : // 跨域资源接口（如 edith 行业树）：Chromium 网络栈拒绝 Cookie/Origin/
+        // Sec-Fetch-*/签名头等跨域设置（ERR_BLOCKED_BY_CLIENT / ERR_INVALID_ARGUMENT）。
+        // 只保留调用方显式追加的非禁止头（Accept 等）。
+        { ...(isRecord(headers) ? headers : {}) };
     const isPost = typeof method === "string" && method.toUpperCase() === "POST";
     if (isPost && bodyText !== undefined && !hasHeaderIgnoreCase(mergedHeaders, "Content-Type")) {
       mergedHeaders["Content-Type"] = "application/json;charset=UTF-8";

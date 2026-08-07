@@ -372,10 +372,11 @@ test("schema-status without an LKG store still reports empty availability", asyn
   }
 });
 
-test("PGY_KOL_IPC_CHANNELS 契约：5 个只读通道 + Phase 4 批量通道", () => {
+test("PGY_KOL_IPC_CHANNELS 契约：6 个只读通道 + Phase 4 批量通道", () => {
   assert.deepEqual(Object.values(PGY_KOL_IPC_CHANNELS), [
     "pgy-kol:status",
     "pgy-kol:schema-status",
+    "pgy-kol:schema-fields",
     "pgy-kol:search-first-page",
     "pgy-kol:config",
     "pgy-kol:payload-preview",
@@ -569,19 +570,19 @@ test("payload-preview channel：返回纯 JSON payload 与默认分页，绝不�
 test("payload-preview channel：未实证字段允许预览（allowUnproven），真实搜索/采集被门控拒绝", async (t) => {
   const { ipcMain, calls, disposeIpc } = createHarness({ t, transportImpl: async () => cappedSearchResponse });
   try {
-    // 预览：未实证字段（contentTag）序列化展示，不发网络请求。
+    // 预览：未实证字段（audienceGroup）序列化展示，不发网络请求。
     const preview = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.payloadPreview)(
       {},
-      { contentTag: ["美妆", "母婴"] },
+      { audienceGroup: ["test-crowd"] },
     );
     assert.equal(preview.ok, true);
-    assert.deepEqual(preview.data.payload.contentTag, ["美妆", "母婴"]);
+    assert.deepEqual(preview.data.payload.audienceGroup, ["test-crowd"]);
     assert.equal(calls.length, 0, "预览绝不发网络请求");
 
     // 真实搜索：未实证字段必须拒绝，且不发任何请求（track/v2 都不发）。
     const search = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.searchFirstPage)(
       {},
-      { contentTag: ["美妆"] },
+      { audienceGroup: ["test-crowd"] },
     );
     assert.equal(search.ok, false);
     assert.equal(search.error.code, "unproven-field");
@@ -600,7 +601,7 @@ test("batch-start：未实证字段被门控拒绝，不发 track/分页请求",
   });
   try {
     const batch = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
-      filterState: { contentTag: ["美妆"] },
+      filterState: { audienceGroup: ["test-crowd"] },
       columns: ["userId"],
     });
     assert.equal(batch.ok, false);
@@ -951,6 +952,69 @@ test("batchStart 快照规范化：Payload 形态值不二次序列化，节点�
       `快照泄漏本地路径: ${task2.filterState.gender}`,
     );
     assert.ok(!task2.filterState.gender.includes("token=abc"), `快照泄漏敏感形态文本: ${task2.filterState.gender}`);
+  } finally {
+    disposeIpc();
+  }
+});
+
+test("Phase 5.1：批量任务快照与 v2 请求保留结构化 filterList/flagList，dotted 键不泄漏", async (t) => {
+  const bodies = [];
+  const { ipcMain, service, disposeIpc } = createBatchHarness({
+    t,
+    transportImpl: async (opts) => {
+      bodies.push(JSON.parse(opts.body));
+      return jsonResponse({ code: 0, data: { kols: [], total: 0 }, msg: "" });
+    },
+  });
+  try {
+    const start = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
+      filterState: {
+        searchType: 1,
+        keyword: "面膜",
+        "filterList.kliveCnt30d": [[1, 5]],
+        "filterList.avgAgmv90d": [[500000, -1]],
+        "flagList.isHighQuality": true,
+        "flagList.hasBuyerCoopAuth": false,
+        inStar: 1,
+        inviteReply48hNumRatio: [95, -1],
+        thousandLikePercent30: [40, null],
+      },
+      columns: ["userId"],
+    });
+    assert.equal(start.ok, true);
+    await waitForTaskStatus(service, start.data.taskId, ["completed"]);
+
+    const task = await service.batchGet({ taskId: start.data.taskId });
+    // 快照必须保存结构化数组，且不得保留 dotted 顶层键。
+    assert.deepEqual(task.filterState.filterList, [
+      { field: "kliveCnt30d", value: [1, 5] },
+      { field: "avgAgmv90d", value: [500000, -1] },
+    ]);
+    assert.deepEqual(task.filterState.flagList, [
+      { flagType: "HAS_BRAND_COOP_BUYER_AUTH", flagValue: "0" },
+      { flagType: "IS_HIGH_QUALITY", flagValue: "1" },
+    ]);
+    assert.ok(!Object.keys(task.filterState).some((k) => k.startsWith("filterList.") || k.startsWith("flagList.")));
+    assert.equal(task.filterState.inStar, 1);
+    // 百分比范围：快照必须保存除以 100 后的 Payload 值（官网实证 [0.95,-0.01]）。
+    assert.deepEqual(task.filterState.inviteReply48hNumRatio, [0.95, -0.01]);
+    assert.deepEqual(task.filterState.thousandLikePercent30, [0.4, null]);
+
+    // 实际 v2 请求体同样携带结构化字段，且无非法顶层键。
+    const v2Body = bodies.find((body) => body.trackId);
+    assert.ok(v2Body, "至少发过一次分页请求");
+    assert.deepEqual(v2Body.filterList, [
+      { field: "kliveCnt30d", value: [1, 5] },
+      { field: "avgAgmv90d", value: [500000, -1] },
+    ]);
+    assert.deepEqual(v2Body.flagList, [
+      { flagType: "HAS_BRAND_COOP_BUYER_AUTH", flagValue: "0" },
+      { flagType: "IS_HIGH_QUALITY", flagValue: "1" },
+    ]);
+    assert.equal(v2Body["filterList.kliveCnt30d"], undefined);
+    assert.equal(v2Body["flagList.isHighQuality"], undefined);
+    assert.deepEqual(v2Body.inviteReply48hNumRatio, [0.95, -0.01], "v2 请求必须发送百分比归一化值");
+    assert.deepEqual(v2Body.thousandLikePercent30, [0.4, null]);
   } finally {
     disposeIpc();
   }

@@ -14,14 +14,31 @@ const preload = fs.readFileSync(preloadPath, "utf8");
 
 const legacyFrontendBrandPattern = /(?:\bzs\.|@zsdesktop|PYGdata|Emagic(?:DataCrawler| Data Crawler)?|易美(?:传播|数据抓取)?)/i;
 
+// Phase 5.1：页面源码以「基线模板 + pairs + helpers」的最终形态为准（单一来源），
+// 与 apply-magiorix-frontend-patches.js 中的 pgyKolSearchPageSource51 计算一致。
 function extractEmbeddedPageSource() {
   const anchor = "const pgyKolSearchPageSource = `";
   const start = script.indexOf(anchor);
   assert.ok(start >= 0, "patch script must embed the pgy-kol page source in a template literal");
   const bodyStart = start + anchor.length;
-  const bodyEnd = script.indexOf("`;", bodyStart);
+  // 基线模板字面量以行尾 "`;" 闭合（pgyKolSearchPageSource51 之前）。
+  const closeMarker = "`;";
+  const bodyEnd = script.indexOf(closeMarker, bodyStart);
   assert.ok(bodyEnd > bodyStart, "pgy-kol page source template literal must be closed");
-  return script.slice(bodyStart, bodyEnd);
+  const baseSource = script.slice(bodyStart, bodyEnd);
+  const pairsPath = path.join(projectRoot, "scripts", "pgy-kol-phase51-pairs.json");
+  const phase51 = JSON.parse(fs.readFileSync(pairsPath, "utf8"));
+  let source = baseSource;
+  for (const item of phase51.pairs) {
+    assert.ok(source.includes(item.from), `Phase 5.1 pair target must exist: ${item.label}`);
+    assert.equal(
+      source.indexOf(item.from),
+      source.lastIndexOf(item.from),
+      `Phase 5.1 pair target must be unique: ${item.label}`,
+    );
+    source = source.replace(item.from, item.to);
+  }
+  return `${source}\n${phase51.helpers}`;
 }
 
 const pageSource = extractEmbeddedPageSource();
@@ -295,34 +312,63 @@ test("Phase 5：单元格格式化规则——percent 不重复乘 100、money �
   assert.doesNotMatch(pageSource, /col\.unavailable===true/);
 });
 
-test("Phase 5：未实证取值字段不发送（fresh reviewer M1/M2/M3 修复）", () => {
-  // 人群目标/合作行业/预估CPM/精选博主取值语义未实证：不得进入 pgyKolToFilterState。
-  for (const key of [
-    "audienceGroup",
-    "firstIndustry",
-    "secondIndustry",
-    "estimateCpuv30dLower",
-    "estimateCpuv30dUpper",
-    "inStar",
-    "newHighQuality",
-    "filterIntention",
-    "isIndustryRecommend",
-  ]) {
-    assert.ok(
-      !pageSource.includes(`out.${key}=`),
-      `pgyKolToFilterState 不得发送未实证字段 ${key}`,
-    );
+test("Phase 5.1：实证字段进入 payload，未实证 audienceGroup 仍不发送", () => {
+  // 官网最小流量实证后已启用的字段：必须进入 pgyKolToFilterState。
+  const proven = [
+    "out.inviteReply48hNumRatio=f.coopCredit.value",
+    "out.accumCoopImpMedinNum30d=f.coopImpMedin.value",
+    "out.readMidCoop30=f.coopReadMid.value",
+    "out.interMidCoop30=f.coopInterMid.value",
+    "out.mCpuv30d=f.coopOverflowMid.value",
+    "out.estimatePicReadPrice=f.estimatePicReadCost.value",
+    "out.estimateVideoReadPrice=f.estimateVideoReadCost.value",
+    "out.estimatePictureEngageCost=f.estimatePicEngageCost.value",
+    "out.estimateVideoEngageCost=f.estimateVideoEngageCost.value",
+    "out.estimatePictureCpm=f.estimatePictureCpm.value",
+    "out.estimateVideoCpm=f.estimateVideoCpm.value",
+    "out.estimateCpuv30d=f.overflowCost.value",
+    'out["filterList.kliveCnt30d"]=f.liveCount30d.map',
+    'out["filterList.avgLiveViewerNum"]=f.avgLiveViewer.map',
+    'out["filterList.avgAgmv90d"]=f.avgLiveGmv.map',
+    "out.contentSceneLabel=f.noteCategory",
+    "out.inStar=1",
+    "out.newHighQuality=1",
+    "out.filterIntention=true",
+    'out["flagList.isHighQuality"]=true',
+    'out["flagList.hasBuyerCoopAuth"]=true',
+    "out.firstIndustry=f.firstIndustry",
+    "out.secondIndustry=f.secondIndustry",
+  ];
+  for (const needle of proven) {
+    assert.ok(pageSource.includes(needle), `pgyKolToFilterState 必须发送实证字段: ${needle}`);
   }
-  // 待实证集合与用户提示必须存在（M3/M6 可见性）。
-  assert.match(pageSource, /function pgyKolUnprovenSet\(\)\{return \{audienceGroup:1,firstIndustry:1/);
+  // audienceGroup 仍不可实证（官网当前账号不可用）：不得发送。
+  assert.ok(!pageSource.includes("out.audienceGroup="), "audienceGroup 不得进入 payload");
+  // 旧的未实证双份状态已删除：unproven 集合改为 Schema 单一来源（window.__pgyKolUnproven）。
   assert.ok(
-    pageSource.includes("取值语义尚未经官网最小流量实证，暂不参与查询与采集"),
-    "未实证选择必须显示可见提示",
+    pageSource.includes("function pgyKolUnprovenSet(){return window.__pgyKolUnproven||{}}"),
+    "unproven set must read the schema-driven window.__pgyKolUnproven",
   );
+  assert.ok(
+    pageSource.includes("function pgyKolSchemaUnproven(fields)"),
+    "schema loader must populate the unproven set from IPC fields",
+  );
+  assert.ok(
+    pageSource.includes('fd.payloadProven===false&&Array.isArray(fd.uiKeys)'),
+    "unproven keys must come from payloadProven/uiKeys of the shared schema",
+  );
+  // 未实证选择必须显示可见提示（audienceGroup 权限受限原因）。
+  assert.ok(
+    pageSource.includes("人群目标（按博主粉丝推荐）依赖合作品牌：当前账号未绑定品牌，官网禁用该筛选；无法实证前不参与查询与采集。"),
+    "audienceGroup unavailable reason must be visible",
+  );
+  // 摘要 chips 的待实证后缀仍由 Schema 集合驱动（旧硬编码副本已移除）。
   assert.ok(
     pageSource.includes('label:(pgyKolUnprovenSet()[s.key]?"【待实证】":"")+s.label'),
-    "unproven summary chips must carry the 待实证 suffix",
+    "unproven summary chips must carry the 待实证 suffix from the schema set",
   );
+  // 旧精选博主 summary 循环（会导致重复 chips）必须移除。
+  assert.ok(!pageSource.includes('"risingStar"'), "legacy featured summary loop must be removed");
 });
 
 test("brand gating: audience group and exclude switches require a cooperation brand", () => {
@@ -580,7 +626,10 @@ test("patch script wires route, menu merge, and dev switch with idempotent guard
   );
   assert.ok(script.includes('localStorage.getItem("magiorix-pgy-kol-enabled")==="1"'), "dev switch must gate the page");
   assert.ok(script.includes('const crypto = require("crypto")'), "patch script must require crypto for the content guard");
-  assert.ok(script.includes("normalizeSource(pgyKolSearchPageSource)"), "content guard must hash the embedded page source");
+  assert.ok(
+    script.includes("normalizeSource(pgyKolSearchPageSource51)"),
+    "content guard must hash the Phase 5.1 final embedded page source",
+  );
   assert.ok(script.includes("existingSha1 !== sourceSha1"), "content guard must compare existing block hash with source hash");
   assert.ok(
     script.includes('normalizeSource(existingBlock).replace(/\\n$/, "")'),

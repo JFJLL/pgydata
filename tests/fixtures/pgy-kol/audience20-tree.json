@@ -602,6 +602,51 @@
         ]
       }
     ],
-    "contentTheme": []
+    "contentTheme": [],
+    "industryTags": [
+      {
+        "id": "it-001",
+        "orderId": 1,
+        "taxonomy1Tag": "美妆个护",
+        "taxonomy2Tags": [
+          "护肤",
+          "彩妆",
+          "美发",
+          "美甲"
+        ],
+        "taxonomy2Tag": "护肤",
+        "taxonomy3Tags": null
+      },
+      {
+        "id": "it-002",
+        "orderId": 2,
+        "taxonomy1Tag": "食品饮料",
+        "taxonomy2Tags": [
+          "乳制品",
+          "零食",
+          "饮料",
+          "速食",
+          "调味品",
+          "烘焙",
+          "糖果",
+          "茶叶",
+          "酒类",
+          "保健食品"
+        ],
+        "taxonomy2Tag": "乳制品",
+        "taxonomy3Tags": null
+      },
+      {
+        "id": "it-003",
+        "orderId": 3,
+        "taxonomy1Tag": "母婴",
+        "taxonomy2Tags": [
+          "奶粉",
+          "童装"
+        ],
+        "taxonomy2Tag": "奶粉",
+        "taxonomy3Tags": null
+      }
+    ]
   }
 }

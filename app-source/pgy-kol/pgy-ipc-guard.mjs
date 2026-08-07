@@ -41,7 +41,7 @@ const WINDOWS_RESERVED_TASK_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 // config 通道 provider 白名单：只允许这三类，且 section 规则各不相同。
 // kolTagsV2：section 必填且只能是三个已确认节；consumeBehavior/areas：section 必须省略。
 export const PGY_KOL_CONFIG_SECTIONS = Object.freeze(
-  Object.freeze(["automotiveIndustryTag", "audience20", "contentTheme"]),
+  Object.freeze(["automotiveIndustryTag", "audience20", "contentTheme", "industryTags"]),
 );
 export const PGY_KOL_CONFIG_PROVIDERS = Object.freeze([
   "kolTagsV2",
@@ -50,6 +50,7 @@ export const PGY_KOL_CONFIG_PROVIDERS = Object.freeze([
   "activities",
   "brandSearch",
   "contentTagTree",
+  "specialIndustryData",
 ]);
 
 const MAX_CONFIG_FIELD_LENGTH = 64;

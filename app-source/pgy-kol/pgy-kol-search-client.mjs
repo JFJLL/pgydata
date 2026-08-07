@@ -20,6 +20,10 @@ export const KOL_WINDOW_MAX_PAGE = 250;
 const KOL_SEARCH_REFERER = "https://pgy.xiaohongshu.com/solar/pre-trade/note/kol";
 const KOL_PAGE_SIZE_DEFAULT = 20;
 
+// 与 IPC 守卫同口径的 trackId 安全字符集（官网实测形状 kolMatch_<uuid>）。
+// 服务端返回的 trackId 在进入 v2 payload / 持久化前必须通过本校验。
+const TRACK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
 // KNOWN_KOL_FIELDS：人工审核过的安全展示白名单。
 // 响应中任何不在本清单内的字段都属于未知字段，必须进入 quarantinedFields 隔离，不得自动成为展示列。
 export const KNOWN_KOL_FIELDS = Object.freeze([
@@ -425,6 +429,14 @@ export class PgyKolSearchClient {
           break;
         }
       }
+    }
+    // Phase 5.1：纵深防御 — 服务端返回的 trackId 未通过安全字符集校验时视为无效，
+    // 调用方回退随机 trackId，绝不把异常形状写入 v2 payload 或任务快照。
+    if (typeof trackId === "string" && trackId.length > 0 && !TRACK_ID_PATTERN.test(trackId.trim())) {
+      trackId = null;
+      rawShape = `${rawShape}-rejected-charset`;
+    } else if (typeof trackId === "string") {
+      trackId = trackId.trim();
     }
     return { trackId, rawShape };
   }

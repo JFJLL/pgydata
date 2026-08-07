@@ -131,6 +131,11 @@ export class PgyPayloadBuilder {
 
     const payload = {
       ...BASE_PAYLOAD,
+      // 每次构建必须使用全新数组：BASE_PAYLOAD 只做浅冻结，若直接复用其
+      // filterList/flagList 引用，filter-list-entry 的 push 会跨构建累积
+      // （同一进程内多次搜索/预览时旧筛选残留进新 payload）。
+      filterList: [],
+      flagList: (BASE_PAYLOAD.flagList || []).map((flag) => ({ ...flag })),
       pageNum,
       pageSize,
       trackId:
@@ -176,7 +181,8 @@ export class PgyPayloadBuilder {
         continue;
       }
       // 未知字段无论值是否为空都必须显式报错，禁止空值绕过契约检查。
-      const field = this.schema.getField(key);
+      // Phase 5.1：按 payload 字段名或前端状态键（uiKey）解析，映射单一权威来源。
+      const field = this.schema.getFieldByStateKey(key);
       if (!field) {
         throw new PgyPayloadError(`[pgy-payload-builder] 未知筛选字段: ${key}`, {
           kind: "unknown-field",
@@ -198,7 +204,28 @@ export class PgyPayloadBuilder {
           { kind: "unproven-field" },
         );
       }
-      payload[key] = this.schema.serialize({ payloadField: key, value });
+      const serialized = this.schema.serialize({ payloadField: field.payloadField, value });
+      if (field.serializer === "filter-list-entry") {
+        // 直播数据：多个字段共享 filterList 数组（官网 filterList 契约）。
+        payload.filterList = Array.isArray(payload.filterList) ? payload.filterList : [];
+        payload.filterList.push(serialized);
+        continue;
+      }
+      if (field.serializer === "flag-entry") {
+        // 精选博主：flagList 结构化合并（保留默认双 flag，按 flagType 覆盖）。
+        const flags = Array.isArray(payload.flagList) ? payload.flagList : [];
+        const index = flags.findIndex((flag) => flag.flagType === serialized.flagType);
+        const next = flags.slice();
+        if (index >= 0) {
+          // 原位替换：保持默认 flagList 顺序稳定（可复现输出）。
+          next[index] = serialized;
+        } else {
+          next.push(serialized);
+        }
+        payload.flagList = next;
+        continue;
+      }
+      payload[field.payloadField] = serialized;
     }
 
     return payload;

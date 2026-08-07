@@ -198,6 +198,34 @@ test("unavailable 2 项（overflowCost/coopCredit）：responsePath=null、note=
   }
 });
 
+test("展示指标计数口径（任务 4）：50 = 42 官网列 + 8 独立列；可展示/可导出/可添加公式可复核", () => {
+  // 历史交付报告同时出现「官网可添加列 41」与「42 项官网列」，口径必须可复算：
+  // - 注册表总项 50 = 42 官网列（display-metrics-dom.json n 顺序）+ 8 博主信息独立列；
+  // - 官网可添加列 = 42 官网列 − 3 个固定列（kolInfo/recentNotes/actions 不可勾选）；
+  // - 可展示列 = 总数 − 固定列（responsePath=null）− unavailable − computed 合成列。
+  const fixed = PGY_KOL_COLUMN_REGISTRY.filter((column) => column.fixed);
+  const unavailable = PGY_KOL_COLUMN_REGISTRY.filter((column) => column.evidence === "unavailable");
+  const quote = PGY_KOL_COLUMN_REGISTRY.filter((column) => column.mutuallyExclusiveGroup === "quote");
+  const computed = PGY_KOL_COLUMN_REGISTRY.filter(
+    (column) => typeof column.responsePath === "string" && column.responsePath.startsWith("computed:"),
+  );
+  assert.equal(PGY_KOL_COLUMN_REGISTRY.length, 50, "注册表总项 = 42 官网列 + 8 独立列");
+  assert.equal(PGY_KOL_COLUMN_REGISTRY.slice(0, 42).length, 42);
+  assert.equal(PGY_KOL_COLUMN_REGISTRY.slice(42).length, 8);
+  assert.equal(fixed.length, 3, "固定列恰好 3 项");
+  assert.equal(unavailable.length, 2, "unavailable 恰好 2 项");
+  assert.equal(quote.length, 3, "报价互斥组恰好 3 项（三选一）");
+  assert.ok(computed.length >= 1, "computed 合成列至少 1 项（price）");
+  assert.equal(
+    listPgyKolDisplayableColumns().length,
+    50 - fixed.length - unavailable.length - computed.length,
+    "可展示列 = 总数 − 固定列 − unavailable − computed 合成列",
+  );
+  assert.equal(42 - fixed.length, 39, "官网可添加列 = 42 官网列 − 3 固定列");
+  assert.equal(getPgyKolDefaultDisplayColumns().length, 8, "默认展示 8 项");
+  assert.equal(getPgyKolDefaultExportColumns().length, 10, "默认导出保持 Phase 4 的 10 项");
+});
+
 test("默认展示 8 项精确匹配（与官网当前账号默认一致）", () => {
   const defaults = getPgyKolDefaultDisplayColumns();
   assert.deepEqual(defaults.map((column) => column.id), DEFAULT_DISPLAY_8);

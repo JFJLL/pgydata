@@ -50,14 +50,17 @@ async function tmpDir(t, prefix = "pgy-lkg-") {
 }
 
 test("SCHEMA_VERSION / PROVIDER_ENDPOINTS / KOL_TAGS_V2_SECTIONS 契约", () => {
-  assert.equal(SCHEMA_VERSION, "pgy-filter-schema/2.0.0");
+  assert.equal(SCHEMA_VERSION, "pgy-filter-schema/3.0.0");
   assert.equal(PROVIDER_ENDPOINTS.kolTagsV2, "/api/solar/kol/get_select_kol_tags_config_v2");
   assert.equal(PROVIDER_ENDPOINTS.areas, "/api/solar/area/get_areas?type=2");
   assert.equal(PROVIDER_ENDPOINTS.contentTagTree, "/api/solar/cooperator/content/tag_tree");
   assert.equal(
-    PROVIDER_ENDPOINTS.industryTags,
+    PROVIDER_ENDPOINTS.specialIndustryData,
     "https://edith.xiaohongshu.com/api/pgy/kol/get_industry_tag",
   );
+  // 行业推荐树实际来自 kolTagsV2.industryTags section（2026-08-07 实测），
+  // 无独立的 industryTags 端点映射（避免死映射误导）。
+  assert.equal(PROVIDER_ENDPOINTS.industryTags, undefined);
   assert.equal(PROVIDER_ENDPOINTS.consumeBehavior, "/api/pgy/kol/consume_behavior");
   assert.equal(PROVIDER_ENDPOINTS.brandSearch, "/api/solar/brand/search_brand");
   assert.equal(PROVIDER_ENDPOINTS.activities, "/api/solar/cooperator/get_all_activities");
@@ -66,6 +69,7 @@ test("SCHEMA_VERSION / PROVIDER_ENDPOINTS / KOL_TAGS_V2_SECTIONS 契约", () => 
     automotiveIndustryTag: "industrySpecificCrowdsMotorDom",
     audience20: "top20CrowdsLabel",
     contentTheme: "contentThemeLabel",
+    industryTags: "firstIndustry",
   });
 });
 
@@ -414,6 +418,32 @@ test("loadOptions：consumeBehavior / areas live 成功并带正确 payloadField
   assert.equal(areasResult.nodes[0].children[0].fullPath, "中国 > 广东");
 });
 
+test("loadOptions：industryTags 用 taxonomy 形状规范化为两级行业树", async (t) => {
+  const cfg = await loadFixture("kol-tags-v2-config.json");
+  const baseDir = await tmpDir(t);
+  const lkgStore = createJsonLkgStore({ baseDir });
+  const schema = new PgyFilterSchema({ request: makeRequest(() => cfg), lkgStore });
+
+  const result = await schema.loadOptions({ provider: "kolTagsV2", section: "industryTags" });
+  assert.equal(result.source, "live");
+  assert.equal(result.nodes[0].payloadField, "firstIndustry");
+  assert.equal(result.nodes[0].value, "美妆个护");
+  assert.equal(result.nodes[0].label, "美妆个护");
+  assert.equal(result.nodes[0].fullPath, "美妆个护");
+  // 二级=taxonomy2Tags 字符串数组 → 叶子节点。
+  assert.deepEqual(
+    result.nodes[0].children.map((n) => n.value),
+    ["护肤", "彩妆", "美发", "美甲"],
+  );
+  assert.equal(result.nodes[0].children[0].fullPath, "美妆个护 > 护肤");
+  assert.ok(result.nodes[0].children[0].children.length === 0);
+  // 快照按 section 独立保存。
+  const snapshot = await lkgStore.load("kolTagsV2.industryTags");
+  assert.ok(snapshot);
+  assert.equal(snapshot.provider, "kolTagsV2.industryTags");
+  assert.equal(snapshot.nodes[1].value, "食品饮料");
+});
+
 test("loadOptions：request 抛错 + LKG 快照 → source=lkg + warning", async (t) => {
   const baseDir = await tmpDir(t);
   const lkgStore = createJsonLkgStore({ baseDir });
@@ -514,9 +544,9 @@ test("loadOptions：activities 动态加载并规范化活动节点（官网热�
   assert.ok(Array.isArray(result.nodes) && result.nodes.length >= 4);
   const first = result.nodes[0];
   assert.equal(first.payloadField, "activityCodes");
-  assert.equal(first.value, "ACT_MOM_NEW_FACE");
+  assert.equal(first.value, "6a3a40d5e4b078c8dc06b8e3");
   assert.equal(first.label, "母婴新面孔博主团");
-  assert.equal(first.uniqueKey, "activityCodes:ACT_MOM_NEW_FACE:母婴新面孔博主团");
+  assert.equal(first.uniqueKey, "activityCodes:6a3a40d5e4b078c8dc06b8e3:母婴新面孔博主团");
   // LKG 快照独立保存。
   const snapshot = await lkgStore.load("activities");
   assert.ok(snapshot && snapshot.version === SCHEMA_VERSION);
@@ -530,7 +560,7 @@ test("loadOptions：activities 动态加载并规范化活动节点（官网热�
   });
   const fallback = await failing.loadOptions({ provider: "activities" });
   assert.equal(fallback.source, "lkg");
-  assert.equal(fallback.nodes[0].value, "ACT_MOM_NEW_FACE");
+  assert.equal(fallback.nodes[0].value, "6a3a40d5e4b078c8dc06b8e3");
 });
 
 test("loadOptions：activities 容忍 data.list / data.activities 形状", async () => {
@@ -583,9 +613,37 @@ test("loadOptions：brandSearch LKG 快照键使用 keyword 哈希（关键词�
   const schema = new PgyFilterSchema({ request: makeRequest(() => fixture), lkgStore });
   await schema.loadOptions({ provider: "brandSearch", keyword: "美妆" });
   const files = await fs.readdir(baseDir);
-  assert.equal(files.length, 1);
-  assert.match(files[0], /^lkg-brandSearch\.[0-9a-f]{16}\.json$/, "快照文件名必须使用哈希键");
-  assert.ok(!files[0].includes("美妆"), "关键词不得进入快照文件名");
+  const snapshotFiles = files.filter((name) => name.startsWith("lkg-brandSearch."));
+  assert.equal(snapshotFiles.length, 1, "每个关键词哈希只保留一个快照文件");
+  assert.match(snapshotFiles[0], /^lkg-brandSearch\.[0-9a-f]{16}\.json$/, "快照文件名必须使用哈希键");
+  assert.ok(!snapshotFiles[0].includes("美妆"), "关键词不得进入快照文件名");
+  assert.ok(files.some((name) => name === "lkg-cache.json"), "LRU manifest 存在");
+});
+
+test("createJsonLkgStore：LRU 上限淘汰与 TTL 过期清理（有界缓存不无限增长）", async (t) => {
+  const baseDir = await tmpDir(t);
+  const store = createJsonLkgStore({ baseDir, maxEntries: 3, ttlMs: 2000 });
+  const save = async (key) => {
+    await store.save(key, { version: SCHEMA_VERSION, provider: key, savedAt: new Date().toISOString(), nodes: [{ value: key }] });
+  };
+  await save("a");
+  await save("b");
+  await save("c");
+  // 触碰 a（LRU 顺序：b, c, a），再写入 d → 应淘汰最久未用 b。
+  await store.load("a");
+  await save("d");
+  assert.equal(await store.load("b"), null, "LRU 溢出必须淘汰最久未用条目");
+  assert.ok(await store.load("a"), "最近使用的条目必须保留");
+  assert.ok(await store.load("c"));
+  assert.ok(await store.load("d"));
+  // TTL 过期：等待过期后 load 返回 null，且快照文件被清理。
+  await new Promise((resolve) => setTimeout(resolve, 2300));
+  assert.equal(await store.load("a"), null, "TTL 过期后不得返回陈旧快照");
+  assert.equal(await store.load("c"), null);
+  const files = await fs.readdir(baseDir);
+  // 懒清理：被访问过的过期条目文件必须被删除；未访问的条目（d）允许保留到下次访问。
+  assert.ok(!files.includes("lkg-a.json"), "过期且被访问的快照文件必须被清理");
+  assert.ok(!files.includes("lkg-c.json"), "过期且被访问的快照文件必须被清理");
 });
 
 test("loadOptions：activities/brandSearch 元素缺标识键 → fail-closed（unknown-structure）", async () => {
@@ -691,30 +749,34 @@ test("FIELD_REGISTRY：包含全部必需字段且语义正确", () => {
     "contentThemeLabel",
     "kolInfoConsumBehaviorLabel",
     "contentTag",
-    "coopCredit",
-    "propagationScale",
-    "estimateReadCost",
-    "estimateInteractCost",
-    "overflowCost",
-    "liveCount30d",
-    "avgLiveViewer",
-    "avgLiveGmv",
-    "noteCategory",
+    "inviteReply48hNumRatio",
+    "accumCoopImpMedinNum30d",
+    "readMidCoop30",
+    "interMidCoop30",
+    "mCpuv30d",
+    "estimatePicReadPrice",
+    "estimateVideoReadPrice",
+    "estimatePictureEngageCost",
+    "estimateVideoEngageCost",
+    "estimatePictureCpm",
+    "estimateVideoCpm",
+    "estimateCpuv30d",
+    "filterList.kliveCnt30d",
+    "filterList.avgLiveViewerNum",
+    "filterList.avgAgmv90d",
     "inStar",
     "newHighQuality",
     "filterIntention",
-    "isIndustryRecommend",
+    "flagList.isHighQuality",
+    "flagList.hasBuyerCoopAuth",
+    "firstIndustry",
+    "secondIndustry",
     "excludeLowActive",
     "fansNumUp",
     "excludedTradeReportBrand",
     "excludedTradeInviteReportBrand",
     "tradeType",
     "excludedTradeReportBrandId",
-    "estimateCpuv30d",
-    "estimateCpuv30dLower",
-    "estimateCpuv30dUpper",
-    "firstIndustry",
-    "secondIndustry",
   ];
   const byName = new Map(FIELD_REGISTRY.map((field) => [field.payloadField, field]));
   assert.equal(FIELD_REGISTRY.length, requiredFields.length);
@@ -750,15 +812,9 @@ test("FIELD_REGISTRY：包含全部必需字段且语义正确", () => {
     "contentThemeLabel",
     "kolInfoConsumBehaviorLabel",
     "contentTag",
-    "propagationScale",
-    "overflowCost",
-    "liveCount30d",
-    "avgLiveViewer",
-    "avgLiveGmv",
-    "noteCategory",
-    "estimateCpuv30d",
-    "firstIndustry",
-    "secondIndustry",
+    "filterList.kliveCnt30d",
+    "filterList.avgLiveViewerNum",
+    "filterList.avgAgmv90d",
   ];
   for (const name of multiFields) {
     assert.equal(byName.get(name).multiSelect, "multi", name);
@@ -818,35 +874,43 @@ test("FIELD_REGISTRY：包含全部必需字段且语义正确", () => {
 
 test("Phase 5：payloadProven 门控——未实证字段禁止发送，已实证字段放行", () => {
   const byName = new Map(FIELD_REGISTRY.map((field) => [field.payloadField, field]));
-  const unproven = [
-    "audienceGroup",
-    "firstIndustry",
-    "secondIndustry",
-    "contentTag",
-    "coopCredit",
-    "propagationScale",
-    "estimateReadCost",
-    "estimateInteractCost",
-    "overflowCost",
-    "liveCount30d",
-    "avgLiveViewer",
-    "avgLiveGmv",
-    "noteCategory",
-    "inStar",
-    "newHighQuality",
-    "filterIntention",
-    "isIndustryRecommend",
-    "estimateCpuv30dLower",
-    "estimateCpuv30dUpper",
-  ];
+  // Phase 5.1：2026-08-07 真实流量实证后，唯一未实证字段为 audienceGroup
+  // （品牌依赖：账号无可用合作品牌，官网禁用人群目标）。
+  const unproven = ["audienceGroup"];
   for (const name of unproven) {
     const field = byName.get(name);
     assert.ok(field, `缺少字段 ${name}`);
     assert.equal(field.payloadProven, false, `${name} 必须未实证`);
-    assert.equal(field.evidence, "pending-live-verification", `${name} 证据必须标记待实证`);
+    assert.ok(
+      field.evidence === "pending-live-verification" || field.reason,
+      `${name} 必须带证据或不可用原因`,
+    );
   }
-  // 常规剔除与官网 BASE_PAYLOAD 既有字段已实证。
+  // Phase 5.1 已实证字段（2026-08-07 真实流量）与官网 BASE_PAYLOAD 既有字段。
   for (const name of [
+    "contentTag",
+    "inviteReply48hNumRatio",
+    "accumCoopImpMedinNum30d",
+    "readMidCoop30",
+    "interMidCoop30",
+    "mCpuv30d",
+    "estimatePicReadPrice",
+    "estimateVideoReadPrice",
+    "estimatePictureEngageCost",
+    "estimateVideoEngageCost",
+    "estimatePictureCpm",
+    "estimateVideoCpm",
+    "filterList.kliveCnt30d",
+    "filterList.avgLiveViewerNum",
+    "filterList.avgAgmv90d",
+    "contentSceneLabel",
+    "inStar",
+    "newHighQuality",
+    "filterIntention",
+    "flagList.isHighQuality",
+    "flagList.hasBuyerCoopAuth",
+    "firstIndustry",
+    "secondIndustry",
     "excludeLowActive",
     "fansNumUp",
     "excludedTradeReportBrand",

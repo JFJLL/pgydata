@@ -1033,6 +1033,31 @@ const pgyKolRouteFrom = '"../pages/dashboard/index.tsx":()=>G(()=>Promise.resolv
 const pgyKolRouteTo = pgyKolRouteFrom + '"../pages/pgy-kol-search/index.tsx":()=>G(()=>Promise.resolve().then(()=>({default:PgyKolSearchPage})),void 0,import.meta.url),';
 const pgyKolRouteMarker = '"../pages/pgy-kol-search/index.tsx":()=>G(';
 
+// ===========================================================================
+// Phase 5.1：在 Phase 5 注入块之上应用官网实证转换（from/to pairs + helpers）。
+// 单一权威来源：payloadProven 只由后端 Schema 维护，前端通过 schema-fields IPC
+// 读取；本转换删除前端手写 unproven 副本并启用 2026-08-07 实证字段。
+// pairs 由 scripts/build-pgy-kol-phase51-pairs.js 生成（含精确旧串，防漂移）。
+// ===========================================================================
+const pgyKolPhase51Patch = JSON.parse(
+  fs.readFileSync(path.join(projectRoot, "scripts", "pgy-kol-phase51-pairs.json"), "utf8"),
+);
+const pgyKolSearchPageSource51 = (() => {
+  let source = pgyKolSearchPageSource;
+  for (const item of pgyKolPhase51Patch.pairs) {
+    if (!source.includes(item.from)) {
+      throw new Error(`Missing pgy-kol Phase 5.1 patch target: ${item.label}`);
+    }
+    if (source.indexOf(item.from) !== source.lastIndexOf(item.from)) {
+      throw new Error(`Ambiguous pgy-kol Phase 5.1 patch target (multiple matches): ${item.label}`);
+    }
+    source = source.replace(item.from, item.to);
+  }
+  // 追加 helpers（覆盖旧的 PgyKolUnprovenSet / PgyKolNoteCategoryPopup 实现）。
+  source = `${source}\n${pgyKolPhase51Patch.helpers}`;
+  return source;
+})();
+
 const pgyKolPhase4Marker = "function PgyKolBatchPanel";
 // Phase 4 内容级幂等守卫：以源码 SHA-1 对比 bundle 内已注入块，内容漂移时
 // 必然重建（修复“标记存在但函数体已更新导致产物陈旧”的问题）；内容一致时
@@ -1040,7 +1065,7 @@ const pgyKolPhase4Marker = "function PgyKolBatchPanel";
 const normalizeSource = (source) => String(source).replace(/\r\n/g, "\n");
 const sourceSha1 = crypto
   .createHash("sha1")
-  .update(normalizeSource(pgyKolSearchPageSource))
+  .update(normalizeSource(pgyKolSearchPageSource51))
   .digest("hex");
 const bundleBefore = fs.readFileSync(mainBundle, "utf8");
 const oldStart = bundleBefore.indexOf("V1=new Map;function pgyKolDevEnabled");
@@ -1070,7 +1095,7 @@ if (existingSha1 !== sourceSha1) {
   replaceOnce(
     mainBundle,
     "V1=new Map;function si(e){",
-    "V1=new Map;" + pgyKolSearchPageSource.replace(/\n/g, "\r\n") + "\r\nfunction si(e){",
+    "V1=new Map;" + pgyKolSearchPageSource51.replace(/\n/g, "\r\n") + "\r\nfunction si(e){",
     "inject or refresh pgy-kol Phase 4 search page component after the lazy route table",
   );
 }
