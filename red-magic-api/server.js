@@ -1,31 +1,58 @@
 require("dotenv").config();
 
 const crypto = require("crypto");
+const { AsyncLocalStorage } = require("node:async_hooks");
 const fs = require("fs");
 const path = require("path");
 const bcrypt = require("bcryptjs");
 const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
 const { loadReleaseManifest, normalizeSha256 } = require("./lib/release-manifest");
+const { runMigrations } = require("./lib/database-migrations");
+const { createSmsService, SmsServiceError } = require("./lib/sms-service");
+const { createAlipayGateway, isSuccessfulTradeStatus, normalizeNotification } = require("./lib/alipay-gateway");
+const { ORDER_STATUS, SettlementError, settleRechargeOrder } = require("./lib/recharge-settlement");
+const {
+  claimPendingOrder,
+  centsFromAmount,
+  isDefinitiveUnpaidStatus,
+  reconcileOnce,
+  setQueryStatus,
+} = require("./lib/recharge-reconciliation");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3050);
 const BASE_URL = (process.env.BASE_URL || "https://magiorix.red-magic.cn").replace(/\/$/, "");
-const DEFAULT_GIFT_BALANCE = Number(process.env.DEFAULT_GIFT_BALANCE || 100);
+const REGISTER_BONUS_POINTS = 100;
+const AUTH_FAILURE_MESSAGE = "手机号或密码错误";
+const REGISTRATION_FAILURE_MESSAGE = "注册信息不可用";
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, "red-magic-api.sqlite");
 const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, "logs");
-const ASSET_VERSION = "1.1.6";
-const INSTALLER_FILE_NAME = "magiorix-desktop-1.1.6-windows.exe";
-const INSTALLER_DOWNLOAD_URL = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.1.6-windows.exe";
-const INSTALLER_SHA256 = (process.env.INSTALLER_SHA256 || "C874C2166E7C0EBBC2AD427028FB3060441D9A20D33239077B30F3887C5E16BA").trim();
+const ASSET_VERSION = "1.2.0";
+const INSTALLER_FILE_NAME = "magiorix-desktop-1.2.0-windows.exe";
+const INSTALLER_DOWNLOAD_URL = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.2.0-windows.exe";
+const INSTALLER_SHA256 = (process.env.INSTALLER_SHA256 || "").trim();
 const RELEASE_MANIFEST_PATH = process.env.RELEASE_MANIFEST_PATH
   || path.join(__dirname, "public", "releases", "windows", "latest.json");
 const RELEASE_MANIFEST = loadReleaseManifest(RELEASE_MANIFEST_PATH);
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "redmagic2026";
+const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || "").trim();
+const ADMIN_PASSWORD_PLACEHOLDERS = new Set([
+  "replace-me-with-a-long-random-password",
+  "请改成强密码",
+  "change-me",
+  "changeme",
+]);
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const adminSessions = new Map();
+const TRUST_PROXY = String(process.env.TRUST_PROXY || "").trim();
+const LOG_IP_HASH_SECRET = String(
+  process.env.LOG_IP_HASH_SECRET
+    || process.env.SMS_IP_HASH_SECRET
+    || process.env.SMS_SECRET
+    || crypto.randomBytes(32).toString("hex"),
+);
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(LOG_DIR, { recursive: true });
@@ -33,6 +60,7 @@ fs.mkdirSync(path.join(__dirname, "public", "assets", "desktop", ASSET_VERSION),
 fs.mkdirSync(path.join(__dirname, "public", "downloads"), { recursive: true });
 
 const db = new sqlite3.Database(DB_PATH);
+db.configure("busyTimeout", Number(process.env.SQLITE_BUSY_TIMEOUT_MS || 5000));
 
 function logFilePath(date = new Date()) {
   return path.join(LOG_DIR, `server-${date.toISOString().slice(0, 10)}.log`);
@@ -80,13 +108,26 @@ function logError(event, details = {}) {
 function requestLogInfo(req) {
   return {
     method: req.method,
-    path: req.path,
-    ip: req.ip,
+    path: requestLogPath(req),
+    ip: redactIp(req.ip),
     userAgent: req.get("user-agent") || "",
   };
 }
 
-function dbRun(sql, params = []) {
+function requestLogPath(req) {
+  if (req.route?.path) return String(req.route.path);
+  const requestPath = String(req.path || "");
+  if (requestPath === "/pay" || requestPath.startsWith("/pay/")) return "/pay/:paymentToken";
+  return requestPath;
+}
+
+function redactIp(value) {
+  const ip = String(value || "").trim();
+  if (!ip) return "-";
+  return `hmac-sha256:${crypto.createHmac("sha256", LOG_IP_HASH_SECRET).update(ip).digest("hex").slice(0, 16)}`;
+}
+
+function rawDbRun(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.run(sql, params, function onRun(err) {
       if (err) return reject(err);
@@ -113,12 +154,52 @@ function dbAll(sql, params = []) {
   });
 }
 
+const database = {
+  run: rawDbRun,
+  get: dbGet,
+  all: dbAll,
+};
+
+let mutationTail = Promise.resolve();
+const mutationContext = new AsyncLocalStorage();
+
+function dbRun(sql, params = []) {
+  return withMutation((tx) => tx.run(sql, params));
+}
+
+function withMutation(callback) {
+  if (mutationContext.getStore()) {
+    return Promise.reject(new Error("禁止在 mutation 调度器内部再次排队"));
+  }
+  const operation = mutationTail.then(() => mutationContext.run({ active: true }, () => callback(database)));
+  mutationTail = operation.catch(() => {});
+  return operation;
+}
+
+function withTransaction(callback) {
+  return withMutation(async (tx) => {
+    await tx.run("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      const result = await callback(tx);
+      await tx.run("COMMIT");
+      return result;
+    } catch (error) {
+      await tx.run("ROLLBACK").catch(() => {});
+      throw error;
+    }
+  });
+}
+
 function success(res, data = {}, message = "操作成功") {
   return res.json({ code: 200, message, data });
 }
 
 function fail(res, code, message, data = null) {
   return res.json({ code, message, data });
+}
+
+function failHttp(res, httpCode, code, message, data = null) {
+  return res.status(httpCode).json({ code, message, data });
 }
 
 function asyncHandler(fn) {
@@ -170,13 +251,6 @@ function compareVersions(a, b) {
     if (diff !== 0) return diff > 0 ? 1 : -1;
   }
   return 0;
-}
-
-async function ensureColumn(table, column, definition) {
-  const columns = await dbAll(`PRAGMA table_info(${table})`);
-  if (!columns.some((item) => item.name === column)) {
-    await dbRun(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-  }
 }
 
 function parseJsonArray(value, fallback = []) {
@@ -272,7 +346,7 @@ function normalizeTransactionView(value) {
 }
 
 function adminRequestSource(req) {
-  return truncateString(`${req.method} ${req.path} ip=${req.ip || "-"}`, 240);
+  return truncateString(`${req.method} ${req.path} ip=${redactIp(req.ip)}`, 240);
 }
 
 function sanitizeAdminConsumeDetail(detail, summary = "", fallback = {}) {
@@ -312,9 +386,9 @@ function dayLabel(date) {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
-function toYuan(value) {
-  const n = Number(value || 0);
-  return Number(n.toFixed(2));
+function centsToYuan(value) {
+  const cents = Number(value || 0);
+  return Number.isFinite(cents) ? Number((cents / 100).toFixed(2)) : 0;
 }
 
 function trendPercent(series) {
@@ -390,178 +464,57 @@ function getDefaultClientMenus() {
         },
       ],
     },
+    {
+      id: "points",
+      name: "积分中心",
+      icon: "solar:wallet-money-bold-duotone",
+      children: [
+        {
+          id: "points-recharge",
+          name: "积分充值",
+          icon: "solar:card-send-bold-duotone",
+          path: "/shumiao/recharge",
+          component: "pages/shumiao/recharge/index.tsx",
+        },
+        {
+          id: "points-recharge-records",
+          name: "充值记录",
+          icon: "solar:history-bold-duotone",
+          path: "/shumiao/recharge-records",
+          component: "pages/shumiao/recharge-records/index.tsx",
+        },
+        {
+          id: "points-consume-records",
+          name: "消耗记录",
+          icon: "solar:receipt-text-bold-duotone",
+          path: "/shumiao/consume-records",
+          component: "pages/shumiao/consume-records/index.tsx",
+        },
+      ],
+    },
   ];
 }
 
 async function initDb() {
-  await dbRun("PRAGMA foreign_keys = ON");
-
-  await dbRun(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      phone TEXT NOT NULL UNIQUE,
-      password_hash TEXT,
-      nickname TEXT,
-      avatar TEXT,
-      email TEXT,
-      status INTEGER NOT NULL DEFAULT 1,
-      deleted_at TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )
-  `);
-  await ensureColumn("users", "email", "TEXT");
-  await ensureColumn("users", "deleted_at", "TEXT");
-  await ensureColumn("users", "last_active_at", "TEXT");
-
-  await dbRun(`
-    CREATE TABLE IF NOT EXISTS user_tokens (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      token TEXT NOT NULL UNIQUE,
-      expires_at TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
-
-  await dbRun(`
-    CREATE TABLE IF NOT EXISTS shumiao_accounts (
-      user_id INTEGER PRIMARY KEY,
-      balance INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
-
-  await dbRun(`
-    CREATE TABLE IF NOT EXISTS shumiao_packages (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      amount REAL NOT NULL,
-      total_count INTEGER NOT NULL,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL
-    )
-  `);
-
-  await dbRun(`
-    CREATE TABLE IF NOT EXISTS consume_records (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      count INTEGER NOT NULL,
-      balance_after INTEGER NOT NULL,
-      remark TEXT,
-      detail_type TEXT,
-      detail_summary TEXT,
-      detail_json TEXT,
-      task_id TEXT,
-      item_index INTEGER,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
-  await ensureColumn("consume_records", "detail_type", "TEXT");
-  await ensureColumn("consume_records", "detail_summary", "TEXT");
-  await ensureColumn("consume_records", "detail_json", "TEXT");
-  await ensureColumn("consume_records", "task_id", "TEXT");
-  await ensureColumn("consume_records", "item_index", "INTEGER");
-  await dbRun(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_consume_records_task_identity
-    ON consume_records (user_id, task_id, item_index)
-    WHERE task_id IS NOT NULL AND item_index IS NOT NULL
-  `);
-
-  await dbRun(`
-    CREATE TABLE IF NOT EXISTS recharge_orders (
-      order_no TEXT PRIMARY KEY,
-      user_id INTEGER NOT NULL,
-      package_id TEXT NOT NULL,
-      amount REAL NOT NULL,
-      total_count INTEGER NOT NULL,
-      code_url TEXT NOT NULL,
-      status INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
-
-  await dbRun(`
-    CREATE TABLE IF NOT EXISTS admin_balance_adjustments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      admin_username TEXT NOT NULL,
-      user_id INTEGER NOT NULL,
-      delta INTEGER NOT NULL,
-      balance_after INTEGER NOT NULL,
-      remark TEXT,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
-
-  await dbRun(`
-    CREATE TABLE IF NOT EXISTS admin_user_audit_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      admin_username TEXT NOT NULL,
-      user_id INTEGER NOT NULL,
-      action TEXT NOT NULL,
-      request_source TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
-
-  await dbRun(`
-    CREATE TABLE IF NOT EXISTS export_templates (
-      id TEXT PRIMARY KEY,
-      user_id INTEGER NOT NULL,
-      platform TEXT NOT NULL,
-      name TEXT NOT NULL,
-      field_keys TEXT NOT NULL,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      is_default INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      UNIQUE(user_id, platform, name)
-    )
-  `);
-
-  const createdAt = nowIso();
-  const packages = [
-    ["pkg_990", "9.9元树苗包", 9.9, 100, 1],
-    ["pkg_2990", "29.9元树苗包", 29.9, 350, 2],
-    ["pkg_9900", "99元树苗包", 99, 1200, 3],
-  ];
-
-  for (const item of packages) {
-    await dbRun(
-      `INSERT OR IGNORE INTO shumiao_packages
-        (id, title, amount, total_count, sort_order, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [...item, createdAt],
-    );
-  }
+  await withMutation(() => runMigrations(database));
 }
 
-async function ensureAccount(userId, initialBalance = 0) {
-  const existing = await dbGet("SELECT * FROM shumiao_accounts WHERE user_id = ?", [userId]);
+async function ensureAccount(userId, initialBalance = 0, tx = database) {
+  const existing = await tx.get("SELECT * FROM shumiao_accounts WHERE user_id = ?", [userId]);
   if (existing) return existing;
 
   const createdAt = nowIso();
-  await dbRun(
+  await tx.run(
     `INSERT INTO shumiao_accounts (user_id, balance, created_at, updated_at)
      VALUES (?, ?, ?, ?)`,
     [userId, initialBalance, createdAt, createdAt],
   );
-  return dbGet("SELECT * FROM shumiao_accounts WHERE user_id = ?", [userId]);
+  return tx.get("SELECT * FROM shumiao_accounts WHERE user_id = ?", [userId]);
 }
 
-async function issueToken(userId) {
+async function issueToken(userId, tx = database) {
   const token = crypto.randomBytes(32).toString("hex");
-  await dbRun(
+  await tx.run(
     `INSERT INTO user_tokens (user_id, token, expires_at, created_at)
      VALUES (?, ?, ?, ?)`,
     [userId, token, addDaysIso(30), nowIso()],
@@ -569,13 +522,17 @@ async function issueToken(userId) {
   return token;
 }
 
-async function buildLoginData(user) {
-  const account = await ensureAccount(user.id, 0);
-  const token = await issueToken(user.id);
+async function buildLoginDataInMutation(user, tx) {
+  const account = await ensureAccount(user.id, 0, tx);
+  const token = await issueToken(user.id, tx);
   return {
     token,
     userInfo: toUserInfo(user, account),
   };
+}
+
+async function buildLoginData(user) {
+  return withTransaction((tx) => buildLoginDataInMutation(user, tx));
 }
 
 const authRequired = asyncHandler(async (req, res, next) => {
@@ -638,7 +595,42 @@ const adminRequired = asyncHandler(async (req, res, next) => {
   return next();
 });
 
-app.set("trust proxy", true);
+const smsService = createSmsService({
+  db: database,
+  withTransaction,
+  secret: process.env.SMS_SECRET || (process.env.NODE_ENV === "production" ? "" : "local-development-sms-secret"),
+  ipSecret: process.env.SMS_IP_HASH_SECRET || process.env.SMS_SECRET || (process.env.NODE_ENV === "production" ? "" : "local-development-ip-secret"),
+});
+
+const smsEnabled = process.env.NODE_ENV === "test"
+  ? process.env.SMS_TEST_MODE === "1"
+  : process.env.SMS_ENABLED === "1";
+
+const paymentEnabled = process.env.NODE_ENV === "test"
+  ? process.env.PAYMENT_TEST_MODE === "1"
+  : process.env.ALIPAY_ENABLED === "1";
+const alipayGateway = paymentEnabled
+  ? createAlipayGateway()
+  : {
+    config: { appId: "", merchantId: "" },
+    async createPagePay() { throw new Error("支付宝支付功能未开启"); },
+    async verifyNotification() { return false; },
+    async queryTrade() { throw new Error("支付宝查询功能未开启"); },
+  };
+
+function trustProxyValue() {
+  if (!TRUST_PROXY) return false;
+  if (/^\d+$/.test(TRUST_PROXY)) return false;
+  return TRUST_PROXY.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function assertAdminPasswordConfigured() {
+  if (!ADMIN_PASSWORD || ADMIN_PASSWORD.length < 16 || ADMIN_PASSWORD_PLACEHOLDERS.has(ADMIN_PASSWORD.toLowerCase())) {
+    throw new Error("必须配置至少 16 位且不是公开占位值的 ADMIN_PASSWORD");
+  }
+}
+
+app.set("trust proxy", trustProxyValue());
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
@@ -684,6 +676,75 @@ app.get("/admin", (req, res) => {
 });
 app.use("/admin", express.static(path.join(__dirname, "public", "admin")));
 
+function setPaymentHeaders(res) {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; form-action https://*.alipay.com https://*.alipayobjects.com; base-uri 'none'; object-src 'none'; frame-ancestors 'none'");
+}
+
+app.get("/pay/return", (req, res) => {
+  setPaymentHeaders(res);
+  return res.type("html").send("<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>支付结果</title></head><body><main><h1>结果确认中</h1><p>请返回客户端刷新订单状态。</p></main></body></html>");
+});
+
+app.get("/pay/:paymentToken", asyncHandler(async (req, res) => {
+  setPaymentHeaders(res);
+  const paymentToken = String(req.params.paymentToken || "");
+  if (!/^[A-Za-z0-9_-]{40,64}$/.test(paymentToken)) return res.status(404).send("Not found");
+  const order = await dbGet("SELECT * FROM recharge_orders WHERE payment_token_hash = ?", [hashPaymentToken(paymentToken)]);
+  if (!order) return res.status(404).send("Not found");
+  if (Number(order.status) === ORDER_STATUS.CREDITED) {
+    return res.type("html").send("<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>支付结果</title></head><body><main><h1>结果确认中</h1><p>订单状态将由客户端刷新确认。</p></main></body></html>");
+  }
+  if (order.expires_at && new Date(order.expires_at).getTime() <= Date.now()) {
+    return res.status(410).send("订单已过期，请返回客户端重新创建订单");
+  }
+  if (!paymentEnabled) return res.status(503).send("支付宝支付暂未开启");
+  const page = await alipayGateway.createPagePay({
+    orderNo: order.order_no,
+    amountCents: Number(order.amount_cents),
+    subject: `积分充值 ${Number(order.total_count)} 积分`,
+    expiresAt: order.expires_at,
+  });
+  if (/^https?:\/\//i.test(String(page || ""))) return res.redirect(302, page);
+  return res.type("html").send(String(page || ""));
+}));
+
+app.post("/api/shumiao/alipay/notify", asyncHandler(async (req, res) => {
+  if (!paymentEnabled) return res.status(503).send("failure");
+  const verified = await alipayGateway.verifyNotification(req.body || {});
+  if (!verified) return res.status(400).send("failure");
+  const notification = normalizeNotification(req.body || {});
+  const status = notification.tradeStatus;
+  if (!isSuccessfulTradeStatus(status)) {
+    if (status === "TRADE_CLOSED" && notification.outTradeNo) {
+      await withMutation(() => setQueryStatus({ db: database, orderNo: notification.outTradeNo, status, close: true }));
+    }
+    return res.send("success");
+  }
+  const amountCents = centsFromAmount(notification.totalAmount);
+  if (!amountCents || !notification.tradeNo || !notification.outTradeNo
+    || !notification.sellerId || !notification.appId) return res.status(400).send("failure");
+  try {
+    await settleRechargeOrder({
+      db: database,
+      withTransaction,
+      source: "alipay-notify",
+      orderNo: notification.outTradeNo,
+      channel: "alipay",
+      amountCents,
+      merchantId: notification.sellerId,
+      appId: notification.appId,
+      transactionId: notification.tradeNo,
+      paidAt: notification.gmtPayment,
+    });
+    return res.send("success");
+  } catch (error) {
+    if (error instanceof SettlementError) return res.status(400).send("failure");
+    throw error;
+  }
+}));
+
 app.post("/api/auth/login", asyncHandler(async (req, res) => {
   const phone = normalizePhone(req.body.phone);
   const password = String(req.body.password || "");
@@ -691,9 +752,9 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
   if (!phone || !password) return fail(res, 400, "手机号和密码不能为空");
 
   const user = await dbGet("SELECT * FROM users WHERE phone = ?", [phone]);
-  if (!user) return fail(res, 400, "账号不存在");
-  if (Number(user.status) !== 1) return fail(res, 400, "账号已注销");
-  if (!user.password_hash) return fail(res, 400, "密码错误");
+  if (!user) return fail(res, 400, AUTH_FAILURE_MESSAGE);
+  if (Number(user.status) !== 1) return fail(res, 400, AUTH_FAILURE_MESSAGE);
+  if (!user.password_hash) return fail(res, 400, AUTH_FAILURE_MESSAGE);
 
   let passwordOk = false;
   if (user.password_hash.startsWith("$2")) {
@@ -709,12 +770,107 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
     }
   }
 
-  if (!passwordOk) return fail(res, 400, "密码错误");
+  if (!passwordOk) return fail(res, 400, AUTH_FAILURE_MESSAGE);
   return success(res, await buildLoginData(user));
 }));
 
 app.post("/api/auth/sms/send", asyncHandler(async (req, res) => {
-  return success(res, {}, "验证码已发送");
+  if (!smsEnabled) return failHttp(res, 503, 503, "短信服务暂未开启，请稍后再试");
+  const phone = normalizePhone(req.body.phone);
+  const purpose = String(req.body.purpose || "").trim().toLowerCase();
+  if (!phone) return fail(res, 400, "手机号格式不正确");
+  if (!["register", "reset_password"].includes(purpose)) return fail(res, 400, "验证码用途不合法");
+
+  const existing = await dbGet("SELECT id, status FROM users WHERE phone = ?", [phone]);
+  if (purpose === "register" && existing) {
+    return fail(res, 400, REGISTRATION_FAILURE_MESSAGE);
+  }
+  if (purpose === "reset_password" && (!existing || Number(existing.status) !== 1)) {
+    return success(res, {}, "如果账号存在，验证码已发送");
+  }
+
+  try {
+    const result = await smsService.send({ phone, purpose, ip: req.ip });
+    if (!result.sent) return failHttp(res, 503, 503, "验证码发送失败，请稍后重试");
+    return success(res, {
+      ...(result.debugCode ? { debugCode: result.debugCode } : {}),
+    }, "如果账号存在，验证码已发送");
+  } catch (error) {
+    if (error instanceof SmsServiceError) return fail(res, 400, error.message);
+    throw error;
+  }
+}));
+
+app.post("/api/auth/register", asyncHandler(async (req, res) => {
+  if (!smsEnabled) return failHttp(res, 503, 503, "短信服务暂未开启，请稍后再试");
+  const phone = normalizePhone(req.body.phone);
+  const code = String(req.body.code || "").trim();
+  const password = req.body.password;
+  if (!phone) return fail(res, 400, "手机号格式不正确");
+  if (typeof password !== "string" || password.length < 8 || password.length > 64) {
+    return fail(res, 400, "密码长度必须在 8 到 64 个字符之间");
+  }
+  if (!/^\d{4}$/.test(code)) return fail(res, 400, "验证码错误或已失效");
+  if (await dbGet("SELECT id FROM users WHERE phone = ?", [phone])) return fail(res, 400, REGISTRATION_FAILURE_MESSAGE);
+
+  try {
+    await smsService.checkCode({ phone, purpose: "register", code });
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await withTransaction(async (tx) => {
+      if (await tx.get("SELECT id FROM users WHERE phone = ?", [phone])) {
+        throw new SmsServiceError("already_registered", REGISTRATION_FAILURE_MESSAGE);
+      }
+      await smsService.consumeCodeInTransaction(tx, { phone, purpose: "register", code });
+      const createdAt = nowIso();
+      const result = await tx.run(
+        `INSERT INTO users (phone, password_hash, nickname, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [phone, passwordHash, `用户${phone.slice(-4)}`, createdAt, createdAt],
+      );
+      await tx.run(
+        `INSERT INTO shumiao_accounts (user_id, balance, created_at, updated_at)
+         VALUES (?, ?, ?, ?)`,
+        [result.lastID, REGISTER_BONUS_POINTS, createdAt, createdAt],
+      );
+      return tx.get("SELECT * FROM users WHERE id = ?", [result.lastID]);
+    });
+    return success(res, await buildLoginData(user), "注册成功");
+  } catch (error) {
+    if (error instanceof SmsServiceError) return fail(res, 400, error.message);
+    throw error;
+  }
+}));
+
+app.post("/api/auth/password/reset", asyncHandler(async (req, res) => {
+  if (!smsEnabled) return failHttp(res, 503, 503, "短信服务暂未开启，请稍后再试");
+  const phone = normalizePhone(req.body.phone);
+  const code = String(req.body.code || "").trim();
+  const newPassword = req.body.newPassword;
+  if (!phone) return fail(res, 400, "手机号格式不正确");
+  if (typeof newPassword !== "string" || newPassword.length < 8 || newPassword.length > 64) {
+    return fail(res, 400, "新密码长度必须在 8 到 64 个字符之间");
+  }
+  if (!/^\d{4}$/.test(code)) return fail(res, 400, "验证码错误或已失效");
+  const existing = await dbGet("SELECT id, status FROM users WHERE phone = ?", [phone]);
+  if (!existing || Number(existing.status) !== 1) return success(res, {}, "如果账号存在，密码已重置");
+
+  try {
+    await smsService.checkCode({ phone, purpose: "reset_password", code });
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const result = await withTransaction(async (tx) => {
+      const user = await tx.get("SELECT id, status FROM users WHERE phone = ?", [phone]);
+      if (!user || Number(user.status) !== 1) return null;
+      await smsService.consumeCodeInTransaction(tx, { phone, purpose: "reset_password", code });
+      const updatedAt = nowIso();
+      await tx.run("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", [passwordHash, updatedAt, user.id]);
+      const revoked = await tx.run("DELETE FROM user_tokens WHERE user_id = ?", [user.id]);
+      return { revokedTokens: Number(revoked.changes || 0) };
+    });
+    return success(res, result || {}, "如果账号存在，密码已重置");
+  } catch (error) {
+    if (error instanceof SmsServiceError) return fail(res, 400, error.message);
+    throw error;
+  }
 }));
 
 app.post("/api/auth/sms/login", asyncHandler(async (req, res) => {
@@ -723,40 +879,23 @@ app.post("/api/auth/sms/login", asyncHandler(async (req, res) => {
   if (!phone) return fail(res, 400, "手机号不能为空");
   if (!password) return fail(res, 400, "密码不能为空");
 
-  let user = await dbGet("SELECT * FROM users WHERE phone = ?", [phone]);
-  if (!user) {
-    const createdAt = nowIso();
-    const result = await dbRun(
-      `INSERT INTO users (phone, password_hash, nickname, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [phone, await bcrypt.hash(password, 10), `用户${phone.slice(-4) || "0000"}`, createdAt, createdAt],
-    );
-    user = await dbGet("SELECT * FROM users WHERE id = ?", [result.lastID]);
-    await ensureAccount(user.id, DEFAULT_GIFT_BALANCE);
-  } else {
-    if (Number(user.status) !== 1) return fail(res, 400, "账号已注销");
-    let passwordOk = false;
-    if (user.password_hash && user.password_hash.startsWith("$2")) {
-      passwordOk = await bcrypt.compare(password, user.password_hash);
-    } else if (user.password_hash) {
-      passwordOk = password === user.password_hash;
-      if (passwordOk) {
-        await dbRun("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", [
-          await bcrypt.hash(password, 10),
-          nowIso(),
-          user.id,
-        ]);
-      }
-    }
-
-    if (!passwordOk) return fail(res, 400, "手机号或密码错误");
+  const user = await dbGet("SELECT * FROM users WHERE phone = ?", [phone]);
+  if (!user) return fail(res, 400, AUTH_FAILURE_MESSAGE);
+  if (Number(user.status) !== 1) return fail(res, 400, AUTH_FAILURE_MESSAGE);
+  if (!user.password_hash) return fail(res, 400, AUTH_FAILURE_MESSAGE);
+  const passwordOk = user.password_hash.startsWith("$2")
+    ? await bcrypt.compare(password, user.password_hash)
+    : password === user.password_hash;
+  if (!passwordOk) return fail(res, 400, AUTH_FAILURE_MESSAGE);
+  if (!user.password_hash.startsWith("$2")) {
+    user.password_hash = await bcrypt.hash(password, 10);
+    await withTransaction((tx) => tx.run("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", [user.password_hash, nowIso(), user.id]));
   }
-
   return success(res, await buildLoginData(user));
 }));
 
 app.get("/api/auth/info", authRequired, asyncHandler(async (req, res) => {
-  const account = await ensureAccount(req.user.id, 0);
+  const account = await withMutation((tx) => ensureAccount(req.user.id, 0, tx));
   return success(res, toUserInfo(req.user, account));
 }));
 
@@ -786,7 +925,7 @@ app.put("/api/auth/profile", authRequired, asyncHandler(async (req, res) => {
     values,
   );
   const user = await dbGet("SELECT * FROM users WHERE id = ?", [req.user.id]);
-  const account = await ensureAccount(req.user.id, 0);
+  const account = await withMutation((tx) => ensureAccount(req.user.id, 0, tx));
   return success(res, toUserInfo(user, account));
 }));
 
@@ -805,19 +944,14 @@ app.post("/api/auth/logout", authRequired, asyncHandler(async (req, res) => {
 
 app.post("/api/auth/delete-account", authRequired, asyncHandler(async (req, res) => {
   const deletedAt = nowIso();
-  await dbRun("BEGIN IMMEDIATE TRANSACTION");
-  try {
-    await dbRun(
+  await withTransaction(async (tx) => {
+    await tx.run(
       "UPDATE users SET status = 0, deleted_at = ?, updated_at = ? WHERE id = ?",
       [deletedAt, deletedAt, req.user.id],
     );
-    await dbRun("DELETE FROM user_tokens WHERE user_id = ?", [req.user.id]);
-    await dbRun("COMMIT");
-    return success(res, { deletedAt }, "账号已注销");
-  } catch (err) {
-    await dbRun("ROLLBACK").catch(() => {});
-    throw err;
-  }
+    await tx.run("DELETE FROM user_tokens WHERE user_id = ?", [req.user.id]);
+  });
+  return success(res, { deletedAt }, "账号已注销");
 }));
 
 function normalizeTemplatePlatform(platform) {
@@ -875,15 +1009,15 @@ app.post("/api/export-templates", authRequired, asyncHandler(async (req, res) =>
   const createdAt = nowIso();
   const isDefault = payload.isDefault === true || Number(existing.count || 0) === 0;
 
-  await dbRun("BEGIN IMMEDIATE TRANSACTION");
   try {
+    await withTransaction(async (tx) => {
     if (isDefault) {
-      await dbRun(
+      await tx.run(
         "UPDATE export_templates SET is_default = 0, updated_at = ? WHERE user_id = ? AND platform = ?",
         [createdAt, req.user.id, payload.platform],
       );
     }
-    await dbRun(
+    await tx.run(
       `INSERT INTO export_templates
         (id, user_id, platform, name, field_keys, sort_order, is_default, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -899,9 +1033,8 @@ app.post("/api/export-templates", authRequired, asyncHandler(async (req, res) =>
         createdAt,
       ],
     );
-    await dbRun("COMMIT");
+    });
   } catch (err) {
-    await dbRun("ROLLBACK").catch(() => {});
     if (String(err && err.message).includes("UNIQUE")) return fail(res, 409, "模板名已存在");
     throw err;
   }
@@ -937,22 +1070,21 @@ app.patch("/api/export-templates/:id", authRequired, asyncHandler(async (req, re
   }
   if (updates.length === 0 && !setDefault) return fail(res, 400, "没有可修改的模板字段");
 
-  await dbRun("BEGIN IMMEDIATE TRANSACTION");
   try {
-    if (setDefault) {
-      await dbRun(
+    await withTransaction(async (tx) => {
+      if (setDefault) {
+        await tx.run(
         "UPDATE export_templates SET is_default = 0, updated_at = ? WHERE user_id = ? AND platform = ?",
         [updatedAt, req.user.id, current.platform],
       );
-    }
-    values.push(updatedAt, req.params.id, req.user.id);
-    await dbRun(
-      `UPDATE export_templates SET ${updates.join(", ")}, updated_at = ? WHERE id = ? AND user_id = ?`,
-      values,
-    );
-    await dbRun("COMMIT");
+      }
+      values.push(updatedAt, req.params.id, req.user.id);
+      await tx.run(
+        `UPDATE export_templates SET ${updates.join(", ")}, updated_at = ? WHERE id = ? AND user_id = ?`,
+        values,
+      );
+    });
   } catch (err) {
-    await dbRun("ROLLBACK").catch(() => {});
     if (String(err && err.message).includes("UNIQUE")) return fail(res, 409, "模板名已存在");
     throw err;
   }
@@ -967,15 +1099,54 @@ app.delete("/api/export-templates/:id", authRequired, asyncHandler(async (req, r
   return success(res, {});
 }));
 
+function hashPaymentToken(token) {
+  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
+}
+
+function createPaymentToken() {
+  return crypto.randomBytes(32).toString("base64url");
+}
+
+function paymentOrderView(row) {
+  if (!row) return null;
+  return {
+    orderNo: row.orderNo || row.order_no,
+    packageId: row.packageId || row.package_id,
+    amount: Number(row.amount || 0),
+    amountCents: Number(row.amountCents ?? row.amount_cents ?? 0),
+    baseCount: Number(row.baseCount ?? row.base_count ?? 0),
+    giftCount: Number(row.giftCount ?? row.gift_count ?? 0),
+    totalCount: Number(row.totalCount ?? row.total_count ?? 0),
+    channel: row.channel || "alipay",
+    status: Number(row.status ?? 0),
+    platformTransactionId: row.platformTransactionId || row.platform_transaction_id || null,
+    paidAt: row.paidAt || row.paid_at || null,
+    creditedAt: row.creditedAt || row.credited_at || null,
+    expiresAt: row.expiresAt || row.expires_at || null,
+    createdAt: row.createdAt || row.created_at,
+    updatedAt: row.updatedAt || row.updated_at,
+    lastQueryAt: row.lastQueryAt || row.last_query_at || null,
+    lastQueryStatus: row.lastQueryStatus || row.last_query_status || null,
+    expiryQueryAt: row.expiryQueryAt || row.expiry_query_at || null,
+    manualReviewReason: row.manualReviewReason || row.manual_review_reason || null,
+  };
+}
+
+function isManualReviewOrder(row) {
+  return String(row?.last_query_status || "").startsWith("MANUAL_REVIEW:");
+}
+
 app.get("/api/shumiao/balance", authRequired, asyncHandler(async (req, res) => {
-  const account = await ensureAccount(req.user.id, 0);
+  const account = await withMutation((tx) => ensureAccount(req.user.id, 0, tx));
   return success(res, { balance: Number(account.balance || 0) });
 }));
 
 app.get("/api/shumiao/packages", authRequired, asyncHandler(async (req, res) => {
   const rows = await dbAll(
-    `SELECT id, id AS packageId, title, amount, total_count AS totalCount
+    `SELECT id, id AS packageId, title, amount, amount_cents AS amountCents,
+            base_count AS baseCount, gift_count AS giftCount, total_count AS totalCount
      FROM shumiao_packages
+     WHERE enabled = 1
      ORDER BY sort_order ASC, amount ASC`,
   );
   return success(res, rows);
@@ -983,7 +1154,7 @@ app.get("/api/shumiao/packages", authRequired, asyncHandler(async (req, res) => 
 
 app.get("/api/shumiao/check-balance", authRequired, asyncHandler(async (req, res) => {
   const count = parsePositiveAmount(req.query.count) || 0;
-  const account = await ensureAccount(req.user.id, 0);
+  const account = await withMutation((tx) => ensureAccount(req.user.id, 0, tx));
   const balance = Number(account.balance || 0);
   return success(res, {
     balance,
@@ -1000,50 +1171,48 @@ app.post("/api/shumiao/consume", authRequired, asyncHandler(async (req, res) => 
   const taskIdentity = normalizeConsumeTaskIdentity(req.body);
   if (taskIdentity.invalid) return fail(res, 400, "携带 taskId 时 itemIndex 必须为正整数");
 
-  await dbRun("BEGIN IMMEDIATE TRANSACTION");
-  try {
+  const result = await withTransaction(async (tx) => {
     if (taskIdentity.taskId && taskIdentity.itemIndex) {
-      const existing = await dbGet(
+      const existing = await tx.get(
         `SELECT id, count, balance_after AS balanceAfter, created_at AS createdAt
          FROM consume_records
          WHERE user_id = ? AND task_id = ? AND item_index = ?`,
         [req.user.id, taskIdentity.taskId, taskIdentity.itemIndex],
       );
       if (existing) {
-        await dbRun("COMMIT");
-        return success(res, {
-          balance: Number(existing.balanceAfter || 0),
+        return {
           duplicated: true,
+          balance: Number(existing.balanceAfter || 0),
           taskId: taskIdentity.taskId,
           itemIndex: taskIdentity.itemIndex,
           recordId: existing.id,
           createdAt: existing.createdAt,
-        });
+        };
       }
     }
 
-    const account = await ensureAccount(req.user.id, 0);
+    const account = await ensureAccount(req.user.id, 0, tx);
     const balance = Number(account.balance || 0);
     if (balance < count) {
-      await dbRun("ROLLBACK");
-      return fail(res, 400, `树苗余额不足：当前 ${balance}，本次需要 ${count}，还差 ${count - balance}`, {
+      return {
+        insufficient: true,
         balance,
         required: count,
         shortage: count - balance,
-      });
+      };
     }
 
     const nextBalance = balance - count;
     const createdAt = nowIso();
-    await dbRun(
+    await tx.run(
       "UPDATE shumiao_accounts SET balance = ?, updated_at = ? WHERE user_id = ?",
       [nextBalance, createdAt, req.user.id],
     );
-    await dbRun(
+    await tx.run(
       `UPDATE users SET last_active_at = ?, updated_at = ? WHERE id = ?`,
       [createdAt, createdAt, req.user.id],
     );
-    await dbRun(
+    await tx.run(
       `INSERT INTO consume_records
         (user_id, count, balance_after, remark, detail_type, detail_summary, detail_json, task_id, item_index, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -1060,17 +1229,21 @@ app.post("/api/shumiao/consume", authRequired, asyncHandler(async (req, res) => 
         createdAt,
       ],
     );
-    await dbRun("COMMIT");
-    return success(res, {
+    return {
       balance: nextBalance,
       duplicated: false,
       taskId: taskIdentity.taskId,
       itemIndex: taskIdentity.itemIndex,
+    };
+  });
+  if (result.insufficient) {
+    return fail(res, 400, `积分余额不足：当前 ${result.balance}，本次需要 ${count}，还差 ${result.shortage}`, {
+      balance: result.balance,
+      required: result.required,
+      shortage: result.shortage,
     });
-  } catch (err) {
-    await dbRun("ROLLBACK").catch(() => {});
-    throw err;
   }
+  return success(res, result);
 }));
 
 app.get("/api/shumiao/recharge-records", authRequired, asyncHandler(async (req, res) => {
@@ -1078,8 +1251,13 @@ app.get("/api/shumiao/recharge-records", authRequired, asyncHandler(async (req, 
   const offset = (page - 1) * pageSize;
   const totalRow = await dbGet("SELECT COUNT(*) AS total FROM recharge_orders WHERE user_id = ?", [req.user.id]);
   const list = await dbAll(
-    `SELECT order_no AS orderNo, package_id AS packageId, amount, total_count AS totalCount,
-            code_url AS codeUrl, status, created_at AS createdAt
+    `SELECT order_no AS orderNo, package_id AS packageId, amount, amount_cents AS amountCents,
+            base_count AS baseCount, gift_count AS giftCount, total_count AS totalCount,
+            channel, status, platform_transaction_id AS platformTransactionId,
+            paid_at AS paidAt, credited_at AS creditedAt, expires_at AS expiresAt,
+            last_query_at AS lastQueryAt, last_query_status AS lastQueryStatus,
+            expiry_query_at AS expiryQueryAt, manual_review_reason AS manualReviewReason,
+            created_at AS createdAt, updated_at AS updatedAt
      FROM recharge_orders
      WHERE user_id = ?
      ORDER BY created_at DESC
@@ -1105,39 +1283,133 @@ app.get("/api/shumiao/consume-records", authRequired, asyncHandler(async (req, r
 }));
 
 app.post("/api/shumiao/recharge", authRequired, asyncHandler(async (req, res) => {
+  if (!paymentEnabled) return fail(res, 503, "支付宝支付暂未开启，请稍后再试");
   const packageId = String(req.body.packageId || "");
-  const pkg = await dbGet("SELECT * FROM shumiao_packages WHERE id = ?", [packageId]);
+  const pkg = await dbGet("SELECT * FROM shumiao_packages WHERE id = ? AND enabled = 1", [packageId]);
   if (!pkg) return fail(res, 400, "套餐不存在");
 
   const orderNo = `RM${Date.now()}${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
-  const codeUrl = `${BASE_URL}/pay-placeholder`;
+  const paymentToken = createPaymentToken();
+  const paymentTokenHash = hashPaymentToken(paymentToken);
   const createdAt = nowIso();
-  await dbRun(
-    `INSERT INTO recharge_orders
-      (order_no, user_id, package_id, amount, total_count, code_url, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
-    [orderNo, req.user.id, pkg.id, pkg.amount, pkg.total_count, codeUrl, createdAt, createdAt],
-  );
+  const expiresAt = new Date(Date.now() + Number(process.env.PAYMENT_ORDER_TTL_MS || 30 * 60 * 1000)).toISOString();
+  const merchantId = String(alipayGateway.config.merchantId || process.env.ALIPAY_SELLER_ID || (process.env.NODE_ENV === "test" ? "test-merchant" : "")).trim();
+  const appId = String(alipayGateway.config.appId || process.env.ALIPAY_APP_ID || (process.env.NODE_ENV === "test" ? "test-app" : "")).trim();
+  if (!merchantId || !appId) return fail(res, 503, "支付宝支付配置未完成，请联系管理员");
+  await withTransaction(async (tx) => {
+    await tx.run(
+      `INSERT INTO recharge_orders
+        (order_no, user_id, package_id, amount, amount_cents, base_count, gift_count, total_count,
+         code_url, status, channel, payment_token_hash, payment_token_expires_at,
+         merchant_id, app_id, expires_at, query_attempts, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      [
+        orderNo,
+        req.user.id,
+        pkg.id,
+        Number(pkg.amount),
+        Number(pkg.amount_cents),
+        Number(pkg.base_count),
+        Number(pkg.gift_count),
+        Number(pkg.total_count),
+        "redacted",
+        ORDER_STATUS.PENDING,
+        "alipay",
+        paymentTokenHash,
+        expiresAt,
+        merchantId,
+        appId,
+        expiresAt,
+        createdAt,
+        createdAt,
+      ],
+    );
+  });
 
   return success(res, {
     orderNo,
-    codeUrl,
-    amount: pkg.amount,
-    totalCount: pkg.total_count,
-    status: 0,
+    payUrl: `${BASE_URL}/pay/${paymentToken}`,
+    amountCents: Number(pkg.amount_cents),
+    totalCount: Number(pkg.total_count),
+    channel: "alipay",
+    status: ORDER_STATUS.PENDING,
+    expiresAt,
   });
 }));
 
 app.get("/api/shumiao/order/:orderNo", authRequired, asyncHandler(async (req, res) => {
   const order = await dbGet(
-    `SELECT order_no AS orderNo, package_id AS packageId, amount, total_count AS totalCount,
-            code_url AS codeUrl, status, created_at AS createdAt, updated_at AS updatedAt
+    `SELECT order_no AS orderNo, package_id AS packageId, amount, amount_cents AS amountCents,
+            base_count AS baseCount, gift_count AS giftCount, total_count AS totalCount,
+            channel, status, platform_transaction_id AS platformTransactionId,
+            paid_at AS paidAt, credited_at AS creditedAt, expires_at AS expiresAt,
+            last_query_at AS lastQueryAt, last_query_status AS lastQueryStatus,
+            expiry_query_at AS expiryQueryAt, manual_review_reason AS manualReviewReason,
+            created_at AS createdAt, updated_at AS updatedAt
      FROM recharge_orders
      WHERE user_id = ? AND order_no = ?`,
     [req.user.id, req.params.orderNo],
   );
   if (!order) return fail(res, 404, "订单不存在");
   return success(res, order);
+}));
+
+app.post("/api/shumiao/order/:orderNo/query", authRequired, asyncHandler(async (req, res) => {
+  if (!paymentEnabled) return fail(res, 503, "支付宝查询暂未开启，请稍后再试");
+  const orderNo = String(req.params.orderNo || "").trim();
+  const existing = await dbGet("SELECT * FROM recharge_orders WHERE user_id = ? AND order_no = ?", [req.user.id, orderNo]);
+  if (!existing) return fail(res, 404, "订单不存在");
+  if (Number(existing.status) !== ORDER_STATUS.PENDING) return success(res, paymentOrderView(existing));
+  if (isManualReviewOrder(existing)) {
+    return success(res, paymentOrderView(existing), "订单已进入人工复核，请联系客服");
+  }
+
+  const claim = await withMutation(() => claimPendingOrder({
+    db: database,
+    orderNo,
+    now: new Date(),
+    minIntervalMs: 15000,
+    allowExpiredRetry: true,
+  }));
+  if (!claim) {
+    const latest = await dbGet("SELECT * FROM recharge_orders WHERE user_id = ? AND order_no = ?", [req.user.id, orderNo]);
+    return success(res, { ...paymentOrderView(latest), queryInProgress: true }, "查询请求已排队，请稍后刷新");
+  }
+
+  try {
+    const response = await alipayGateway.queryTrade({ orderNo });
+    if (response?.outTradeNo && response.outTradeNo !== orderNo) throw new Error("支付宝查询返回了其他订单");
+    const status = String(response?.tradeStatus || "NOT_FOUND").trim().toUpperCase();
+    if (isSuccessfulTradeStatus(status)) {
+      const amountCents = centsFromAmount(response.totalAmount);
+      if (!amountCents || !response.tradeNo || response.outTradeNo !== orderNo) throw new Error("支付宝查询成功但交易信息不完整");
+      await settleRechargeOrder({
+        db: database,
+        withTransaction,
+        source: "alipay-query",
+        orderNo,
+        channel: "alipay",
+        amountCents,
+        merchantId: response.sellerId,
+        appId: response.appId,
+        transactionId: response.tradeNo,
+        paidAt: response.gmtPayment,
+      });
+    } else {
+      await withMutation(() => setQueryStatus({
+        db: database,
+        orderNo,
+        status,
+        close: isDefinitiveUnpaidStatus(status),
+      }));
+    }
+    const latest = await dbGet("SELECT * FROM recharge_orders WHERE user_id = ? AND order_no = ?", [req.user.id, orderNo]);
+    return success(res, paymentOrderView(latest));
+  } catch {
+    await withMutation(() => setQueryStatus({ db: database, orderNo, status: "ERROR:QUERY_FAILED" }));
+    const latest = await dbGet("SELECT * FROM recharge_orders WHERE user_id = ? AND order_no = ?", [req.user.id, orderNo]);
+    return success(res, paymentOrderView(latest), "支付结果暂未确认，请稍后刷新订单");
+  }
 }));
 
 app.get("/api/frontend-assets/latest/desktop", asyncHandler(async (req, res) => {
@@ -1338,43 +1610,43 @@ app.post("/api/admin/users/:id/add-points", adminRequired, asyncHandler(async (r
   if (!user) return fail(res, 404, "用户不存在");
   if (Number(user.status) !== 1) return fail(res, 400, "账号已注销，不能继续调整积分");
 
-  await dbRun("BEGIN IMMEDIATE TRANSACTION");
-  try {
-    const account = await ensureAccount(userId, 0);
+  let adjustment;
+  await withTransaction(async (tx) => {
+    const account = await ensureAccount(userId, 0, tx);
     const createdAt = nowIso();
     const currentBalance = Number(account.balance || 0);
     const nextBalance = currentBalance + delta;
     if (nextBalance < 0) {
-      await dbRun("ROLLBACK");
-      return fail(res, 400, `积分余额不足，当前余额 ${currentBalance}，不能扣 ${Math.abs(delta)}`);
+      adjustment = { insufficient: true, currentBalance };
+      return;
     }
 
-    await dbRun(
+    await tx.run(
       "UPDATE shumiao_accounts SET balance = ?, updated_at = ? WHERE user_id = ?",
       [nextBalance, createdAt, userId],
     );
-    await dbRun(
+    await tx.run(
       `INSERT INTO admin_balance_adjustments
         (admin_username, user_id, delta, balance_after, remark, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [req.admin.username, userId, delta, nextBalance, remark, createdAt],
     );
-    await dbRun("COMMIT");
+    adjustment = { userId, delta, balance: nextBalance };
+  });
+  if (adjustment?.insufficient) {
+    return fail(res, 400, `积分余额不足，当前余额 ${adjustment.currentBalance}，不能扣 ${Math.abs(delta)}`);
+  }
+  try {
     logInfo("admin_adjust_points", {
       adminUsername: req.admin.username,
       userId,
       delta,
-      balanceAfter: nextBalance,
+      balanceAfter: adjustment.balance,
       ...requestLogInfo(req),
     });
 
-    return success(res, {
-      userId,
-      delta,
-      balance: nextBalance,
-    });
+    return success(res, adjustment);
   } catch (err) {
-    await dbRun("ROLLBACK");
     throw err;
   }
 }));
@@ -1390,47 +1662,50 @@ app.post("/api/admin/users/:id/reset-password", adminRequired, asyncHandler(asyn
   const requestSource = adminRequestSource(req);
   const passwordHash = await bcrypt.hash(newPassword, 10);
 
-  await dbRun("BEGIN IMMEDIATE TRANSACTION");
-  try {
-    const user = await dbGet("SELECT id, phone, status FROM users WHERE id = ?", [userId]);
+  let resetResult;
+  await withTransaction(async (tx) => {
+    const user = await tx.get("SELECT id, phone, status FROM users WHERE id = ?", [userId]);
     if (!user) {
-      await dbRun("ROLLBACK");
-      return fail(res, 404, "用户不存在");
+      resetResult = { missing: true };
+      return;
     }
     if (Number(user.status) !== 1) {
-      await dbRun("ROLLBACK");
-      return fail(res, 400, "账号已注销，不能重置密码");
+      resetResult = { deleted: true };
+      return;
     }
 
     const updatedAt = nowIso();
-    await dbRun(
+    await tx.run(
       "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
       [passwordHash, updatedAt, userId],
     );
-    const revokeResult = await dbRun("DELETE FROM user_tokens WHERE user_id = ?", [userId]);
-    await dbRun(
+    const revokeResult = await tx.run("DELETE FROM user_tokens WHERE user_id = ?", [userId]);
+    await tx.run(
       `INSERT INTO admin_user_audit_logs
         (admin_username, user_id, action, request_source, created_at)
        VALUES (?, ?, ?, ?, ?)`,
       [req.admin.username, userId, "reset_password", requestSource, updatedAt],
     );
-    await dbRun("COMMIT");
+    resetResult = {
+      userId,
+      revokedTokens: Number(revokeResult.changes || 0),
+      updatedAt,
+    };
+  });
+  if (resetResult?.missing) return fail(res, 404, "用户不存在");
+  if (resetResult?.deleted) return fail(res, 400, "账号已注销，不能重置密码");
 
+  try {
     logInfo("admin_reset_password", {
       adminUsername: req.admin.username,
       userId,
-      revokedTokens: Number(revokeResult.changes || 0),
+      revokedTokens: resetResult.revokedTokens,
       requestSource,
       ...requestLogInfo(req),
     });
 
-    return success(res, {
-      userId,
-      revokedTokens: Number(revokeResult.changes || 0),
-      updatedAt,
-    }, "密码已重置，用户已退出全部登录");
+    return success(res, resetResult, "密码已重置，用户已退出全部登录");
   } catch (err) {
-    await dbRun("ROLLBACK").catch(() => {});
     throw err;
   }
 }));
@@ -1618,7 +1893,66 @@ app.get("/api/admin/user-transactions", adminRequired, asyncHandler(async (req, 
   });
 }));
 
-app.get("/api/statistics/admin-dashboard", authRequired, asyncHandler(async (req, res) => {
+function buildSafeDashboardStatistics() {
+  const today = startOfDay();
+  const categories = [];
+  for (let i = 6; i >= 0; i -= 1) categories.push(dayLabel(addDays(today, -i)));
+  const emptyTrend = () => ({
+    percent: 0,
+    series: categories.map(() => 0),
+    categories,
+  });
+
+  return {
+    restricted: true,
+    users: {
+      total: 0,
+      todayNew: 0,
+      activeCount: 0,
+      totalTrend: emptyTrend(),
+      newTrend: emptyTrend(),
+      activeTrend: emptyTrend(),
+    },
+    bloggers: {
+      xhs: { total: 0 },
+      douyin: { total: 0 },
+      totalTrend: emptyTrend(),
+    },
+    finance: {
+      recharge: {
+        totalAmountYuan: 0,
+        todayAmountYuan: 0,
+        weekAmountYuan: 0,
+        todayOrders: 0,
+        totalOrders: 0,
+        createdOrders: { today: 0, total: 0 },
+        trend: { series: categories.map(() => 0), categories },
+      },
+      commission: {
+        totalAmountYuan: 0,
+        settledAmountYuan: 0,
+        pendingAmountYuan: 0,
+        pendingCount: 0,
+        failedCount: 0,
+        trend: { series: categories.map(() => 0), categories },
+      },
+      profit: {
+        available: false,
+        reason: "管理员数据仅管理员可见",
+        totalProfitYuan: 0,
+        todayProfitYuan: 0,
+        weekProfitYuan: 0,
+        trend: { series: categories.map(() => 0), categories },
+      },
+    },
+  };
+}
+
+app.get("/api/statistics/dashboard", authRequired, asyncHandler(async (req, res) => {
+  return success(res, buildSafeDashboardStatistics());
+}));
+
+app.get("/api/statistics/admin-dashboard", adminRequired, asyncHandler(async (req, res) => {
   const today = startOfDay();
   const tomorrow = addDays(today, 1);
   const weekStart = addDays(today, -6);
@@ -1650,17 +1984,19 @@ app.get("/api/statistics/admin-dashboard", authRequired, asyncHandler(async (req
       [day.toISOString(), nextDay.toISOString(), nowIso()],
     );
     const recharge = await dbGet(
-      "SELECT COALESCE(SUM(amount), 0) AS amount FROM recharge_orders WHERE created_at >= ? AND created_at < ?",
-      [day.toISOString(), nextDay.toISOString()],
+      `SELECT COALESCE(SUM(amount_cents), 0) AS amountCents, COUNT(*) AS count
+       FROM recharge_orders
+       WHERE status = ? AND credited_at IS NOT NULL AND credited_at >= ? AND credited_at < ?`,
+      [ORDER_STATUS.CREDITED, day.toISOString(), nextDay.toISOString()],
     );
 
-    const rechargeAmount = toYuan(recharge.amount);
+    const rechargeAmount = centsToYuan(recharge.amountCents);
     userNewSeries.push(Number(newUsers.count || 0));
     userTotalSeries.push(Number(totalUsers.count || 0));
     userActiveSeries.push(Number(activeUsers.count || 0));
     rechargeSeries.push(rechargeAmount);
     commissionSeries.push(0);
-    profitSeries.push(rechargeAmount);
+    profitSeries.push(0);
   }
 
   const totalUsers = await dbGet("SELECT COUNT(*) AS count FROM users");
@@ -1672,19 +2008,33 @@ app.get("/api/statistics/admin-dashboard", authRequired, asyncHandler(async (req
     "SELECT COUNT(DISTINCT user_id) AS count FROM user_tokens WHERE expires_at > ?",
     [nowIso()],
   );
-  const rechargeTotal = await dbGet("SELECT COALESCE(SUM(amount), 0) AS amount, COUNT(*) AS count FROM recharge_orders");
+  const rechargeTotal = await dbGet(
+    `SELECT COALESCE(SUM(amount_cents), 0) AS amountCents, COUNT(*) AS count
+     FROM recharge_orders
+     WHERE status = ? AND credited_at IS NOT NULL`,
+    [ORDER_STATUS.CREDITED],
+  );
   const rechargeToday = await dbGet(
-    "SELECT COALESCE(SUM(amount), 0) AS amount, COUNT(*) AS count FROM recharge_orders WHERE created_at >= ? AND created_at < ?",
-    [today.toISOString(), tomorrow.toISOString()],
+    `SELECT COALESCE(SUM(amount_cents), 0) AS amountCents, COUNT(*) AS count
+     FROM recharge_orders
+     WHERE status = ? AND credited_at IS NOT NULL AND credited_at >= ? AND credited_at < ?`,
+    [ORDER_STATUS.CREDITED, today.toISOString(), tomorrow.toISOString()],
   );
   const rechargeWeek = await dbGet(
-    "SELECT COALESCE(SUM(amount), 0) AS amount FROM recharge_orders WHERE created_at >= ?",
-    [weekStart.toISOString()],
+    `SELECT COALESCE(SUM(amount_cents), 0) AS amountCents
+     FROM recharge_orders
+     WHERE status = ? AND credited_at IS NOT NULL AND credited_at >= ?`,
+    [ORDER_STATUS.CREDITED, weekStart.toISOString()],
+  );
+  const createdRechargeTotal = await dbGet("SELECT COUNT(*) AS count FROM recharge_orders");
+  const createdRechargeToday = await dbGet(
+    "SELECT COUNT(*) AS count FROM recharge_orders WHERE created_at >= ? AND created_at < ?",
+    [today.toISOString(), tomorrow.toISOString()],
   );
 
-  const totalRechargeYuan = toYuan(rechargeTotal.amount);
-  const todayRechargeYuan = toYuan(rechargeToday.amount);
-  const weekRechargeYuan = toYuan(rechargeWeek.amount);
+  const totalRechargeYuan = centsToYuan(rechargeTotal.amountCents);
+  const todayRechargeYuan = centsToYuan(rechargeToday.amountCents);
+  const weekRechargeYuan = centsToYuan(rechargeWeek.amountCents);
 
   return success(res, {
     users: {
@@ -1723,6 +2073,10 @@ app.get("/api/statistics/admin-dashboard", authRequired, asyncHandler(async (req
         weekAmountYuan: weekRechargeYuan,
         todayOrders: Number(rechargeToday.count || 0),
         totalOrders: Number(rechargeTotal.count || 0),
+        createdOrders: {
+          today: Number(createdRechargeToday.count || 0),
+          total: Number(createdRechargeTotal.count || 0),
+        },
         trend: {
           series: rechargeSeries,
           categories,
@@ -1740,9 +2094,11 @@ app.get("/api/statistics/admin-dashboard", authRequired, asyncHandler(async (req
         },
       },
       profit: {
-        totalProfitYuan: totalRechargeYuan,
-        todayProfitYuan: todayRechargeYuan,
-        weekProfitYuan: weekRechargeYuan,
+        available: false,
+        reason: "成本数据未接入，当前只提供已入账收入",
+        totalProfitYuan: 0,
+        todayProfitYuan: 0,
+        weekProfitYuan: 0,
         trend: {
           series: profitSeries,
           categories,
@@ -1766,12 +2122,25 @@ app.use((err, req, res, next) => {
   return res.status(500).json({
     code: 500,
     message: "服务器内部错误",
-    data: process.env.NODE_ENV === "production" ? null : { error: err.message },
+    data: process.env.NODE_ENV === "test" ? { error: err.message } : null,
   });
 });
 
+async function runReconciliation() {
+  if (!paymentEnabled || process.env.RECONCILIATION_ENABLED !== "1") return [];
+  return reconcileOnce({
+    db: database,
+    gateway: alipayGateway,
+    withMutation,
+    settle: (input) => settleRechargeOrder({ db: database, withTransaction, ...input }),
+    batchSize: 20,
+    minIntervalMs: 15000,
+  });
+}
+
 initDb()
   .then(() => {
+    assertAdminPasswordConfigured();
     app.listen(PORT, () => {
       logInfo("server_started", {
         port: PORT,
@@ -1782,6 +2151,12 @@ initDb()
       });
       console.log(`red-magic-api listening on http://127.0.0.1:${PORT}`);
     });
+    if (paymentEnabled && process.env.RECONCILIATION_ENABLED === "1") {
+      const interval = setInterval(() => {
+        runReconciliation().catch((error) => logError("reconciliation_failed", { error: error.message }));
+      }, 60 * 1000);
+      interval.unref();
+    }
   })
   .catch((err) => {
     console.error("Failed to initialize database:", err);

@@ -1,0 +1,1 @@
+import{d as s}from"./index-B09sHfUO.js";const o=e=>s.get("/api/roles",{params:e}),a=e=>s.post("/api/roles",e),n=(e,t)=>s.put(`/api/roles/${e}`,t),u=e=>s.delete(`/api/roles/${e}`),l=e=>s.get(`/api/roles/${e}/menus`),p=(e,t)=>s.put(`/api/roles/${e}/menus`,{menuIds:t});export{o as a,a as c,u as d,l as g,p as s,n as u};

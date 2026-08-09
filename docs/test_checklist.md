@@ -4,6 +4,12 @@
 
 ## 1. 构建产物
 
+- [ ] 1.2.0 Candidate 的短信、支付宝和对账开关保持关闭，未触碰正式发布 manifest。
+- [ ] 迁移测试覆盖旧库升级、重复运行、重复平台交易号回滚；短信测试覆盖限流、错误锁定、过期、一次性消费和 provider 失败。
+- [ ] 支付测试覆盖金额/商户/应用/交易号校验、重复通知幂等、跨订单交易号冲突、主动查询和对账恢复。
+- [ ] 充值页仅出现积分、支付宝和“立即充值”；左侧积分中心仅出现积分充值、充值记录、消耗记录。
+- [ ] 主进程支付外链拒绝 HTTP、`file:`、IP、自定义协议、其他主机和 `window.open` 绕过。
+- [ ] 主窗口导航只允许当前 `index.html` 或开发服务器自身 origin，并拦截 `will-navigate` / `will-redirect`；采集/登录辅助窗口的第三方授权流程不受影响。
 - [ ] 能成功执行 `scripts/build-magiorix-windows-installer.ps1`。
 - [ ] `desktop-versions/windows/<version>/` 下生成了 `.exe`、`assets.zip`、`.sha256.txt`、`release-info.json`。
 - [ ] `red-magic-api/public/assets/desktop/<version>/assets.zip` 已同步更新。

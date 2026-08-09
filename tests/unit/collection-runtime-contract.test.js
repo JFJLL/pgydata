@@ -57,14 +57,14 @@ test("history export handler builds schema payload instead of raw single-row dat
   );
 });
 
-test("source package, asset version, and backend package stay aligned at 1.1.13", () => {
+test("source package, asset version, and backend package stay aligned", () => {
   const desktop = JSON.parse(read("app-source/package.json"));
   const backend = JSON.parse(read("red-magic-api/package.json"));
-  const assets = JSON.parse(read("assets/1.1.13/version.json"));
-  assert.equal(desktop.version, "1.1.13");
-  assert.equal(desktop.assetsVersion, "1.1.13");
-  assert.equal(backend.version, "1.1.13");
-  assert.equal(assets.version, "1.1.13");
+  const assets = JSON.parse(read(`assets/${desktop.assetsVersion}/version.json`));
+  assert.match(desktop.version, /^\d+\.\d+\.\d+$/);
+  assert.equal(desktop.assetsVersion, desktop.version);
+  assert.equal(backend.version, desktop.version);
+  assert.equal(assets.version, desktop.assetsVersion);
 });
 
 test("admin password reset dialog requires matching passwords and task transaction filter", () => {

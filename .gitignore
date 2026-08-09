@@ -41,6 +41,9 @@ pic/
 user-images-keep/
 tools/__pycache__/
 tools/pgy-chart-renderer.py
+!tools/rcedit-x64.exe
+!tools/rcedit-x64.exe.sha256
+!tools/rcedit-x64.exe.metadata.json
 output/
 
 # OS/editor noise

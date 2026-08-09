@@ -66,9 +66,28 @@ pm2 startup
 ```env
 PORT=3050
 BASE_URL=https://magiorix.red-magic.cn
-DEFAULT_GIFT_BALANCE=100
 ADMIN_USERNAME=admin
-ADMIN_PASSWORD=redmagic2026
+ADMIN_PASSWORD=
+TRUST_PROXY=127.0.0.1,::1
+SMS_SECRET=
+SMS_IP_HASH_SECRET=
+LOG_IP_HASH_SECRET=
+SMS_CODE_TTL_MS=300000
+SMS_ENABLED=0
+ALIYUN_SMS_ACCESS_KEY_ID=
+ALIYUN_SMS_ACCESS_KEY_SECRET=
+ALIYUN_SMS_SIGN_NAME=
+ALIYUN_SMS_TEMPLATE_CODE=
+ALIYUN_SMS_REGION_ID=cn-beijing
+ALIYUN_SMS_ENDPOINT=https://dysmsapi.aliyuncs.com
+ALIPAY_ENABLED=0
+ALIPAY_APP_ID=
+ALIPAY_SELLER_ID=
+ALIPAY_PRIVATE_KEY_PATH=
+ALIPAY_PUBLIC_KEY_PATH=
+ALIPAY_NOTIFY_URL=https://magiorix.red-magic.cn/api/shumiao/alipay/notify
+ALIPAY_RETURN_URL=https://magiorix.red-magic.cn/pay/return
+RECONCILIATION_ENABLED=0
 LOG_DIR=./logs
 ```
 
@@ -86,7 +105,7 @@ logs/server-YYYY-MM-DD.log
 
 日志会记录启动、请求错误、管理员登录和积分调整等排查信息，不会主动记录密码或登录 token。
 
-启动时会自动创建表并初始化默认树苗套餐。
+启动时会在事务中执行版本迁移、保留历史数据，并初始化四档积分套餐。生产环境必须显式设置 `ADMIN_PASSWORD` 和 `SMS_SECRET`；支付宝、短信和对账开关默认关闭。
 
 ## 管理后台
 
@@ -100,10 +119,10 @@ https://magiorix.red-magic.cn/admin
 
 ```env
 ADMIN_USERNAME=admin
-ADMIN_PASSWORD=请改成强密码
+ADMIN_PASSWORD=
 ```
 
-登录后可以搜索用户，并通过“加减积分”按钮给用户增加或扣减树苗积分。客户端不再使用原首页仪表盘，登录后会直接进入蒲公英采集页面。
+登录后可以搜索用户，并通过“加减积分”按钮给用户增加或扣减积分。客户端不再使用原首页仪表盘，登录后会直接进入蒲公英采集页面。
 
 ## Nginx 配置
 
@@ -153,31 +172,57 @@ sudo certbot renew --dry-run
 桌面资源包必须放到：
 
 ```text
-public/assets/desktop/1.1.2/assets.zip
+public/assets/desktop/1.2.0/assets.zip
 ```
 
 部署后应能通过这个地址访问：
 
 ```text
-https://magiorix.red-magic.cn/assets/desktop/1.1.2/assets.zip
+https://magiorix.red-magic.cn/assets/desktop/1.2.0/assets.zip
 ```
 
 兼容期内旧域名也应能访问同一资源：
 
 ```text
-https://xhs.red-magic.cn/assets/desktop/1.1.2/assets.zip
+https://xhs.red-magic.cn/assets/desktop/1.2.0/assets.zip
 ```
 
 接口 `GET /api/frontend-assets/latest/desktop` 会自动读取这个文件并计算 `size` 和 `sha256`。
 
 ## 关键接口测试
 
-手机号注册/登录：
+手机号注册、密码登录和密码重置：
+
+先申请注册验证码；测试环境才会在响应中返回 `debugCode`，生产环境只通过短信发送：
 
 ```bash
-curl -X POST http://127.0.0.1:3050/api/auth/sms/login \
+curl -X POST http://127.0.0.1:3050/api/auth/sms/send \
   -H "Content-Type: application/json" \
-  -d '{"phone":"13800000000","password":"123456"}'
+  -d '{"phone":"13800000000","purpose":"register"}'
+```
+
+使用短信验证码注册：
+
+```bash
+curl -X POST http://127.0.0.1:3050/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"13800000000","code":"1234","password":"replace-with-password"}'
+```
+
+已有账号使用手机号和密码登录：
+
+```bash
+curl -X POST http://127.0.0.1:3050/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"13800000000","password":"replace-with-password"}'
+```
+
+找回密码时使用 `purpose=reset_password` 申请验证码，再调用：
+
+```bash
+curl -X POST http://127.0.0.1:3050/api/auth/password/reset \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"13800000000","code":"1234","newPassword":"replace-with-new-password"}'
 ```
 
 复制返回的 `data.token`，后续接口带请求头 `satoken`。
@@ -189,14 +234,14 @@ curl http://127.0.0.1:3050/api/auth/info \
   -H "satoken: 这里替换成登录返回的token"
 ```
 
-查询树苗余额：
+查询积分余额：
 
 ```bash
 curl http://127.0.0.1:3050/api/shumiao/balance \
   -H "satoken: 这里替换成登录返回的token"
 ```
 
-扣减树苗：
+扣减积分：
 
 ```bash
 curl -X POST http://127.0.0.1:3050/api/shumiao/consume \
@@ -211,7 +256,7 @@ curl -X POST http://127.0.0.1:3050/api/shumiao/consume \
 curl -X POST http://127.0.0.1:3050/api/shumiao/recharge \
   -H "Content-Type: application/json" \
   -H "satoken: 这里替换成登录返回的token" \
-  -d '{"packageId":"pkg_990"}'
+  -d '{"packageId":"pkg_10"}'
 ```
 
 查询桌面资源：

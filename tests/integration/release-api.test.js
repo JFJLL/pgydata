@@ -63,6 +63,7 @@ test("latest endpoints share one release manifest", async (t) => {
       DB_PATH: path.join(tempDir, "api.sqlite"),
       LOG_DIR: path.join(tempDir, "logs"),
       RELEASE_MANIFEST_PATH: manifestPath,
+      ADMIN_PASSWORD: "test-admin-password",
       NODE_ENV: "test",
     },
     stdio: ["ignore", "pipe", "pipe"],
