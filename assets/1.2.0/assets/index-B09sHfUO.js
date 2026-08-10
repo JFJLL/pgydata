@@ -66,26 +66,158 @@ function y5(){const e=Te(),t=r1(),{login:r}=ze(),[a,n]=m.useState(()=>localStora
 function b5({open:e,onClose:t}){const[a,n]=m.useState(""),[l,s]=m.useState(""),[i,d]=m.useState(""),[c,u]=m.useState(!1),[f,b]=m.useState(0),[C,h]=m.useState(!1),[g,v]=m.useState(""),[j,S]=m.useState("");m.useEffect(()=>{if(f<=0)return;const E=window.setInterval(()=>b(q=>q<=1?0:q-1),1e3);return()=>window.clearInterval(E)},[f]);const A=()=>{u(!1),b(0),v(""),S(""),t()},D=async()=>{if(c||f>0)return;const E=a.trim();if(!/^1[3-9]\d{9}$/.test(E)){v("请输入正确的手机号格式");return}u(!0),v(""),S("");try{await pgySendSms({phone:E,purpose:"reset_password"}),b(60),S("验证码已发送，请查收短信")}catch(q){v(q.message||"验证码发送失败，请稍后重试")}finally{u(!1)}},O=async E=>{E.preventDefault();if(C)return;const q=a.trim(),T=l.trim();if(!/^1[3-9]\d{9}$/.test(q)){v("请输入正确的手机号格式");return}if(!/^\d{4}$/.test(T)){v("请输入 4 位验证码");return}if(i.length<8||i.length>64){v("新密码长度必须在 8 到 64 个字符之间");return}h(!0),v("");try{await pgyResetPassword({phone:q,code:T,newPassword:i}),S("密码已重置，请返回登录"),setTimeout(A,600)}catch(R){v(R.message||"密码重置失败，请稍后重试")}finally{h(!1)}};return o.jsxs(ue,{open:e,onClose:A,PaperProps:{sx:{width:380}},children:[o.jsxs(be,{sx:{display:"flex",alignItems:"center",justifyContent:"space-between"},children:["找回密码",o.jsx(te,{onClick:A,size:"small",children:o.jsx(B,{icon:"solar:close-circle-bold",width:22})})]}),o.jsxs(x,{component:"form",onSubmit:O,sx:{px:3,pb:3,display:"flex",flexDirection:"column",gap:1.5},children:[o.jsx(ae,{fullWidth:!0,variant:"outlined",value:a,onChange:E=>n(E.target.value),disabled:C||c,placeholder:"请输入手机号",autoComplete:"tel",size:"small"}),o.jsxs(x,{sx:{display:"flex",gap:1},children:[o.jsx(ae,{fullWidth:!0,variant:"outlined",value:l,onChange:E=>s(E.target.value),disabled:C,placeholder:"4 位验证码",autoComplete:"one-time-code",size:"small",slotProps:{htmlInput:{maxLength:4,inputMode:"numeric"}}}),o.jsx($,{type:"button",variant:"outlined",onClick:D,disabled:C||c||f>0,size:"small",children:c?"发送中...":f>0?f+"s":"获取验证码"})]}),o.jsx(ae,{fullWidth:!0,variant:"outlined",type:"password",value:i,onChange:E=>d(E.target.value),disabled:C,placeholder:"新密码（8-64 位）",autoComplete:"new-password",size:"small"}),g&&o.jsx(oe,{severity:"error",children:g}),j&&o.jsx(w,{variant:"body2",color:"success.main",children:j}),o.jsx($,{fullWidth:!0,type:"submit",variant:"contained",disabled:C,children:C?"提交中...":"重置密码"})]})]})}
 function wr(e){for(const t of e){if(t.children&&t.children.length>0){const r=wr(t.children);if(r)return r}if(t.path)return t.path}return""}
 function x5(){const e=Te(),t=r1(),{login:r}=ze(),[a,n]=m.useState(()=>localStorage.getItem("magiorix.login.phone")??""),[l,s]=m.useState(""),[i,d]=m.useState(!1),[c,u]=m.useState(!1),[f,b]=m.useState(""),[C,h]=m.useState(!1),g=m.useCallback(async y=>{y.preventDefault();if(c)return;b("");const v=a.trim();if(!/^1[3-9]\d{9}$/.test(v)){b("请输入正确的手机号格式");return}if(!l){b("请输入密码");return}u(!0);try{await r({loginType:"password",phone:v,password:l}),localStorage.setItem("magiorix.login.phone",v),pgyAuthNavigate(e,t,wr)}catch(S){b(S.message||"登录失败，请检查登录信息")}finally{u(!1)}},[r,t,e,c,a,l]);return o.jsxs(x,{component:"form",onSubmit:g,noValidate:!0,className:"password-login",children:[o.jsx(_1,{open:!!f,autoHideDuration:3e3,onClose:()=>b(""),anchorOrigin:{vertical:"top",horizontal:"center"},children:o.jsx(oe,{severity:"error",children:f})}),o.jsxs(x,{className:"password-login__fields",children:[o.jsx(ae,{fullWidth:!0,variant:"outlined",value:a,onChange:y=>n(y.target.value),autoComplete:"tel",autoFocus:!0,disabled:c,placeholder:"请输入手机号",className:"password-login__input",size:"small"}),o.jsx(ae,{fullWidth:!0,variant:"outlined",type:i?"text":"password",value:l,onChange:y=>s(y.target.value),autoComplete:"current-password",disabled:c,placeholder:"请输入密码",size:"small",slotProps:{input:{endAdornment:o.jsx(y1,{position:"end",children:o.jsx(te,{onClick:()=>d(y=>!y),edge:"end",disabled:c,size:"small",children:i?o.jsx(B,{icon:"solar:eye-closed-bold-duotone",width:18,height:18}):o.jsx(B,{icon:"solar:eye-bold-duotone",width:18,height:18})})})}}}),o.jsx(lo,{component:"button",type:"button",variant:"caption",color:"primary",onClick:()=>h(!0),sx:{alignSelf:"flex-end",mt:.2,position:"relative",top:"-10px"},children:"忘记密码？"})]}),o.jsx($,{fullWidth:!0,size:"large",type:"submit",variant:"contained",disabled:c,startIcon:c?o.jsx(de,{size:20,color:"inherit"}):void 0,children:c?"登录中...":"登录"}),o.jsx(b5,{open:C,onClose:()=>h(!1)})]})}function kr(e){for(const t of e){if(t.children&&t.children.length>0){const r=kr(t.children);if(r)return r}if(t.path)return t.path}return""}function C5(){const e=Te(),t=r1(),{setToken:r}=Zt(),{setUserInfo:a,setPermissions:n,setMenus:l}=Se(),[s,i]=m.useState("loading"),[d,c]=m.useState(""),[u,f]=m.useState(""),[b,C]=m.useState(""),[h,g]=m.useState(0),[p,y]=m.useState(0),v=m.useRef(null),j=m.useRef(null),S=m.useCallback(()=>{v.current&&(clearInterval(v.current),v.current=null),j.current&&(clearInterval(j.current),j.current=null)},[]),E=m.useCallback(async()=>{try{const R=await nr();if(R)return await M1(R),console.log("[WechatLogin] Auto bound inviter via clipboard:",R),!0;const q=await Qt(),T=await or(q);if(T.inviteCode)return await M1(T.inviteCode),console.log("[WechatLogin] Auto bound inviter via fingerprint:",T.inviteCode),!0}catch(R){console.error("[WechatLogin] Failed to auto bind inviter:",R)}return!1},[]),D=m.useCallback(async()=>{S(),i("loading"),C("");try{const R=await ts();c(R.qrCodeUrl),f(R.ticket),g(Date.now()+R.expiresIn*1e3),y(R.expiresIn),i("ready")}catch(R){console.warn("[WechatLogin] qrcode endpoint unavailable:",R),c(""),f(""),g(0),y(0),C(""),i("empty")}},[S]),A=m.useCallback(async()=>{var R,q;if(u)try{const T=await rs(u);if(T.status==="expired"){i("expired"),S();return}if((T.status==="scanned"||T.status==="confirmed")&&i("scanned"),T.status==="success"&&T.token&&T.userInfo){i("success"),S(),r(T.token),a(T.userInfo);const Q=await Ht();if(n(Q.permissions),l(Q.menus),Ee.system.auth.setLoginState(!0),!(T.isLogin??!1)&&!T.userInfo.hasInviter&&await E()){const M=await Bt();a(M)}const O=(q=(R=t.state)==null?void 0:R.from)==null?void 0:q.pathname;if(O&&O!=="/sign-in")e(O,{replace:!0});else{const L=Se.getState().menus,M=kr(L)||"/";e(M,{replace:!0})}}}catch(T){console.error("检查登录状态失败:",T)}},[u,S,r,a,n,l,e,t,E]);m.useEffect(()=>(D(),()=>S()),[D,S]),m.useEffect(()=>((s==="ready"||s==="scanned")&&(v.current=window.setInterval(A,2e3)),()=>{v.current&&(clearInterval(v.current),v.current=null)}),[s,A]),m.useEffect(()=>(s==="ready"&&h>0&&(j.current=window.setInterval(()=>{const R=Math.max(0,Math.floor((h-Date.now())/1e3));y(R),R<=0&&(i("expired"),S())},1e3)),()=>{j.current&&(clearInterval(j.current),j.current=null)}),[s,h,S]);const H=()=>{switch(s){case"loading":return o.jsx(x,{className:"wechat-login__qr-overlay",children:o.jsx(de,{size:40})});case"ready":return o.jsxs(o.Fragment,{children:[o.jsx("img",{src:d,alt:"微信登录二维码",className:"wechat-login__qr-img"}),p>0&&p<=60&&o.jsxs(w,{variant:"caption",className:"wechat-login__countdown",children:[p,"秒后过期"]})]});case"scanned":return o.jsxs(x,{className:"wechat-login__qr-overlay wechat-login__qr-overlay--scanned",children:[o.jsx(B,{icon:"mdi:check-circle",width:48,height:48}),o.jsx(w,{variant:"body2",sx:{mt:1},children:"扫码成功"}),o.jsx(w,{variant:"caption",color:"text.secondary",children:"请在手机上确认登录"})]});case"success":return o.jsxs(x,{className:"wechat-login__qr-overlay wechat-login__qr-overlay--success",children:[o.jsx(de,{size:40}),o.jsx(w,{variant:"body2",sx:{mt:1},children:"登录成功，正在跳转..."})]});case"expired":return o.jsxs(o.Fragment,{children:[o.jsx("img",{src:d,alt:"微信登录二维码",className:"wechat-login__qr-img"}),o.jsxs(x,{className:"wechat-login__qr-overlay wechat-login__qr-overlay--expired",onClick:D,children:[o.jsx(te,{color:"primary",size:"small",sx:{mt:.5},children:o.jsx(B,{icon:"mdi:refresh",width:24,height:24})}),o.jsx(w,{variant:"caption",children:"点击刷新"})]})]});case"error":return o.jsxs(x,{className:"wechat-login__qr-overlay wechat-login__qr-overlay--error",children:[o.jsx(B,{icon:"mdi:alert-circle",width:48,height:48}),o.jsx(w,{variant:"body2",sx:{mt:1},children:b||"加载失败"}),o.jsx(et,{title:"点击重试",children:o.jsx(te,{onClick:D,color:"primary",sx:{mt:1},children:o.jsx(B,{icon:"mdi:refresh",width:24,height:24})})})]});default:return null}};return o.jsxs(x,{className:"wechat-login",children:[o.jsx(x,{className:"wechat-login__qr-wrapper",children:o.jsx(x,{className:"wechat-login__qr",children:H()})}),o.jsxs(w,{variant:"body2",className:"wechat-login__hint",children:["打开"," ",o.jsx(B,{icon:"mdi:wechat",className:"wechat-login__hint-icon",width:20,height:20}),o.jsx("span",{className:"wechat-login__hint-app",children:"微信"})," 扫一扫登录"]})]})}const Z0="magiorix.login.method";function Sr(){const[e,t]=m.useState(()=>{if(typeof window>"u")return"sms";const r=window.localStorage.getItem(Z0);return r==="sms"||r==="password"?r:"sms"});return m.useEffect(()=>{typeof window>"u"||window.localStorage.setItem(Z0,e)},[e]),o.jsx(x,{className:"sign-in",children:o.jsx(x,{className:"sign-in__container",children:o.jsxs(x,{className:"sign-in__card",children:[o.jsxs(x,{className:"sign-in__title-bar",sx:{WebkitAppRegion:"drag","& button, & a":{WebkitAppRegion:"no-drag"}},children:[o.jsx(w,{variant:"h4",className:"sign-in__title",children:"登录magiorix"}),o.jsx(x,{sx:{position:"absolute",right:40,top:5},children:o.jsx(dr,{})})]}),o.jsxs(x,{className:"sign-in__left",children:[o.jsx(w,{variant:"h6",className:"sign-in__section-title",children:"扫码登录"}),o.jsx(C5,{})]}),o.jsx(x,{className:"sign-in__divider"}),o.jsxs(x,{className:"sign-in__right",children:[o.jsxs(x,{className:"sign-in__right-header",children:[o.jsx(w,{variant:"h6",className:`sign-in__tab ${e==="sms"?"sign-in__tab--active":""}`,onClick:()=>t("sms"),children:"手机号注册"}),o.jsx(w,{variant:"h6",className:`sign-in__tab ${e==="password"?"sign-in__tab--active":""}`,onClick:()=>t("password"),children:"密码登录"})]}),e==="sms"?o.jsx(y5,{}):o.jsx(x5,{})]})]})})})}const v5=Object.defineProperty({__proto__:null,default:Sr},Symbol.toStringTag,{value:"Module"});function w5(){const e=se(),{user:t}=ze(),r=()=>{const a=new Date().getHours();return a<6?"夜深了":a<12?"早上好":a<14?"中午好":a<18?"下午好":"晚上好"};return o.jsx(xe,{sx:{p:3,mb:3,background:`linear-gradient(135deg, ${F(e.palette.primary.main,.1)} 0%, ${F(e.palette.primary.light,.05)} 100%)`,border:`1px solid ${F(e.palette.primary.main,.1)}`},children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:2},children:[o.jsx(x,{sx:{width:56,height:56,borderRadius:"50%",bgcolor:F(e.palette.primary.main,.12),display:"flex",alignItems:"center",justifyContent:"center",fontSize:24},children:t!=null&&t.avatar?o.jsx(x,{component:"img",src:t.avatar,sx:{width:56,height:56,borderRadius:"50%",objectFit:"cover"}}):"👋"}),o.jsxs(x,{children:[o.jsxs(w,{variant:"h5",sx:{fontWeight:700,mb:.5},children:[r(),"，",(t==null?void 0:t.nickname)||(t==null?void 0:t.username)]}),o.jsx(w,{variant:"body2",color:"text.secondary",children:"欢迎回到工作台，今天也是充满活力的一天！"})]})]})})}function jr(e,t){const r={...e};for(const a in t)if(Object.prototype.hasOwnProperty.call(t,a)){const n=t[a],l=r[a];n!==void 0&&typeof n=="object"&&!Array.isArray(n)&&n!==null&&typeof l=="object"&&!Array.isArray(l)&&l!==null?r[a]=jr(l,n):n!==void 0&&(r[a]=n)}return r}function r0(e){const t=se(),r=[t.palette.primary.main,t.palette.warning.main,t.palette.info.main,t.palette.error.main,t.palette.success.main,t.palette.warning.dark,t.palette.success.dark,t.palette.info.dark,t.palette.info.light],a={chart:{toolbar:{show:!1},zoom:{enabled:!1},foreColor:t.palette.text.disabled,fontFamily:t.typography.fontFamily},colors:r,states:{hover:{filter:{type:"lighten"}},active:{filter:{type:"darken"}}},fill:{opacity:1,gradient:{type:"vertical",shadeIntensity:0,opacityFrom:.4,opacityTo:0,stops:[0,100]}},dataLabels:{enabled:!1},stroke:{width:3,curve:"smooth",lineCap:"round"},grid:{strokeDashArray:3,borderColor:F(t.palette.grey[500],.16),xaxis:{lines:{show:!1}}},xaxis:{axisBorder:{show:!1},axisTicks:{show:!1}},markers:{size:0,strokeColors:t.palette.background.paper},tooltip:{theme:t.palette.mode,x:{show:!0}},legend:{show:!0,fontSize:"13px",position:"top",horizontalAlign:"right",markers:{size:8},fontWeight:500,itemMargin:{horizontal:8},labels:{colors:t.palette.text.primary}},plotOptions:{bar:{borderRadius:4,columnWidth:"28%",borderRadiusApplication:"end",borderRadiusWhenStacked:"last"},pie:{donut:{labels:{show:!0,value:{fontSize:"18px",fontWeight:700,color:t.palette.text.primary},total:{show:!0,label:"总计",fontSize:"14px",color:t.palette.text.secondary}}}},radialBar:{hollow:{size:"68%"},dataLabels:{value:{offsetY:16,fontSize:"28px",fontWeight:700,color:t.palette.text.primary},total:{show:!0,label:"总计",color:t.palette.text.secondary}}}},responsive:[{breakpoint:t.breakpoints.values.sm,options:{plotOptions:{bar:{columnWidth:"40%"}}}},{breakpoint:t.breakpoints.values.md,options:{plotOptions:{bar:{columnWidth:"32%"}}}}]};return jr(a,e??{})}const k5="modulepreload",S5=function(e,t){return new URL(e,t).href},e2={},G=function(t,r,a){let n=Promise.resolve();if(r&&r.length>0){const s=document.getElementsByTagName("link"),i=document.querySelector("meta[property=csp-nonce]"),d=(i==null?void 0:i.nonce)||(i==null?void 0:i.getAttribute("nonce"));n=Promise.allSettled(r.map(c=>{if(c=S5(c,a),c in e2)return;e2[c]=!0;const u=c.endsWith(".css"),f=u?'[rel="stylesheet"]':"";if(!!a)for(let h=s.length-1;h>=0;h--){const g=s[h];if(g.href===c&&(!u||g.rel==="stylesheet"))return}else if(document.querySelector(`link[href="${c}"]${f}`))return;const C=document.createElement("link");if(C.rel=u?"stylesheet":k5,u||(C.as="script"),C.crossOrigin="",C.href=c,d&&C.setAttribute("nonce",d),document.head.appendChild(C),u)return new Promise((h,g)=>{C.addEventListener("load",h),C.addEventListener("error",()=>g(new Error(`Unable to preload CSS for ${c}`)))})}))}function l(s){const i=new Event("vite:preloadError",{cancelable:!0});if(i.payload=s,window.dispatchEvent(i),!i.defaultPrevented)throw s}return n.then(s=>{for(const i of s||[])i.status==="rejected"&&l(i.reason);return t().catch(l)})},j5=m.lazy(()=>G(()=>import("./react-apexcharts.esm-BHQd7y-E.js"),__vite__mapDeps([0,1]),import.meta.url));function o0({type:e,series:t,options:r,width:a="100%",height:n=320,sx:l,...s}){const i=se(),d=["donut","pie","polarArea","radialBar"].includes(e||"");return o.jsx(x,{sx:{width:a,height:n,"& .apexcharts-canvas":{"& .apexcharts-tooltip":{color:i.palette.text.primary,bgcolor:i.palette.background.paper,boxShadow:i.shadows[3],borderRadius:1},"& .apexcharts-xaxistooltip":{color:i.palette.text.primary,bgcolor:i.palette.background.paper,boxShadow:i.shadows[3],borderRadius:1}},...l},...s,children:o.jsx(m.Suspense,{fallback:o.jsx(Z1,{variant:d?"circular":"rounded",sx:{width:"100%",height:"100%",...d&&{width:n,height:n,margin:"auto"}}}),children:o.jsx(j5,{type:e,series:t,options:r,width:a,height:n})})})}function ke({title:e,value:t,color:r="primary",icon:a}){const l=se().palette[r];return o.jsxs(x,{sx:{p:2,borderRadius:1.5,bgcolor:F(l.main,.08),display:"flex",alignItems:"center",gap:1.5},children:[a&&o.jsx(x,{sx:{color:l.main,"& svg":{width:20,height:20}},children:a}),o.jsxs(x,{children:[o.jsx(w,{variant:"caption",sx:{color:"text.secondary"},children:e}),o.jsx(w,{variant:"h6",sx:{fontWeight:700,color:l.dark},children:typeof t=="number"?t.toLocaleString():t})]})]})}const H1=""+new URL("shape-square-DfEasCbb.svg",import.meta.url).href,M5={primary:{lighter:"#D0ECFE",darker:"#042174"},secondary:{lighter:"#EFD6FF",darker:"#27097A"},info:{lighter:"#CAFDF5",darker:"#003768"},success:{lighter:"#D3FCD2",darker:"#065E49"},warning:{lighter:"#FFF5CC",darker:"#7A4100"},error:{lighter:"#FFE9D5",darker:"#7A0916"}};function jt(e){return e>=1e6?(e/1e6).toFixed(1)+"M":e>=1e4?(e/1e3).toFixed(1)+"K":e.toLocaleString()}function t2(e){return`${e.toFixed(1)}%`}const r2=so("span")({width:24,height:24,flexShrink:0,display:"inline-flex",backgroundColor:"currentColor"});function $e({sx:e,icon:t,title:r,total:a,percent:n,chart:l,color:s="primary",horizontal:i=!1,...d}){const u=se().palette[s],f=M5[s],b=[u.dark],C=r0({chart:{sparkline:{enabled:!0}},colors:b,xaxis:{categories:(l==null?void 0:l.categories)||[]},grid:{padding:{top:6,left:6,right:6,bottom:6}},tooltip:{y:{formatter:g=>jt(g),title:{formatter:()=>""}}},markers:{strokeWidth:0}}),h=()=>{if(n===void 0||n===0)return null;const g=n<0;return o.jsxs(x,{sx:{top:16,gap:.5,right:16,display:"flex",position:"absolute",alignItems:"center",color:g?"error.main":"success.main"},children:[g?o.jsx(G1,{sx:{width:20,height:20}}):o.jsx(S1,{sx:{width:20,height:20}}),o.jsxs(x,{component:"span",sx:{typography:"subtitle2",fontWeight:600},children:[n>0&&"+",t2(n)]})]})};return i?o.jsxs(xe,{sx:{p:2,boxShadow:"none",position:"relative",color:f.darker,backgroundColor:"common.white",backgroundImage:`linear-gradient(135deg, ${F(f.lighter,.48)} 0%, ${F(u.light,.48)} 100%)`,overflow:"hidden",...e},...d,children:[o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:2,position:"relative",zIndex:1},children:[o.jsx(x,{sx:{width:48,height:48,flexShrink:0,"& img":{width:"100%",height:"100%"}},children:t}),o.jsxs(x,{sx:{flexGrow:1,minWidth:0},children:[o.jsx(x,{sx:{typography:"caption",color:"text.secondary",mb:.5},children:r}),o.jsx(x,{sx:{typography:"h5",fontWeight:700},children:typeof a=="number"?jt(a):a})]}),n!==void 0&&n!==0&&o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:.5,color:n<0?"error.main":"success.main"},children:[n<0?o.jsx(G1,{sx:{width:18,height:18}}):o.jsx(S1,{sx:{width:18,height:18}}),o.jsxs(x,{component:"span",sx:{typography:"caption",fontWeight:600},children:[n>0&&"+",t2(n)]})]})]}),o.jsx(r2,{sx:{top:-20,right:-20,width:120,height:120,zIndex:0,opacity:.2,position:"absolute",color:u.main,pointerEvents:"none",mask:`url(${H1}) no-repeat center / contain`,WebkitMask:`url(${H1}) no-repeat center / contain`}})]}):o.jsxs(xe,{sx:{p:3,boxShadow:"none",position:"relative",color:f.darker,backgroundColor:"common.white",backgroundImage:`linear-gradient(135deg, ${F(f.lighter,.48)} 0%, ${F(u.light,.48)} 100%)`,overflow:"hidden",...e},...d,children:[o.jsx(x,{sx:{width:48,height:48,mb:3,position:"relative",zIndex:1,"& img":{width:"100%",height:"100%"}},children:t}),h(),o.jsxs(x,{sx:{display:"flex",flexWrap:"wrap",alignItems:"flex-end",justifyContent:"flex-end",position:"relative",zIndex:1},children:[o.jsxs(x,{sx:{flexGrow:1,minWidth:112},children:[o.jsx(x,{sx:{mb:1,typography:"subtitle2"},children:r}),o.jsx(x,{sx:{typography:"h4",fontWeight:700},children:typeof a=="number"?jt(a):a})]}),l&&l.series.length>0&&o.jsx(o0,{type:"line",series:[{data:l.series}],options:C,width:84,height:56})]}),o.jsx(r2,{sx:{top:0,left:-20,width:240,height:240,zIndex:0,opacity:.24,position:"absolute",color:u.main,pointerEvents:"none",mask:`url(${H1}) no-repeat center / contain`,WebkitMask:`url(${H1}) no-repeat center / contain`}})]})}const E5="data:image/svg+xml,%3csvg%20width='64'%20height='64'%20viewBox='0%200%2064%2064'%20fill='none'%20xmlns='http://www.w3.org/2000/svg'%3e%3cpath%20opacity='0.48'%20d='M32%208C24.268%208%2018%2014.268%2018%2022C18%2029.732%2024.268%2036%2032%2036C39.732%2036%2046%2029.732%2046%2022C46%2014.268%2039.732%208%2032%208Z'%20fill='url(%23paint0_linear)'/%3e%3cpath%20d='M32%208C24.268%208%2018%2014.268%2018%2022C18%2029.732%2024.268%2036%2032%2036C39.732%2036%2046%2029.732%2046%2022C46%2014.268%2039.732%208%2032%208Z'%20fill='url(%23paint1_linear)'/%3e%3cpath%20opacity='0.48'%20d='M8%2052C8%2043.716%2018.745%2040%2032%2040C45.255%2040%2056%2043.716%2056%2052C56%2056%2045.255%2056%2032%2056C18.745%2056%208%2056%208%2052Z'%20fill='url(%23paint2_linear)'/%3e%3cpath%20d='M8%2052C8%2043.716%2018.745%2040%2032%2040C45.255%2040%2056%2043.716%2056%2052C56%2056%2045.255%2056%2032%2056C18.745%2056%208%2056%208%2052Z'%20fill='url(%23paint3_linear)'/%3e%3cdefs%3e%3clinearGradient%20id='paint0_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2373BAFB'/%3e%3cstop%20offset='1'%20stop-color='%231877F2'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint1_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%231877F2'/%3e%3cstop%20offset='1'%20stop-color='%230C44AE'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint2_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2373BAFB'/%3e%3cstop%20offset='1'%20stop-color='%231877F2'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint3_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%231877F2'/%3e%3cstop%20offset='1'%20stop-color='%230C44AE'/%3e%3c/linearGradient%3e%3c/defs%3e%3c/svg%3e",A5="data:image/svg+xml,%3csvg%20width='64'%20height='64'%20viewBox='0%200%2064%2064'%20fill='none'%20xmlns='http://www.w3.org/2000/svg'%3e%3cpath%20opacity='0.48'%20d='M28%208C20.268%208%2014%2014.268%2014%2022C14%2029.732%2020.268%2036%2028%2036C35.732%2036%2042%2029.732%2042%2022C42%2014.268%2035.732%208%2028%208Z'%20fill='url(%23paint0_linear)'/%3e%3cpath%20d='M28%208C20.268%208%2014%2014.268%2014%2022C14%2029.732%2020.268%2036%2028%2036C35.732%2036%2042%2029.732%2042%2022C42%2014.268%2035.732%208%2028%208Z'%20fill='url(%23paint1_linear)'/%3e%3cpath%20opacity='0.48'%20d='M4%2052C4%2043.716%2014.745%2040%2028%2040C41.255%2040%2052%2043.716%2052%2052C52%2056%2041.255%2056%2028%2056C14.745%2056%204%2056%204%2052Z'%20fill='url(%23paint2_linear)'/%3e%3cpath%20d='M4%2052C4%2043.716%2014.745%2040%2028%2040C41.255%2040%2052%2043.716%2052%2052C52%2056%2041.255%2056%2028%2056C14.745%2056%204%2056%204%2052Z'%20fill='url(%23paint3_linear)'/%3e%3ccircle%20cx='52'%20cy='20'%20r='10'%20fill='url(%23paint4_linear)'/%3e%3cpath%20d='M52%2014V26M46%2020H58'%20stroke='white'%20stroke-width='2.5'%20stroke-linecap='round'/%3e%3cdefs%3e%3clinearGradient%20id='paint0_linear'%20x1='4'%20y1='8'%20x2='52'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2377ED8B'/%3e%3cstop%20offset='1'%20stop-color='%2322C55E'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint1_linear'%20x1='4'%20y1='8'%20x2='52'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2322C55E'/%3e%3cstop%20offset='1'%20stop-color='%23118D57'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint2_linear'%20x1='4'%20y1='8'%20x2='52'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2377ED8B'/%3e%3cstop%20offset='1'%20stop-color='%2322C55E'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint3_linear'%20x1='4'%20y1='8'%20x2='52'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2322C55E'/%3e%3cstop%20offset='1'%20stop-color='%23118D57'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint4_linear'%20x1='42'%20y1='10'%20x2='62'%20y2='30'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2322C55E'/%3e%3cstop%20offset='1'%20stop-color='%23118D57'/%3e%3c/linearGradient%3e%3c/defs%3e%3c/svg%3e",_5="data:image/svg+xml,%3csvg%20width='64'%20height='64'%20viewBox='0%200%2064%2064'%20fill='none'%20xmlns='http://www.w3.org/2000/svg'%3e%3cpath%20opacity='0.48'%20d='M28%208C20.268%208%2014%2014.268%2014%2022C14%2029.732%2020.268%2036%2028%2036C35.732%2036%2042%2029.732%2042%2022C42%2014.268%2035.732%208%2028%208Z'%20fill='url(%23paint0_linear)'/%3e%3cpath%20d='M28%208C20.268%208%2014%2014.268%2014%2022C14%2029.732%2020.268%2036%2028%2036C35.732%2036%2042%2029.732%2042%2022C42%2014.268%2035.732%208%2028%208Z'%20fill='url(%23paint1_linear)'/%3e%3cpath%20opacity='0.48'%20d='M4%2052C4%2043.716%2014.745%2040%2028%2040C41.255%2040%2052%2043.716%2052%2052C52%2056%2041.255%2056%2028%2056C14.745%2056%204%2056%204%2052Z'%20fill='url(%23paint2_linear)'/%3e%3cpath%20d='M4%2052C4%2043.716%2014.745%2040%2028%2040C41.255%2040%2052%2043.716%2052%2052C52%2056%2041.255%2056%2028%2056C14.745%2056%204%2056%204%2052Z'%20fill='url(%23paint3_linear)'/%3e%3ccircle%20cx='52'%20cy='20'%20r='10'%20fill='url(%23paint4_linear)'/%3e%3cpath%20d='M54%2013L49%2020H54L50%2027'%20stroke='white'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'/%3e%3cdefs%3e%3clinearGradient%20id='paint0_linear'%20x1='4'%20y1='8'%20x2='52'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2361F3F3'/%3e%3cstop%20offset='1'%20stop-color='%2300B8D9'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint1_linear'%20x1='4'%20y1='8'%20x2='52'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2300B8D9'/%3e%3cstop%20offset='1'%20stop-color='%23006C9C'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint2_linear'%20x1='4'%20y1='8'%20x2='52'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2361F3F3'/%3e%3cstop%20offset='1'%20stop-color='%2300B8D9'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint3_linear'%20x1='4'%20y1='8'%20x2='52'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2300B8D9'/%3e%3cstop%20offset='1'%20stop-color='%23006C9C'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint4_linear'%20x1='42'%20y1='10'%20x2='62'%20y2='30'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2300B8D9'/%3e%3cstop%20offset='1'%20stop-color='%23006C9C'/%3e%3c/linearGradient%3e%3c/defs%3e%3c/svg%3e",T5="data:image/svg+xml,%3csvg%20width='64'%20height='64'%20viewBox='0%200%2064%2064'%20fill='none'%20xmlns='http://www.w3.org/2000/svg'%3e%3cellipse%20opacity='0.48'%20cx='32'%20cy='16'%20rx='22'%20ry='8'%20fill='url(%23paint0_linear)'/%3e%3cellipse%20cx='32'%20cy='16'%20rx='22'%20ry='8'%20fill='url(%23paint1_linear)'/%3e%3cpath%20opacity='0.48'%20d='M10%2016V32C10%2036.418%2019.85%2040%2032%2040C44.15%2040%2054%2036.418%2054%2032V16'%20stroke='url(%23paint2_linear)'%20stroke-width='8'/%3e%3cpath%20d='M10%2016V32C10%2036.418%2019.85%2040%2032%2040C44.15%2040%2054%2036.418%2054%2032V16'%20stroke='url(%23paint3_linear)'%20stroke-width='8'/%3e%3cpath%20opacity='0.48'%20d='M10%2032V48C10%2052.418%2019.85%2056%2032%2056C44.15%2056%2054%2052.418%2054%2048V32'%20stroke='url(%23paint4_linear)'%20stroke-width='8'/%3e%3cpath%20d='M10%2032V48C10%2052.418%2019.85%2056%2032%2056C44.15%2056%2054%2052.418%2054%2048V32'%20stroke='url(%23paint5_linear)'%20stroke-width='8'/%3e%3cdefs%3e%3clinearGradient%20id='paint0_linear'%20x1='10'%20y1='8'%20x2='54'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%23FFD666'/%3e%3cstop%20offset='1'%20stop-color='%23FFAB00'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint1_linear'%20x1='10'%20y1='8'%20x2='54'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%23FFAB00'/%3e%3cstop%20offset='1'%20stop-color='%23B76E00'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint2_linear'%20x1='10'%20y1='8'%20x2='54'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%23FFD666'/%3e%3cstop%20offset='1'%20stop-color='%23FFAB00'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint3_linear'%20x1='10'%20y1='8'%20x2='54'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%23FFAB00'/%3e%3cstop%20offset='1'%20stop-color='%23B76E00'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint4_linear'%20x1='10'%20y1='8'%20x2='54'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%23FFD666'/%3e%3cstop%20offset='1'%20stop-color='%23FFAB00'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint5_linear'%20x1='10'%20y1='8'%20x2='54'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%23FFAB00'/%3e%3cstop%20offset='1'%20stop-color='%23B76E00'/%3e%3c/linearGradient%3e%3c/defs%3e%3c/svg%3e";function L5(){return W.get("/api/statistics/dashboard")}function R5(){const[e,t]=m.useState(null),[r,a]=m.useState(!0),[n,l]=m.useState(null);return m.useEffect(()=>{(async()=>{try{a(!0);const i=await L5();t(i),l(null)}catch(i){console.error("Failed to fetch admin dashboard:",i),l(i instanceof Error?i.message:"加载统计数据失败")}finally{a(!1)}})()},[]),r?o.jsxs(x,{sx:{mb:3},children:[o.jsx(w,{variant:"h6",sx:{mb:2,fontWeight:600},children:"管理员数据概览"}),o.jsx(N,{container:!0,spacing:2,children:[1,2,3,4].map(s=>o.jsx(N,{item:!0,xs:12,sm:6,md:3,children:o.jsx(Z1,{variant:"rounded",height:120,sx:{borderRadius:2}})},s))})]}):n?o.jsx(x,{sx:{mb:3},children:o.jsx(oe,{severity:"error",children:n})}):e?o.jsxs(x,{sx:{mb:3},children:[o.jsx(w,{variant:"h6",sx:{mb:2,fontWeight:600},children:"管理员数据概览"}),o.jsxs(N,{container:!0,spacing:3,sx:{mb:3},children:[o.jsx(N,{item:!0,xs:12,sm:6,md:3,children:o.jsx($e,{title:"用户总数",total:e.users.total,percent:e.users.totalTrend.percent,color:"primary",icon:o.jsx("img",{alt:"用户总数",src:E5}),chart:{series:e.users.totalTrend.series,categories:e.users.totalTrend.categories}})}),o.jsx(N,{item:!0,xs:12,sm:6,md:3,children:o.jsx($e,{title:"今日新增用户",total:e.users.todayNew,percent:e.users.newTrend.percent,color:"success",icon:o.jsx("img",{alt:"新增用户",src:A5}),chart:{series:e.users.newTrend.series,categories:e.users.newTrend.categories}})}),o.jsx(N,{item:!0,xs:12,sm:6,md:3,children:o.jsx($e,{title:"活跃用户",total:e.users.activeCount,percent:e.users.activeTrend.percent,color:"info",icon:o.jsx("img",{alt:"活跃用户",src:_5}),chart:{series:e.users.activeTrend.series,categories:e.users.activeTrend.categories}})}),o.jsx(N,{item:!0,xs:12,sm:6,md:3,children:o.jsx($e,{title:"博主总量",total:e.bloggers.xhs.total+e.bloggers.douyin.total,percent:e.bloggers.totalTrend.percent,color:"warning",icon:o.jsx("img",{alt:"博主总量",src:T5}),chart:{series:e.bloggers.totalTrend.series,categories:e.bloggers.totalTrend.categories}})})]}),o.jsx(w,{variant:"h6",sx:{mb:2,fontWeight:600},children:"财务概览"}),o.jsxs(N,{container:!0,spacing:2,children:[o.jsx(N,{item:!0,xs:12,md:4,children:o.jsx(P5,{finance:e.finance})}),o.jsx(N,{item:!0,xs:12,md:4,children:o.jsx(D5,{finance:e.finance})}),o.jsx(N,{item:!0,xs:12,md:4,children:o.jsx(I5,{finance:e.finance})})]}),o.jsx(N,{container:!0,spacing:2,sx:{mt:1},children:o.jsx(N,{item:!0,xs:12,children:o.jsx(O5,{finance:e.finance})})})]}):null}function P5({finance:e}){const t=se(),{recharge:r}=e;return o.jsxs(xe,{children:[o.jsx(b1,{title:"充值收入",titleTypographyProps:{variant:"subtitle1",fontWeight:600},sx:{pb:1,borderBottom:`1px solid ${t.palette.divider}`},action:o.jsxs(x,{sx:{textAlign:"right",mr:1.5},children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"累计充值"}),o.jsxs(w,{variant:"h6",sx:{fontWeight:700,color:t.palette.success.main},children:["¥",r.totalAmountYuan.toLocaleString()]})]})}),o.jsx(We,{children:o.jsxs(N,{container:!0,spacing:2,children:[o.jsx(N,{item:!0,xs:6,children:o.jsx(ke,{title:"今日充值",value:`¥${r.todayAmountYuan.toLocaleString()}`,color:"success",icon:o.jsx(i0,{})})}),o.jsx(N,{item:!0,xs:6,children:o.jsx(ke,{title:"本周充值",value:`¥${r.weekAmountYuan.toLocaleString()}`,color:"success",icon:o.jsx(i0,{})})}),o.jsx(N,{item:!0,xs:6,children:o.jsx(ke,{title:"今日订单",value:r.todayOrders,color:"info",icon:o.jsx(c0,{})})}),o.jsx(N,{item:!0,xs:6,children:o.jsx(ke,{title:"累计订单",value:r.totalOrders,color:"info",icon:o.jsx(c0,{})})})]})})]})}function D5({finance:e}){const t=se(),{commission:r}=e;return o.jsxs(xe,{children:[o.jsx(b1,{title:"佣金支出",titleTypographyProps:{variant:"subtitle1",fontWeight:600},sx:{pb:1,borderBottom:`1px solid ${t.palette.divider}`},action:o.jsxs(x,{sx:{textAlign:"right",mr:1.5},children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"累计佣金"}),o.jsxs(w,{variant:"h6",sx:{fontWeight:700,color:t.palette.warning.main},children:["¥",r.totalAmountYuan.toLocaleString()]})]})}),o.jsx(We,{children:o.jsxs(N,{container:!0,spacing:2,children:[o.jsx(N,{item:!0,xs:6,children:o.jsx(ke,{title:"已结算",value:`¥${r.settledAmountYuan.toLocaleString()}`,color:"success",icon:o.jsx(S1,{})})}),o.jsx(N,{item:!0,xs:6,children:o.jsx(ke,{title:"待结算",value:`¥${r.pendingAmountYuan.toLocaleString()}`,color:"warning",icon:o.jsx(d0,{})})}),o.jsx(N,{item:!0,xs:6,children:o.jsx(ke,{title:"待结算笔数",value:r.pendingCount,color:"warning",icon:o.jsx(d0,{})})}),o.jsx(N,{item:!0,xs:6,children:o.jsx(ke,{title:"失败笔数",value:r.failedCount,color:"error",icon:o.jsx(io,{})})})]})})]})}function I5({finance:e}){const t=se(),{profit:r}=e,a=r.totalProfitYuan>=0;return o.jsxs(xe,{children:[o.jsx(b1,{title:"网站盈亏",titleTypographyProps:{variant:"subtitle1",fontWeight:600},sx:{pb:1,borderBottom:`1px solid ${t.palette.divider}`},action:o.jsxs(x,{sx:{textAlign:"right",mr:1.5},children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"累计净盈亏"}),o.jsxs(w,{variant:"h6",sx:{fontWeight:700,color:a?t.palette.success.main:t.palette.error.main},children:[a?"+":"","¥",r.totalProfitYuan.toLocaleString()]})]})}),o.jsx(We,{children:o.jsxs(N,{container:!0,spacing:2,children:[o.jsx(N,{item:!0,xs:6,children:o.jsx(ke,{title:"今日盈亏",value:`${r.todayProfitYuan>=0?"+":""}¥${r.todayProfitYuan.toLocaleString()}`,color:r.todayProfitYuan>=0?"success":"error",icon:r.todayProfitYuan>=0?o.jsx(S1,{}):o.jsx(G1,{})})}),o.jsx(N,{item:!0,xs:6,children:o.jsx(ke,{title:"本周盈亏",value:`${r.weekProfitYuan>=0?"+":""}¥${r.weekProfitYuan.toLocaleString()}`,color:r.weekProfitYuan>=0?"success":"error",icon:r.weekProfitYuan>=0?o.jsx(S1,{}):o.jsx(G1,{})})}),o.jsx(N,{item:!0,xs:12,children:o.jsxs(x,{sx:{p:1.5,borderRadius:1,bgcolor:F(a?t.palette.success.main:t.palette.error.main,.08),textAlign:"center"},children:[o.jsx(w,{variant:"body2",color:"text.secondary",children:"盈亏率"}),o.jsx(w,{variant:"h6",sx:{fontWeight:700,color:a?t.palette.success.main:t.palette.error.main},children:e.recharge.totalAmountYuan>0?`${(r.totalProfitYuan/e.recharge.totalAmountYuan*100).toFixed(1)}%`:"N/A"})]})})]})})]})}function O5({finance:e}){const t=se(),r=r0({colors:[t.palette.success.main,t.palette.warning.main,t.palette.info.main],stroke:{width:[2,2,2],curve:"smooth"},fill:{type:["solid","solid","gradient"],gradient:{type:"vertical",shadeIntensity:0,opacityFrom:.3,opacityTo:.05,stops:[0,100]}},xaxis:{categories:e.recharge.trend.categories},yaxis:{title:{text:"金额（元）"},min:void 0,labels:{formatter:n=>`¥${n.toFixed(0)}`}},tooltip:{shared:!0,intersect:!1,y:{formatter:n=>`¥${n.toFixed(2)}`}},legend:{position:"top",horizontalAlign:"right"}}),a=[{name:"充值收入",type:"line",data:e.recharge.trend.series},{name:"佣金支出",type:"line",data:e.commission.trend.series},{name:"净盈亏",type:"area",data:e.profit.trend.series}];return o.jsxs(xe,{children:[o.jsx(b1,{title:"近7天财务趋势",titleTypographyProps:{variant:"subtitle1",fontWeight:600},sx:{pb:1,borderBottom:`1px solid ${t.palette.divider}`}}),o.jsx(We,{children:o.jsx(o0,{type:"line",series:a,options:r,height:300})})]})}const z5="data:image/svg+xml,%3csvg%20width='64'%20height='64'%20viewBox='0%200%2064%2064'%20fill='none'%20xmlns='http://www.w3.org/2000/svg'%3e%3crect%20opacity='0.48'%20x='10'%20y='8'%20width='44'%20height='48'%20rx='6'%20fill='url(%23paint0_linear)'/%3e%3crect%20x='10'%20y='8'%20width='44'%20height='48'%20rx='6'%20fill='url(%23paint1_linear)'/%3e%3cpath%20d='M22%2028L28%2034L42%2020'%20stroke='white'%20stroke-width='4'%20stroke-linecap='round'%20stroke-linejoin='round'/%3e%3cpath%20d='M22%2044H42'%20stroke='white'%20stroke-width='4'%20stroke-linecap='round'/%3e%3cdefs%3e%3clinearGradient%20id='paint0_linear'%20x1='10'%20y1='8'%20x2='54'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2373BAFB'/%3e%3cstop%20offset='1'%20stop-color='%231877F2'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint1_linear'%20x1='10'%20y1='8'%20x2='54'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%231877F2'/%3e%3cstop%20offset='1'%20stop-color='%230C44AE'/%3e%3c/linearGradient%3e%3c/defs%3e%3c/svg%3e",N5="data:image/svg+xml,%3csvg%20width='64'%20height='64'%20viewBox='0%200%2064%2064'%20fill='none'%20xmlns='http://www.w3.org/2000/svg'%3e%3crect%20opacity='0.48'%20x='8'%20y='12'%20width='48'%20height='44'%20rx='6'%20fill='url(%23paint0_linear)'/%3e%3crect%20x='8'%20y='12'%20width='48'%20height='44'%20rx='6'%20fill='url(%23paint1_linear)'/%3e%3crect%20x='8'%20y='12'%20width='48'%20height='12'%20rx='6'%20fill='url(%23paint2_linear)'/%3e%3ccircle%20cx='20'%20cy='8'%20r='4'%20fill='url(%23paint3_linear)'/%3e%3ccircle%20cx='44'%20cy='8'%20r='4'%20fill='url(%23paint3_linear)'/%3e%3ccircle%20cx='22'%20cy='36'%20r='4'%20fill='white'/%3e%3ccircle%20cx='32'%20cy='36'%20r='4'%20fill='white'/%3e%3ccircle%20cx='42'%20cy='36'%20r='4'%20fill='white'/%3e%3ccircle%20cx='22'%20cy='48'%20r='4'%20fill='white'%20opacity='0.6'/%3e%3ccircle%20cx='32'%20cy='48'%20r='4'%20fill='white'%20opacity='0.6'/%3e%3ccircle%20cx='42'%20cy='48'%20r='4'%20fill='white'%20opacity='0.6'/%3e%3cdefs%3e%3clinearGradient%20id='paint0_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2361F3F3'/%3e%3cstop%20offset='1'%20stop-color='%2300B8D9'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint1_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2300B8D9'/%3e%3cstop%20offset='1'%20stop-color='%23006C9C'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint2_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2300B8D9'/%3e%3cstop%20offset='1'%20stop-color='%23006C9C'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint3_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2300B8D9'/%3e%3cstop%20offset='1'%20stop-color='%23006C9C'/%3e%3c/linearGradient%3e%3c/defs%3e%3c/svg%3e",F5="data:image/svg+xml,%3csvg%20width='64'%20height='64'%20viewBox='0%200%2064%2064'%20fill='none'%20xmlns='http://www.w3.org/2000/svg'%3e%3ccircle%20opacity='0.48'%20cx='32'%20cy='32'%20r='24'%20fill='url(%23paint0_linear)'/%3e%3ccircle%20cx='32'%20cy='32'%20r='24'%20fill='url(%23paint1_linear)'/%3e%3cpath%20d='M20%2032L28%2040L44%2024'%20stroke='white'%20stroke-width='5'%20stroke-linecap='round'%20stroke-linejoin='round'/%3e%3cdefs%3e%3clinearGradient%20id='paint0_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2377ED8B'/%3e%3cstop%20offset='1'%20stop-color='%2322C55E'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint1_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2322C55E'/%3e%3cstop%20offset='1'%20stop-color='%23118D57'/%3e%3c/linearGradient%3e%3c/defs%3e%3c/svg%3e",B5="data:image/svg+xml,%3csvg%20width='64'%20height='64'%20viewBox='0%200%2064%2064'%20fill='none'%20xmlns='http://www.w3.org/2000/svg'%3e%3crect%20opacity='0.48'%20x='8'%20y='8'%20width='48'%20height='16'%20rx='4'%20fill='url(%23paint0_linear)'/%3e%3crect%20x='8'%20y='8'%20width='48'%20height='16'%20rx='4'%20fill='url(%23paint1_linear)'/%3e%3crect%20opacity='0.48'%20x='8'%20y='28'%20width='48'%20height='12'%20rx='4'%20fill='url(%23paint2_linear)'/%3e%3crect%20x='8'%20y='28'%20width='48'%20height='12'%20rx='4'%20fill='url(%23paint3_linear)'/%3e%3crect%20opacity='0.48'%20x='8'%20y='44'%20width='48'%20height='12'%20rx='4'%20fill='url(%23paint4_linear)'/%3e%3crect%20x='8'%20y='44'%20width='48'%20height='12'%20rx='4'%20fill='url(%23paint5_linear)'/%3e%3ccircle%20cx='16'%20cy='16'%20r='3'%20fill='white'/%3e%3ccircle%20cx='16'%20cy='34'%20r='2'%20fill='white'/%3e%3ccircle%20cx='16'%20cy='50'%20r='2'%20fill='white'/%3e%3crect%20x='24'%20y='14'%20width='24'%20height='4'%20rx='2'%20fill='white'%20opacity='0.4'/%3e%3crect%20x='24'%20y='32'%20width='20'%20height='4'%20rx='2'%20fill='white'%20opacity='0.4'/%3e%3crect%20x='24'%20y='48'%20width='16'%20height='4'%20rx='2'%20fill='white'%20opacity='0.4'/%3e%3cdefs%3e%3clinearGradient%20id='paint0_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2377ED8B'/%3e%3cstop%20offset='1'%20stop-color='%2322C55E'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint1_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2322C55E'/%3e%3cstop%20offset='1'%20stop-color='%23118D57'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint2_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2377ED8B'/%3e%3cstop%20offset='1'%20stop-color='%2322C55E'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint3_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2322C55E'/%3e%3cstop%20offset='1'%20stop-color='%23118D57'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint4_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2377ED8B'/%3e%3cstop%20offset='1'%20stop-color='%2322C55E'/%3e%3c/linearGradient%3e%3clinearGradient%20id='paint5_linear'%20x1='8'%20y1='8'%20x2='56'%20y2='56'%20gradientUnits='userSpaceOnUse'%3e%3cstop%20stop-color='%2322C55E'/%3e%3cstop%20offset='1'%20stop-color='%23118D57'/%3e%3c/linearGradient%3e%3c/defs%3e%3c/svg%3e";function o2(e){const t=[],r=[],a=[];for(let n=6;n>=0;n--){const l=new Date;l.setDate(l.getDate()-n),l.setHours(0,0,0,0);const s=l.getTime(),i=s+24*60*60*1e3,d=l.getMonth()+1,c=l.getDate();t.push(`${d}/${c}`);const u=e.filter(b=>b.createdAt>=s&&b.createdAt<i);r.push(u.length);const f=u.reduce((b,C)=>b+C.successCount,0);a.push(f)}return{tasks:{series:r,categories:t},dataCount:{series:a,categories:t}}}function H5(){const[e,t]=m.useState(null),[r,a]=m.useState(!0),[n,l]=m.useState(null);return m.useEffect(()=>{(async()=>{try{a(!0);const d=await me.getAllTasks(),c=new Date;c.setHours(0,0,0,0);const u=c.getTime(),f=new Date;f.setDate(f.getDate()-7),f.setHours(0,0,0,0);const b=f.getTime(),C=d.filter(R=>R.createdAt>=u),h=d.filter(R=>R.createdAt>=b),g=d.reduce((R,q)=>R+q.successCount,0),p=d.reduce((R,q)=>R+q.errorCount,0),y=g+p>0?Number((g/(g+p)*100).toFixed(1)):0,v=d.filter(R=>R.pluginId==="pgy"),j=d.filter(R=>R.pluginId==="starmap"),S=v.filter(R=>R.createdAt>=u),E=v.filter(R=>R.createdAt>=b),D=j.filter(R=>R.createdAt>=u),A=j.filter(R=>R.createdAt>=b),H=o2(d);t({total:d.length,todayCount:C.length,weekCount:h.length,successRate:y,totalDataCount:g,byPlatform:{pgy:{count:v.length,success:v.reduce((R,q)=>R+q.successCount,0),todayCount:S.length,weekCount:E.length},starmap:{count:j.length,success:j.reduce((R,q)=>R+q.successCount,0),todayCount:D.length,weekCount:A.length}},trend:H}),l(null)}catch(d){console.error("Failed to load scraper stats:",d),l(d instanceof Error?d.message:"加载统计数据失败")}finally{a(!1)}})()},[]),{stats:e,loading:r,error:n,refresh:async()=>{a(!0);const i=await me.getAllTasks(),d=new Date;d.setHours(0,0,0,0);const c=d.getTime(),u=new Date;u.setDate(u.getDate()-7),u.setHours(0,0,0,0);const f=u.getTime(),b=i.filter(H=>H.createdAt>=c),C=i.filter(H=>H.createdAt>=f),h=i.reduce((H,R)=>H+R.successCount,0),g=i.reduce((H,R)=>H+R.errorCount,0),p=h+g>0?Number((h/(h+g)*100).toFixed(1)):0,y=i.filter(H=>H.pluginId==="pgy"),v=i.filter(H=>H.pluginId==="starmap"),j=y.filter(H=>H.createdAt>=c),S=y.filter(H=>H.createdAt>=f),E=v.filter(H=>H.createdAt>=c),D=v.filter(H=>H.createdAt>=f),A=o2(i);t({total:i.length,todayCount:b.length,weekCount:C.length,successRate:p,totalDataCount:h,byPlatform:{pgy:{count:y.length,success:y.reduce((H,R)=>H+R.successCount,0),todayCount:j.length,weekCount:S.length},starmap:{count:v.length,success:v.reduce((H,R)=>H+R.successCount,0),todayCount:E.length,weekCount:D.length}},trend:A}),a(!1)}}}function V5(){const{stats:e,loading:t,error:r}=H5();return t?o.jsxs(x,{children:[o.jsx(w,{variant:"h6",sx:{mb:2,fontWeight:600},children:"采集数据统计"}),o.jsx(N,{container:!0,spacing:2,children:[1,2,3,4].map(a=>o.jsx(N,{item:!0,xs:12,sm:6,md:3,children:o.jsx(Z1,{variant:"rounded",height:120,sx:{borderRadius:2}})},a))})]}):r?o.jsxs(x,{children:[o.jsx(w,{variant:"h6",sx:{mb:2,fontWeight:600},children:"采集数据统计"}),o.jsx(xe,{sx:{p:3,textAlign:"center"},children:o.jsx(w,{color:"text.secondary",children:r})})]}):e?o.jsxs(x,{children:[o.jsx(w,{variant:"h6",sx:{mb:2,fontWeight:600},children:"采集数据统计"}),o.jsxs(N,{container:!0,spacing:2,sx:{mb:3},children:[o.jsx(N,{item:!0,xs:12,sm:6,md:3,children:o.jsx($e,{horizontal:!0,title:"今日采集任务",total:e.todayCount,color:"primary",icon:o.jsx("img",{alt:"今日任务",src:z5})})}),o.jsx(N,{item:!0,xs:12,sm:6,md:3,children:o.jsx($e,{horizontal:!0,title:"本周采集任务",total:e.weekCount,color:"info",icon:o.jsx("img",{alt:"本周任务",src:N5})})}),o.jsx(N,{item:!0,xs:12,sm:6,md:3,children:o.jsx($e,{horizontal:!0,title:"采集成功率",total:`${e.successRate}%`,color:e.successRate>=90?"success":e.successRate>=70?"warning":"error",icon:o.jsx("img",{alt:"成功率",src:F5})})}),o.jsx(N,{item:!0,xs:12,sm:6,md:3,children:o.jsx($e,{horizontal:!0,title:"总采集数据量",total:e.totalDataCount,color:"success",icon:o.jsx("img",{alt:"数据量",src:B5})})})]}),o.jsxs(N,{container:!0,spacing:2,children:[o.jsx(N,{item:!0,xs:12,md:6,children:o.jsxs(N,{container:!0,spacing:2,children:[o.jsx(N,{item:!0,xs:12,children:o.jsx(a2,{title:"小红书 (蒲公英)",stats:e.byPlatform.pgy,color:"error"})}),o.jsx(N,{item:!0,xs:12,children:o.jsx(a2,{title:"抖音星图",stats:e.byPlatform.starmap,color:"info"})})]})}),o.jsx(N,{item:!0,xs:12,md:6,children:o.jsx($5,{tasksTrend:e.trend.tasks,dataCountTrend:e.trend.dataCount})})]})]}):null}function a2({title:e,stats:t,color:r}){const a=se(),n=a.palette[r];return o.jsxs(xe,{children:[o.jsx(b1,{title:e,titleTypographyProps:{variant:"subtitle1",fontWeight:600},sx:{pb:1,borderBottom:`1px solid ${a.palette.divider}`},action:o.jsxs(x,{sx:{textAlign:"right",mr:1.5},children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"累计任务"}),o.jsx(w,{variant:"h6",sx:{fontWeight:700,color:n.main},children:t.count})]})}),o.jsx(We,{children:o.jsxs(N,{container:!0,spacing:2,children:[o.jsx(N,{item:!0,xs:6,children:o.jsx(ke,{title:"今日任务",value:t.todayCount,color:r,icon:o.jsx(co,{})})}),o.jsx(N,{item:!0,xs:6,children:o.jsx(ke,{title:"本周任务",value:t.weekCount,color:r,icon:o.jsx(uo,{})})}),o.jsx(N,{item:!0,xs:12,children:o.jsxs(x,{sx:{mt:1},children:[o.jsxs(x,{sx:{display:"flex",justifyContent:"space-between",mb:.5},children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"成功采集数据"}),o.jsxs(w,{variant:"caption",sx:{fontWeight:600,color:n.main},children:[t.success.toLocaleString()," 条"]})]}),o.jsx(Q1,{variant:"determinate",value:t.count>0?Math.min(t.success/(t.count*100)*100,100):0,sx:{height:8,borderRadius:1,bgcolor:F(n.main,.12),"& .MuiLinearProgress-bar":{bgcolor:n.main,borderRadius:1}}})]})})]})})]})}function $5({tasksTrend:e,dataCountTrend:t}){const r=se(),a=r0({colors:[F(r.palette.primary.main,.7),F(r.palette.success.main,.5)],stroke:{width:[2,2],curve:"smooth"},fill:{type:["solid","gradient"],gradient:{type:"vertical",shadeIntensity:0,opacityFrom:.3,opacityTo:.05,stops:[0,100]}},xaxis:{categories:e.categories},yaxis:[{title:{text:"任务数"},min:0},{opposite:!0,title:{text:"数据量"},min:0}],tooltip:{shared:!0,intersect:!1},legend:{position:"top",horizontalAlign:"right"}}),n=[{name:"采集任务",type:"line",data:e.series},{name:"采集数据量",type:"area",data:t.series}];return o.jsxs(xe,{sx:{height:"100%"},children:[o.jsx(b1,{title:"近7天采集趋势",titleTypographyProps:{variant:"subtitle1",fontWeight:600},sx:{pb:1,borderBottom:`1px solid ${r.palette.divider}`}}),o.jsx(We,{children:o.jsx(o0,{type:"line",series:n,options:a,height:240})})]})}function Mr(){const{permissions:e}=ze(),t=e.includes("*");return o.jsxs(x,{sx:{p:3},children:[o.jsx(w5,{}),t?o.jsx(R5,{}):o.jsx(V5,{})]})}const W5=Object.defineProperty({__proto__:null,default:Mr},Symbol.toStringTag,{value:"Module"}),U5=Array.from({length:25},(e,t)=>t+1).map(e=>`./avatars/avatar-${e}.webp`);function q5({open:e,value:t,onClose:r,onSelect:a}){const n=l=>{a(l),r()};return o.jsxs(ue,{open:e,onClose:r,maxWidth:"sm",fullWidth:!0,children:[o.jsxs(be,{sx:{display:"flex",alignItems:"center",justifyContent:"space-between"},children:["选择头像",o.jsx(te,{onClick:r,size:"small",children:o.jsx(B,{icon:"solar:close-circle-bold-duotone",width:20,height:20})})]}),o.jsx(pe,{children:o.jsx(x,{sx:{maxHeight:500,overflow:"auto",pt:1},children:o.jsx(N,{container:!0,columnSpacing:2,rowSpacing:3,children:U5.map((l,s)=>{const i=t===l;return o.jsx(N,{item:!0,xs:3,sm:2,children:o.jsx(A1,{src:l,onClick:()=>n(l),sx:{width:72,height:72,cursor:"pointer",outline:i?2:0,outlineColor:"primary.main",outlineOffset:2,"&:hover":{opacity:.8}}})},s)})})})})]})}function G5({onToast:e}){const[t,r]=m.useState(null),[a,n]=m.useState(!0),[l,s]=m.useState(!1);m.useEffect(()=>{i()},[]);const i=async()=>{try{const u=await os();r(u)}catch(u){console.error("加载绑定状态失败:",u)}finally{n(!1)}},d=async()=>{if(confirm("确定要解绑收款账号吗？解绑后将无法收到佣金。"))try{await ls(),e("success","解绑成功"),i()}catch(u){const f=u instanceof Error?u.message:"解绑失败";e("error",f)}},c=()=>{s(!1),e("success","绑定成功"),i()};return a?o.jsx(x,{sx:{py:4,textAlign:"center"},children:o.jsx(de,{size:24})}):o.jsxs(o.Fragment,{children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,sx:{mb:1.5},children:"第三方账号"}),o.jsxs(x,{sx:{border:1,borderColor:"divider",borderRadius:2,bgcolor:"background.paper"},children:[o.jsx(n2,{label:"登录微信",icon:"ri:wechat-fill",iconColor:"#07C160",binding:(t==null?void 0:t.login)??null,description:"用于微信扫码登录",canUnbind:!1}),o.jsx(Oe,{sx:{mx:6,mt:1.5}}),o.jsx(n2,{label:"收款微信",icon:"ri:wechat-fill",iconColor:"#07C160",binding:(t==null?void 0:t.payment)??null,description:"用于接收推广佣金",canUnbind:!!(t!=null&&t.payment),onUnbind:d,onBind:()=>s(!0)})]}),o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",mt:1.5},children:"* 收款微信账号用于接收推广佣金，绑定后好友充值产生的佣金将自动发放到该微信"}),o.jsx(K5,{open:l,onClose:()=>s(!1),onSuccess:c})]})}function n2({label:e,icon:t,iconColor:r,binding:a,description:n,canUnbind:l,onUnbind:s,onBind:i}){var d;return o.jsxs(x,{sx:{display:"flex",alignItems:"center",py:2.5,px:3,minHeight:64},children:[o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:2,flex:1},children:[o.jsx(B,{icon:t,width:28,height:28,style:{color:r}}),o.jsxs(x,{children:[o.jsx(w,{variant:"body2",fontWeight:500,children:e}),o.jsx(w,{variant:"caption",color:"text.secondary",children:n})]})]}),o.jsx(x,{sx:{display:"flex",alignItems:"center",gap:2},children:a?o.jsxs(o.Fragment,{children:[o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(A1,{src:a.avatar||void 0,sx:{width:32,height:32,fontSize:14},children:((d=a.nickname)==null?void 0:d.charAt(0))||"?"}),o.jsxs(x,{children:[o.jsx(w,{variant:"body2",children:a.nickname||"微信用户"}),a.realName&&o.jsxs(w,{variant:"caption",color:"text.secondary",children:["实名：",a.realName]})]})]}),l&&s&&o.jsx($,{size:"small",color:"error",onClick:s,children:"解绑"})]}):o.jsx($,{size:"small",variant:"contained",onClick:i,startIcon:o.jsx(B,{icon:"solar:link-bold",width:16}),children:"绑定"})})]})}function K5({open:e,onClose:t,onSuccess:r}){const[a,n]=m.useState(""),[l,s]=m.useState("loading"),[i,d]=m.useState(""),c=m.useRef(null),u=m.useCallback(async()=>{s("loading"),d("");try{const h=await as();n(h.qrCodeUrl),s("ready"),f(h.ticket)}catch(h){const g=h instanceof Error?h.message:"获取二维码失败";d(g),s("error")}},[]),f=h=>{c.current&&clearInterval(c.current),c.current=window.setInterval(async()=>{try{const g=await ns(h);g.status==="success"?(b(),g.bound?r():(d(g.message||"绑定失败"),s("error"))):g.status==="expired"&&(b(),s("expired"))}catch(g){console.error("检查绑定状态失败:",g)}},2e3)},b=()=>{c.current&&(clearInterval(c.current),c.current=null)};m.useEffect(()=>(e?u():b(),()=>b()),[e,u]);const C=()=>{b(),u()};return o.jsxs(ue,{open:e,onClose:t,maxWidth:"xs",fullWidth:!0,children:[o.jsxs(be,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(B,{icon:"ri:wechat-fill",width:24,style:{color:"#07C160"}}),"绑定收款微信"]}),o.jsxs(pe,{children:[i&&o.jsx(oe,{severity:"error",sx:{mb:2},children:i}),o.jsx(w,{variant:"body2",color:"text.secondary",sx:{mb:2,textAlign:"center"},children:"请使用微信扫描下方二维码关注公众号完成绑定"}),o.jsxs(x,{sx:{display:"flex",justifyContent:"center",alignItems:"center",minHeight:220},children:[l==="loading"&&o.jsx(de,{}),l==="ready"&&a&&o.jsx(x,{component:"img",src:a,alt:"绑定二维码",sx:{width:180,height:180}}),l==="expired"&&o.jsxs(x,{sx:{textAlign:"center"},children:[o.jsx(w,{color:"text.secondary",sx:{mb:2},children:"二维码已过期"}),o.jsx($,{variant:"outlined",size:"small",onClick:C,children:"刷新二维码"})]}),l==="error"&&o.jsxs(x,{sx:{textAlign:"center"},children:[o.jsx(w,{color:"error",sx:{mb:2},children:"加载失败"}),o.jsx($,{variant:"outlined",size:"small",onClick:C,children:"重试"})]})]}),o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",mt:2,textAlign:"center"},children:"绑定后，推广佣金将自动发放到该微信账号"})]}),o.jsx(_e,{sx:{px:3,pb:2},children:o.jsx($,{onClick:t,children:"取消"})})]})}function Y5(e){return!e||e.length<7?e:e.slice(0,3)+"****"+e.slice(-4)}const J5=[{key:"basic",label:"本地信息"},{key:"security",label:"本地设置"},{key:"account",label:"账户信息"}];function Er(){const e=Te(),{user:t,refreshProfile:r}=ze(),[a,n]=m.useState(()=>{try{const S=localStorage.getItem("pgyProfileInitialTab");return localStorage.removeItem("pgyProfileInitialTab"),J5.some(E=>E.key===S)?S:"basic"}catch{return"basic"}}),[l,s]=m.useState(null),[i,d]=m.useState(!1),[c,u]=m.useState(!1),[f,b]=m.useState(!1),[C,h]=m.useState(!1),[g,p]=m.useState(!1),y=(t==null?void 0:t.passwordSet)===1,v=async S=>{try{await St({avatar:S}),s({type:"success",message:"头像已更新"}),await r()}catch(E){const D=E instanceof Error?E.message:"更新失败";s({type:"error",message:D})}},j=m.useCallback((S,E)=>{s({type:S,message:E})},[]);return o.jsxs(x,{sx:{display:"flex",height:"100%",bgcolor:"background.default"},children:[o.jsxs(x,{sx:{width:200,flexShrink:0,borderRight:1,borderColor:"divider",bgcolor:"background.paper",py:3},children:[o.jsx(w,{variant:"h6",fontWeight:700,sx:{px:3,pb:2},children:"账号设置"}),o.jsx(E1,{disablePadding:!0,children:J5.map(S=>o.jsx(Wt,{selected:a===S.key,onClick:()=>n(S.key),sx:{mx:1.5,borderRadius:1.5,mb:.5,position:"relative","&.Mui-selected":{bgcolor:"action.selected","&::before":{content:'""',position:"absolute",left:0,top:"20%",bottom:"20%",width:3,borderRadius:1.5,bgcolor:"primary.main"}}},children:o.jsx(Ye,{primary:S.label,primaryTypographyProps:{variant:"body2",fontWeight:a===S.key?600:400}})},S.key))})]}),o.jsxs(x,{sx:{flex:1,overflow:"auto",px:5,py:4,position:"relative",bgcolor:"background.paper"},children:[o.jsx(te,{onClick:()=>e(-1),size:"small",sx:{position:"absolute",top:12,right:12},children:o.jsx(B,{icon:"mdi:close",width:22})}),a==="basic"&&o.jsx(X5,{authUser:t,onOpenAvatarPicker:()=>d(!0),onOpenNicknameDialog:()=>u(!0),onOpenEmailDialog:()=>b(!0),onToast:j,onRefreshProfile:r}),a==="security"&&o.jsx(Q5,{authUser:t,hasPassword:y,onOpenPhoneDialog:()=>h(!0),onOpenPasswordDialog:()=>p(!0)}),a==="account"&&o.jsx(Z5,{onToast:j})]}),o.jsx(q5,{open:i,value:t==null?void 0:t.avatar,onClose:()=>d(!1),onSelect:v}),o.jsx(l2,{open:c,title:"修改名称",label:"名称",initialValue:(t==null?void 0:t.nickname)||"",onClose:()=>u(!1),onSubmit:async S=>{await St({nickname:S}),await r(),j("success","名称已更新")},onError:S=>j("error",S)}),o.jsx(l2,{open:f,title:t!=null&&t.email?"修改邮箱":"绑定邮箱",label:"邮箱",initialValue:(t==null?void 0:t.email)||"",type:"email",placeholder:"example@email.com",onClose:()=>b(!1),onSubmit:async S=>{await St({email:S}),await r(),j("success","邮箱已更新")},onError:S=>j("error",S)}),o.jsx(ei,{open:C,onClose:()=>h(!1),onSuccess:async()=>{j("success",t!=null&&t.phone?"手机号修改成功":"手机号绑定成功"),await r()},onError:S=>j("error",S),currentPhone:t==null?void 0:t.phone}),o.jsx(ri,{open:g,hasPassword:y,onClose:()=>p(!1),onSuccess:async()=>{j("success",y?"密码修改成功":"密码设置成功"),await r()},onError:S=>j("error",S)}),o.jsx(_1,{open:!!l,autoHideDuration:3e3,onClose:()=>s(null),anchorOrigin:{vertical:"top",horizontal:"center"},children:l?o.jsx(oe,{severity:l.type,onClose:()=>s(null),sx:{width:"100%"},children:l.message}):void 0})]})}function X5({authUser:e,onOpenAvatarPicker:t,onOpenNicknameDialog:r,onOpenEmailDialog:a,onToast:n,onRefreshProfile:l}){const s=(e==null?void 0:e.nickname)||(e==null?void 0:e.username)||"",[i,d]=m.useState(""),[c,u]=m.useState(!1),[f,b]=m.useState(!1);m.useEffect(()=>{C()},[]);const C=async()=>{u(!0);try{const g=await is();d(g.inviteCode)}catch(g){console.error("获取邀请码失败:",g)}finally{u(!1)}},h=async()=>{if(i)try{await navigator.clipboard.writeText(i),n("success","邀请码已复制")}catch{n("error","复制失败")}};return o.jsxs(o.Fragment,{children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,sx:{mb:1.5},children:"账号信息"}),o.jsxs(x,{sx:{border:1,borderColor:"divider",borderRadius:2,bgcolor:"background.paper"},children:[o.jsx(Be,{label:"头像",value:o.jsx(A1,{src:e==null?void 0:e.avatar,alt:s,sx:{width:40,height:40,fontSize:18,fontWeight:700},children:s.charAt(0).toUpperCase()}),action:o.jsx(Xe,{label:"修改",onClick:t})}),o.jsx(Oe,{}),o.jsx(Be,{label:"昵称",value:s||"-",action:o.jsx(Xe,{label:"修改",onClick:r})}),o.jsx(Oe,{}),o.jsx(Be,{label:"邮箱",value:(e==null?void 0:e.email)||"未绑定",valueColor:e!=null&&e.email?void 0:"text.disabled",action:o.jsx(Xe,{label:e!=null&&e.email?"修 改":"绑 定",variant:e!=null&&e.email?"outlined":"contained",onClick:a})})]}),o.jsx(w,{variant:"subtitle1",fontWeight:600,sx:{mb:1.5,mt:3},children:"邀请推广"}),o.jsxs(x,{sx:{border:1,borderColor:"divider",borderRadius:2,bgcolor:"background.paper"},children:[o.jsx(Be,{label:"我的邀请码",value:c?o.jsx(de,{size:16}):o.jsx(w,{variant:"body2",sx:{fontWeight:700,letterSpacing:1},children:i||"-"}),valueAlign:"right",action:o.jsx(et,{title:"复制邀请码",children:o.jsx(te,{size:"small",onClick:h,disabled:!i,children:o.jsx(B,{icon:"solar:copy-linear",width:18})})})}),o.jsx(Oe,{}),o.jsx(Be,{label:"我的邀请人",value:e!=null&&e.hasInviter?(e==null?void 0:e.inviterNickname)||"已绑定":"",valueColor:e!=null&&e.hasInviter?void 0:"text.disabled",valueAlign:"right",action:e!=null&&e.hasInviter?null:o.jsx(Xe,{label:"绑 定",variant:"contained",onClick:()=>b(!0)})})]}),o.jsx(ti,{open:f,onClose:()=>b(!1),onSuccess:async()=>{n("success","邀请人绑定成功"),await l()},onError:g=>n("error",g)})]})}function Q5({authUser:e,hasPassword:t,onOpenPhoneDialog:r,onOpenPasswordDialog:a}){return o.jsxs(o.Fragment,{children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,sx:{mb:1.5},children:"安全信息"}),o.jsxs(x,{sx:{border:1,borderColor:"divider",borderRadius:2,bgcolor:"background.paper"},children:[o.jsx(Be,{label:"手机号",value:e!=null&&e.phone?Y5(e.phone):"未绑定",valueColor:e!=null&&e.phone?void 0:"text.disabled",action:o.jsx(Xe,{label:e!=null&&e.phone?"修 改":"绑 定",variant:e!=null&&e.phone?"outlined":"contained",onClick:r})}),o.jsx(Oe,{}),o.jsx(Be,{label:"密码",value:t?"已设置":"未设置",valueColor:t?void 0:"text.disabled",action:o.jsx(Xe,{label:t?"修改密码":"设置密码",onClick:a})})]})]})}function Z5({onToast:e}){const t=Te(),{logout:r}=ze(),[a,n]=m.useState(!1),[l,s]=m.useState(""),[i,d]=m.useState(!1),c=async()=>{if(l!=="确认注销"){e("error",'请输入"确认注销"以继续');return}d(!0);try{await ss(),e("success","账号已注销"),r(),t("/login",{replace:!0})}catch(u){const f=u instanceof Error?u.message:"注销失败";e("error",f)}finally{d(!1)}};return o.jsxs(o.Fragment,{children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,color:"error",sx:{mb:1.5},children:"危险区域"}),o.jsx(x,{sx:{border:1,borderColor:"divider",borderRadius:2,bgcolor:"background.paper"},children:o.jsx(Be,{label:"注销账号",value:"务必谨慎，注销后账号将永久删除",valueColor:"text.secondary",action:o.jsx(Xe,{label:"注 销",variant:"outlined",color:"error",onClick:()=>n(!0)})})}),o.jsxs(ue,{open:a,onClose:()=>!i&&n(!1),maxWidth:"xs",fullWidth:!0,children:[o.jsx(be,{sx:{pb:1,color:"error.main"},children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(B,{icon:"solar:danger-triangle-bold",width:24}),"注销账号"]})}),o.jsxs(pe,{children:[o.jsx(oe,{severity:"warning",sx:{mb:2},children:"此操作不可撤销！注销后以下数据将被永久删除："}),o.jsxs(w,{variant:"body2",color:"text.secondary",sx:{mb:2},children:["• 账号信息和个人资料",o.jsx("br",{}),"• 积分余额和本地记录",o.jsx("br",{}),"• 消耗记录和佣金记录",o.jsx("br",{}),"• 微信绑定关系"]}),o.jsx(ae,{fullWidth:!0,label:'请输入"确认注销"',value:l,onChange:u=>s(u.target.value),placeholder:"确认注销",size:"small",autoFocus:!0})]}),o.jsxs(_e,{sx:{px:3,pb:2},children:[o.jsx($,{onClick:()=>{n(!1),s("")},disabled:i,children:"取消"}),o.jsx($,{variant:"contained",color:"error",onClick:c,disabled:i||l!=="确认注销",disableElevation:!0,children:i?"注销中...":"确认注销"})]})]})]})}function Be({label:e,value:t,valueColor:r,action:a,valueAlign:n="left"}){return o.jsxs(x,{sx:{display:"flex",alignItems:"center",py:2.5,px:3,minHeight:64},children:[o.jsx(w,{variant:"body2",color:"text.secondary",sx:{width:80,flexShrink:0},children:e}),o.jsx(x,{sx:{flex:1,minWidth:0,display:"flex",justifyContent:n==="right"?"flex-end":"flex-start"},children:typeof t=="string"?o.jsx(w,{variant:"body2",color:r||"text.primary",children:t}):t}),o.jsx(x,{sx:{flexShrink:0},children:a})]})}function Xe({label:e,variant:t="text",color:r="primary",onClick:a}){return o.jsx($,{size:"small",variant:t,color:r,onClick:a,disableElevation:!0,sx:{textTransform:"none",borderRadius:1.5,px:2,minWidth:64},children:e})}function l2({open:e,title:t,label:r,initialValue:a,type:n="text",placeholder:l,onClose:s,onSubmit:i,onError:d}){const[c,u]=m.useState(""),[f,b]=m.useState(!1),[C,h]=m.useState("");m.useEffect(()=>{e&&(u(a),h(""))},[e,a]);const g=async()=>{const p=c.trim();if(!p){h(`请输入${r}`);return}b(!0),h("");try{await i(p),s()}catch(y){const v=y instanceof Error?y.message:"操作失败";h(v),d(v)}finally{b(!1)}};return o.jsxs(ue,{open:e,onClose:s,maxWidth:"xs",fullWidth:!0,children:[o.jsx(be,{sx:{pb:1},children:t}),o.jsxs(pe,{children:[C&&o.jsx(oe,{severity:"error",sx:{mb:2},onClose:()=>h(""),children:C}),o.jsx(ae,{fullWidth:!0,label:r,type:n,value:c,onChange:p=>u(p.target.value),placeholder:l||`请输入${r}`,size:"small",autoFocus:!0,sx:{mt:1}})]}),o.jsxs(_e,{sx:{px:3,pb:2},children:[o.jsx($,{onClick:s,disabled:f,children:"取消"}),o.jsx($,{variant:"contained",onClick:g,disabled:f,disableElevation:!0,children:f?"保存中...":"确认"})]})]})}function ei({open:e,onClose:t}){return o.jsxs(ue,{open:e,onClose:t,maxWidth:"xs",fullWidth:!0,children:[o.jsx(be,{sx:{pb:1},children:"手机号设置"}),o.jsx(pe,{children:o.jsx(w,{variant:"body2",color:"text.secondary",children:"当前版本暂不支持客户端修改手机号，请联系管理员处理。"})}),o.jsx(_e,{sx:{px:3,pb:2},children:o.jsx($,{variant:"contained",onClick:t,disableElevation:!0,children:"知道了"})})]})}function ti({open:e,onClose:t,onSuccess:r,onError:a}){const[n,l]=m.useState(""),[s,i]=m.useState(!1),[d,c]=m.useState(!1),[u,f]=m.useState(""),[b,C]=m.useState(null);m.useEffect(()=>{e&&(l(""),f(""),C(null))},[e]);const h=async()=>{const p=n.trim().toUpperCase();if(!p){f("请输入邀请码");return}c(!0),f(""),C(null);try{const y=await cs(p);y?C(y):f("邀请码无效")}catch(y){const v=y instanceof Error?y.message:"查询失败";f(v)}finally{c(!1)}},g=async()=>{if(!b){f("请先查询邀请人信息");return}i(!0),f("");try{await M1(n.trim().toUpperCase()),t(),r()}catch(p){const y=p instanceof Error?p.message:"绑定失败";f(y),a(y)}finally{i(!1)}};return o.jsxs(ue,{open:e,onClose:t,maxWidth:"xs",fullWidth:!0,children:[o.jsx(be,{sx:{pb:1},children:"绑定邀请人"}),o.jsxs(pe,{children:[u&&o.jsx(oe,{severity:"error",sx:{mb:2},onClose:()=>f(""),children:u}),o.jsxs(ce,{spacing:2.5,sx:{mt:1},children:[o.jsx(ae,{fullWidth:!0,label:"邀请码",value:n,onChange:p=>{l(p.target.value.toUpperCase()),C(null)},placeholder:"请输入邀请码",size:"small",autoFocus:!0,slotProps:{input:{endAdornment:o.jsx(y1,{position:"end",children:o.jsx($,{size:"small",disabled:d||!n.trim(),onClick:h,sx:{whiteSpace:"nowrap",minWidth:"auto"},children:d?"查询中...":"查询"})})}}}),b&&o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:2,p:2,borderRadius:2,bgcolor:"action.hover"},children:[o.jsx(A1,{src:b.avatar||void 0,sx:{width:48,height:48},children:(b.nickname||"用户").charAt(0)}),o.jsxs(x,{children:[o.jsx(w,{variant:"body2",fontWeight:600,children:b.nickname||"未设置昵称"}),o.jsx(w,{variant:"caption",color:"text.secondary",children:"邀请人信息"})]})]})]})]}),o.jsxs(_e,{sx:{px:3,pb:2},children:[o.jsx($,{onClick:t,disabled:s,children:"取消"}),o.jsx($,{variant:"contained",onClick:g,disabled:s||!b,disableElevation:!0,children:s?"绑定中...":"确认绑定"})]})]})}function ri({open:e,hasPassword:t,onClose:r,onSuccess:a,onError:n}){const[l,s]=m.useState(""),[i,d]=m.useState(""),[c,u]=m.useState(""),[f,b]=m.useState(!1),[C,h]=m.useState(!1),[g,p]=m.useState(!1),[y,v]=m.useState(!1),[j,S]=m.useState("");m.useEffect(()=>{e&&(s(""),d(""),u(""),b(!1),h(!1),p(!1),S(""))},[e]);const E=async()=>{if(t&&!l.trim()){S("请输入旧密码");return}if(!i.trim()){S("请输入新密码");return}if(i.length<6){S("密码长度不能少于6位");return}if(i!==c){S("两次输入的密码不一致");return}v(!0),S("");try{t?await Zl(l,i):await es(i),r(),a()}catch(A){const H=A instanceof Error?A.message:"操作失败";S(H),n(H)}finally{v(!1)}},D=(A,H)=>o.jsx(y1,{position:"end",children:o.jsx(te,{size:"small",onClick:H,edge:"end",children:o.jsx(B,{icon:A?"solar:eye-bold":"solar:eye-closed-bold",width:18})})});return o.jsxs(ue,{open:e,onClose:r,maxWidth:"xs",fullWidth:!0,children:[o.jsx(be,{sx:{pb:1},children:t?"修改密码":"设置密码"}),o.jsxs(pe,{children:[j&&o.jsx(oe,{severity:"error",sx:{mb:2},onClose:()=>S(""),children:j}),o.jsxs(ce,{spacing:2.5,sx:{mt:1},children:[t&&o.jsx(ae,{fullWidth:!0,label:"旧密码",type:f?"text":"password",value:l,onChange:A=>s(A.target.value),placeholder:"请输入旧密码",size:"small",autoFocus:!0,slotProps:{input:{endAdornment:D(f,()=>b(!f))}}}),o.jsx(ae,{fullWidth:!0,label:"新密码",type:C?"text":"password",value:i,onChange:A=>d(A.target.value),placeholder:"请输入新密码（至少6位）",size:"small",autoFocus:!t,slotProps:{input:{endAdornment:D(C,()=>h(!C))}}}),o.jsx(ae,{fullWidth:!0,label:"确认密码",type:g?"text":"password",value:c,onChange:A=>u(A.target.value),placeholder:"请再次输入新密码",size:"small",slotProps:{input:{endAdornment:D(g,()=>p(!g))}}})]})]}),o.jsxs(_e,{sx:{px:3,pb:2},children:[o.jsx($,{onClick:r,disabled:y,children:"取消"}),o.jsx($,{variant:"contained",onClick:E,disabled:y,disableElevation:!0,children:y?"提交中...":"确认"})]})]})}const oi=Object.defineProperty({__proto__:null,default:Er},Symbol.toStringTag,{value:"Module"});function Mt(e){if(!e||typeof e!="object")return{code:500,message:"响应格式错误"};const t=e,r=typeof t.code=="number"?t.code:500,a=typeof t.message=="string"?t.message:"";return{code:r,message:a,data:t.data}}function Et(e){if(!e)return"-";const t=new Date(e);return Number.isNaN(t.getTime())?e:t.toLocaleString("zh-CN")}function Ar(){const e=Te(),{refreshProfile:t}=ze(),{organization:r,isOwner:a,isEnterprise:n}=e0(),l=Se(P=>P.setOrganization),[s,i]=m.useState(null),[d,c]=m.useState(!1),[u,f]=m.useState(""),[b,C]=m.useState(""),[h,g]=m.useState(!1),[p,y]=m.useState(""),[v,j]=m.useState(!1),[S,E]=m.useState(!1),[D,A]=m.useState(null),[H,R]=m.useState(!1),[q,T]=m.useState(!1),[Q,ve]=m.useState(!1),O=m.useCallback(async()=>{if(r){c(!0),f("");try{const P=await yt.getApiOrganizations({id:r.id}),I=Mt(P);I.code===200&&I.data?(i(I.data),y(I.data.name)):f(I.message||"加载企业信息失败")}catch(P){f(P instanceof Error?P.message:"加载企业信息失败")}finally{c(!1)}}},[r]);m.useEffect(()=>{O()},[O]);const L=async()=>{if(!r)return;const P=p.trim();if(!P){f("企业名称不能为空");return}if(P.length>100){f("企业名称不能超过 100 个字符");return}j(!0),f("");try{const I=await yt.putApiOrganizations({id:r.id,requestBody:{name:P}}),U=Mt(I);U.code===200&&U.data?(i(U.data),l({...r,name:U.data.name}),C("企业名称已更新"),g(!1)):f(U.message||"更新失败")}catch(I){f(I instanceof Error?I.message:"更新失败")}finally{j(!1)}},M=P=>{A(P),E(!0)},z=async()=>{if(!(!r||!D)){R(!0),f("");try{const P=await yt.putApiOrganizationsDataMode({id:r.id,requestBody:{dataMode:D,confirmed:!0}}),I=Mt(P);I.code===200&&I.data?(i(I.data),l({...r,dataMode:I.data.dataMode}),C("数据模式已切换"),E(!1),A(null)):f(I.message||"切换失败")}catch(P){f(P instanceof Error?P.message:"切换失败")}finally{R(!1)}}},_=async()=>{if(!(!r||a)){ve(!0),f("");try{await W.delete(`/api/organizations/${r.id}/membership`,{params:{dataTransfer:(s==null?void 0:s.dataMode)==="LOCAL"?"transfer":void 0}}),l(null),await t(),T(!1),e("/",{replace:!0})}catch(P){f(P instanceof Error?P.message:"退出企业失败")}finally{ve(!1)}}};return n?d&&!s?o.jsx(x,{sx:{p:3,display:"flex",justifyContent:"center"},children:o.jsx(de,{})}):s?o.jsxs(x,{sx:{p:3},children:[o.jsxs(x,{sx:{mb:3,display:"flex",alignItems:"center",gap:1},children:[o.jsx(B,{icon:"solar:buildings-3-bold-duotone",width:28,height:28}),o.jsx(w,{variant:"h4",fontWeight:"bold",children:"企业信息"})]}),u&&o.jsx(oe,{severity:"error",sx:{mb:2},onClose:()=>f(""),children:u}),o.jsx(xe,{children:o.jsx(We,{children:o.jsxs(N,{container:!0,spacing:2,children:[o.jsxs(N,{item:!0,xs:12,sm:6,children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"企业 ID"}),o.jsx(w,{variant:"body2",sx:{fontFamily:"monospace",wordBreak:"break-all"},children:s.id})]}),o.jsxs(N,{item:!0,xs:12,sm:6,children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"企业状态"}),o.jsx(x,{sx:{mt:.5},children:o.jsx(f1,{size:"small",label:s.status==="ACTIVE"?"正常":s.status,color:s.status==="ACTIVE"?"success":"default"})})]}),o.jsx(N,{item:!0,xs:12,children:o.jsx(Oe,{})}),o.jsxs(N,{item:!0,xs:12,children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"企业名称"}),h?o.jsxs(x,{sx:{display:"flex",gap:1,mt:.5,alignItems:"center"},children:[o.jsx(ae,{size:"small",fullWidth:!0,value:p,onChange:P=>y(P.target.value),disabled:v,inputProps:{maxLength:100}}),o.jsx($,{variant:"contained",size:"small",onClick:L,disabled:v,children:v?"保存中...":"保存"}),o.jsx($,{size:"small",onClick:()=>{g(!1),y(s.name)},disabled:v,children:"取消"})]}):o.jsxs(x,{sx:{display:"flex",gap:1,mt:.5,alignItems:"center"},children:[o.jsx(w,{variant:"body1",fontWeight:500,children:s.name}),a&&o.jsx($,{size:"small",startIcon:o.jsx(B,{icon:"solar:pen-bold-duotone",width:16,height:16}),onClick:()=>g(!0),children:"编辑"})]})]}),o.jsxs(N,{item:!0,xs:12,sm:6,children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"订阅计划"}),o.jsx(w,{variant:"body2",children:s.subscriptionPlan||"免费版"})]}),o.jsxs(N,{item:!0,xs:12,sm:6,children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"订阅到期"}),o.jsx(w,{variant:"body2",children:Et(s.subscriptionExpiresAt)})]}),o.jsx(N,{item:!0,xs:12,children:o.jsx(Oe,{})}),o.jsxs(N,{item:!0,xs:12,children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"数据模式"}),o.jsxs(x,{sx:{display:"flex",gap:1,mt:.5,alignItems:"center",flexWrap:"wrap"},children:[o.jsx(f1,{size:"small",icon:o.jsx(B,{icon:s.dataMode==="CLOUD"?"solar:cloud-bold-duotone":"solar:laptop-bold-duotone",width:16,height:16}),label:s.dataMode==="CLOUD"?"云端共享（CLOUD）":"本地隔离（LOCAL）",color:s.dataMode==="CLOUD"?"primary":"warning"}),o.jsx(w,{variant:"caption",color:"text.secondary",children:s.dataMode==="CLOUD"?"所有成员共享同一份达人数据":"每位成员看到自己维护的数据"}),a&&s.dataMode==="LOCAL"&&o.jsx($,{size:"small",variant:"outlined",sx:{ml:"auto"},onClick:()=>M("CLOUD"),children:"切换到 CLOUD"}),a&&s.dataMode==="CLOUD"&&o.jsx(et,{title:"如需切回 LOCAL 请联系支持（本期不开放自助切换）",children:o.jsx("span",{style:{marginLeft:"auto"},children:o.jsx($,{size:"small",variant:"outlined",disabled:!0,children:"切换到 LOCAL"})})})]})]}),o.jsxs(N,{item:!0,xs:12,sm:6,children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"创建时间"}),o.jsx(w,{variant:"body2",children:Et(s.createdAt)})]}),o.jsxs(N,{item:!0,xs:12,sm:6,children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"更新时间"}),o.jsx(w,{variant:"body2",children:Et(s.updatedAt)})]})]})})}),!a&&o.jsx(xe,{sx:{mt:2,borderColor:"error.light"},children:o.jsxs(We,{children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,color:"error",children:"退出企业"}),o.jsx(w,{variant:"body2",color:"text.secondary",sx:{mt:.5,mb:2},children:"退出后将恢复为普通用户，企业菜单和企业达人数据库权限会立即移除。"}),o.jsx($,{variant:"outlined",color:"error",startIcon:o.jsx(B,{icon:"solar:logout-3-bold-duotone",width:18,height:18}),onClick:()=>T(!0),children:"退出当前企业"})]})}),o.jsxs(ue,{open:S,onClose:()=>!H&&E(!1),maxWidth:"sm",fullWidth:!0,children:[o.jsxs(be,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(B,{icon:"solar:danger-triangle-bold-duotone",width:24,height:24,style:{color:"#ed6c02"}}),"确认切换数据模式"]}),o.jsxs(pe,{children:[o.jsx(oe,{severity:"warning",sx:{mb:2},children:"该操作会改变企业内全部成员的数据可见性，请确认知晓后果。"}),D==="LOCAL"?o.jsxs(x,{children:[o.jsxs(w,{variant:"body2",sx:{mb:1},children:["即将从 ",o.jsx("strong",{children:"云端共享 CLOUD"})," 切换到"," ",o.jsx("strong",{children:"本地隔离 LOCAL"}),"："]}),o.jsxs(w,{variant:"body2",component:"ul",sx:{pl:2},children:[o.jsx("li",{children:"切换后，员工只能看到自己维护的数据；"}),o.jsx("li",{children:"现有云端共享数据仍保留在数据库中，但所有员工列表均不可见；"}),o.jsx("li",{children:"不会迁移历史数据，仅影响新增和查询规则。"})]})]}):o.jsxs(x,{children:[o.jsxs(w,{variant:"body2",sx:{mb:1},children:["即将从 ",o.jsx("strong",{children:"本地隔离 LOCAL"})," 切换到"," ",o.jsx("strong",{children:"云端共享 CLOUD"}),"："]}),o.jsxs(w,{variant:"body2",component:"ul",sx:{pl:2},children:[o.jsxs("li",{children:[o.jsx("strong",{children:"达人数据将合并为企业共享池"}),"，所有成员立即可见全部数据；"]}),o.jsxs("li",{children:[o.jsx("strong",{children:"成员私有标记被清空"}),"（owner_user_id 等私有归属字段会被改写为企业归属）；"]}),o.jsx("li",{children:"切换是一次性操作，本期不开放自助切回 LOCAL，请确认后再继续。"})]})]})]}),o.jsxs(_e,{children:[o.jsx($,{onClick:()=>E(!1),disabled:H,children:"取消"}),o.jsx($,{variant:"contained",color:"warning",onClick:z,disabled:H,children:H?"切换中...":"确认切换"})]})]}),o.jsxs(ue,{open:q,onClose:()=>!Q&&T(!1),maxWidth:"xs",fullWidth:!0,children:[o.jsx(be,{children:"确认退出企业"}),o.jsx(pe,{children:o.jsxs(w,{variant:"body2",color:"text.secondary",children:["退出后你将无法继续访问该企业的达人数据库、更新任务和数据同步配置。",s.dataMode==="LOCAL"?" 你在 LOCAL 模式下维护的数据将按默认策略转交给企业 Owner。":""]})}),o.jsxs(_e,{children:[o.jsx($,{onClick:()=>T(!1),disabled:Q,children:"取消"}),o.jsx($,{color:"error",variant:"contained",onClick:_,disabled:Q,children:Q?"退出中...":"确认退出"})]})]}),o.jsx(_1,{open:!!b,autoHideDuration:3e3,onClose:()=>C(""),message:b})]}):o.jsx(x,{sx:{p:3},children:o.jsx(oe,{severity:"error",onClose:()=>f(""),children:u||"未加载到企业信息"})}):o.jsx(x,{sx:{p:3},children:o.jsx(oe,{severity:"warning",children:"当前账号不属于任何企业。"})})}const ai=Object.defineProperty({__proto__:null,default:Ar},Symbol.toStringTag,{value:"Module"}),ni=()=>o.jsx(x,{sx:{display:"flex",justifyContent:"center",alignItems:"center",height:"100%",minHeight:"400px"},children:o.jsx(de,{})}),li=Object.assign({"../pages/blogger-db/accounts/index.tsx":()=>G(()=>import("./index-CQJqzw2I.js"),__vite__mapDeps([2,1,3,4,5,6,7,8]),import.meta.url),"../pages/blogger-db/list/index.tsx":()=>G(()=>import("./index-Bkn8dcM4.js"),__vite__mapDeps([9,1,10,4,3,11,0,8]),import.meta.url),"../pages/blogger-db/pace-policy/index.tsx":()=>G(()=>import("./index-BxZE9bFu.js"),__vite__mapDeps([12,1,13,14,15,3,16,8]),import.meta.url),"../pages/blogger-db/sync/index.tsx":()=>G(()=>import("./index-b5Geql4X.js"),__vite__mapDeps([17,1,18,7,4,3,8]),import.meta.url),"../pages/blogger-db/tasks/index.tsx":()=>G(()=>import("./index-DxrlKoUT.js"),__vite__mapDeps([19,1,8,10,4,3,13,15,5,6,7,20]),import.meta.url),"../pages/blogger/index.tsx":()=>G(()=>import("./index-B9tfq8W9.js"),__vite__mapDeps([21,1,8]),import.meta.url),"../pages/dashboard/index.tsx":()=>G(()=>Promise.resolve().then(()=>W5),void 0,import.meta.url),"../pages/pgy-kol-search/index.tsx":()=>G(()=>Promise.resolve().then(()=>({default:PgyKolSearchPage})),void 0,import.meta.url),"../pages/database/douyin/blogger/index.tsx":()=>G(()=>import("./index-D1aMO0QN.js"),__vite__mapDeps([22,1,23,24,20,8,25]),import.meta.url),"../pages/database/starmap/blogger/index.tsx":()=>G(()=>import("./index-Ct9D5phI.js"),__vite__mapDeps([26,1,6,23,24,20,13,8,25]),import.meta.url),"../pages/database/xhs/pgy-blog/index.tsx":()=>G(()=>import("./index-CNtqW3CV.js"),__vite__mapDeps([27,1,28,6,23,24,20,13,8,25]),import.meta.url),"../pages/database/xhs/pgy-blogger/index.tsx":()=>G(()=>import("./index-kY9tCwGX.js"),__vite__mapDeps([29,1,28,6,23,24,20,13,8,25]),import.meta.url),"../pages/enterprise/api-keys/index.tsx":()=>G(()=>import("./index-BHKF2Can.js"),__vite__mapDeps([31,1,18,11,8]),import.meta.url),"../pages/enterprise/info/index.tsx":()=>G(()=>Promise.resolve().then(()=>ai),void 0,import.meta.url),"../pages/enterprise/members/index.tsx":()=>G(()=>import("./index-Z-rdeklB.js"),__vite__mapDeps([32,1,11,8]),import.meta.url),"../pages/enterprise/scraping-policy/index.tsx":()=>G(()=>import("./index-G1t-he5X.js"),__vite__mapDeps([33,1,3,6,16,8]),import.meta.url),"../pages/profile/index.tsx":()=>G(()=>Promise.resolve().then(()=>oi),void 0,import.meta.url),"../pages/shumiao/consume-records/index.tsx":()=>G(()=>import("./index-CgHBiVER.js"),__vite__mapDeps([36,1,11,8]),import.meta.url),"../pages/shumiao/recharge-records/index.tsx":()=>G(()=>import("./index-DHMLmlYD.js"),__vite__mapDeps([37,1,11,8]),import.meta.url),"../pages/shumiao/recharge/index.tsx":()=>G(()=>import("./index-C0Ke2Ul0.js"),__vite__mapDeps([38,1,35,8]),import.meta.url),"../pages/sign-in/index.tsx":()=>G(()=>Promise.resolve().then(()=>v5),void 0,import.meta.url),"../pages/system/activity/index.tsx":()=>G(()=>import("./index-CB4FiGU9.js"),__vite__mapDeps([39,1,40,8]),import.meta.url),"../pages/system/commission-records/index.tsx":()=>G(()=>import("./index-Cvuo0KPi.js"),__vite__mapDeps([41,1,40,42,43,8]),import.meta.url),"../pages/system/export-template/index.tsx":()=>G(()=>import("./index-CiEqCfGB.js"),__vite__mapDeps([44,1,45,11,20,8]),import.meta.url),"../pages/system/menus/index.tsx":()=>G(()=>import("./index-CswQQJEF.js"),__vite__mapDeps([46,1,45,47,8]),import.meta.url),"../pages/system/pace-policy/index.tsx":()=>G(()=>import("./index-aLrsE3bx.js"),__vite__mapDeps([48,1,13,14,15,3,16,8]),import.meta.url),"../pages/system/platform-policy/index.tsx":()=>G(()=>import("./index-Cvnr-Fb8.js"),__vite__mapDeps([49,1,3,16,8]),import.meta.url),"../pages/system/recharge-orders/index.tsx":()=>G(()=>import("./index-BQzHzZFu.js"),__vite__mapDeps([50,1,40,42,43,8]),import.meta.url),"../pages/system/roles/index.tsx":()=>G(()=>import("./index-D8pygJ3B.js"),__vite__mapDeps([51,1,45,52,47,8]),import.meta.url),"../pages/system/sms-logs/index.tsx":()=>G(()=>import("./index-XYjdQpgZ.js"),__vite__mapDeps([53,1,40,43,8]),import.meta.url),"../pages/system/users/index.tsx":()=>G(()=>import("./index-nKj0sF66.js"),__vite__mapDeps([54,1,45,11,52,8]),import.meta.url),"../pages/version/desktop/index.tsx":()=>G(()=>import("./index-jm_bvw7Q.js"),__vite__mapDeps([55,1,45,8]),import.meta.url),"../pages/version/frontend/index.tsx":()=>G(()=>import("./index-Bs8zGiFu.js"),__vite__mapDeps([56,1,45,8]),import.meta.url)}),V1=new Map;function pgyKolDevEnabled(){try{return window.localStorage.getItem("magiorix-pgy-kol-enabled")==="1"}catch(e){return!1}}
+
 function pgyKolWithLocalMenu(e){if(!pgyKolDevEnabled()||!Array.isArray(e))return e;for(var i=0;i<e.length;i++){if(e[i]&&e[i].path==="/pgy-kol-search")return e}return e.concat([{name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"mdi:account-search"}])}
+
 function pgyKolNodeKey(n){if(n&&n.uniqueKey)return n.uniqueKey;var v=n&&n.value!==undefined?String(n.value):"",p=n&&n.fullPath?n.fullPath:n&&n.label||"";return v+":"+p}
+
 function pgyKolFlattenLeaves(n,out){out=out||[];if(!n)return out;if(n.children&&n.children.length>0){for(var i=0;i<n.children.length;i++)pgyKolFlattenLeaves(n.children[i],out);return out}out.push(n.value||n.label||n);return out}
+
 function pgyKolOptValue(n){return typeof n==="string"?n:(n&&n.value!==undefined?n.value:n&&n.id)||String(n)}
+
 function pgyKolOptLabel(n){return typeof n==="string"?n:(n&&n.label)||(n&&n.fullPath)||(n&&n.value!==undefined?String(n.value):String(n))}
+
 function pgyKolReadJson(key){try{var raw=window.localStorage.getItem(key);if(!raw)return null;return JSON.parse(raw)}catch(e){return null}}
+
 function pgyKolWriteJson(key,val){try{window.localStorage.setItem(key,JSON.stringify(val));return true}catch(e){return false}}
+
 function pgyKolClearJson(key){try{window.localStorage.removeItem(key)}catch(e){}}
+
 function pgyKolDefaultFilter(){return {searchType:1,keyword:"",marketTarget:null,audienceGroup:null,brands:[],contentTag:[],personalTags:[],featureTags:[],gender:null,location:null,audience20:[],automotive:[],consumeBehavior:[],signed:null,contentSceneLabel:[],contentTheme:[],fansNumberLower:"",fansNumberUpper:"",fansAge:null,fansGender:null,fansLocation:null,fansMaritalStatus:null,fansConsumptionLevel:null,fansChildAgeInfo:[],fansDevicePrice:[],fansDeviceBrand:[],industryTag:[],accumCommonImpMedinNum30d:null,readMidNor30:null,interMidNor30:null,thousandLikePercent30:null,noteType:null,notePriceLower:"",notePriceUpper:"",videoPriceLower:"",videoPriceUpper:"",coopCredit:null,progressOrderCnt:"",firstIndustry:"",secondIndustry:"",tradeReportBrandIdSet:[],coopImpMedin:null,coopReadMid:null,coopInterMid:null,coopOverflowMid:null,estimatePicReadCost:null,estimateVideoReadCost:null,estimatePicEngageCost:null,estimateVideoEngageCost:null,estimatePictureCpm:null,estimateVideoCpm:null,overflowCost:null,liveCount30d:[],avgLiveViewer:[],avgLiveGmv:[],noteCategory:[],inStar:false,newHighQuality:false,isHighQualityFlag:false,hasBuyerCoopAuthFlag:false,filterIntention:false,activityCodes:[],excludeLowActive:false,fansNumUp:false,excludedTradeReportBrand:false,excludedTradeInviteReportBrand:false}}
-function pgyKolToFilterState(f){var out={};if(f.searchType===0||f.searchType===1)out.searchType=f.searchType;if(f.keyword)out.keyword=f.keyword;if(f.marketTarget)out.marketTarget=f.marketTarget;if(f.gender)out.gender=f.gender;if(f.location)out.location=[f.location];if(f.signed)out.signed=f.signed;if(f.audience20&&f.audience20.length)out.top20CrowdsLabel=f.audience20;if(f.automotive&&f.automotive.length)out.industrySpecificCrowdsMotorDom=f.automotive;if(f.consumeBehavior&&f.consumeBehavior.length)out.kolInfoConsumBehaviorLabel=f.consumeBehavior;if(f.contentTheme&&f.contentTheme.length)out.contentThemeLabel=f.contentTheme;if(f.fansNumberLower!==""){var lo=Number(f.fansNumberLower);if(Number.isFinite(lo)&&Number.isInteger(lo)&&lo>0)out.fansNumberLower=lo}if(f.fansNumberUpper!==""){var hi=Number(f.fansNumberUpper);if(Number.isFinite(hi)&&Number.isInteger(hi)&&hi>0)out.fansNumberUpper=hi}if(f.fansAge)out.fansAge=f.fansAge;if(f.fansGender)out.fansGender=f.fansGender;if(f.fansLocation)out.fansLocation=f.fansLocation;if(f.fansMaritalStatus)out.fansMaritalStatus=f.fansMaritalStatus;if(f.fansConsumptionLevel)out.fansConsumptionLevel=f.fansConsumptionLevel;if(f.fansChildAgeInfo&&f.fansChildAgeInfo.length)out.fansChildAgeInfo=f.fansChildAgeInfo;if(f.fansDevicePrice&&f.fansDevicePrice.length)out.fansDevicePrice=f.fansDevicePrice;if(f.fansDeviceBrand&&f.fansDeviceBrand.length)out.fansDeviceBrand=f.fansDeviceBrand;if(f.accumCommonImpMedinNum30d)out.accumCommonImpMedinNum30d=f.accumCommonImpMedinNum30d.value;if(f.readMidNor30)out.readMidNor30=f.readMidNor30.value;if(f.interMidNor30)out.interMidNor30=f.interMidNor30.value;if(f.thousandLikePercent30)out.thousandLikePercent30=f.thousandLikePercent30.value;if(f.noteType)out.noteType=f.noteType;if(f.notePriceLower!==""){var npl=Number(f.notePriceLower);if(Number.isFinite(npl)&&npl>=0)out.notePriceLower=npl}if(f.notePriceUpper!==""){var npu=Number(f.notePriceUpper);if(Number.isFinite(npu)&&npu>=0)out.notePriceUpper=npu}if(f.videoPriceLower!==""){var vpl=Number(f.videoPriceLower);if(Number.isFinite(vpl)&&vpl>=0)out.videoPriceLower=vpl}if(f.videoPriceUpper!==""){var vpu=Number(f.videoPriceUpper);if(Number.isFinite(vpu)&&vpu>=0)out.videoPriceUpper=vpu}if(f.progressOrderCnt!==""){var poc=Number(f.progressOrderCnt);if(Number.isFinite(poc)&&poc>=0)out.progressOrderCnt=poc}if(f.tradeReportBrandIdSet&&f.tradeReportBrandIdSet.length)out.tradeReportBrandIdSet=f.tradeReportBrandIdSet;if(f.activityCodes&&f.activityCodes.length)out.activityCodes=f.activityCodes;if(f.excludeLowActive)out.excludeLowActive=true;if(f.fansNumUp===true)out.fansNumUp=1;if(f.excludedTradeReportBrand)out.excludedTradeReportBrand=true;if(f.excludedTradeInviteReportBrand)out.excludedTradeInviteReportBrand=true;if(f.contentTag&&f.contentTag.length){var p51ct=f.contentTag.filter(function(t){return t!=="全部"});if(p51ct.length)out.contentTag=p51ct}if(f.coopCredit)out.inviteReply48hNumRatio=f.coopCredit.value;if(f.coopImpMedin)out.accumCoopImpMedinNum30d=f.coopImpMedin.value;if(f.coopReadMid)out.readMidCoop30=f.coopReadMid.value;if(f.coopInterMid)out.interMidCoop30=f.coopInterMid.value;if(f.coopOverflowMid)out.mCpuv30d=f.coopOverflowMid.value;if(f.estimatePicReadCost)out.estimatePicReadPrice=f.estimatePicReadCost.value;if(f.estimateVideoReadCost)out.estimateVideoReadPrice=f.estimateVideoReadCost.value;if(f.estimatePicEngageCost)out.estimatePictureEngageCost=f.estimatePicEngageCost.value;if(f.estimateVideoEngageCost)out.estimateVideoEngageCost=f.estimateVideoEngageCost.value;if(f.estimatePictureCpm)out.estimatePictureCpm=f.estimatePictureCpm.value;if(f.estimateVideoCpm)out.estimateVideoCpm=f.estimateVideoCpm.value;if(f.overflowCost)out.estimateCpuv30d=f.overflowCost.value;if(f.liveCount30d&&f.liveCount30d.length)out["filterList.kliveCnt30d"]=f.liveCount30d.map(function(n){return n.value});if(f.avgLiveViewer&&f.avgLiveViewer.length)out["filterList.avgLiveViewerNum"]=f.avgLiveViewer.map(function(n){return n.value});if(f.avgLiveGmv&&f.avgLiveGmv.length)out["filterList.avgAgmv90d"]=f.avgLiveGmv.map(function(n){return n.value});if(f.noteCategory&&f.noteCategory.length)out.contentSceneLabel=f.noteCategory;if(f.inStar===true)out.inStar=1;if(f.newHighQuality===true)out.newHighQuality=1;if(f.filterIntention===true)out.filterIntention=true;if(f.isHighQualityFlag===true)out["flagList.isHighQuality"]=true;if(f.hasBuyerCoopAuthFlag===true)out["flagList.hasBuyerCoopAuth"]=true;if(f.firstIndustry)out.firstIndustry=f.firstIndustry;if(f.secondIndustry)out.secondIndustry=f.secondIndustry;return out}function pgyKolUnprovenSet(){return window.__pgyKolUnproven||{}}
+
+function pgyKolToFilterState(f){var out={};if(f.searchType===0||f.searchType===1)out.searchType=f.searchType;if(f.keyword)out.keyword=f.keyword;if(f.marketTarget)out.marketTarget=f.marketTarget;if(f.personalTags&&f.personalTags.length)out.personalTags=f.personalTags.map(pgyKolOptValue);var featureTags=[];if(f.featureTags&&f.featureTags.length)featureTags=featureTags.concat(f.featureTags.map(pgyKolOptValue));if(f.contentSceneLabel&&f.contentSceneLabel.length)featureTags=featureTags.concat(f.contentSceneLabel.map(pgyKolOptValue));if(featureTags.length)out.featureTags=featureTags.filter(function(v,i,a){return a.indexOf(v)===i});if(f.gender)out.gender=f.gender;if(f.location)out.location=[f.location];if(f.signed)out.signed=f.signed;if(f.audience20&&f.audience20.length)out.top20CrowdsLabel=f.audience20;if(f.automotive&&f.automotive.length)out.industrySpecificCrowdsMotorDom=f.automotive;if(f.consumeBehavior&&f.consumeBehavior.length)out.kolInfoConsumBehaviorLabel=f.consumeBehavior;if(f.contentTheme&&f.contentTheme.length)out.contentThemeLabel=f.contentTheme;if(f.fansNumberLower!==""){var lo=Number(f.fansNumberLower);if(Number.isFinite(lo)&&Number.isInteger(lo)&&lo>0)out.fansNumberLower=lo}if(f.fansNumberUpper!==""){var hi=Number(f.fansNumberUpper);if(Number.isFinite(hi)&&Number.isInteger(hi)&&hi>0)out.fansNumberUpper=hi}if(f.fansAge)out.fansAge=f.fansAge;if(f.fansGender)out.fansGender=f.fansGender;if(f.fansLocation)out.fansLocation=f.fansLocation;if(f.fansMaritalStatus)out.fansMaritalStatus=f.fansMaritalStatus;if(f.fansConsumptionLevel)out.fansConsumptionLevel=f.fansConsumptionLevel;if(f.fansChildAgeInfo&&f.fansChildAgeInfo.length)out.fansChildAgeInfo=f.fansChildAgeInfo;if(f.fansDevicePrice&&f.fansDevicePrice.length)out.fansDevicePrice=f.fansDevicePrice;if(f.fansDeviceBrand&&f.fansDeviceBrand.length)out.fansDeviceBrand=f.fansDeviceBrand;if(f.accumCommonImpMedinNum30d)out.accumCommonImpMedinNum30d=f.accumCommonImpMedinNum30d.value;if(f.readMidNor30)out.readMidNor30=f.readMidNor30.value;if(f.interMidNor30)out.interMidNor30=f.interMidNor30.value;if(f.thousandLikePercent30)out.thousandLikePercent30=f.thousandLikePercent30.value;if(f.noteType)out.noteType=f.noteType;if(f.notePriceLower!==""){var npl=Number(f.notePriceLower);if(Number.isFinite(npl)&&npl>=0)out.notePriceLower=npl}if(f.notePriceUpper!==""){var npu=Number(f.notePriceUpper);if(Number.isFinite(npu)&&npu>=0)out.notePriceUpper=npu}if(f.videoPriceLower!==""){var vpl=Number(f.videoPriceLower);if(Number.isFinite(vpl)&&vpl>=0)out.videoPriceLower=vpl}if(f.videoPriceUpper!==""){var vpu=Number(f.videoPriceUpper);if(Number.isFinite(vpu)&&vpu>=0)out.videoPriceUpper=vpu}if(f.progressOrderCnt!==""){var poc=Number(f.progressOrderCnt);if(Number.isFinite(poc)&&poc>=0)out.progressOrderCnt=poc}if(f.tradeReportBrandIdSet&&f.tradeReportBrandIdSet.length)out.tradeReportBrandIdSet=f.tradeReportBrandIdSet;if(f.activityCodes&&f.activityCodes.length)out.activityCodes=f.activityCodes;if(f.excludeLowActive)out.excludeLowActive=true;if(f.fansNumUp===true)out.fansNumUp=1;var hasBrands=f.brands&&f.brands.length>0;if(hasBrands&&f.excludedTradeReportBrand)out.excludedTradeReportBrand=true;if(hasBrands&&f.excludedTradeInviteReportBrand)out.excludedTradeInviteReportBrand=true;if(f.contentTag&&f.contentTag.length){var p51ct=f.contentTag.filter(function(t){return t!=="全部"});if(p51ct.length)out.contentTag=p51ct}if(f.coopCredit)out.inviteReply48hNumRatio=f.coopCredit.value;if(f.coopImpMedin)out.accumCoopImpMedinNum30d=f.coopImpMedin.value;if(f.coopReadMid)out.readMidCoop30=f.coopReadMid.value;if(f.coopInterMid)out.interMidCoop30=f.coopInterMid.value;if(f.coopOverflowMid)out.mCpuv30d=f.coopOverflowMid.value;if(f.estimatePicReadCost)out.estimatePicReadPrice=f.estimatePicReadCost.value;if(f.estimateVideoReadCost)out.estimateVideoReadPrice=f.estimateVideoReadCost.value;if(f.estimatePicEngageCost)out.estimatePictureEngageCost=f.estimatePicEngageCost.value;if(f.estimateVideoEngageCost)out.estimateVideoEngageCost=f.estimateVideoEngageCost.value;if(f.estimatePictureCpm)out.estimatePictureCpm=f.estimatePictureCpm.value;if(f.estimateVideoCpm)out.estimateVideoCpm=f.estimateVideoCpm.value;if(f.overflowCost)out.estimateCpuv30d=f.overflowCost.value;if(f.liveCount30d&&f.liveCount30d.length)out["filterList.kliveCnt30d"]=f.liveCount30d.map(function(n){return n.value});if(f.avgLiveViewer&&f.avgLiveViewer.length)out["filterList.avgLiveViewerNum"]=f.avgLiveViewer.map(function(n){return n.value});if(f.avgLiveGmv&&f.avgLiveGmv.length)out["filterList.avgAgmv90d"]=f.avgLiveGmv.map(function(n){return n.value});if(f.noteCategory&&f.noteCategory.length)out.contentSceneLabel=f.noteCategory;if(f.inStar===true)out.inStar=1;if(f.newHighQuality===true)out.newHighQuality=1;if(f.filterIntention===true)out.filterIntention=true;if(f.isHighQualityFlag===true)out["flagList.isHighQuality"]=true;if(f.hasBuyerCoopAuthFlag===true)out["flagList.hasBuyerCoopAuth"]=true;if(f.firstIndustry)out.firstIndustry=f.firstIndustry;if(f.secondIndustry)out.secondIndustry=f.secondIndustry;return out}
+
+var pgyKolBaseToFilterState=pgyKolToFilterState;
+pgyKolToFilterState=function(f){var out=pgyKolBaseToFilterState(f);delete out.progressOrderCnt;if(f.progressOrderCnt&&Array.isArray(f.progressOrderCnt.value))out.progressOrderCnt=f.progressOrderCnt.value.slice();if(f.tradeType&&f.tradeType!=="不限")out.tradeType=f.tradeType;if(f.tradeReportBrandIdSet&&f.tradeReportBrandIdSet.length&&f.excludedTradeReportBrandId===true)out.excludedTradeReportBrandId=true;return out};
+
+function pgyKolClone(value){if(value===undefined)return undefined;return JSON.parse(JSON.stringify(value))}
+
+function pgyKolStableSerialize(value){if(value===null||typeof value!=="object")return JSON.stringify(value);if(Array.isArray(value))return "["+value.map(pgyKolStableSerialize).join(",")+"]";var keys=Object.keys(value).sort(),parts=[];for(var i=0;i<keys.length;i++)parts.push(JSON.stringify(keys[i])+":"+pgyKolStableSerialize(value[keys[i]]));return "{"+parts.join(",")+"}"}
+
+function pgyKolNormalizeFilter(filter){var next=Object.assign({},pgyKolDefaultFilter(),pgyKolClone(filter||{}));next.keyword=typeof next.keyword==="string"?next.keyword.trim():"";return next}
+
+function pgyKolCreateSearchCoordinator(options){
+  options=options||{};
+  var state={draftFilter:pgyKolDefaultFilter(),appliedFilter:null,appliedRequestKey:null,status:"idle",error:null,result:null};
+  var appliedRequestSnapshot=null,successfulKey=null,requestEpoch=0,latestSubmittedKey=null,inFlightByKey=Object.create(null);
+  function bridge(){return typeof options.bridge==="function"?options.bridge():options.bridge}
+  function filterKey(filter){return pgyKolStableSerialize(pgyKolNormalizeFilter(filter))}
+  function requestSnapshot(filter){return pgyKolClone(pgyKolToFilterState(pgyKolNormalizeFilter(filter)))}
+  function snapshot(){return {draftFilter:pgyKolClone(state.draftFilter),appliedFilter:pgyKolClone(state.appliedFilter),isDirty:state.appliedFilter===null||filterKey(state.draftFilter)!==filterKey(state.appliedFilter),appliedRequestKey:state.appliedRequestKey,status:state.status,error:pgyKolClone(state.error),result:pgyKolClone(state.result)}}
+  function emit(){var view=snapshot();if(typeof options.onState==="function")options.onState(view);return view}
+  function setDraft(next){state.draftFilter=Object.assign({},pgyKolDefaultFilter(),pgyKolClone(next||{}));if(typeof options.onDraft==="function")options.onDraft(pgyKolClone(state.draftFilter));emit();return snapshot()}
+  function editDraft(patch){var current=pgyKolClone(state.draftFilter),value=typeof patch==="function"?patch(current):patch;return setDraft(Object.assign({},current,value||{}))}
+  function restore(filter){requestEpoch++;latestSubmittedKey=null;inFlightByKey=Object.create(null);state.draftFilter=Object.assign({},pgyKolDefaultFilter(),pgyKolClone(filter||{}));state.appliedFilter=null;state.appliedRequestKey=null;state.status="idle";state.error=null;state.result=null;appliedRequestSnapshot=null;successfulKey=null;if(typeof options.onDraft==="function")options.onDraft(pgyKolClone(state.draftFilter));emit();return snapshot()}
+  function notice(message){if(typeof options.onNotice==="function")options.onNotice(message)}
+  function applyAndSearch(){
+    var normalized=pgyKolNormalizeFilter(state.draftFilter),request=requestSnapshot(normalized),key=pgyKolStableSerialize(request),entry=inFlightByKey[key];
+    state.draftFilter=pgyKolClone(normalized);
+    latestSubmittedKey=key;
+    if(typeof options.onDraft==="function")options.onDraft(pgyKolClone(normalized));
+    if(entry){entry.normalized=pgyKolClone(normalized);entry.request=pgyKolClone(request);state.status="loading";state.error=null;emit();return entry.promise}
+    if(successfulKey===key&&state.appliedFilter!==null){state.appliedFilter=pgyKolClone(normalized);appliedRequestSnapshot=pgyKolClone(request);state.appliedRequestKey=key;state.error=null;state.status=state.result&&Array.isArray(state.result.kols)&&state.result.kols.length>0?"loaded":"empty";notice("筛选未变化");emit();return Promise.resolve({ok:true,skipped:true,data:pgyKolClone(state.result)})}
+    var api=bridge();
+    if(!api||typeof api.searchFirstPage!=="function"){state.status="error";state.error={code:"bridge-missing",message:"当前环境不支持蒲公英找博主"};emit();return Promise.resolve({ok:false,error:pgyKolClone(state.error)})}
+    var epoch=requestEpoch;
+    state.status="loading";state.error=null;emit();
+    var requested;
+    try{requested=api.searchFirstPage(pgyKolClone(request))}catch(err){requested=Promise.reject(err)}
+    entry={key:key,epoch:epoch,promise:null,normalized:pgyKolClone(normalized),request:pgyKolClone(request)};
+    var promise=Promise.resolve(requested).then(function(res){
+      if(epoch!==requestEpoch||key!==latestSubmittedKey||inFlightByKey[key]!==entry)return Object.assign({},res||{},{stale:true});
+      if(res&&res.ok){var appliedNormalized=entry.normalized,appliedRequest=entry.request;state.appliedFilter=pgyKolClone(appliedNormalized);appliedRequestSnapshot=pgyKolClone(appliedRequest);state.appliedRequestKey=key;successfulKey=key;state.result=pgyKolClone(res.data);state.status=res.data&&Array.isArray(res.data.kols)&&res.data.kols.length>0?"loaded":"empty";state.error=null;if(appliedNormalized.searchType===0&&appliedNormalized.keyword&&typeof options.onHistory==="function")options.onHistory(appliedNormalized.keyword);if(typeof options.onResult==="function")options.onResult(pgyKolClone(res.data));emit();return res}
+      var failure=res&&res.error?res.error:{code:"unknown",message:"查询失败"};state.error=pgyKolClone(failure);state.status=failure.code==="auth-expired"?"auth-expired":"error";state.appliedRequestKey=state.appliedFilter?successfulKey:null;emit();return res;
+    }).catch(function(err){
+      if(epoch!==requestEpoch||key!==latestSubmittedKey||inFlightByKey[key]!==entry)return {ok:false,stale:true,error:{code:err&&err.code||"unknown",message:err&&err.message||String(err)}};
+      state.error={code:err&&err.code||"unknown",message:err&&err.message||String(err)};state.status="error";state.appliedRequestKey=state.appliedFilter?successfulKey:null;emit();return {ok:false,error:pgyKolClone(state.error)};
+    }).then(function(res){if(inFlightByKey[key]===entry)delete inFlightByKey[key];return res});
+    entry.promise=promise;
+    inFlightByKey[key]=entry;
+    return promise;
+  }
+  function startBatch(columns){var api=bridge(),view=snapshot(),appliedKey=appliedRequestSnapshot?pgyKolStableSerialize(appliedRequestSnapshot):null;if(!state.appliedFilter||view.isDirty||!successfulKey||successfulKey!==appliedKey){notice("请先确定筛选并查询");return Promise.resolve({ok:false,blocked:true,error:{code:"filter-not-applied",message:"请先确定筛选并查询"}})}if(!api||typeof api.batchStart!=="function")return Promise.resolve({ok:false,error:{code:"bridge-missing",message:"当前环境不支持批量采集"}});return api.batchStart({filterState:pgyKolClone(appliedRequestSnapshot),columns:pgyKolClone(columns||[])})}
+  return {editDraft:editDraft,applyAndSearch:applyAndSearch,startBatch:startBatch,restore:restore,getState:snapshot};
+}
+
+function pgyKolUnprovenSet(){return window.__pgyKolUnproven||{}}
+
 function pgyKolExportColumnIds(list,selected){var byId={};for(var i=0;i<list.length;i++){byId[list[i].id]=list[i]}var out=[];for(var j=0;j<selected.length;j++){var c=byId[selected[j]];if(c&&c.responsePath&&typeof c.responsePath==="string"&&c.responsePath.indexOf("computed:")!==0&&c.evidence!=="unavailable"){out.push(selected[j])}}return out}
+
 function PgyKolTreeNode(p){var node=p.node,level=p.level||0,selected=p.selected||[],onToggle=p.onToggle,leafOnly=p.leafOnly||false,display=p.display||function(n){return n.fullPath||n.label||String(n.value)},has=node.children&&node.children.length>0,openState=m.useState(false),open=openState[0],setOpen=openState[1],key=pgyKolNodeKey(node),isSel=selected.indexOf(key)>-1,parentOnly=leafOnly&&has;return o.jsxs(x,{sx:{pl:level*1.5},children:[o.jsxs(x,{sx:{display:"flex",alignItems:"center",minHeight:30,gap:.25},children:[has?o.jsx(te,{size:"small",sx:{p:.25},onClick:function(e){e.stopPropagation(),setOpen(!open)},children:o.jsx(B,{icon:open?"solar:alt-arrow-up-bold-duotone":"solar:alt-arrow-down-bold-duotone",width:14,height:14})}):o.jsx(x,{sx:{width:24}}),parentOnly?o.jsx(w,{variant:"body2",sx:{wordBreak:"break-all"},children:display(node)}):o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:.75,flex:1,cursor:"pointer",py:.5},onClick:function(){onToggle(node)},children:[o.jsx(x,{sx:{width:16,height:16,borderRadius:2,border:"1px solid",borderColor:isSel?"primary.main":"divider",bgcolor:isSel?"primary.main":"transparent",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,flexShrink:0},children:isSel?"✓":null}),o.jsx(w,{variant:"body2",sx:{wordBreak:"break-all"},children:display(node)})]})]}),open&&has&&node.children.map(function(c){return o.jsx(PgyKolTreeNode,{key:pgyKolNodeKey(c),node:c,level:level+1,selected:selected,onToggle:onToggle,display:display,leafOnly:leafOnly})})]})}
+
 function PgyKolTree(p){return o.jsx(x,{sx:{display:"flex",flexDirection:"column"},children:p.nodes.map(function(n){return o.jsx(PgyKolTreeNode,{key:pgyKolNodeKey(n),node:n,level:0,selected:p.selected,onToggle:p.onToggle,display:p.display,leafOnly:p.leafOnly})})})}
-function PgyKolChips(p){var keyOf=p.keyOf||pgyKolNodeKey;return o.jsx(x,{sx:{display:"flex",flexWrap:"wrap",gap:1},children:p.options.map(function(n){var key=keyOf(n),sel=p.selected.indexOf(key)>-1;return o.jsx(f1,{key:key,size:"small",label:p.display?p.display(n):n.label||n.fullPath||String(n.value),color:sel?"primary":"default",variant:sel?"filled":"outlined",onClick:function(){p.onToggle(n)}})})})}function pgyKolStaticOptions(values){var out=[];for(var i=0;i<values.length;i++)out.push({value:values[i],label:values[i]});return out}
+
+function PgyKolChips(p){var keyOf=p.keyOf||pgyKolNodeKey;return o.jsx(x,{sx:{display:"flex",flexWrap:"wrap",gap:1},children:p.options.map(function(n){var key=keyOf(n),sel=p.selected.indexOf(key)>-1;return o.jsx(f1,{key:key,size:"small",label:p.display?p.display(n):n.label||n.fullPath||String(n.value),color:sel?"primary":"default",variant:sel?"filled":"outlined",onClick:function(){p.onToggle(n)}})})})}
+
+function pgyKolStaticOptions(values){var out=[];for(var i=0;i<values.length;i++)out.push({value:values[i],label:values[i]});return out}
+
+function pgyKolPresetActive(p,f){return f.fansNumberLower===p.lower&&f.fansNumberUpper===p.upper}
+
+function pgyKolCollectLeafPaths(node,prefix){prefix=prefix||[];if(!node)return[];var here=prefix.concat([String(node.label||node.value||"")]);if(node.children&&node.children.length>0){var out=[];for(var i=0;i<node.children.length;i++)out=out.concat(pgyKolCollectLeafPaths(node.children[i],here));return out}return [here.join(" ")]}
+
+function pgyKolSchemaUnproven(fields){var m={};if(Array.isArray(fields)){fields.forEach(function(fd){if(fd&&fd.payloadProven===false&&Array.isArray(fd.uiKeys)){fd.uiKeys.forEach(function(k){m[k]=1})}})}window.__pgyKolUnproven=m;return m}
+
+function pgyKolNoteCatFallback(){return Object.keys(pgyKolNoteCategoryTree).map(function(k){return {label:k,value:k,children:pgyKolNoteCategoryTree[k]&&pgyKolNoteCategoryTree[k].nodes?pgyKolNoteCategoryTree[k].nodes.map(function(n){return {label:n.label,value:n.label,children:[]}}):[]}})}
+
+function pgyKolFixedColumnIds(){return ["kolInfo","recentNotes","actions"]}
+
+function pgyKolDefaultColumnIds(list){return list.filter(function(c){return c.defaultDisplay===true}).map(function(c){return c.id})}
+
+function pgyKolResolveColumns(list,stored){var fixed=pgyKolFixedColumnIds(),ids=[];function valid(v){return Array.isArray(v)&&v.length>0&&v.every(function(id){return typeof id==="string"&&(fixed.indexOf(id)>=0||list.some(function(c){return c.id===id}))})}if(valid(stored)){ids=stored.slice()}else{ids=pgyKolDefaultColumnIds(list)}if(ids.length===0){ids=list.slice(0,8).map(function(c){return c.id})}return fixed.concat(ids.filter(function(id){return fixed.indexOf(id)<0}))}
+
+function pgyKolColumnGroups(){return ["固定列","博主报价","账号数据","直播数据","日常笔记数据","合作笔记数据","其他指标"]}
+
+function pgyKolColumnGroupOf(c){return c&&c.group||"其他指标"}
+
+/* 官网展示指标来自同一份 registry：固定「操作」不计入指标数；Phase 4
+ * 为导出保留的博主信息独立列被明确放进 Magiorix 扩展分区，绝不丢字段。 */
+function pgyKolIsExtensionColumn(c){return pgyKolColumnGroupOf(c)==="博主信息"}
+
+function pgyKolOfficialMetricColumns(list){return (list||[]).filter(function(c){return !pgyKolIsExtensionColumn(c)&&c.id!=="actions"})}
+
+function pgyKolThousand(v){var s=String(Math.round(Number(v))),out="",cnt=0;for(var i=s.length-1;i>=0;i--){out=s[i]+out;cnt++;if(cnt%3===0&&i>0)out=","+out}return out}
+
+function pgyKolFormatCell(v,fmt){if(v===undefined||v===null||v==="")return "-";if(fmt==="number")return pgyKolThousand(v);if(fmt==="percent"){var n=Number(v);return Number.isFinite(n)?(Math.abs(n)<=1?n*100:n).toFixed(1)+"%":String(v)}if(fmt==="money")return String(v)+"元";return String(v)}
+
+function pgyKolCellValue(k,col){if(!col||col.evidence==="unavailable")return {unavailable:true};if(col.id==="price"){var pic=k&&k.picturePrice,vid=k&&k.videoPrice,ps=[];if(pic!==undefined&&pic!==null&&pic!=="")ps.push(String(pic)+"元");if(vid!==undefined&&vid!==null&&vid!=="")ps.push(String(vid)+"元");return {value:ps.length?ps.join(" / "):undefined}}var path=col.responsePath||col.id;if(!path||String(path).indexOf("computed:")===0)return {value:undefined};var parts=String(path).split("."),cur=k;for(var i=0;i<parts.length;i++){if(cur===undefined||cur===null)return {value:undefined};cur=cur[parts[i]]}return {value:cur}}
+
+function pgyKolInfoCell(k){var avatar=k&&(k.avatar||k.avatarUrl)||"";return o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1,minWidth:240},children:[avatar?o.jsx(x,{component:"img",src:avatar,sx:{width:36,height:36,borderRadius:"50%",objectFit:"cover",flexShrink:0}}):o.jsx(x,{sx:{width:36,height:36,borderRadius:"50%",bgcolor:"action.hover",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0},children:"👤"}),o.jsxs(x,{sx:{minWidth:0},children:[o.jsx(w,{variant:"body2",fontWeight:600,noWrap:true,children:k&&k.nickname||"-"}),o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",fontFamily:"monospace",wordBreak:"break-all"},children:k&&k.userId||"-"}),o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block"},children:((k&&k.location)||"-")+" · "+((k&&k.gender)||"-")})]})]})}
+
+function pgyKolStickyColumnStyle(id,header){var ids=pgyKolFixedColumnIds(),widths=[260,120,84],index=ids.indexOf(id);if(index<0)return {};var left=0;for(var i=0;i<index;i++)left+=widths[i];return {position:"sticky",left:left,zIndex:header?4:2,bgcolor:header?"#f5f6f7":"#fff",width:widths[index],minWidth:widths[index],maxWidth:widths[index],boxShadow:index===ids.length-1?"2px 0 0 #e5e6eb":"inset -1px 0 0 #f0f1f3"}}
+
+function PgyKolResultTable(p){var result=p.result,kols=result.kols||[],list=p.list||[],columns=p.columns||[],colOf=function(id){for(var i=0;i<list.length;i++){if(list[i].id===id)return list[i]}return null},cell=function(k,id){if(id==="kolInfo")return pgyKolInfoCell(k);if(id==="recentNotes"){var rn=k&&k.recentNotes;if(Array.isArray(rn))return o.jsx(w,{variant:"body2",children:rn.length+" 篇"});return o.jsx(w,{variant:"body2",children:rn!=null&&rn!==""?String(rn):"-"})}if(id==="actions")return o.jsx(w,{variant:"body2",children:"-"});var c=colOf(id);if(!c)return o.jsx(w,{variant:"body2",children:"-"});if(c.unavailable===true)return o.jsx(w,{variant:"body2",color:"text.secondary",children:"官网当前未返回"});var v=pgyKolCellValue(k,c);if(v.unavailable)return o.jsx(w,{variant:"body2",color:"text.secondary",children:"官网当前未返回"});if(v.value===undefined||v.value===null||v.value==="")return o.jsx(w,{variant:"body2",color:"text.secondary",children:"-"});if(c.formatter==="url")return o.jsx(w,{variant:"body2",component:"a",href:String(v.value),target:"_blank",rel:"noreferrer",sx:{color:"primary.main",wordBreak:"break-all"},children:String(v.value)});return o.jsx(w,{variant:"body2",children:pgyKolFormatCell(v.value,c.formatter)})};return o.jsx(x,{sx:{overflow:"auto",maxHeight:520,border:"1px solid",borderColor:"divider",borderRadius:1,position:"relative"},children:o.jsx(x,{component:"table",sx:{borderCollapse:"separate",borderSpacing:0,minWidth:1080,width:"100%"},children:[o.jsx(x,{component:"thead",children:o.jsx(x,{component:"tr",children:columns.map(function(id,hi){var h=id==="kolInfo"?"博主信息":id==="recentNotes"?"近期笔记":id==="actions"?"操作":(colOf(id)&&colOf(id).label)||id;return o.jsx(x,{component:"th",key:hi,sx:Object.assign({p:1,borderBottom:"1px solid",borderColor:"divider",textAlign:"left",whiteSpace:"nowrap",fontWeight:600,fontSize:12,bgcolor:"#f5f6f7"},pgyKolStickyColumnStyle(id,true)),children:h})})})}),o.jsx(x,{component:"tbody",children:kols.map(function(k,ki){return o.jsx(x,{component:"tr",key:k&&k.userId||"row-"+ki,children:columns.map(function(id,ci){return o.jsx(x,{component:"td",key:ci,sx:Object.assign({p:1,borderBottom:"1px solid",borderColor:"divider",verticalAlign:"middle",whiteSpace:"nowrap",bgcolor:"#fff"},pgyKolStickyColumnStyle(id,false)),children:cell(k,id)})})})})})]})})}
+
+function pgyKolStatusText(s){if(s==="running")return "采集中";if(s==="paused")return "已暂停";if(s==="auth-expired")return "登录已失效";if(s==="risk-control")return "触发风控";if(s==="cancelled")return "已取消";if(s==="failed")return "采集失败";if(s==="incomplete")return "采集未完整";if(s==="completed")return "已完成";return s||"未知状态"}
+
+function pgyKolCompletenessText(t){if(!t)return "";if(t.completeness==="complete")return "完整性已证明";if(t.completeness==="cannot-prove")return "完整性无法证明（原因："+(t.summary&&t.summary.stopReason||t.warning||"无法证明")+"）";return "完整性未证明"}
+
+function pgyKolResumePlan(t){if(!t)return null;var reason=t.summary&&t.summary.stopReason,cur=t.budgets||{},used=Number.isFinite(t.budgetUsed)?t.budgetUsed:0;if(t.status==="incomplete"){if(reason==="budget-exhausted"){var curB=Number.isInteger(cur.queryBudget)?cur.queryBudget:400,min=Math.max(curB,used)+1;if(min>1000)return {kind:"blocked",reasonText:"已消费请求数已达预算上限（1000），无法继续增加预算"};return {kind:"budget",label:"查询预算",current:curB,used:used,min:min,max:1000,reasonText:"查询预算已耗尽，请输入更大的总预算后从原检查点继续"}}if(reason==="max-pages-reached"){var curM=Number.isInteger(cur.maxPagesPerLeaf)?cur.maxPagesPerLeaf:250;if(curM>=250)return {kind:"blocked",reasonText:"已到官方安全页数上限（250 页），无法继续同一查询"};return {kind:"maxPages",label:"单叶子最大页数",current:curM,used:used,min:curM+1,max:250,reasonText:"已达单叶子最大页数，请输入更大的页数预算后从原检查点继续"}}if(reason==="repeat-page")return {kind:"blocked",reasonText:"检测到连续重复页，分页可能复读，继续无法证明完整"};if(reason==="capped-unprovable")return {kind:"blocked",reasonText:"无安全切分维度，继续会重复抓取且无法证明完整"};if(reason==="checkpoint-desync")return {kind:"blocked",reasonText:"检查点与行数据不一致，禁止继续"};return {kind:"blocked",reasonText:"该任务无法安全继续，可导出已有数据"}}if(t.status==="completed"&&t.completeness!=="complete")return {kind:"blocked",reasonText:"该任务已完成但完整性未证明（旧版任务），无法继续，可导出已有数据"};return null}
+
+function pgyKolBatchErrorMessage(e){if(!e)return "";if(e.code==="filter-not-applied")return "请先确定筛选并查询";if(e.code==="auth-expired")return "蒲公英登录已失效，请重新授权";if(e.code==="risk-control")return "触发风控，采集已停止";if(e.code==="failed"||e.kind==="failed")return "采集失败（错误码 "+(e.code||"unknown")+"）："+(e.message||"未知错误");return "任务操作失败（错误码 "+(e.code||"unknown")+"）："+(e.message||"未知错误")}
+
+function pgyKolCount(t,k){return t&&t.counts&&t.counts[k]!=null?t.counts[k]:0}
+
+function pgyKolPagesDone(t){if(!t||!Array.isArray(t.leaves))return 0;var n=0;for(var i=0;i<t.leaves.length;i++){var l=t.leaves[i];if(l&&Array.isArray(l.pagesCompleted))n+=l.pagesCompleted.length}return n}
+
+function pgyKolAnyCapped(t){if(!t)return false;if(t.capSignal&&t.capSignal.capped)return true;if(Array.isArray(t.leaves)){for(var i=0;i<t.leaves.length;i++){if(t.leaves[i]&&t.leaves[i].capSignal&&t.leaves[i].capSignal.capped)return true}}return false}
+
+function PgyKolBatchPanel(p){var bv=m.useState(""),budgetInput=bv[0],setBudgetInput=bv[1];var t=p.task;if(!t)return null;var counts=t.counts||{},statusText=pgyKolStatusText(t.status),completenessText=pgyKolCompletenessText(t),pages=pgyKolPagesDone(t),capped=pgyKolAnyCapped(t),subCount=t.summary&&t.summary.subqueryCount!=null?t.summary.subqueryCount:0,resumePlan=pgyKolResumePlan(t),resumeEligible=resumePlan&&(resumePlan.kind==="budget"||resumePlan.kind==="maxPages"),parsedInput=budgetInput.trim()===""?NaN:Number(budgetInput),inputValid=resumeEligible&&Number.isInteger(parsedInput)&&parsedInput>=resumePlan.min&&parsedInput<=resumePlan.max,legacyUnproven=t.status==="completed"&&t.completeness!=="complete",incompleteShown=t.status==="incomplete"||legacyUnproven;return o.jsxs(xe,{variant:"outlined",sx:{mt:2},children:[o.jsxs(We,{children:[o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1,mb:1,flexWrap:"wrap"},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:"任务进度"}),o.jsx(f1,{size:"small",color:t.status==="completed"&&t.completeness==="complete"?"success":incompleteShown?"warning":t.status==="failed"||t.status==="risk-control"?"error":t.status==="running"?"info":"default",label:incompleteShown?"采集未完整/需要处理":statusText}),capped&&o.jsx(f1,{size:"small",color:"warning",label:"结果可能超过 5000"})]}),o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",mb:1,fontFamily:"monospace",wordBreak:"break-all"},children:"任务 ID："+t.taskId}),incompleteShown&&o.jsx(oe,{severity:"warning",sx:{mb:1},children:"采集未完整/需要处理："+(resumePlan&&resumePlan.reasonText||completenessText)}),!incompleteShown&&o.jsx(oe,{severity:completenessText.indexOf("无法证明")>=0?"warning":"success",sx:{mb:1},children:completenessText}),o.jsxs(x,{sx:{display:"flex",gap:1,flexWrap:"wrap",mb:1},children:[o.jsx(f1,{size:"small",variant:"outlined",label:"原始条数 "+(counts.raw!=null?counts.raw:0)}),o.jsx(f1,{size:"small",variant:"outlined",label:"唯一博主数 "+(counts.unique!=null?counts.unique:0)}),o.jsx(f1,{size:"small",variant:"outlined",label:"重复数 "+(counts.dup!=null?counts.dup:0)}),o.jsx(f1,{size:"small",variant:"outlined",label:"缺UID异常数 "+(counts.missingUid!=null?counts.missingUid:0)}),o.jsx(f1,{size:"small",variant:"outlined",label:"已抓页数 "+pages}),o.jsx(f1,{size:"small",variant:"outlined",label:"子查询数 "+subCount})]}),resumeEligible&&o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1,flexWrap:"wrap",mb:1},children:[o.jsx(w,{variant:"body2",color:"text.secondary",children:"当前"+resumePlan.label+"："+resumePlan.current+"；已消费请求数："+resumePlan.used+"；允许新值："+resumePlan.min+"～"+resumePlan.max}),o.jsx(ae,{size:"small",type:"number",value:budgetInput,onChange:function(e){setBudgetInput(e.target.value)},placeholder:"请输入新"+resumePlan.label,sx:{maxWidth:180}}),o.jsx($,{size:"small",variant:"contained",disabled:!inputValid,onClick:function(){var nb={};if(resumePlan.kind==="budget"){nb.queryBudget=parsedInput}else{nb.maxPagesPerLeaf=parsedInput}p.onResumeWithBudgets(nb)},children:resumePlan.kind==="maxPages"?"增加页数并继续":"增加预算并继续"})]}),resumePlan&&resumePlan.kind==="blocked"&&o.jsx(w,{variant:"body2",color:"text.secondary",sx:{display:"block",mb:1},children:resumePlan.reasonText}),o.jsxs(x,{sx:{display:"flex",gap:1,flexWrap:"wrap"},children:[t.status==="running"&&o.jsx($,{size:"small",variant:"outlined",onClick:p.onPause,children:"暂停"}),(t.status==="paused"||t.status==="auth-expired"||t.status==="interrupted"||t.status==="failed")&&o.jsx($,{size:"small",variant:"outlined",onClick:p.onResume,children:"继续"}),(t.status==="cancelled"||t.status==="failed"||t.status==="completed"||t.status==="incomplete")?null:o.jsx($,{size:"small",variant:"outlined",color:"error",onClick:p.onCancel,children:"取消"}),o.jsx($,{size:"small",variant:"outlined",onClick:p.onExport,children:"导出"})]})]})]})}
+
+function PgyKolTaskHistory(p){return o.jsxs(xe,{variant:"outlined",sx:{mt:2},children:[o.jsxs(We,{children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,sx:{mb:1},children:"任务历史"}),p.error&&o.jsx(oe,{severity:"error",sx:{mb:1},children:"任务历史加载失败（错误码 "+(p.error.code||"unknown")+"）："+(p.error.message||"未知错误")}),!p.error&&(!p.tasks||p.tasks.length===0)&&o.jsx(w,{variant:"body2",color:"text.secondary",children:"暂无采集任务"}),p.tasks&&p.tasks.map(function(t){var c=t.counts||{};return o.jsxs(x,{key:t.taskId,sx:{display:"flex",alignItems:"center",gap:1,mb:1,flexWrap:"wrap"},children:[o.jsx(w,{variant:"body2",sx:{fontFamily:"monospace",wordBreak:"break-all"},children:t.taskId}),o.jsx(f1,{size:"small",variant:"outlined",color:t.status==="completed"&&t.completeness==="complete"?"success":t.status==="incomplete"?"warning":"default",label:t.status==="incomplete"?"采集未完整":pgyKolStatusText(t.status)}),o.jsx(f1,{size:"small",variant:"outlined",label:t.completeness==="complete"?"完整性已证明":"完整性未证明"}),o.jsx(w,{variant:"caption",color:"text.secondary",children:"原始 "+(c.raw!=null?c.raw:0)+" / 唯一 "+(c.unique!=null?c.unique:0)+" / 重复 "+(c.dup!=null?c.dup:0)+" / 缺UID "+(c.missingUid!=null?c.missingUid:0)}),o.jsx(w,{variant:"caption",color:"text.secondary",children:t.updatedAt||""}),o.jsx($,{size:"small",variant:"outlined",onClick:function(){p.onSelect(t.taskId)},children:"查看"}),o.jsx($,{size:"small",variant:"outlined",onClick:function(){p.onExport(t.taskId)},children:"导出"})]})})]})]})}
+
+function PgyKolBrandPopup(p){var kw=m.useState(""),keyword=kw[0],setKeyword=kw[1],ops=m.useState([]),options=ops[0],setOptions=ops[1],ld=m.useState(false),loading=ld[0],setLoading=ld[1],bpe=m.useState(null),brandError=bpe[0],setBrandError=bpe[1],dr=m.useState([]),draft=dr[0],setDraft=dr[1],tr=m.useRef(null);function fetchBrands(kw0){var bridge=window.bridge&&window.bridge.pgyKol;if(!bridge||!bridge.getConfig)return;setLoading(true);bridge.getConfig({provider:"brandSearch",keyword:kw0||""}).then(function(res){setLoading(false);if(res&&res.ok){var data=res.data||{},list=data.options||data.nodes||(Array.isArray(res.data)?res.data:[]);setOptions(list);setBrandError(null)}else{setBrandError(res&&res.error||{code:"unknown",message:"品牌搜索失败"})}}).catch(function(e){setLoading(false);setBrandError({code:e&&e.code||"unknown",message:e&&e.message||String(e)})})}m.useEffect(function(){if(!p.open)return;setDraft(Array.isArray(p.current)?p.current.slice():[]);setKeyword("");setOptions([]);setBrandError(null)},[p.open]);var onKeyword=function(e){var v=e.target.value;setKeyword(v);if(tr.current)window.clearTimeout(tr.current);tr.current=window.setTimeout(function(){fetchBrands(v)},300)},toggleBrand=function(n){var v=pgyKolOptValue(n);setDraft(function(prev){var i=prev.indexOf(v);return i>=0?prev.slice(0,i).concat(prev.slice(i+1)):prev.concat([v])})};return o.jsxs(ue,{open:p.open,onClose:p.onClose,maxWidth:"sm",fullWidth:true,children:[o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:p.mode==="recent"?"近期合作品牌":"合作品牌智能推荐"}),o.jsx(te,{size:"small",sx:{ml:"auto"},onClick:p.onClose,children:o.jsx(B,{icon:"mdi:close",width:18,height:18})})]})}),o.jsxs(pe,{children:[o.jsx(ae,{size:"small",fullWidth:true,placeholder:"搜索品牌关键词",value:keyword,onChange:onKeyword,sx:{mb:1}}),brandError&&o.jsx(oe,{severity:"error",sx:{mb:1},children:"品牌搜索失败（错误码 "+(brandError.code||"unknown")+"）："+(brandError.message||"未知错误")}),loading&&o.jsx(Q1,{sx:{mb:1}}),options.length>0?o.jsxs(x,{sx:{display:"flex",flexWrap:"wrap",gap:.5,maxHeight:260,overflowY:"auto"},children:[options.map(function(n){var v=pgyKolOptValue(n),sel=draft.indexOf(v)>=0;return o.jsx(f1,{key:String(v),size:"small",label:pgyKolOptLabel(n),color:sel?"primary":"default",variant:sel?"filled":"outlined",onClick:function(){toggleBrand(n)}})}),o.jsx(w,{variant:"caption",color:"text.secondary",sx:{width:"100%"},children:"已选 "+draft.length+" 个品牌"})]}):!loading&&o.jsx(w,{variant:"body2",color:"text.secondary",children:"输入关键词搜索品牌"})]}),o.jsxs(_e,{children:[o.jsx($,{onClick:p.onClose,children:"取消"}),draft.length===0&&o.jsx(w,{variant:"caption",color:"text.secondary",children:"请选择您的合作品牌"}),o.jsx($,{variant:"contained",disabled:draft.length===0,onClick:function(){p.onApply(draft.slice());p.onClose()},children:"确定"})]})]})}
+
+function PgyKolNoteCategoryPopup(p){var inds=p.nodes&&p.nodes.length?p.nodes:pgyKolNoteCatFallback();var ind=inds.find(function(n){return String(n.label||n.value)===p.industry})||inds[0]||null;var children=ind&&ind.children?ind.children:[];var leafPaths={};children.forEach(function(c){leafPaths[pgyKolNodeKey(c)]=pgyKolCollectLeafPaths(c,[String(ind.label||ind.value)])});function isAll(c){var paths=leafPaths[pgyKolNodeKey(c)]||[];return paths.length>0&&paths.every(function(pp){return p.selected.indexOf(pp)>=0})}function toggle(c){var paths=leafPaths[pgyKolNodeKey(c)]||[];var all=isAll(c);var next=p.selected.slice();paths.forEach(function(pp){var ix=next.indexOf(pp);if(all&&ix>=0)next=next.slice(0,ix).concat(next.slice(ix+1));else if(!all&&ix<0)next.push(pp)});p.onToggle(next)}var closeBtn=o.jsx(te,{size:"small",sx:{ml:"auto"},onClick:p.onClose,children:o.jsx(B,{icon:"mdi:close",width:18,height:18})});var header=o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:"笔记类目"}),closeBtn]})});var indRow=o.jsxs(x,{sx:{display:"flex",gap:.5,mb:1,flexWrap:"wrap"},children:inds.map(function(n){var lab=String(n.label||n.value||"");return o.jsx(f1,{key:pgyKolNodeKey(n),size:"small",label:lab,color:p.industry===lab?"primary":"default",variant:p.industry===lab?"filled":"outlined",onClick:function(){p.onSelectIndustry(lab)}})})});var leafRow=children.length>0?o.jsxs(x,{sx:{display:"flex",flexWrap:"wrap",gap:.5},children:children.map(function(c){var lab=String(c.label||c.value||"");return o.jsx(f1,{key:pgyKolNodeKey(c),size:"small",label:lab,color:isAll(c)?"primary":"default",variant:isAll(c)?"filled":"outlined",onClick:function(){toggle(c)}})})}):o.jsx(w,{variant:"body2",color:"text.secondary",children:"该行业暂无子类目"});var countLine=o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",mt:1},children:"已选 "+p.selected.length+" 项"});return o.jsxs(ue,{open:p.open,onClose:p.onClose,maxWidth:"md",fullWidth:true,children:[header,o.jsxs(pe,{children:[indRow,leafRow,countLine]})]})}
+
+function PgyKolIndustryPopup(p){var firsts=p.cfg&&p.cfg.nodes&&p.cfg.nodes.length?p.cfg.nodes:[];var firstSel=firsts.find(function(n){return String(n.label||n.value)===p.first})||null;var seconds=firstSel&&firstSel.children?firstSel.children:[];var closeBtn=o.jsx(te,{size:"small",sx:{ml:"auto"},onClick:p.onClose,children:o.jsx(B,{icon:"mdi:close",width:18,height:18})});var header=o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:"行业推荐博主"}),closeBtn]})});var tip=o.jsx(w,{variant:"caption",color:"text.secondary",children:"选择行业后，平台优先展示该行业下内容更匹配、数据更优质的博主"});var emptyTip=firsts.length===0?o.jsx(w,{variant:"body2",color:"text.secondary",children:"行业列表加载中…"}):null;var firstRow=firsts.length>0?o.jsxs(x,{children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"一级行业"}),o.jsx(PgyKolChips,{options:firsts,keyOf:function(n){return pgyKolNodeKey(n)},selected:p.first?[firsts.find(function(n){return String(n.label||n.value)===p.first})].filter(Boolean):[],onToggle:function(n){p.onFirst(String(n.label||n.value));p.onSecond("")}})]}):null;var secondRow=seconds.length>0?o.jsxs(x,{children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"二级行业"}),o.jsx(PgyKolChips,{options:seconds,keyOf:function(n){return pgyKolNodeKey(n)},selected:p.second?[seconds.find(function(n){return String(n.label||n.value)===p.second})].filter(Boolean):[],onToggle:function(n){p.onSecond(String(n.label||n.value))}})]}):null;return o.jsxs(ue,{open:p.open,onClose:p.onClose,maxWidth:"sm",fullWidth:true,children:[header,o.jsxs(pe,{children:[tip,emptyTip,firstRow,secondRow]})]})}
+
 var pgyKolCategoryCommon=["全部","美妆","护肤","个人护理","母婴","时尚","美食","家居家装","影视综资讯","运动健身","宠物","文化艺术","兴趣爱好","生活记录","教育","职场"];
 var pgyKolCategoryFull=["全部","美妆","护肤","个人护理","母婴","时尚","美食","家居家装","影视综资讯","运动健身","宠物","文化艺术","兴趣爱好","生活记录","教育","职场","情感","摄影","游戏","科技数码","出行旅游","音乐","搞笑","健康养生","汽车","婚嫁","商业财经","素材","其他"];
 var pgyKolMarketOptions=pgyKolStaticOptions(["曝光","种草","转化"]);
 var pgyKolGenderOptions=pgyKolStaticOptions(["不限","男","女"]);
 var pgyKolSignedOptions=pgyKolStaticOptions(["不限","个人博主","机构博主"]);
-var pgyKolNoteTypeOptions=pgyKolStaticOptions(["不限","图文笔记为主","视频笔记为主"]);
+var pgyKolNoteTypeOptions=[{label:"不限",value:null},{label:"图文笔记为主",value:1},{label:"视频笔记为主",value:2}];
+var pgyKolRecentIndustryOptions=pgyKolStaticOptions(["不限","美妆个护","食品饮料","母婴","3c及电器","日用百货","服装配饰","互联网","生活服务","家居建材","汽车"]);
 var pgyKolFansAgeOptions=pgyKolStaticOptions(["18岁以下","18-24","25-34","35-44","45岁以上"]);
 var pgyKolFansGenderOptions=pgyKolStaticOptions(["不限","男","女"]);
 var pgyKolMaritalOptions=pgyKolStaticOptions(["不限","未婚","已婚","恋爱中"]);
@@ -109,42 +241,2427 @@ var pgyKolFansPresets=[{label:"1万以下",lower:"",upper:"10000"},{label:"1万-
 var pgyKolFeaturedOptions=[{key:"inStar",value:"明星",label:"明星"},{key:"isHighQualityFlag",value:"优质博主",label:"优质博主"},{key:"newHighQuality",value:"新锐博主",label:"新锐博主"},{key:"hasBuyerCoopAuthFlag",value:"笔记+直播均可合作",label:"笔记+直播均可合作"},{key:"filterIntention",value:"意向行业匹配",label:"意向行业匹配"}];
 function pgyKolFeaturedLabel(key){for(var i=0;i<pgyKolFeaturedOptions.length;i++){if(pgyKolFeaturedOptions[i].key===key)return pgyKolFeaturedOptions[i].label}return key}
 var pgyKolNoteCategoryIndustries=pgyKolStaticOptions(["汽车","游戏","母婴","美妆"]);
-var pgyKolNoteCategoryTree={"汽车":{"nodes":[{"label":"理性决策","children":[{"label":"选车攻略","children":[{"label":"政策"},{"label":"购车顾虑"},{"label":"配置"},{"label":"能源类型优势对比"},{"label":"攻略"}]},{"label":"新车测评"},{"label":"探店试驾"},{"label":"车主心得"}]},{"label":"用车场景","children":[{"label":"远行近游","children":[{"label":"近郊探索"},{"label":"长途自驾"},{"label":"硬核越野"}]},{"label":"提车/交付场景","children":[{"label":"场地布置与礼遇"},{"label":"仪式感记录"}]},{"label":"商务用车","children":[{"label":"移动头等舱"},{"label":"商务接待"}]},{"label":"亲子家庭","children":[{"label":"家庭采购日"},{"label":"接送孩子"},{"label":"三代同堂"},{"label":"周末溜娃"},{"label":"车内学习室"},{"label":"车内育婴室"}]},{"label":"朋友社交","children":[{"label":"后备箱经济"},{"label":"移动娱乐屋"}]},{"label":"礼赠场景","children":[{"label":"毕业礼物"},{"label":"送给父母"},{"label":"适合送男友"},{"label":"适合送女友"}]},{"label":"户外兴趣","children":[{"label":"钓鱼/野营"},{"label":"骑行"},{"label":"徒步"},{"label":"硬核竞速"}]},{"label":"宠物出行","children":[{"label":"大型宠物"},{"label":"短途出行"},{"label":"小型宠物"},{"label":"长途出行"}]},{"label":"城市通勤","children":[{"label":"车内小憩"},{"label":"健身储物"},{"label":"日常通勤"},{"label":"生活圈代步"},{"label":"移动美容舱"}]}]},{"label":"个性化美化","children":[{"label":"个性改装"},{"label":"储物收纳"},{"label":"车内装饰"},{"label":"车外装饰"},{"label":"车衣保护"},{"label":"汽车用品"}]},{"label":"车型品类","children":[{"label":"轿车"},{"label":"SUV"},{"label":"MPV"},{"label":"跑车"},{"label":"微型车"},{"label":"微面"},{"label":"房车"},{"label":"越野车"},{"label":"旅行车"}]},{"label":"圈层属性","children":[{"label":"改装圈层"},{"label":"痛车圈层"},{"label":"跑山圈层"}]},{"label":"品牌倾向","children":[{"label":"自主"},{"label":"豪华"},{"label":"集团"},{"label":"新势力"}]},{"label":"能源类型","children":[{"label":"纯电车"},{"label":"新能源"},{"label":"油车"}]},{"label":"人生阶段","children":[{"label":"单身"},{"label":"多娃&大家庭阶段"},{"label":"银发退休阶段"}]}]},"游戏":{"nodes":[{"label":"游戏品类","children":[{"label":"网页游戏"},{"label":"电脑游戏"},{"label":"手机游戏"}]},{"label":"游戏类型","children":[{"label":"动作格斗游戏","children":[{"label":"永劫无间"}]},{"label":"即时制二次元游戏","children":[{"label":"境界刀鸣"},{"label":"黑色信标"},{"label":"物华弥新"},{"label":"无期迷途"},{"label":"新月同行"},{"label":"绝区零"}]},{"label":"即时制角色扮演","children":[{"label":"诛仙2"},{"label":"诛仙"},{"label":"明日之后"},{"label":"超自然行动组"},{"label":"永恒之塔2"}]},{"label":"回合制二次元游戏","children":[{"label":"未定事件簿"},{"label":"雷索纳斯"},{"label":"浮生忆玲珑"},{"label":"重返未来1999"}]},{"label":"回合制角色扮演","children":[{"label":"梦幻西游手游"},{"label":"龙魂旅人"},{"label":"最终幻想14"}]},{"label":"塔防游戏","children":[{"label":"保卫向日葵"},{"label":"全境守卫"},{"label":"向僵尸开炮"}]},{"label":"开放世界角色扮演","children":[{"label":"燕云十六声"},{"label":"王者荣耀世界"}]},{"label":"恋爱游戏","children":[{"label":"如鸢"},{"label":"银与绯"},{"label":"时空中的绘旅人"},{"label":"光与夜之恋"},{"label":"恋与深空"},{"label":"恋与制作人"}]},{"label":"战略游戏","children":[{"label":"率土之滨"},{"label":"群星纪元"},{"label":"阿瓦隆之王"},{"label":"快来当领主"},{"label":"冒险之星"},{"label":"无尽的拉格朗日"}]},{"label":"放置类二次元游戏","children":[{"label":"花花与幕间剧"}]},{"label":"放置类角色扮演","children":[{"label":"发条总动员"},{"label":"遮天凡尘一叶"}]},{"label":"模拟养成","children":[{"label":"美人传"},{"label":"盲盒派对"},{"label":"闪耀暖暖"},{"label":"以闪亮之名"},{"label":"无限暖暖"}]},{"label":"模拟家园建造","children":[{"label":"江南百景图"},{"label":"动物森友会"},{"label":"星露谷物语"}]},{"label":"模拟经营","children":[{"label":"暴吵萌厨"},{"label":"肥鹅健身房"}]},{"label":"模拟职业","children":[{"label":"杜拉拉升职记"}]},{"label":"消除游戏","children":[{"label":"四季合合"}]},{"label":"生存沙盒游戏","children":[{"label":"无尽冬日"}]},{"label":"聚会游戏","children":[{"label":"蛋仔派对"},{"label":"代号砰砰"}]},{"label":"解谜游戏","children":[{"label":"晴空之下"}]},{"label":"抓宠类游戏","children":[{"label":"洛克王国手游"}]},{"label":"射击游戏","children":[{"label":"三角洲行动"},{"label":"codm（使命召唤）"}]}]}]},"母婴":{"nodes":[{"label":"婴童洗护","children":[{"label":"安全防晒"},{"label":"浴后护理"},{"label":"敏感修护"},{"label":"屏障树立"},{"label":"泳后护理"},{"label":"口周干裂"},{"label":"分区清洁"},{"label":"头皮问题"},{"label":"驱虫驱蚊"},{"label":"洁面清洁"},{"label":"红屁股"},{"label":"湿疹皮炎"},{"label":"痱子热疹"},{"label":"抚触链接"},{"label":"趣味洗护"}]},{"label":"母婴纸品","children":[{"label":"精算育儿"},{"label":"颜值派"},{"label":"汗宝宝"},{"label":"囤货党"},{"label":"敏感肌"},{"label":"肉腿娃"},{"label":"功课党"},{"label":"好动宝"},{"label":"安睡整夜"},{"label":"出行便携"},{"label":"贵妇体验"},{"label":"红屁屁"}]},{"label":"母婴小家电","children":[{"label":"空间收纳"},{"label":"滋补养生"},{"label":"温度把控"},{"label":"夜奶操作"},{"label":"新手喂养"},{"label":"材质挑选"},{"label":"三代同育"},{"label":"户外喂养"},{"label":"通乳攻略"},{"label":"洁癖爸妈"},{"label":"精准喂养"},{"label":"职场妈妈"}]},{"label":"婴童辅食","children":[{"label":"吞咽能力"},{"label":"多元辅食"},{"label":"零食分享"},{"label":"健康零食"},{"label":"放学加餐"},{"label":"出牙磨牙"},{"label":"居家囤货"},{"label":"节日礼包"},{"label":"零食训练"},{"label":"宝宝挑食"},{"label":"户外零食"},{"label":"低敏辅食"},{"label":"入园社交"},{"label":"居家辅食"},{"label":"入园准备"},{"label":"敏敏零食"},{"label":"抓握训练"},{"label":"外出口粮"},{"label":"营养均衡"},{"label":"自主进食"},{"label":"第一口辅食"}]},{"label":"母婴营养品","children":[{"label":"开胃因子"},{"label":"视力保护"},{"label":"营养补充"},{"label":"防护因子"},{"label":"高钙因子"},{"label":"自护构建"},{"label":"发育表现"},{"label":"助眠安睡"}]},{"label":"婴童奶粉","children":[{"label":"丝滑转奶"},{"label":"益生组合"},{"label":"眼脑体发育"},{"label":"选奶功课"},{"label":"防敏脱敏"},{"label":"助力聪明脑"},{"label":"乳铁自护"},{"label":"黄金长高"},{"label":"内修外护"},{"label":"肚肚吸收"},{"label":"断奶攻略"},{"label":"混合喂养"},{"label":"母源黄金HMO"},{"label":"长肉多肉"}]},{"label":"哺乳喂养工具","children":[{"label":"萌娃穿搭"},{"label":"安全材质"},{"label":"奶瓶喂养"},{"label":"颜值发育"},{"label":"哄娃安抚"},{"label":"餐具选购"},{"label":"学饮指南"},{"label":"换季保温"}]},{"label":"母婴孕产","children":[{"label":"职场孕妇"},{"label":"产后复工"},{"label":"顺产"},{"label":"孕期变化"},{"label":"孕期学习"},{"label":"剖腹产"}]},{"label":"母婴家居","children":[{"label":"护脊深睡"},{"label":"安全翻滚"},{"label":"进食习惯"},{"label":"早教启蒙"},{"label":"学习角落"},{"label":"自主入睡"},{"label":"爬行探索"},{"label":"防惊跳"}]},{"label":"母婴出行&用品","children":[{"label":"长线旅途"},{"label":"户外探索"},{"label":"二胎/双胎"},{"label":"新贵消费"},{"label":"备产研究"},{"label":"短途旅行"},{"label":"高频出行"},{"label":"新生出行"},{"label":"务实精算"},{"label":"遛娃必备"}]}]},"美妆":{"nodes":[]}}; /* Phase5 预留：行业类目标签待实证，UI 选择带入 filterState.industryTag */
-function pgyKolPresetActive(p,f){return f.fansNumberLower===p.lower&&f.fansNumberUpper===p.upper}function PgyKolMatrixSection(p){return o.jsxs(x,{sx:{display:"flex",gap:1.5,mb:1,border:"1px solid",borderColor:"divider",borderRadius:1,p:1},children:[o.jsx(w,{variant:"subtitle2",fontWeight:600,sx:{width:96,flexShrink:0,pt:.5},children:p.title}),o.jsx(x,{sx:{flexGrow:1,minWidth:0},children:p.children})]})}
-function PgyKolMatrixRow(p){return o.jsxs(x,{sx:{display:"flex",alignItems:"center",minHeight:36,gap:1},children:[p.label?o.jsx(w,{variant:"caption",color:"text.secondary",sx:{width:110,flexShrink:0,textAlign:"right"},children:p.label}):null,o.jsxs(x,{sx:{flexGrow:1,minWidth:0,display:"flex",alignItems:"center",flexWrap:"wrap",gap:.75},children:p.children})]})}
-function PgyKolField(p){return o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:.5},children:[o.jsx(w,{variant:"caption",color:"text.secondary",sx:{flexShrink:0},children:p.label}),p.children]})}
-function PgyKolToggle(p){return o.jsx(f1,{size:"small",label:p.label,color:p.on?"warning":"default",variant:p.on?"filled":"outlined",disabled:p.disabled,onClick:function(){if(!p.disabled)p.onToggle()}})}
-function PgyKolDropdown(p){var os=m.useState(false),open=os[0],setOpen=os[1],label=p.label||"",options=p.options||[],selected=p.selected||[],keyOf=p.keyOf||function(n){return pgyKolOptValue(n)},disabled=p.disabled;return o.jsxs(x,{sx:{position:"relative",display:"inline-block"},children:[o.jsx($,{size:"small",variant:selected.length>0?"contained":"outlined",color:selected.length>0?"primary":"inherit",disabled:disabled,onClick:function(){setOpen(!open)},startIcon:o.jsx(B,{icon:"mdi:chevron-down",width:16,height:16}),children:label+(selected.length>0?"（"+selected.length+"）":"")}),open&&!disabled&&o.jsx(x,{sx:{position:"absolute",top:"100%",left:0,zIndex:1300,mt:.5,minWidth:240,maxWidth:360,maxHeight:280,overflowY:"auto",p:1,bgcolor:"background.paper",border:"1px solid",borderColor:"divider",borderRadius:1,boxShadow:3},children:o.jsxs(x,{children:[o.jsx(PgyKolChips,{options:options,keyOf:keyOf,selected:selected,display:pgyKolOptLabel,onToggle:function(n){p.onToggle(n)}}),o.jsx($,{size:"small",sx:{mt:1},onClick:function(){setOpen(false)},children:"收起"})]})})]})}
-function PgyKolTreePopup(p){var os=m.useState(false),open=os[0],setOpen=os[1],cfg=p.cfg,count=p.count||0,disabled=p.disabled,title=p.label||"";return o.jsxs(x,{children:[o.jsx($,{size:"small",variant:count>0?"contained":"outlined",color:count>0?"primary":"inherit",disabled:disabled,onClick:function(){setOpen(true)},children:title+(count>0?"（"+count+"）":"")}),o.jsxs(ue,{open:open,onClose:function(){setOpen(false)},maxWidth:"sm",fullWidth:true,children:[o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:title}),o.jsx(te,{size:"small",sx:{ml:"auto"},onClick:function(){setOpen(false)},children:o.jsx(B,{icon:"mdi:close",width:18,height:18})})]})}),o.jsxs(pe,{children:cfg&&cfg.error?o.jsx(oe,{severity:"error",children:"加载失败（错误码 "+(cfg.error.code||"unknown")+"）："+(cfg.error.message||"未知错误")}):cfg?o.jsxs(x,{children:[o.jsx(PgyKolTree,{nodes:cfg.nodes||[],selected:p.selectedKeys,onToggle:function(n){p.onToggle(n);if(p.closeOnSelect)setOpen(false)},display:function(n){return n.fullPath||n.label||String(n.value)}}),p.hint&&o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",mt:1},children:p.hint})]}):o.jsx(de,{size:24})})]})]})}
-function PgyKolBrandPopup(p){var kw=m.useState(""),keyword=kw[0],setKeyword=kw[1],ops=m.useState([]),options=ops[0],setOptions=ops[1],ld=m.useState(false),loading=ld[0],setLoading=ld[1],bpe=m.useState(null),brandError=bpe[0],setBrandError=bpe[1],dr=m.useState([]),draft=dr[0],setDraft=dr[1],tr=m.useRef(null);function fetchBrands(kw0){var bridge=window.bridge&&window.bridge.pgyKol;if(!bridge||!bridge.getConfig)return;setLoading(true);bridge.getConfig({provider:"brandSearch",keyword:kw0||""}).then(function(res){setLoading(false);if(res&&res.ok){var data=res.data||{},list=data.options||data.nodes||(Array.isArray(res.data)?res.data:[]);setOptions(list);setBrandError(null)}else{setBrandError(res&&res.error||{code:"unknown",message:"品牌搜索失败"})}}).catch(function(e){setLoading(false);setBrandError({code:e&&e.code||"unknown",message:e&&e.message||String(e)})})}m.useEffect(function(){if(!p.open)return;setDraft(Array.isArray(p.current)?p.current.slice():[]);setKeyword("");setOptions([]);setBrandError(null)},[p.open]);var onKeyword=function(e){var v=e.target.value;setKeyword(v);if(tr.current)window.clearTimeout(tr.current);tr.current=window.setTimeout(function(){fetchBrands(v)},300)},toggleBrand=function(n){var v=pgyKolOptValue(n);setDraft(function(prev){var i=prev.indexOf(v);return i>=0?prev.slice(0,i).concat(prev.slice(i+1)):prev.concat([v])})};return o.jsxs(ue,{open:p.open,onClose:p.onClose,maxWidth:"sm",fullWidth:true,children:[o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:p.mode==="recent"?"近期合作品牌":"合作品牌智能推荐"}),o.jsx(te,{size:"small",sx:{ml:"auto"},onClick:p.onClose,children:o.jsx(B,{icon:"mdi:close",width:18,height:18})})]})}),o.jsxs(pe,{children:[o.jsx(ae,{size:"small",fullWidth:true,placeholder:"搜索品牌关键词",value:keyword,onChange:onKeyword,sx:{mb:1}}),brandError&&o.jsx(oe,{severity:"error",sx:{mb:1},children:"品牌搜索失败（错误码 "+(brandError.code||"unknown")+"）："+(brandError.message||"未知错误")}),loading&&o.jsx(Q1,{sx:{mb:1}}),options.length>0?o.jsxs(x,{sx:{display:"flex",flexWrap:"wrap",gap:.5,maxHeight:260,overflowY:"auto"},children:[options.map(function(n){var v=pgyKolOptValue(n),sel=draft.indexOf(v)>=0;return o.jsx(f1,{key:String(v),size:"small",label:pgyKolOptLabel(n),color:sel?"primary":"default",variant:sel?"filled":"outlined",onClick:function(){toggleBrand(n)}})}),o.jsx(w,{variant:"caption",color:"text.secondary",sx:{width:"100%"},children:"已选 "+draft.length+" 个品牌"})]}):!loading&&o.jsx(w,{variant:"body2",color:"text.secondary",children:"输入关键词搜索品牌"})]}),o.jsxs(_e,{children:[o.jsx($,{onClick:p.onClose,children:"取消"}),draft.length===0&&o.jsx(w,{variant:"caption",color:"text.secondary",children:"请选择您的合作品牌"}),o.jsx($,{variant:"contained",disabled:draft.length===0,onClick:function(){p.onApply(draft.slice());p.onClose()},children:"确定"})]})]})}
+var pgyKolNoteCategoryTree={"汽车":{"nodes":[{"label":"理性决策","children":[{"label":"选车攻略","children":[{"label":"政策"},{"label":"购车顾虑"},{"label":"配置"},{"label":"能源类型优势对比"},{"label":"攻略"}]},{"label":"新车测评"},{"label":"探店试驾"},{"label":"车主心得"}]},{"label":"用车场景","children":[{"label":"远行近游","children":[{"label":"近郊探索"},{"label":"长途自驾"},{"label":"硬核越野"}]},{"label":"提车/交付场景","children":[{"label":"场地布置与礼遇"},{"label":"仪式感记录"}]},{"label":"商务用车","children":[{"label":"移动头等舱"},{"label":"商务接待"}]},{"label":"亲子家庭","children":[{"label":"家庭采购日"},{"label":"接送孩子"},{"label":"三代同堂"},{"label":"周末溜娃"},{"label":"车内学习室"},{"label":"车内育婴室"}]},{"label":"朋友社交","children":[{"label":"后备箱经济"},{"label":"移动娱乐屋"}]},{"label":"礼赠场景","children":[{"label":"毕业礼物"},{"label":"送给父母"},{"label":"适合送男友"},{"label":"适合送女友"}]},{"label":"户外兴趣","children":[{"label":"钓鱼/野营"},{"label":"骑行"},{"label":"徒步"},{"label":"硬核竞速"}]},{"label":"宠物出行","children":[{"label":"大型宠物"},{"label":"短途出行"},{"label":"小型宠物"},{"label":"长途出行"}]},{"label":"城市通勤","children":[{"label":"车内小憩"},{"label":"健身储物"},{"label":"日常通勤"},{"label":"生活圈代步"},{"label":"移动美容舱"}]}]},{"label":"个性化美化","children":[{"label":"个性改装"},{"label":"储物收纳"},{"label":"车内装饰"},{"label":"车外装饰"},{"label":"车衣保护"},{"label":"汽车用品"}]},{"label":"车型品类","children":[{"label":"轿车"},{"label":"SUV"},{"label":"MPV"},{"label":"跑车"},{"label":"微型车"},{"label":"微面"},{"label":"房车"},{"label":"越野车"},{"label":"旅行车"}]},{"label":"圈层属性","children":[{"label":"改装圈层"},{"label":"痛车圈层"},{"label":"跑山圈层"}]},{"label":"品牌倾向","children":[{"label":"自主"},{"label":"豪华"},{"label":"集团"},{"label":"新势力"}]},{"label":"能源类型","children":[{"label":"纯电车"},{"label":"新能源"},{"label":"油车"}]},{"label":"人生阶段","children":[{"label":"单身"},{"label":"多娃&大家庭阶段"},{"label":"银发退休阶段"}]}]},"游戏":{"nodes":[{"label":"游戏品类","children":[{"label":"网页游戏"},{"label":"电脑游戏"},{"label":"手机游戏"}]},{"label":"游戏类型","children":[{"label":"动作格斗游戏","children":[{"label":"永劫无间"}]},{"label":"即时制二次元游戏","children":[{"label":"境界刀鸣"},{"label":"黑色信标"},{"label":"物华弥新"},{"label":"无期迷途"},{"label":"新月同行"},{"label":"绝区零"}]},{"label":"即时制角色扮演","children":[{"label":"诛仙2"},{"label":"诛仙"},{"label":"明日之后"},{"label":"超自然行动组"},{"label":"永恒之塔2"}]},{"label":"回合制二次元游戏","children":[{"label":"未定事件簿"},{"label":"雷索纳斯"},{"label":"浮生忆玲珑"},{"label":"重返未来1999"}]},{"label":"回合制角色扮演","children":[{"label":"梦幻西游手游"},{"label":"龙魂旅人"},{"label":"最终幻想14"}]},{"label":"塔防游戏","children":[{"label":"保卫向日葵"},{"label":"全境守卫"},{"label":"向僵尸开炮"}]},{"label":"开放世界角色扮演","children":[{"label":"燕云十六声"},{"label":"王者荣耀世界"}]},{"label":"恋爱游戏","children":[{"label":"如鸢"},{"label":"银与绯"},{"label":"时空中的绘旅人"},{"label":"光与夜之恋"},{"label":"恋与深空"},{"label":"恋与制作人"}]},{"label":"战略游戏","children":[{"label":"率土之滨"},{"label":"群星纪元"},{"label":"阿瓦隆之王"},{"label":"快来当领主"},{"label":"冒险之星"},{"label":"无尽的拉格朗日"}]},{"label":"放置类二次元游戏","children":[{"label":"花花与幕间剧"}]},{"label":"放置类角色扮演","children":[{"label":"发条总动员"},{"label":"遮天凡尘一叶"}]},{"label":"模拟养成","children":[{"label":"美人传"},{"label":"盲盒派对"},{"label":"闪耀暖暖"},{"label":"以闪亮之名"},{"label":"无限暖暖"}]},{"label":"模拟家园建造","children":[{"label":"江南百景图"},{"label":"动物森友会"},{"label":"星露谷物语"}]},{"label":"模拟经营","children":[{"label":"暴吵萌厨"},{"label":"肥鹅健身房"}]},{"label":"模拟职业","children":[{"label":"杜拉拉升职记"}]},{"label":"消除游戏","children":[{"label":"四季合合"}]},{"label":"生存沙盒游戏","children":[{"label":"无尽冬日"}]},{"label":"聚会游戏","children":[{"label":"蛋仔派对"},{"label":"代号砰砰"}]},{"label":"解谜游戏","children":[{"label":"晴空之下"}]},{"label":"抓宠类游戏","children":[{"label":"洛克王国手游"}]},{"label":"射击游戏","children":[{"label":"三角洲行动"},{"label":"codm（使命召唤）"}]}]}]},"母婴":{"nodes":[{"label":"婴童洗护","children":[{"label":"安全防晒"},{"label":"浴后护理"},{"label":"敏感修护"},{"label":"屏障树立"},{"label":"泳后护理"},{"label":"口周干裂"},{"label":"分区清洁"},{"label":"头皮问题"},{"label":"驱虫驱蚊"},{"label":"洁面清洁"},{"label":"红屁股"},{"label":"湿疹皮炎"},{"label":"痱子热疹"},{"label":"抚触链接"},{"label":"趣味洗护"}]},{"label":"母婴纸品","children":[{"label":"精算育儿"},{"label":"颜值派"},{"label":"汗宝宝"},{"label":"囤货党"},{"label":"敏感肌"},{"label":"肉腿娃"},{"label":"功课党"},{"label":"好动宝"},{"label":"安睡整夜"},{"label":"出行便携"},{"label":"贵妇体验"},{"label":"红屁屁"}]},{"label":"母婴小家电","children":[{"label":"空间收纳"},{"label":"滋补养生"},{"label":"温度把控"},{"label":"夜奶操作"},{"label":"新手喂养"},{"label":"材质挑选"},{"label":"三代同育"},{"label":"户外喂养"},{"label":"通乳攻略"},{"label":"洁癖爸妈"},{"label":"精准喂养"},{"label":"职场妈妈"}]},{"label":"婴童辅食","children":[{"label":"吞咽能力"},{"label":"多元辅食"},{"label":"零食分享"},{"label":"健康零食"},{"label":"放学加餐"},{"label":"出牙磨牙"},{"label":"居家囤货"},{"label":"节日礼包"},{"label":"零食训练"},{"label":"宝宝挑食"},{"label":"户外零食"},{"label":"低敏辅食"},{"label":"入园社交"},{"label":"居家辅食"},{"label":"入园准备"},{"label":"敏敏零食"},{"label":"抓握训练"},{"label":"外出口粮"},{"label":"营养均衡"},{"label":"自主进食"},{"label":"第一口辅食"}]},{"label":"母婴营养品","children":[{"label":"开胃因子"},{"label":"视力保护"},{"label":"营养补充"},{"label":"防护因子"},{"label":"高钙因子"},{"label":"自护构建"},{"label":"发育表现"},{"label":"助眠安睡"}]},{"label":"婴童奶粉","children":[{"label":"丝滑转奶"},{"label":"益生组合"},{"label":"眼脑体发育"},{"label":"选奶功课"},{"label":"防敏脱敏"},{"label":"助力聪明脑"},{"label":"乳铁自护"},{"label":"黄金长高"},{"label":"内修外护"},{"label":"肚肚吸收"},{"label":"断奶攻略"},{"label":"混合喂养"},{"label":"母源黄金HMO"},{"label":"长肉多肉"}]},{"label":"哺乳喂养工具","children":[{"label":"萌娃穿搭"},{"label":"安全材质"},{"label":"奶瓶喂养"},{"label":"颜值发育"},{"label":"哄娃安抚"},{"label":"餐具选购"},{"label":"学饮指南"},{"label":"换季保温"}]},{"label":"母婴孕产","children":[{"label":"职场孕妇"},{"label":"产后复工"},{"label":"顺产"},{"label":"孕期变化"},{"label":"孕期学习"},{"label":"剖腹产"}]},{"label":"母婴家居","children":[{"label":"护脊深睡"},{"label":"安全翻滚"},{"label":"进食习惯"},{"label":"早教启蒙"},{"label":"学习角落"},{"label":"自主入睡"},{"label":"爬行探索"},{"label":"防惊跳"}]},{"label":"母婴出行&用品","children":[{"label":"长线旅途"},{"label":"户外探索"},{"label":"二胎/双胎"},{"label":"新贵消费"},{"label":"备产研究"},{"label":"短途旅行"},{"label":"高频出行"},{"label":"新生出行"},{"label":"务实精算"},{"label":"遛娃必备"}]}]},"美妆":{"nodes":[]}}
 
-function pgyKolFixedColumnIds(){return ["kolInfo","recentNotes","actions"]}
-function pgyKolDefaultColumnIds(list){return list.filter(function(c){return c.defaultDisplay===true}).map(function(c){return c.id})}
-function pgyKolResolveColumns(list,stored){var fixed=pgyKolFixedColumnIds(),ids=[];function valid(v){return Array.isArray(v)&&v.length>0&&v.every(function(id){return typeof id==="string"&&list.some(function(c){return c.id===id})})}if(valid(stored)){ids=stored.slice()}else{ids=pgyKolDefaultColumnIds(list)}if(ids.length===0){ids=list.slice(0,8).map(function(c){return c.id})}for(var i=0;i<fixed.length;i++){if(ids.indexOf(fixed[i])<0)ids=[fixed[i]].concat(ids)}return ids}
-function pgyKolColumnGroups(){return ["固定列","博主报价","账号数据","直播数据","日常笔记数据","合作笔记数据","其他指标"]}
-function pgyKolColumnGroupOf(c){return c&&c.group||"其他指标"}
-function pgyKolThousand(v){var s=String(Math.round(Number(v))),out="",cnt=0;for(var i=s.length-1;i>=0;i--){out=s[i]+out;cnt++;if(cnt%3===0&&i>0)out=","+out}return out}
-function pgyKolFormatCell(v,fmt){if(v===undefined||v===null||v==="")return "-";if(fmt==="number")return pgyKolThousand(v);if(fmt==="percent"){var n=Number(v);return Number.isFinite(n)?(Math.abs(n)<=1?n*100:n).toFixed(1)+"%":String(v)}if(fmt==="money")return String(v)+"元";return String(v)}
-function pgyKolCellValue(k,col){if(!col||col.evidence==="unavailable")return {unavailable:true};if(col.id==="price"){var pic=k&&k.picturePrice,vid=k&&k.videoPrice,ps=[];if(pic!==undefined&&pic!==null&&pic!=="")ps.push(String(pic)+"元");if(vid!==undefined&&vid!==null&&vid!=="")ps.push(String(vid)+"元");return {value:ps.length?ps.join(" / "):undefined}}var path=col.responsePath||col.id;if(!path||String(path).indexOf("computed:")===0)return {value:undefined};var parts=String(path).split("."),cur=k;for(var i=0;i<parts.length;i++){if(cur===undefined||cur===null)return {value:undefined};cur=cur[parts[i]]}return {value:cur}}function PgyKolColumnDialog(p){var groups=pgyKolColumnGroups(),fixedIds=pgyKolFixedColumnIds(),list=p.columns||[],ds=m.useState(null),draft=ds[0],setDraft=ds[1],ss=m.useState(""),search=ss[0],setSearch=ss[1],effective=draft||p.selected||[],filtered=list.filter(function(c){return search===""||(c.label||"").indexOf(search)>=0});var fixedLabel=function(id){if(id==="kolInfo")return "博主信息";if(id==="recentNotes")return "近期笔记";if(id==="actions")return "操作";return id},colOf=function(id){for(var i=0;i<list.length;i++){if(list[i].id===id)return list[i]}return null},toggleDraft=function(id){if(fixedIds.indexOf(id)>=0)return;setDraft(function(prev){var cur=(prev||p.selected||[]).slice(),i=cur.indexOf(id);if(i>=0)return cur.slice(0,i).concat(cur.slice(i+1));if(id==="price"||id==="picturePrice"||id==="videoPrice"){cur=cur.filter(function(c){return c!=="price"&&c!=="picturePrice"&&c!=="videoPrice"})}return cur.concat([id])})},clearDraft=function(){setDraft(fixedIds.slice())},moveDraft=function(id,dir){setDraft(function(prev){var cur=(prev||p.selected||[]).slice(),i=cur.indexOf(id);if(i<0)return cur;var j=i+dir;if(j<0||j>=cur.length)return cur;var tmp=cur[i];cur[i]=cur[j];cur[j]=tmp;return cur})},apply=function(){p.onApply(effective.slice());setDraft(null);setSearch("");p.onClose()},cancel=function(){setDraft(null);setSearch("");p.onClose()};return o.jsxs(ue,{open:p.open,onClose:cancel,maxWidth:"md",fullWidth:true,children:[o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:"自定义列"}),o.jsx(te,{size:"small",sx:{ml:"auto"},onClick:cancel,children:o.jsx(B,{icon:"mdi:close",width:18,height:18})})]})}),o.jsxs(pe,{children:[p.error&&o.jsx(oe,{severity:"error",sx:{mb:1},children:"字段加载失败（错误码 "+(p.error.code||"unknown")+"）："+(p.error.message||"未知错误")}),o.jsx(ae,{size:"small",fullWidth:true,placeholder:"按名称过滤列",value:search,onChange:function(e){setSearch(e.target.value)},sx:{mb:1}}),o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",mb:1},children:"已选 "+effective.length+" 列；固定列不可删除；可添加列按分组勾选（报价三列互斥，顺序用上移/下移调整）"}),/* 官网为拖拽排序，这里用按钮等价实现（简单可靠） */groups.map(function(g){var cols;if(g==="固定列"){cols=fixedIds.map(function(id){var c=colOf(id);return {id:id,label:c&&c.label||fixedLabel(id),group:"固定列",fixed:true}})}else{cols=filtered.filter(function(c){return pgyKolColumnGroupOf(c)===g})}if(cols.length===0)return null;return o.jsxs(x,{key:g,sx:{mb:1},children:[o.jsx(w,{variant:"subtitle2",sx:{mb:.25},children:g}),cols.map(function(c){var sel=effective.indexOf(c.id)>=0,idx=effective.indexOf(c.id),first=idx===0,last=idx===effective.length-1;return o.jsxs(x,{key:c.id,sx:{display:"flex",alignItems:"center",gap:.5,minHeight:34,px:.5,borderRadius:.5},children:[o.jsx(f1,{size:"small",label:c.label||c.id,color:sel?"primary":"default",variant:sel?"filled":"outlined",disabled:!!c.fixed,onClick:function(){toggleDraft(c.id)}}),sel&&!c.fixed&&o.jsxs(x,{sx:{display:"flex",gap:.25},children:[o.jsx($,{size:"small",disabled:first,onClick:function(){moveDraft(c.id,-1)},children:"上移"}),o.jsx($,{size:"small",disabled:last,onClick:function(){moveDraft(c.id,1)},children:"下移"})]}),sel&&o.jsx(w,{variant:"caption",color:"text.secondary",children:"第 "+(idx+1)+" 列"})]})})]})})]}),o.jsxs(_e,{children:[o.jsx($,{variant:"outlined",onClick:clearDraft,children:"清空"}),o.jsx($,{onClick:cancel,children:"取消"}),o.jsx($,{variant:"contained",onClick:apply,children:"确定"})]})]})}
-function pgyKolInfoCell(k){var avatar=k&&(k.avatar||k.avatarUrl)||"";return o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1,minWidth:240},children:[avatar?o.jsx(x,{component:"img",src:avatar,sx:{width:36,height:36,borderRadius:"50%",objectFit:"cover",flexShrink:0}}):o.jsx(x,{sx:{width:36,height:36,borderRadius:"50%",bgcolor:"action.hover",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0},children:"👤"}),o.jsxs(x,{sx:{minWidth:0},children:[o.jsx(w,{variant:"body2",fontWeight:600,noWrap:true,children:k&&k.nickname||"-"}),o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",fontFamily:"monospace",wordBreak:"break-all"},children:k&&k.userId||"-"}),o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block"},children:((k&&k.location)||"-")+" · "+((k&&k.gender)||"-")})]})]})}
-function PgyKolResultTable(p){var result=p.result,kols=result.kols||[],list=p.list||[],columns=p.columns||[],fixedIds=pgyKolFixedColumnIds(),colOf=function(id){for(var i=0;i<list.length;i++){if(list[i].id===id)return list[i]}return null},cell=function(k,id){if(id==="kolInfo")return pgyKolInfoCell(k);if(id==="recentNotes"){var rn=k&&k.recentNotes;if(Array.isArray(rn))return o.jsx(w,{variant:"body2",children:rn.length+" 篇"});return o.jsx(w,{variant:"body2",children:rn!=null&&rn!==""?String(rn):"-"})}if(id==="actions")return o.jsx(w,{variant:"body2",children:"-"});var c=colOf(id);if(!c)return o.jsx(w,{variant:"body2",children:"-"});if(c.unavailable===true)return o.jsx(w,{variant:"body2",color:"text.secondary",children:"官网当前未返回"});var v=pgyKolCellValue(k,c);if(v.unavailable)return o.jsx(w,{variant:"body2",color:"text.secondary",children:"官网当前未返回"});if(v.value===undefined||v.value===null||v.value==="")return o.jsx(w,{variant:"body2",color:"text.secondary",children:"-"});if(c.formatter==="url")return o.jsx(w,{variant:"body2",component:"a",href:String(v.value),target:"_blank",rel:"noreferrer",sx:{color:"primary.main",wordBreak:"break-all"},children:String(v.value)});return o.jsx(w,{variant:"body2",children:pgyKolFormatCell(v.value,c.formatter)})};return o.jsx(x,{sx:{overflow:"auto",maxHeight:520,border:"1px solid",borderColor:"divider",borderRadius:1},children:o.jsx(x,{component:"table",sx:{borderCollapse:"collapse",minWidth:1080,width:"100%"},children:[o.jsx(x,{component:"thead",children:o.jsx(x,{component:"tr",children:columns.map(function(id,hi){var h=id==="kolInfo"?"博主信息":id==="recentNotes"?"近期笔记":id==="actions"?"操作":(colOf(id)&&colOf(id).label)||id;return o.jsx(x,{component:"th",key:hi,sx:{p:1,borderBottom:"1px solid",borderColor:"divider",textAlign:"left",whiteSpace:"nowrap",fontWeight:600,fontSize:12,bgcolor:"action.hover"},children:h})})})}),o.jsx(x,{component:"tbody",children:kols.map(function(k,ki){return o.jsx(x,{component:"tr",key:k&&k.userId||"row-"+ki,children:columns.map(function(id,ci){return o.jsx(x,{component:"td",key:ci,sx:{p:1,borderBottom:"1px solid",borderColor:"divider",verticalAlign:"middle",whiteSpace:"nowrap"},children:cell(k,id)})})})})})]})})}function pgyKolStatusText(s){if(s==="running")return "采集中";if(s==="paused")return "已暂停";if(s==="auth-expired")return "登录已失效";if(s==="risk-control")return "触发风控";if(s==="cancelled")return "已取消";if(s==="failed")return "采集失败";if(s==="incomplete")return "采集未完整";if(s==="completed")return "已完成";return s||"未知状态"}
-function pgyKolCompletenessText(t){if(!t)return "";if(t.completeness==="complete")return "完整性已证明";if(t.completeness==="cannot-prove")return "完整性无法证明（原因："+(t.summary&&t.summary.stopReason||t.warning||"无法证明")+"）";return "完整性未证明"}
-function pgyKolResumePlan(t){if(!t)return null;var reason=t.summary&&t.summary.stopReason,cur=t.budgets||{},used=Number.isFinite(t.budgetUsed)?t.budgetUsed:0;if(t.status==="incomplete"){if(reason==="budget-exhausted"){var curB=Number.isInteger(cur.queryBudget)?cur.queryBudget:400,min=Math.max(curB,used)+1;if(min>1000)return {kind:"blocked",reasonText:"已消费请求数已达预算上限（1000），无法继续增加预算"};return {kind:"budget",label:"查询预算",current:curB,used:used,min:min,max:1000,reasonText:"查询预算已耗尽，请输入更大的总预算后从原检查点继续"}}if(reason==="max-pages-reached"){var curM=Number.isInteger(cur.maxPagesPerLeaf)?cur.maxPagesPerLeaf:250;if(curM>=250)return {kind:"blocked",reasonText:"已到官方安全页数上限（250 页），无法继续同一查询"};return {kind:"maxPages",label:"单叶子最大页数",current:curM,used:used,min:curM+1,max:250,reasonText:"已达单叶子最大页数，请输入更大的页数预算后从原检查点继续"}}if(reason==="repeat-page")return {kind:"blocked",reasonText:"检测到连续重复页，分页可能复读，继续无法证明完整"};if(reason==="capped-unprovable")return {kind:"blocked",reasonText:"无安全切分维度，继续会重复抓取且无法证明完整"};if(reason==="checkpoint-desync")return {kind:"blocked",reasonText:"检查点与行数据不一致，禁止继续"};return {kind:"blocked",reasonText:"该任务无法安全继续，可导出已有数据"}}if(t.status==="completed"&&t.completeness!=="complete")return {kind:"blocked",reasonText:"该任务已完成但完整性未证明（旧版任务），无法继续，可导出已有数据"};return null}
-function pgyKolBatchErrorMessage(e){if(!e)return "";if(e.code==="auth-expired")return "蒲公英登录已失效，请重新授权";if(e.code==="risk-control")return "触发风控，采集已停止";if(e.code==="failed"||e.kind==="failed")return "采集失败（错误码 "+(e.code||"unknown")+"）："+(e.message||"未知错误");return "任务操作失败（错误码 "+(e.code||"unknown")+"）："+(e.message||"未知错误")}
-function pgyKolCount(t,k){return t&&t.counts&&t.counts[k]!=null?t.counts[k]:0}
-function pgyKolPagesDone(t){if(!t||!Array.isArray(t.leaves))return 0;var n=0;for(var i=0;i<t.leaves.length;i++){var l=t.leaves[i];if(l&&Array.isArray(l.pagesCompleted))n+=l.pagesCompleted.length}return n}
-function pgyKolAnyCapped(t){if(!t)return false;if(t.capSignal&&t.capSignal.capped)return true;if(Array.isArray(t.leaves)){for(var i=0;i<t.leaves.length;i++){if(t.leaves[i]&&t.leaves[i].capSignal&&t.leaves[i].capSignal.capped)return true}}return false}
-function PgyKolBatchPanel(p){var bv=m.useState(""),budgetInput=bv[0],setBudgetInput=bv[1];var t=p.task;if(!t)return null;var counts=t.counts||{},statusText=pgyKolStatusText(t.status),completenessText=pgyKolCompletenessText(t),pages=pgyKolPagesDone(t),capped=pgyKolAnyCapped(t),subCount=t.summary&&t.summary.subqueryCount!=null?t.summary.subqueryCount:0,resumePlan=pgyKolResumePlan(t),resumeEligible=resumePlan&&(resumePlan.kind==="budget"||resumePlan.kind==="maxPages"),parsedInput=budgetInput.trim()===""?NaN:Number(budgetInput),inputValid=resumeEligible&&Number.isInteger(parsedInput)&&parsedInput>=resumePlan.min&&parsedInput<=resumePlan.max,legacyUnproven=t.status==="completed"&&t.completeness!=="complete",incompleteShown=t.status==="incomplete"||legacyUnproven;return o.jsxs(xe,{variant:"outlined",sx:{mt:2},children:[o.jsxs(We,{children:[o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1,mb:1,flexWrap:"wrap"},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:"任务进度"}),o.jsx(f1,{size:"small",color:t.status==="completed"&&t.completeness==="complete"?"success":incompleteShown?"warning":t.status==="failed"||t.status==="risk-control"?"error":t.status==="running"?"info":"default",label:incompleteShown?"采集未完整/需要处理":statusText}),capped&&o.jsx(f1,{size:"small",color:"warning",label:"结果可能超过 5000"})]}),o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",mb:1,fontFamily:"monospace",wordBreak:"break-all"},children:"任务 ID："+t.taskId}),incompleteShown&&o.jsx(oe,{severity:"warning",sx:{mb:1},children:"采集未完整/需要处理："+(resumePlan&&resumePlan.reasonText||completenessText)}),!incompleteShown&&o.jsx(oe,{severity:completenessText.indexOf("无法证明")>=0?"warning":"success",sx:{mb:1},children:completenessText}),o.jsxs(x,{sx:{display:"flex",gap:1,flexWrap:"wrap",mb:1},children:[o.jsx(f1,{size:"small",variant:"outlined",label:"原始条数 "+(counts.raw!=null?counts.raw:0)}),o.jsx(f1,{size:"small",variant:"outlined",label:"唯一博主数 "+(counts.unique!=null?counts.unique:0)}),o.jsx(f1,{size:"small",variant:"outlined",label:"重复数 "+(counts.dup!=null?counts.dup:0)}),o.jsx(f1,{size:"small",variant:"outlined",label:"缺UID异常数 "+(counts.missingUid!=null?counts.missingUid:0)}),o.jsx(f1,{size:"small",variant:"outlined",label:"已抓页数 "+pages}),o.jsx(f1,{size:"small",variant:"outlined",label:"子查询数 "+subCount})]}),resumeEligible&&o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1,flexWrap:"wrap",mb:1},children:[o.jsx(w,{variant:"body2",color:"text.secondary",children:"当前"+resumePlan.label+"："+resumePlan.current+"；已消费请求数："+resumePlan.used+"；允许新值："+resumePlan.min+"～"+resumePlan.max}),o.jsx(ae,{size:"small",type:"number",value:budgetInput,onChange:function(e){setBudgetInput(e.target.value)},placeholder:"请输入新"+resumePlan.label,sx:{maxWidth:180}}),o.jsx($,{size:"small",variant:"contained",disabled:!inputValid,onClick:function(){var nb={};if(resumePlan.kind==="budget"){nb.queryBudget=parsedInput}else{nb.maxPagesPerLeaf=parsedInput}p.onResumeWithBudgets(nb)},children:resumePlan.kind==="maxPages"?"增加页数并继续":"增加预算并继续"})]}),resumePlan&&resumePlan.kind==="blocked"&&o.jsx(w,{variant:"body2",color:"text.secondary",sx:{display:"block",mb:1},children:resumePlan.reasonText}),o.jsxs(x,{sx:{display:"flex",gap:1,flexWrap:"wrap"},children:[t.status==="running"&&o.jsx($,{size:"small",variant:"outlined",onClick:p.onPause,children:"暂停"}),(t.status==="paused"||t.status==="auth-expired"||t.status==="interrupted"||t.status==="failed")&&o.jsx($,{size:"small",variant:"outlined",onClick:p.onResume,children:"继续"}),(t.status==="cancelled"||t.status==="failed"||t.status==="completed"||t.status==="incomplete")?null:o.jsx($,{size:"small",variant:"outlined",color:"error",onClick:p.onCancel,children:"取消"}),o.jsx($,{size:"small",variant:"outlined",onClick:p.onExport,children:"导出"})]})]})]})}
-function PgyKolTaskHistory(p){return o.jsxs(xe,{variant:"outlined",sx:{mt:2},children:[o.jsxs(We,{children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,sx:{mb:1},children:"任务历史"}),p.error&&o.jsx(oe,{severity:"error",sx:{mb:1},children:"任务历史加载失败（错误码 "+(p.error.code||"unknown")+"）："+(p.error.message||"未知错误")}),!p.error&&(!p.tasks||p.tasks.length===0)&&o.jsx(w,{variant:"body2",color:"text.secondary",children:"暂无采集任务"}),p.tasks&&p.tasks.map(function(t){var c=t.counts||{};return o.jsxs(x,{key:t.taskId,sx:{display:"flex",alignItems:"center",gap:1,mb:1,flexWrap:"wrap"},children:[o.jsx(w,{variant:"body2",sx:{fontFamily:"monospace",wordBreak:"break-all"},children:t.taskId}),o.jsx(f1,{size:"small",variant:"outlined",color:t.status==="completed"&&t.completeness==="complete"?"success":t.status==="incomplete"?"warning":"default",label:t.status==="incomplete"?"采集未完整":pgyKolStatusText(t.status)}),o.jsx(f1,{size:"small",variant:"outlined",label:t.completeness==="complete"?"完整性已证明":"完整性未证明"}),o.jsx(w,{variant:"caption",color:"text.secondary",children:"原始 "+(c.raw!=null?c.raw:0)+" / 唯一 "+(c.unique!=null?c.unique:0)+" / 重复 "+(c.dup!=null?c.dup:0)+" / 缺UID "+(c.missingUid!=null?c.missingUid:0)}),o.jsx(w,{variant:"caption",color:"text.secondary",children:t.updatedAt||""}),o.jsx($,{size:"small",variant:"outlined",onClick:function(){p.onSelect(t.taskId)},children:"查看"}),o.jsx($,{size:"small",variant:"outlined",onClick:function(){p.onExport(t.taskId)},children:"导出"})]})})]})]})}function PgyKolSearchPage(){var st=m.useState("idle"),status=st[0],setStatus=st[1],er=m.useState(null),error=er[0],setError=er[1],cf=m.useState({}),configs=cf[0],setConfigs=cf[1],fs0=m.useState(pgyKolDefaultFilter()),filter=fs0[0],setFilter=fs0[1],pv=m.useState(""),preview=pv[0],setPreview=pv[1],rs=m.useState(null),result=rs[0],setResult=rs[1],cl=m.useState(null),columnList=cl[0],setColumnList=cl[1],ce2=m.useState(null),columnError=ce2[0],setColumnError=ce2[1],sc2=m.useState([]),selectedColumns=sc2[0],setSelectedColumns=sc2[1],colOpen=m.useState(false),columnOpen=colOpen[0],setColumnOpen=colOpen[1],iop=m.useState(false),industryPopupOpen=iop[0],setIndustryPopupOpen=iop[1],catOpen=m.useState(false),categoryOpen=catOpen[0],setCategoryOpen=catOpen[1],catInd=m.useState("汽车"),catIndustry=catInd[0],setCatIndustry=catInd[1],brandPopup=m.useState(null),brandPopupMode=brandPopup[0],setBrandPopupMode=brandPopup[1],showAllCat=m.useState(false),showAllCategory=showAllCat[0],setShowAllCategory=showAllCat[1],restored=m.useState(false),restoredNotice=restored[0],setRestoredNotice=restored[1],au20=m.useState(false),aud20Open=au20[0],setAud20Open=au20[1],tid2=m.useState(null),currentTaskId=tid2[0],setCurrentTaskId=tid2[1],ct2=m.useState(null),currentTask=ct2[0],setCurrentTask=ct2[1],tl2=m.useState([]),taskList=tl2[0],setTaskList=tl2[1],tle=m.useState(null),taskListError=tle[0],setTaskListError=tle[1],tl3=m.useState(false),taskLoading=tl3[0],setTaskLoading=tl3[1],bzy=m.useState(false),batchBusy=bzy[0],setBatchBusy=bzy[1],ber=m.useState(null),batchError=ber[0],setBatchError=ber[1],bnt=m.useState(null),batchNotice=bnt[0],setBatchNotice=bnt[1];m.useEffect(function(){var bridge=window.bridge&&window.bridge.pgyKol;if(!bridge)return;var tasks=[["areas",{provider:"areas"}],["automotive",{provider:"kolTagsV2",section:"automotiveIndustryTag"}],["audience20",{provider:"kolTagsV2",section:"audience20"}],["contentTheme",{provider:"kolTagsV2",section:"contentTheme"}],["consumeBehavior",{provider:"consumeBehavior"}],["noteCategory",{provider:"specialIndustryData"}],["industry",{provider:"kolTagsV2",section:"industryTags"}],["activities",{provider:"activities"}]];var schemaP=bridge.getSchemaFields?bridge.getSchemaFields():Promise.resolve({ok:false,error:{code:"unknown",message:"schema 不可用"}});schemaP.then(function(res){if(res&&res.ok&&Array.isArray(res.data))pgyKolSchemaUnproven(res.data)}).catch(function(){});tasks.forEach(function(t){bridge.getConfig(t[1]).then(function(res){setConfigs(function(prev){var next=Object.assign({},prev);if(res&&res.ok){next[t[0]]={source:res.data&&res.data.source||"live",warning:res.data&&res.data.warning,nodes:res.data&&res.data.nodes||[],options:res.data&&res.data.options||[]}}else{next[t[0]]={error:res&&res.error?res.error:{code:"unknown",message:"配置加载失败"}}}return next})}).catch(function(e){setConfigs(function(prev){var next=Object.assign({},prev);next[t[0]]={error:{code:e&&e.code||"unknown",message:e&&e.message||String(e)}};return next})})})},[]);m.useEffect(function(){var saved=pgyKolReadJson("magiorix-pgy-kol-filters");if(saved&&typeof saved==="object"&&saved.filter&&typeof saved.filter==="object"){var next=Object.assign({},pgyKolDefaultFilter(),saved.filter);if(saved.searchType===0||saved.searchType===1)next.searchType=saved.searchType;if(typeof saved.keyword==="string")next.keyword=saved.keyword;setFilter(next);setRestoredNotice(true)}},[]);m.useEffect(function(){var bridge=window.bridge&&window.bridge.pgyKol;if(!bridge||!bridge.getColumns)return;bridge.getColumns().then(function(res){if(res&&res.ok&&Array.isArray(res.data)){setColumnList(res.data);var saved=pgyKolReadJson("magiorix-pgy-kol-filters"),stored=Array.isArray(saved&&saved.selectedColumns)?saved.selectedColumns:null;if(!stored){var cols=pgyKolReadJson("magiorix-pgy-kol-columns");if(Array.isArray(cols))stored=cols}setSelectedColumns(pgyKolResolveColumns(res.data,stored));setColumnError(null)}else{setColumnError(res&&res.error||{code:"unknown",message:"字段列表加载失败"})}}).catch(function(e){setColumnError({code:e&&e.code||"unknown",message:e&&e.message||String(e)})})},[]);m.useEffect(function(){refreshTaskList()},[]);m.useEffect(function(){var bridge=window.bridge&&window.bridge.pgyKol;if(!bridge||!bridge.onBatchEvent)return;var dispose=bridge.onBatchEvent(function(ev){if(currentTaskId)loadTask(currentTaskId);refreshTaskList()});return function(){if(dispose&&typeof dispose==="function")dispose()}},[currentTaskId]);m.useEffect(function(){var bridge=window.bridge&&window.bridge.pgyKol;if(!bridge){setPreview("");return}var timer=window.setTimeout(function(){bridge.previewPayload(pgyKolToFilterState(filter)).then(function(res){if(res&&res.ok){setPreview(typeof res.data==="string"?res.data:JSON.stringify(res.data,null,2))}else{setPreview("预览不可用："+((res&&res.error&&res.error.message)||"未知错误"))}}).catch(function(e){setPreview("预览不可用："+((e&&e.message)||String(e)))})},300);return function(){window.clearTimeout(timer)}},[filter]);m.useEffect(function(){var timer=window.setTimeout(function(){pgyKolWriteJson("magiorix-pgy-kol-filters",{searchType:filter.searchType,keyword:filter.keyword,filter:filter,selectedColumns:selectedColumns})},400);return function(){window.clearTimeout(timer)}},[filter,selectedColumns]);var update=m.useCallback(function(patch){setFilter(function(prev){return Object.assign({},prev,patch)})},[]),toggleArr=m.useCallback(function(key,node){setFilter(function(prev){var cur=prev[key]||[],found=-1;for(var i=0;i<cur.length;i++){if(pgyKolNodeKey(cur[i])===pgyKolNodeKey(node)){found=i;break}}var next=found>=0?cur.slice(0,found).concat(cur.slice(found+1)):cur.concat([node]),patch={};patch[key]=next;return Object.assign({},prev,patch)})},[]),toggleSingle=m.useCallback(function(key,value){setFilter(function(prev){var patch={};patch[key]=prev[key]===value?null:value;return Object.assign({},prev,patch)})},[]),toggleRange=m.useCallback(function(key,node){setFilter(function(prev){var patch={};patch[key]=pgyKolRangeEq(prev[key],node)?null:node;return Object.assign({},prev,patch)})},[]),toggleWithNone=m.useCallback(function(key,value){setFilter(function(prev){var patch={};patch[key]=value==="不限"?null:(prev[key]===value?null:value);return Object.assign({},prev,patch)})},[]),toggleBool=m.useCallback(function(key){setFilter(function(prev){var patch={};patch[key]=!prev[key];return Object.assign({},prev,patch)})},[]),toggleCategory=m.useCallback(function(value){setFilter(function(prev){var cur=prev.contentTag||[],next;if(value==="全部"){next=cur.indexOf("全部")>=0?[]:["全部"]}else{next=cur.slice();var i=next.indexOf("全部");if(i>=0)next=next.slice(0,i).concat(next.slice(i+1));var j=next.indexOf(value);if(j>=0)next=next.slice(0,j).concat(next.slice(j+1));else next.push(value)}var patch={};patch.contentTag=next;return Object.assign({},prev,patch)})},[]);var runSearch=m.useCallback(function(){var bridge=window.bridge&&window.bridge.pgyKol;if(!bridge)return;setStatus("loading");setError(null);bridge.searchFirstPage(pgyKolToFilterState(filter)).then(function(res){if(res&&res.ok){setResult(res.data);setStatus(res.data&&res.data.kols&&res.data.kols.length>0?"loaded":"empty")}else{var e=res&&res.error||{code:"unknown",message:"查询失败"};setError(e);setStatus(e.code==="auth-expired"?"auth-expired":"error")}}).catch(function(e){setError({code:e&&e.code||"unknown",message:e&&e.message||String(e)});setStatus("error")})},[filter]);var loadTask=function(tid){var bridge=window.bridge&&window.bridge.pgyKol;if(!bridge||!bridge.batchGet||!tid)return;setTaskLoading(true);bridge.batchGet({taskId:tid}).then(function(res){setTaskLoading(false);if(res&&res.ok){setCurrentTask(res.data);setBatchError(null)}else{setBatchError(res&&res.error||{code:"unknown",message:"任务详情加载失败"})}}).catch(function(e){setTaskLoading(false);setBatchError({code:e&&e.code||"unknown",message:e&&e.message||String(e)})})},refreshTaskList=function(){var bridge=window.bridge&&window.bridge.pgyKol;if(!bridge||!bridge.batchList)return;bridge.batchList().then(function(res){if(res&&res.ok&&Array.isArray(res.data)){setTaskList(res.data);setTaskListError(null)}else{setTaskListError(res&&res.error||{code:"unknown",message:"任务历史加载失败"})}}).catch(function(e){setTaskListError({code:e&&e.code||"unknown",message:e&&e.message||String(e)})})},startBatch=function(){var bridge=window.bridge&&window.bridge.pgyKol;if(!bridge||!bridge.batchStart||batchBusy)return;var exportColumns=pgyKolExportColumnIds(columnList,selectedColumns);if(exportColumns.length===0){setBatchError({code:"invalid-input",message:"请至少选择一个可导出的展示字段"});return}setBatchBusy(true);setBatchError(null);bridge.batchStart({filterState:pgyKolToFilterState(filter),columns:exportColumns}).then(function(res){setBatchBusy(false);if(res&&res.ok){var tid=res.data&&res.data.taskId;if(tid){setCurrentTaskId(tid);loadTask(tid)}refreshTaskList()}else{setBatchError(res&&res.error||{code:"unknown",message:"采集启动失败"})}}).catch(function(e){setBatchBusy(false);setBatchError({code:e&&e.code||"unknown",message:e&&e.message||String(e)})})},pauseBatch=function(){var bridge=window.bridge&&window.bridge.pgyKol,tid=currentTaskId;if(!bridge||!tid)return;setBatchBusy(true);setBatchError(null);bridge.batchPause({taskId:tid}).then(function(res){setBatchBusy(false);if(res&&res.ok){loadTask(tid);refreshTaskList()}else{setBatchError(res&&res.error||{code:"unknown",message:"任务操作失败"})}}).catch(function(e){setBatchBusy(false);setBatchError({code:e&&e.code||"unknown",message:e&&e.message||String(e)})})},resumeBatch=function(budgets){var bridge=window.bridge&&window.bridge.pgyKol,tid=currentTaskId;if(!bridge||!tid)return;setBatchBusy(true);setBatchError(null);bridge.batchResume(budgets?{taskId:tid,budgets:budgets}:{taskId:tid}).then(function(res){setBatchBusy(false);if(res&&res.ok){loadTask(tid);refreshTaskList()}else{setBatchError(res&&res.error||{code:"unknown",message:"任务操作失败"})}}).catch(function(e){setBatchBusy(false);setBatchError({code:e&&e.code||"unknown",message:e&&e.message||String(e)})})},cancelBatch=function(){var bridge=window.bridge&&window.bridge.pgyKol,tid=currentTaskId;if(!bridge||!tid)return;setBatchBusy(true);setBatchError(null);bridge.batchCancel({taskId:tid}).then(function(res){setBatchBusy(false);if(res&&res.ok){loadTask(tid);refreshTaskList()}else{setBatchError(res&&res.error||{code:"unknown",message:"任务操作失败"})}}).catch(function(e){setBatchBusy(false);setBatchError({code:e&&e.code||"unknown",message:e&&e.message||String(e)})})},exportTask=function(tid){var bridge=window.bridge&&window.bridge.pgyKol;if(!bridge||!bridge.batchExport||!tid)return;setBatchBusy(true);setBatchError(null);setBatchNotice(null);bridge.batchExport({taskId:tid}).then(function(res){setBatchBusy(false);if(res&&res.ok){setBatchNotice("导出已提交："+tid+"（完整数据以导出文件为准）")}else{setBatchError(res&&res.error||{code:"unknown",message:"导出失败"})}}).catch(function(e){setBatchBusy(false);setBatchError({code:e&&e.code||"unknown",message:e&&e.message||String(e)})})},selectTask=function(tid){setCurrentTaskId(tid);loadTask(tid)},applyBrands=function(ids){if(brandPopupMode==="recent"){update({tradeReportBrandIdSet:ids,audienceGroup:null})}else{update({brands:ids,audienceGroup:null})}},clearAll=function(){setFilter(pgyKolDefaultFilter());pgyKolClearJson("magiorix-pgy-kol-filters");setRestoredNotice(false);setShowAllCategory(false)},openNoteCategory=function(ind){setCatIndustry(ind);setCategoryOpen(true)},areasToggle=function(node){var key=pgyKolNodeKey(node);update({location:filter.location&&pgyKolNodeKey(filter.location)===key?null:node})},fansLocToggle=function(node){var key=pgyKolNodeKey(node);update({fansLocation:filter.fansLocation&&pgyKolNodeKey(filter.fansLocation)===key?null:node})},toggleActivity=function(n){var v=pgyKolOptValue(n);setFilter(function(prev){var cur=prev.activityCodes||[],i=cur.indexOf(v),next=i>=0?cur.slice(0,i).concat(cur.slice(i+1)):cur.concat([v]),patch={};patch.activityCodes=next;return Object.assign({},prev,patch)})},togglePreset=function(n){if(pgyKolPresetActive(n,filter)){update({fansNumberLower:"",fansNumberUpper:""})}else{update({fansNumberLower:n.lower,fansNumberUpper:n.upper})}};if(!pgyKolDevEnabled())return o.jsx(x,{sx:{p:4},children:o.jsx(oe,{severity:"warning",children:"功能未开启"})});var bridgeOk=!!(window.bridge&&window.bridge.pgyKol),areasCfg=configs.areas||null,autoCfg=configs.automotive||null,audCfg=configs.audience20||null,themeCfg=configs.contentTheme||null,consumeCfg=configs.consumeBehavior||null,audGroupCfg=configs.audienceGroup||null,actCfg=configs.activities||null,areasSel=filter.location?[pgyKolNodeKey(filter.location)]:[],fansLocSel=filter.fansLocation?[pgyKolNodeKey(filter.fansLocation)]:[],autoLeaves=[],batchRunning=currentTask&&currentTask.status==="running",hasBrands=filter.brands&&filter.brands.length>0,catOptions=showAllCategory?pgyKolCategoryFull:pgyKolCategoryCommon;filter.automotive.forEach(function(n){pgyKolFlattenLeaves(n,autoLeaves)});var summary=[],unprovenKeys=pgyKolUnprovenSet(),hasUnprovenSel=Object.keys(filter).some(function(k){var v=filter[k];if(!unprovenKeys[k]||v===undefined||v===null||v==="")return false;return !Array.isArray(v)||v.length>0});function sumAdd(key,label,onDelete){summary.push({key:key,label:label,onDelete:onDelete})}if(filter.searchType===0)sumAdd("searchType","搜昵称",function(){update({searchType:1})});if(filter.keyword)sumAdd("keyword","关键词："+filter.keyword,function(){update({keyword:""})});if(filter.marketTarget)sumAdd("marketTarget","营销目标："+filter.marketTarget,function(){update({marketTarget:null})});if(filter.audienceGroup)sumAdd("audienceGroup","人群目标："+filter.audienceGroup,function(){update({audienceGroup:null})});if(filter.brands&&filter.brands.length)sumAdd("brands","合作品牌 "+filter.brands.length+" 个",function(){update({brands:[]})});if(filter.contentTag&&filter.contentTag.length)sumAdd("contentTag","类目："+filter.contentTag.join("、"),function(){update({contentTag:[]})});if(filter.personalTags&&filter.personalTags.length)sumAdd("personalTags","家庭身份 "+filter.personalTags.length+" 项",function(){update({personalTags:[]})});if(filter.featureTags&&filter.featureTags.length)sumAdd("featureTags","职业/特色 "+filter.featureTags.length+" 项",function(){update({featureTags:[]})});if(filter.coopCredit)sumAdd("coopCredit","合作信用度："+filter.coopCredit.label,function(){update({coopCredit:null})});if(filter.coopImpMedin)sumAdd("coopImpMedin","传播-曝光："+filter.coopImpMedin.label,function(){update({coopImpMedin:null})});if(filter.coopReadMid)sumAdd("coopReadMid","传播-阅读："+filter.coopReadMid.label,function(){update({coopReadMid:null})});if(filter.coopInterMid)sumAdd("coopInterMid","传播-互动："+filter.coopInterMid.label,function(){update({coopInterMid:null})});if(filter.coopOverflowMid)sumAdd("coopOverflowMid","传播-外溢中位："+filter.coopOverflowMid.label,function(){update({coopOverflowMid:null})});if(filter.estimatePicReadCost)sumAdd("estimatePicReadCost","图文阅读单价："+filter.estimatePicReadCost.label,function(){update({estimatePicReadCost:null})});if(filter.estimateVideoReadCost)sumAdd("estimateVideoReadCost","视频阅读单价："+filter.estimateVideoReadCost.label,function(){update({estimateVideoReadCost:null})});if(filter.estimatePicEngageCost)sumAdd("estimatePicEngageCost","图文互动单价："+filter.estimatePicEngageCost.label,function(){update({estimatePicEngageCost:null})});if(filter.estimateVideoEngageCost)sumAdd("estimateVideoEngageCost","视频互动单价："+filter.estimateVideoEngageCost.label,function(){update({estimateVideoEngageCost:null})});if(filter.estimatePictureCpm)sumAdd("estimatePictureCpm","图文CPM："+filter.estimatePictureCpm.label,function(){update({estimatePictureCpm:null})});if(filter.estimateVideoCpm)sumAdd("estimateVideoCpm","视频CPM："+filter.estimateVideoCpm.label,function(){update({estimateVideoCpm:null})});if(filter.overflowCost)sumAdd("overflowCost","外溢进店单价："+filter.overflowCost.label,function(){update({overflowCost:null})});if(filter.liveCount30d&&filter.liveCount30d.length)sumAdd("liveCount30d","直播场次 "+filter.liveCount30d.length+" 项",function(){update({liveCount30d:[]})});if(filter.avgLiveViewer&&filter.avgLiveViewer.length)sumAdd("avgLiveViewer","观播人数 "+filter.avgLiveViewer.length+" 项",function(){update({avgLiveViewer:[]})});if(filter.avgLiveGmv&&filter.avgLiveGmv.length)sumAdd("avgLiveGmv","场均销售额 "+filter.avgLiveGmv.length+" 项",function(){update({avgLiveGmv:[]})});if(filter.noteCategory&&filter.noteCategory.length)sumAdd("noteCategory","笔记类目 "+filter.noteCategory.length+" 项",function(){update({noteCategory:[]})});if(filter.inStar===true)sumAdd("inStar","精选博主：明星",function(){update({inStar:false})});if(filter.isHighQualityFlag===true)sumAdd("isHighQualityFlag","精选博主：优质博主",function(){update({isHighQualityFlag:false})});if(filter.newHighQuality===true)sumAdd("newHighQuality","精选博主：新锐博主",function(){update({newHighQuality:false})});if(filter.hasBuyerCoopAuthFlag===true)sumAdd("hasBuyerCoopAuthFlag","精选博主：笔记+直播均可合作",function(){update({hasBuyerCoopAuthFlag:false})});if(filter.filterIntention===true)sumAdd("filterIntention","精选博主：意向行业匹配",function(){update({filterIntention:false})});if(filter.firstIndustry)sumAdd("firstIndustry","行业推荐："+filter.firstIndustry+(filter.secondIndustry?"-"+filter.secondIndustry:""),function(){update({firstIndustry:"",secondIndustry:""})});if(filter.gender)sumAdd("gender","性别："+filter.gender,function(){update({gender:null})});if(filter.location)sumAdd("location","地域："+pgyKolOptLabel(filter.location),function(){update({location:null})});if(filter.audience20&&filter.audience20.length)sumAdd("audience20","二十大人群 "+filter.audience20.length+" 项",function(){update({audience20:[]})});if(filter.automotive&&filter.automotive.length)sumAdd("automotive","行业特色画像 "+filter.automotive.length+" 项",function(){update({automotive:[]})});if(filter.consumeBehavior&&filter.consumeBehavior.length)sumAdd("consumeBehavior","消费行为 "+filter.consumeBehavior.length+" 项",function(){update({consumeBehavior:[]})});if(filter.signed)sumAdd("signed","签约："+filter.signed,function(){update({signed:null})});if(filter.contentSceneLabel&&filter.contentSceneLabel.length)sumAdd("contentSceneLabel","擅长内容 "+filter.contentSceneLabel.length+" 项",function(){update({contentSceneLabel:[]})});if(filter.contentTheme&&filter.contentTheme.length)sumAdd("contentTheme","内容题材 "+filter.contentTheme.length+" 项",function(){update({contentTheme:[]})});if(filter.fansNumberLower!==""||filter.fansNumberUpper!=="")sumAdd("fansNum","粉丝量："+(filter.fansNumberLower||"0")+"～"+(filter.fansNumberUpper||"不限"),function(){update({fansNumberLower:"",fansNumberUpper:""})});if(filter.fansAge)sumAdd("fansAge","粉丝年龄："+filter.fansAge,function(){update({fansAge:null})});if(filter.fansGender)sumAdd("fansGender","粉丝性别："+filter.fansGender,function(){update({fansGender:null})});if(filter.fansLocation)sumAdd("fansLocation","粉丝地域："+pgyKolOptLabel(filter.fansLocation),function(){update({fansLocation:null})});if(filter.fansMaritalStatus)sumAdd("fansMaritalStatus","婚恋状态："+filter.fansMaritalStatus,function(){update({fansMaritalStatus:null})});if(filter.fansConsumptionLevel)sumAdd("fansConsumptionLevel","消费水平："+filter.fansConsumptionLevel,function(){update({fansConsumptionLevel:null})});if(filter.fansChildAgeInfo&&filter.fansChildAgeInfo.length)sumAdd("fansChildAgeInfo","母婴阶段 "+filter.fansChildAgeInfo.length+" 项",function(){update({fansChildAgeInfo:[]})});if(filter.fansDevicePrice&&filter.fansDevicePrice.length)sumAdd("fansDevicePrice","手机价格 "+filter.fansDevicePrice.length+" 项",function(){update({fansDevicePrice:[]})});if(filter.fansDeviceBrand&&filter.fansDeviceBrand.length)sumAdd("fansDeviceBrand","手机品牌 "+filter.fansDeviceBrand.length+" 项",function(){update({fansDeviceBrand:[]})});if(filter.accumCommonImpMedinNum30d)sumAdd("impMed","曝光中位数："+filter.accumCommonImpMedinNum30d.label,function(){update({accumCommonImpMedinNum30d:null})});if(filter.readMidNor30)sumAdd("readMid","阅读中位数："+filter.readMidNor30.label,function(){update({readMidNor30:null})});if(filter.interMidNor30)sumAdd("interMid","互动中位数："+filter.interMidNor30.label,function(){update({interMidNor30:null})});if(filter.thousandLikePercent30)sumAdd("thousand","千赞笔记比例："+filter.thousandLikePercent30.label,function(){update({thousandLikePercent30:null})});if(filter.noteType)sumAdd("noteType","笔记类型："+filter.noteType,function(){update({noteType:null})});if(filter.notePriceLower!==""||filter.notePriceUpper!=="")sumAdd("notePrice","图文报价："+(filter.notePriceLower||"0")+"～"+(filter.notePriceUpper||"不限"),function(){update({notePriceLower:"",notePriceUpper:""})});if(filter.videoPriceLower!==""||filter.videoPriceUpper!=="")sumAdd("videoPrice","视频报价："+(filter.videoPriceLower||"0")+"～"+(filter.videoPriceUpper||"不限"),function(){update({videoPriceLower:"",videoPriceUpper:""})});if(filter.progressOrderCnt!=="")sumAdd("progressOrderCnt","合作订单数 ≥"+filter.progressOrderCnt,function(){update({progressOrderCnt:""})});if(filter.tradeReportBrandIdSet&&filter.tradeReportBrandIdSet.length)sumAdd("tradeBrand","近期合作品牌 "+filter.tradeReportBrandIdSet.length+" 个",function(){update({tradeReportBrandIdSet:[]})});if(filter.activityCodes&&filter.activityCodes.length)sumAdd("activityCodes","热门活动 "+filter.activityCodes.length+" 项",function(){update({activityCodes:[]})});if(filter.excludeLowActive)sumAdd("excludeLowActive","剔除低活博主",function(){update({excludeLowActive:false})});if(filter.fansNumUp)sumAdd("fansNumUp","剔除掉粉博主",function(){update({fansNumUp:false})});if(filter.excludedTradeReportBrand)sumAdd("excludedTradeReportBrand","剔除已合作博主",function(){update({excludedTradeReportBrand:false})});if(filter.excludedTradeInviteReportBrand)sumAdd("excludedTradeInviteReportBrand","剔除已邀约博主",function(){update({excludedTradeInviteReportBrand:false})});return o.jsx(x,{sx:{p:3,maxWidth:1180,margin:"0 auto"},children:o.jsxs(x,{children:[o.jsxs(x,{sx:{mb:2},children:[o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1.5,mb:.5},children:[o.jsx(x,{sx:{width:28,height:28,borderRadius:1,background:"linear-gradient(135deg,#FF6C40,#FF3030)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff"},children:o.jsx(B,{icon:"mdi:account-search",width:18,height:18})}),o.jsx(w,{variant:"h4",fontWeight:"bold",children:"找博主"})]}),o.jsx(w,{variant:"body2",color:"text.secondary",children:"蒲公英博主原生筛选。开发开关开启后显示菜单与路由，关闭时页面不可达。"})]}),!bridgeOk&&o.jsx(oe,{severity:"error",sx:{mb:1.5},children:"当前环境不支持蒲公英找博主（bridge 缺失）"}),restoredNotice&&o.jsx(oe,{severity:"info",sx:{mb:1.5},onClose:function(){setRestoredNotice(false)},children:"已恢复上次筛选（可用「一键清空」清除持久化）"}),o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1.5,flexWrap:"wrap",mb:1},children:[o.jsxs(x,{sx:{display:"inline-flex",alignItems:"center",gap:.25,p:.25,border:"1px solid",borderColor:"divider",borderRadius:999,bgcolor:"action.hover"},children:[o.jsx($,{size:"small",variant:filter.searchType===1?"contained":"text",sx:{borderRadius:999},onClick:function(){update({searchType:1})},children:"搜笔记"}),o.jsx($,{size:"small",variant:filter.searchType===0?"contained":"text",sx:{borderRadius:999},onClick:function(){update({searchType:0})},children:"搜昵称"})]}),o.jsx(ae,{size:"small",value:filter.keyword,placeholder:filter.searchType===1?"按笔记关键词找博主，试试搜":"按博主昵称/小红书号找博主",onChange:function(e){update({keyword:e.target.value})},onKeyDown:function(e){if(e.key==="Enter")runSearch()},sx:{minWidth:320,maxWidth:520,flexGrow:1}}),o.jsx($,{variant:"contained",size:"medium",disabled:status==="loading",onClick:runSearch,startIcon:status==="loading"?o.jsx(de,{size:18,color:"inherit"}):o.jsx(B,{icon:"mdi:account-search",width:18,height:18}),children:status==="loading"?"搜索中...":"搜索"}),o.jsxs(x,{children:[o.jsx($,{size:"small",variant:hasBrands?"contained":"outlined",color:hasBrands?"primary":"inherit",onClick:function(){setBrandPopupMode("recommend")},children:"合作品牌智能推荐"+(hasBrands?"（"+filter.brands.length+"）":"")}),!hasBrands&&o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",mt:.25},children:"请选择您的合作品牌"})]})]}),o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1,mb:1},children:[o.jsx(w,{variant:"subtitle2",sx:{flexShrink:0},children:"已选条件"}),o.jsx(x,{sx:{flexGrow:1,display:"flex",alignItems:"center",gap:.5,overflowX:"auto",py:.25},children:summary.length===0?o.jsx(w,{variant:"body2",color:"text.secondary",children:"暂无筛选条件"}):summary.map(function(s){return o.jsx(f1,{key:s.key,size:"small",variant:"outlined",label:(pgyKolUnprovenSet()[s.key]?"【待实证】":"")+s.label,onDelete:s.onDelete})})}),o.jsx($,{size:"small",variant:"outlined",color:"error",onClick:clearAll,children:"一键清空"})]}),hasUnprovenSel&&o.jsx(oe,{severity:"info",sx:{mb:1},children:"人群目标（按博主粉丝推荐）依赖合作品牌：当前账号未绑定品牌，官网禁用该筛选；无法实证前不参与查询与采集。"}),o.jsx(PgyKolMatrixSection,{title:"合作目标",children:o.jsxs(x,{children:[o.jsx(PgyKolMatrixRow,{label:"营销目标",children:o.jsx(PgyKolChips,{options:pgyKolMarketOptions,keyOf:function(n){return n.value},selected:filter.marketTarget?[filter.marketTarget]:[],onToggle:function(n){update({marketTarget:filter.marketTarget===n.value?null:n.value})}})}),o.jsx(PgyKolMatrixRow,{label:"人群目标",children:[o.jsx(PgyKolDropdown,{label:"选择人群",options:audGroupCfg&&audGroupCfg.options&&audGroupCfg.options.length?audGroupCfg.options:audGroupCfg&&audGroupCfg.nodes&&audGroupCfg.nodes.length?audGroupCfg.nodes:pgyKolAudienceFallback,selected:filter.audienceGroup?[filter.audienceGroup]:[],onToggle:function(n){toggleSingle("audienceGroup",pgyKolOptValue(n))},disabled:!hasBrands}),!hasBrands&&o.jsx(w,{variant:"caption",color:"text.secondary",children:"未选择合作品牌时不可用"})]})]})}),o.jsx(PgyKolMatrixSection,{title:"匹配度",children:o.jsxs(x,{children:[o.jsx(PgyKolMatrixRow,{label:"博主类目",children:[o.jsx(PgyKolChips,{options:catOptions.map(function(v){return {value:v,label:v}}),keyOf:function(n){return n.value},selected:filter.contentTag.slice(),onToggle:function(n){toggleCategory(n.value)},display:function(n){return n.label}}),o.jsx($,{size:"small",variant:"text",onClick:function(){setShowAllCategory(!showAllCategory)},children:showAllCategory?"收起":"展开"})]}),o.jsx(PgyKolMatrixRow,{label:"博主人设",children:[o.jsx(PgyKolDropdown,{label:"家庭身份",options:pgyKolFamilyOptions,selected:filter.personalTags.slice(),onToggle:function(n){toggleArr("personalTags",n)}}),o.jsx(PgyKolDropdown,{label:"职业身份",options:pgyKolCareerOptions,selected:filter.featureTags.slice(),onToggle:function(n){toggleArr("featureTags",n)}}),o.jsx(PgyKolDropdown,{label:"特色背景",options:pgyKolFeatureOptions,selected:filter.featureTags.slice(),onToggle:function(n){toggleArr("featureTags",n)}})]}),o.jsx(PgyKolMatrixRow,{label:"博主信息",children:[o.jsx(PgyKolChips,{options:pgyKolGenderOptions,keyOf:function(n){return n.value},selected:filter.gender?[filter.gender]:[],onToggle:function(n){toggleWithNone("gender",n.value)}}),o.jsx(PgyKolTreePopup,{label:"地域",cfg:areasCfg,selectedKeys:areasSel,onToggle:function(n){areasToggle(n)},closeOnSelect:true,count:filter.location?1:0}),o.jsxs(x,{children:[o.jsx($,{size:"small",variant:filter.audience20.length>0?"contained":"outlined",color:filter.audience20.length>0?"primary":"inherit",onClick:function(){setAud20Open(true)},children:"二十大人群"+(filter.audience20.length>0?"（"+filter.audience20.length+"）":"")}),o.jsxs(ue,{open:aud20Open,onClose:function(){setAud20Open(false)},maxWidth:"sm",fullWidth:true,children:[o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:"二十大人群"}),o.jsx(te,{size:"small",sx:{ml:"auto"},onClick:function(){setAud20Open(false)},children:o.jsx(B,{icon:"mdi:close",width:18,height:18})})]})}),o.jsxs(pe,{children:audCfg&&!audCfg.error?o.jsxs(x,{children:[o.jsx(PgyKolTree,{leafOnly:true,nodes:audCfg.nodes||[],selected:filter.audience20.map(function(n){return pgyKolNodeKey(n)}),onToggle:function(n){toggleArr("audience20",n)},display:function(n){return n.fullPath||n.label||String(n.value)}}),filter.audience20.length>0&&o.jsxs(x,{sx:{mt:1,display:"flex",flexWrap:"wrap",gap:.5},children:[filter.audience20.map(function(n){return o.jsx(f1,{key:pgyKolNodeKey(n),size:"small",label:n.fullPath||n.label,onDelete:function(){toggleArr("audience20",n)}})}),o.jsx(w,{variant:"caption",color:"text.secondary",sx:{width:"100%"},children:"已选 "+filter.audience20.length+" 项"})]})]}):audCfg&&audCfg.error?o.jsx(oe,{severity:"error",children:"加载失败（错误码 "+(audCfg.error.code||"unknown")+"）："+(audCfg.error.message||"未知错误")}):o.jsx(de,{size:24})})]})]}),o.jsx(PgyKolTreePopup,{label:"行业特色画像",cfg:autoCfg,selectedKeys:filter.automotive.map(function(n){return pgyKolNodeKey(n)}),onToggle:function(n){toggleArr("automotive",n)},count:filter.automotive.length,hint:filter.automotive.length>0?"选中父节点时展开叶子 ID："+autoLeaves.join("、"):null}),o.jsx(PgyKolTreePopup,{label:"预估消费行为",cfg:consumeCfg,selectedKeys:filter.consumeBehavior.map(function(n){return pgyKolNodeKey(n)}),onToggle:function(n){toggleArr("consumeBehavior",n)},count:filter.consumeBehavior.length}),o.jsx(PgyKolChips,{options:pgyKolSignedOptions,keyOf:function(n){return n.value},selected:filter.signed?[filter.signed]:[],onToggle:function(n){toggleWithNone("signed",n.value)}}),o.jsx(PgyKolChips,{options:pgyKolSceneOptions,keyOf:function(n){return n.value},selected:filter.contentSceneLabel.slice(),onToggle:function(n){toggleArr("contentSceneLabel",n)}}),o.jsx(PgyKolTreePopup,{label:"内容题材",cfg:themeCfg,selectedKeys:filter.contentTheme.map(function(n){return pgyKolNodeKey(n)}),onToggle:function(n){toggleArr("contentTheme",n)},count:filter.contentTheme.length})]}),o.jsx(PgyKolMatrixRow,{label:"粉丝画像",children:[o.jsx(PgyKolChips,{options:pgyKolFansPresets,keyOf:function(n){return n.label},selected:pgyKolFansPresets.filter(function(p){return pgyKolPresetActive(p,filter)}).map(function(p){return p.label}),onToggle:togglePreset}),o.jsx(ae,{size:"small",type:"number",label:"粉丝数下限",value:filter.fansNumberLower,onChange:function(e){update({fansNumberLower:e.target.value})},sx:{maxWidth:140}}),o.jsx(ae,{size:"small",type:"number",label:"粉丝数上限",value:filter.fansNumberUpper,onChange:function(e){update({fansNumberUpper:e.target.value})},sx:{maxWidth:140}}),o.jsx(PgyKolChips,{options:pgyKolFansAgeOptions,keyOf:function(n){return n.value},selected:filter.fansAge?[filter.fansAge]:[],onToggle:function(n){toggleSingle("fansAge",n.value)}}),o.jsx(PgyKolChips,{options:pgyKolFansGenderOptions,keyOf:function(n){return n.value},selected:filter.fansGender?[filter.fansGender]:[],onToggle:function(n){toggleWithNone("fansGender",n.value)}}),o.jsx(PgyKolTreePopup,{label:"粉丝地域",cfg:areasCfg,selectedKeys:fansLocSel,onToggle:function(n){fansLocToggle(n)},closeOnSelect:true,count:filter.fansLocation?1:0}),o.jsx(PgyKolChips,{options:pgyKolMaritalOptions,keyOf:function(n){return n.value},selected:filter.fansMaritalStatus?[filter.fansMaritalStatus]:[],onToggle:function(n){toggleWithNone("fansMaritalStatus",n.value)}}),o.jsx(PgyKolChips,{options:pgyKolConsumptionOptions,keyOf:function(n){return n.value},selected:filter.fansConsumptionLevel?[filter.fansConsumptionLevel]:[],onToggle:function(n){toggleWithNone("fansConsumptionLevel",n.value)}}),o.jsx(PgyKolChips,{options:pgyKolChildAgeOptions,keyOf:function(n){return n.value},selected:filter.fansChildAgeInfo.slice(),onToggle:function(n){toggleArr("fansChildAgeInfo",n)}}),o.jsx(PgyKolChips,{options:pgyKolDevicePriceOptions,keyOf:function(n){return n.value},selected:filter.fansDevicePrice.slice(),onToggle:function(n){toggleArr("fansDevicePrice",n)}}),o.jsx(PgyKolChips,{options:pgyKolDeviceBrandOptions,keyOf:function(n){return n.value},selected:filter.fansDeviceBrand.slice(),onToggle:function(n){toggleArr("fansDeviceBrand",n)}})]}),o.jsx(PgyKolMatrixRow,{label:"笔记类目",children:[(configs.noteCategory&&configs.noteCategory.nodes&&configs.noteCategory.nodes.length?configs.noteCategory.nodes:pgyKolNoteCatFallback()).map(function(ind){var lab=String(ind.label||ind.value||"");return o.jsx($,{key:pgyKolNodeKey(ind),size:"small",variant:filter.noteCategory.length>0?"contained":"outlined",color:filter.noteCategory.length>0?"primary":"inherit",onClick:function(){openNoteCategory(lab)},children:lab})}),o.jsx(w,{variant:"caption",color:"text.secondary",children:"已选 "+filter.noteCategory.length+" 项"})]})]})}),o.jsx(PgyKolMatrixSection,{title:"数据表现",children:o.jsxs(x,{children:[o.jsx(PgyKolMatrixRow,{label:"日常笔记",children:[o.jsx(PgyKolField,{label:"曝光中位数",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeOptions50w,value:filter.accumCommonImpMedinNum30d,onToggle:function(n){toggleRange("accumCommonImpMedinNum30d",n)}})}),o.jsx(PgyKolField,{label:"阅读中位数",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeOptions50w,value:filter.readMidNor30,onToggle:function(n){toggleRange("readMidNor30",n)}})}),o.jsx(PgyKolField,{label:"互动中位数",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeOptions2000,value:filter.interMidNor30,onToggle:function(n){toggleRange("interMidNor30",n)}})}),o.jsx(PgyKolField,{label:"千赞笔记比例",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeOptionsPercent,value:filter.thousandLikePercent30,onToggle:function(n){toggleRange("thousandLikePercent30",n)}})}),o.jsx(PgyKolField,{label:"笔记类型",children:o.jsx(PgyKolChips,{options:pgyKolNoteTypeOptions,keyOf:function(n){return n.value},selected:filter.noteType?[filter.noteType]:[],onToggle:function(n){toggleWithNone("noteType",n.value)}})})]}),o.jsx(PgyKolMatrixRow,{label:"合作笔记",children:[o.jsx(PgyKolField,{label:"图文报价",children:[o.jsx(ae,{size:"small",type:"number",placeholder:"下限",value:filter.notePriceLower,onChange:function(e){update({notePriceLower:e.target.value})},sx:{maxWidth:110}}),o.jsx(w,{variant:"caption",color:"text.secondary",children:"～"}),o.jsx(ae,{size:"small",type:"number",placeholder:"上限",value:filter.notePriceUpper,onChange:function(e){update({notePriceUpper:e.target.value})},sx:{maxWidth:110}})]}),o.jsx(PgyKolField,{label:"视频报价",children:[o.jsx(ae,{size:"small",type:"number",placeholder:"下限",value:filter.videoPriceLower,onChange:function(e){update({videoPriceLower:e.target.value})},sx:{maxWidth:110}}),o.jsx(w,{variant:"caption",color:"text.secondary",children:"～"}),o.jsx(ae,{size:"small",type:"number",placeholder:"上限",value:filter.videoPriceUpper,onChange:function(e){update({videoPriceUpper:e.target.value})},sx:{maxWidth:110}})]}),o.jsx(PgyKolField,{label:"合作信用度",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeDefs51.inviteReply,value:filter.coopCredit,onToggle:function(n){toggleRange("coopCredit",n)}})}),o.jsx(PgyKolField,{label:"合作订单数",children:o.jsx(ae,{size:"small",type:"number",placeholder:"≥ 订单数",value:filter.progressOrderCnt,onChange:function(e){update({progressOrderCnt:e.target.value})},sx:{maxWidth:120}})}),o.jsx(PgyKolField,{label:"近期合作品牌",children:o.jsx($,{size:"small",variant:filter.tradeReportBrandIdSet.length>0?"contained":"outlined",color:filter.tradeReportBrandIdSet.length>0?"primary":"inherit",onClick:function(){setBrandPopupMode("recent")},children:"选择品牌"+(filter.tradeReportBrandIdSet.length>0?"（"+filter.tradeReportBrandIdSet.length+"）":"")})}),o.jsx(PgyKolField,{label:"传播规模",children:[o.jsx(PgyKolField,{label:"曝光",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeDefs51.imp50w,value:filter.coopImpMedin,onToggle:function(n){toggleRange("coopImpMedin",n)}})}),o.jsx(PgyKolField,{label:"阅读",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeDefs51.imp50w,value:filter.coopReadMid,onToggle:function(n){toggleRange("coopReadMid",n)}})}),o.jsx(PgyKolField,{label:"互动",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeDefs51.inter2000,value:filter.coopInterMid,onToggle:function(n){toggleRange("coopInterMid",n)}})}),o.jsx(PgyKolField,{label:"外溢中位",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeDefs51.overflow10000,value:filter.coopOverflowMid,onToggle:function(n){toggleRange("coopOverflowMid",n)}})})]}),o.jsx(PgyKolField,{label:"预估CPM",children:[o.jsx(PgyKolField,{label:"图文",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeDefs51.cpmPic,value:filter.estimatePictureCpm,onToggle:function(n){toggleRange("estimatePictureCpm",n)}})}),o.jsx(PgyKolField,{label:"视频",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeDefs51.cpmVideo,value:filter.estimateVideoCpm,onToggle:function(n){toggleRange("estimateVideoCpm",n)}})})]}),o.jsx(PgyKolField,{label:"阅读单价",children:[o.jsx(PgyKolField,{label:"图文",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeDefs51.picRead,value:filter.estimatePicReadCost,onToggle:function(n){toggleRange("estimatePicReadCost",n)}})}),o.jsx(PgyKolField,{label:"视频",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeDefs51.videoRead,value:filter.estimateVideoReadCost,onToggle:function(n){toggleRange("estimateVideoReadCost",n)}})})]}),o.jsx(PgyKolField,{label:"互动单价",children:[o.jsx(PgyKolField,{label:"图文",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeDefs51.picEngage,value:filter.estimatePicEngageCost,onToggle:function(n){toggleRange("estimatePicEngageCost",n)}})}),o.jsx(PgyKolField,{label:"视频",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeDefs51.videoEngage,value:filter.estimateVideoEngageCost,onToggle:function(n){toggleRange("estimateVideoEngageCost",n)}})})]}),o.jsx(PgyKolField,{label:"外溢进店单价",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeDefs51.cpuv,value:filter.overflowCost,onToggle:function(n){toggleRange("overflowCost",n)}})})]}),o.jsx(PgyKolMatrixRow,{label:"直播数据",children:[o.jsx(PgyKolField,{label:"近30天直播场次",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeDefs51.liveCount,value:filter.liveCount30d,onToggle:function(n){toggleArr("liveCount30d",n)}})}),o.jsx(PgyKolField,{label:"场均观播人数",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeDefs51.liveViewer,value:filter.avgLiveViewer,onToggle:function(n){toggleArr("avgLiveViewer",n)}})}),o.jsx(PgyKolField,{label:"场均销售额",children:o.jsx(pgyKolRangeChips,{options:pgyKolRangeDefs51.liveGmv,value:filter.avgLiveGmv,onToggle:function(n){toggleArr("avgLiveGmv",n)}})})]})]})}),o.jsx(PgyKolMatrixSection,{title:"平台推荐",children:o.jsxs(x,{children:[o.jsx(PgyKolMatrixRow,{label:"精选博主",children:[o.jsx(PgyKolChips,{options:pgyKolFeaturedOptions,keyOf:function(n){return n.value},selected:pgyKolFeaturedOptions.filter(function(n){return filter[n.key]===true}).map(function(n){return n.value}),onToggle:function(n){toggleBool(n.key)}}),o.jsx(PgyKolField,{label:"行业推荐",children:o.jsx($,{size:"small",variant:filter.firstIndustry?"contained":"outlined",color:filter.firstIndustry?"primary":"inherit",onClick:function(){setIndustryPopupOpen(true)},children:"行业推荐博主"+(filter.firstIndustry?"（"+filter.firstIndustry+(filter.secondIndustry?"-"+filter.secondIndustry:"")+"）":"")})})]}),o.jsx(PgyKolMatrixRow,{label:"热门活动",children:[actCfg&&actCfg.error&&o.jsx(oe,{severity:"warning",sx:{py:.25,my:0},children:"热门活动加载失败，不影响其它筛选："+(actCfg.error.message||"未知错误")}),o.jsx(PgyKolChips,{options:actCfg&&actCfg.nodes&&actCfg.nodes.length?actCfg.nodes:actCfg&&actCfg.options&&actCfg.options.length?actCfg.options:[],keyOf:function(n){return pgyKolOptValue(n)},selected:filter.activityCodes.slice(),onToggle:toggleActivity})]})]})}),o.jsx(PgyKolMatrixSection,{title:"常规剔除",children:o.jsx(PgyKolMatrixRow,{label:null,children:[o.jsx(PgyKolToggle,{label:"剔除低活博主",on:filter.excludeLowActive,onToggle:function(){toggleBool("excludeLowActive")}}),o.jsx(PgyKolToggle,{label:"剔除掉粉博主",on:filter.fansNumUp,onToggle:function(){toggleBool("fansNumUp")}}),o.jsx(PgyKolToggle,{label:"剔除已合作博主",on:filter.excludedTradeReportBrand,disabled:!hasBrands,onToggle:function(){toggleBool("excludedTradeReportBrand")}}),o.jsx(PgyKolToggle,{label:"剔除已邀约博主",on:filter.excludedTradeInviteReportBrand,disabled:!hasBrands,onToggle:function(){toggleBool("excludedTradeInviteReportBrand")}})]})}),o.jsxs(xe,{variant:"outlined",sx:{mb:1.5},children:[o.jsxs(We,{children:[o.jsx(w,{variant:"subtitle2",fontWeight:600,sx:{mb:.5},children:"当前 Payload 预览"}),o.jsx(x,{component:"pre",sx:{maxHeight:160,overflow:"auto",p:1,bgcolor:"background.paper",borderRadius:1,fontSize:11,fontFamily:"monospace",whiteSpace:"pre-wrap",wordBreak:"break-all"},children:preview||"（未配置筛选条件）"})]})]}),o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1.5,mb:1,flexWrap:"wrap"},children:[o.jsx($,{variant:"contained",color:"secondary",size:"medium",onClick:startBatch,disabled:batchBusy||batchRunning,startIcon:batchBusy?o.jsx(de,{size:18,color:"inherit"}):null,children:batchBusy?"启动中...":"开始采集"}),o.jsx($,{variant:"outlined",size:"medium",onClick:function(){setColumnOpen(true)},children:"选择展示指标"}),status==="empty"&&o.jsx(w,{variant:"body2",color:"text.secondary",children:"没有匹配的博主"})]}),batchError&&o.jsx(oe,{severity:"error",sx:{mt:1},children:pgyKolBatchErrorMessage(batchError)}),batchNotice&&o.jsx(oe,{severity:"success",sx:{mt:1},children:batchNotice}),status==="loading"&&o.jsx(Q1,{sx:{mt:1}}),status==="auth-expired"&&o.jsx(oe,{severity:"error",sx:{mt:1},children:"蒲公英登录已失效，请重新授权"}),status==="error"&&error&&o.jsx(oe,{severity:"error",sx:{mt:1},children:"查询失败（错误码 "+(error.code||"unknown")+"）："+(error.message||"未知错误")}),result&&o.jsxs(x,{sx:{mt:2},children:[o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1,mb:1,flexWrap:"wrap"},children:[o.jsx(w,{variant:"h6",children:"共 "+(result.total!=null?result.total:"?")+" 位博主"}),o.jsx(f1,{size:"small",label:"当前展示 "+(result.kols?result.kols.length:0)+" 条"}),o.jsx(f1,{size:"small",variant:"outlined",label:"预览 "+(result.kols?result.kols.length:0)+" 条 / 已持久化 "+pgyKolCount(currentTask,"raw")+" 条（完整数据以导出为准）"}),result.capSignal&&result.capSignal.capped&&o.jsx(f1,{size:"small",color:"warning",label:"结果可能超过 5000"}),result.quarantinedFields&&result.quarantinedFields.length>0&&o.jsx(f1,{size:"small",variant:"outlined",label:"未知字段 "+result.quarantinedFields.length+" 个已隔离"})]}),result.capSignal&&result.capSignal.capped&&o.jsx(oe,{severity:"warning",sx:{mb:1},children:"结果可能超过 5000，完整性未证明"}),o.jsx(PgyKolResultTable,{result:result,columns:selectedColumns,list:columnList})]}),o.jsx(PgyKolBatchPanel,{task:currentTask,onPause:pauseBatch,onResume:resumeBatch,onResumeWithBudgets:function(budgets){resumeBatch(budgets)},onCancel:cancelBatch,onExport:function(){exportTask(currentTaskId)}}),taskLoading&&o.jsx(Q1,{sx:{mt:1}}),o.jsx(PgyKolTaskHistory,{tasks:taskList,error:taskListError,onSelect:selectTask,onExport:exportTask}),o.jsx(PgyKolColumnDialog,{open:columnOpen,onClose:function(){setColumnOpen(false)},columns:columnList,error:columnError,selected:selectedColumns,onApply:function(ids){setSelectedColumns(ids);pgyKolWriteJson("magiorix-pgy-kol-columns",ids)}}),o.jsx(PgyKolBrandPopup,{open:brandPopupMode!=null,onClose:function(){setBrandPopupMode(null)},mode:brandPopupMode,current:brandPopupMode==="recent"?filter.tradeReportBrandIdSet:filter.brands,onApply:applyBrands}),o.jsx(PgyKolNoteCategoryPopup,{open:categoryOpen,onClose:function(){setCategoryOpen(false)},nodes:configs.noteCategory&&configs.noteCategory.nodes&&configs.noteCategory.nodes.length?configs.noteCategory.nodes:pgyKolNoteCatFallback(),industry:catIndustry,onSelectIndustry:setCatIndustry,selected:filter.noteCategory,onToggle:function(next){update({noteCategory:next})}}),o.jsx(PgyKolIndustryPopup,{open:industryPopupOpen,onClose:function(){setIndustryPopupOpen(false)},cfg:configs.industry,first:filter.firstIndustry,second:filter.secondIndustry,onFirst:function(v){update({firstIndustry:v})},onSecond:function(v){update({secondIndustry:v})}})]})})}
+var pgyKolRangeDefs={inviteReply:[{label:"95%以上",value:[95,-1]},{label:"90%～95%",value:[90,95]},{label:"80%～90%",value:[80,90]},{label:"70%～80%",value:[70,80]},{label:"80%以下",value:[0,80]}],imp50w:[{label:"5万以上",value:[50000,-1]},{label:"1万～5万",value:[10000,50000]},{label:"0.5万～1万",value:[5000,10000]},{label:"0.1万～0.5万",value:[1000,5000]}],inter2000:[{label:"2000以上",value:[2000,-1]},{label:"1000～2000",value:[1000,2000]},{label:"500～1000",value:[500,1000]},{label:"200～500",value:[200,500]},{label:"100～200",value:[100,200]}],overflow10000:[{label:"10000以上",value:[10000,-1]},{label:"5000～10000",value:[5000,10000]},{label:"2000～5000",value:[2000,5000]},{label:"1000～2000",value:[1000,2000]},{label:"500～1000",value:[500,1000]}],cpuv:[{label:"0.5以下",value:[0,.5]},{label:"0.5～1.0",value:[.5,1]},{label:"1.0～1.5",value:[1,1.5]},{label:"1.5～2.5",value:[1.5,2.5]},{label:"2.5～4.0",value:[2.5,4]}],picRead:[{label:"0.5以下",value:[0,.5]},{label:"0.5～1.0",value:[.5,1]},{label:"1.0～1.5",value:[1,1.5]},{label:"1.5～2.0",value:[1.5,2]},{label:"2.0以上",value:[2,-1]}],videoRead:[{label:"1.5以下",value:[0,1.5]},{label:"1.5～2.0",value:[1.5,2]},{label:"2.0～2.5",value:[2,2.5]},{label:"2.5～3.0",value:[2.5,3]},{label:"3.0以上",value:[3,-1]}],picEngage:[{label:"0.5以下",value:[0,.5]},{label:"0.5～1.0",value:[.5,1]},{label:"1.0～2.0",value:[1,2]},{label:"2.0～3.0",value:[2,3]},{label:"3.0以上",value:[3,-1]}],videoEngage:[{label:"1.0以下",value:[0,1]},{label:"1.0～2.0",value:[1,2]},{label:"2.0～3.0",value:[2,3]},{label:"3.0～4.0",value:[3,4]},{label:"4.0以上",value:[4,-1]}],cpmPic:[{label:"10以下",value:[0,10]},{label:"10～20",value:[10,20]},{label:"20～30",value:[20,30]},{label:"30～50",value:[30,50]},{label:"50以上",value:[50,-1]}],cpmVideo:[{label:"10以下",value:[0,10]},{label:"10～30",value:[10,30]},{label:"30～50",value:[30,50]},{label:"50～70",value:[50,70]},{label:"70以上",value:[70,-1]}],liveCount:[{label:"0次",value:[0,0]},{label:"1～5次",value:[1,5]},{label:"6～10次",value:[6,10]},{label:"10次以上",value:[10,-1]}],liveViewer:[{label:"0~5k",value:[0,5000]},{label:"5k~1w",value:[5000,10000]},{label:"1w~10w",value:[10000,100000]},{label:"10w~50w",value:[100000,500000]},{label:"50w以上",value:[500000,-1]}],liveGmv:[{label:"5千以下",value:[0,5000]},{label:"5千～1万",value:[5000,10000]},{label:"1万～10万",value:[10000,100000]},{label:"10万～50万",value:[100000,500000]},{label:"50万～100万",value:[500000,1000000]},{label:"100万～200万",value:[1000000,2000000]},{label:"200万～500万",value:[2000000,5000000]},{label:"500万以上",value:[5000000,-1]}]}
+pgyKolRangeDefs.quote=[{label:"5万及以上",value:[50000,-1]},{label:"1万～5万",value:[10000,50000]},{label:"0.5万～1万",value:[5000,10000]},{label:"0.1万～0.5万",value:[1000,5000]},{label:"0.1万以下",value:[0,1000]}];
 
-var pgyKolRangeDefs51={inviteReply:[{label:"95%以上",value:[95,-1]},{label:"90%～95%",value:[90,95]},{label:"80%～90%",value:[80,90]},{label:"70%～80%",value:[70,80]},{label:"80%以下",value:[0,80]}],imp50w:[{label:"5万以上",value:[50000,-1]},{label:"1万～5万",value:[10000,50000]},{label:"0.5万～1万",value:[5000,10000]},{label:"0.1万～0.5万",value:[1000,5000]}],inter2000:[{label:"2000以上",value:[2000,-1]},{label:"1000～2000",value:[1000,2000]},{label:"500～1000",value:[500,1000]},{label:"200～500",value:[200,500]},{label:"100～200",value:[100,200]}],overflow10000:[{label:"10000以上",value:[10000,-1]},{label:"5000～10000",value:[5000,10000]},{label:"2000～5000",value:[2000,5000]},{label:"1000～2000",value:[1000,2000]},{label:"500～1000",value:[500,1000]}],cpuv:[{label:"0.5以下",value:[0,.5]},{label:"0.5～1.0",value:[.5,1]},{label:"1.0～1.5",value:[1,1.5]},{label:"1.5～2.5",value:[1.5,2.5]},{label:"2.5～4.0",value:[2.5,4]}],picRead:[{label:"0.5以下",value:[0,.5]},{label:"0.5～1.0",value:[.5,1]},{label:"1.0～1.5",value:[1,1.5]},{label:"1.5～2.0",value:[1.5,2]},{label:"2.0以上",value:[2,-1]}],videoRead:[{label:"1.5以下",value:[0,1.5]},{label:"1.5～2.0",value:[1.5,2]},{label:"2.0～2.5",value:[2,2.5]},{label:"2.5～3.0",value:[2.5,3]},{label:"3.0以上",value:[3,-1]}],picEngage:[{label:"0.5以下",value:[0,.5]},{label:"0.5～1.0",value:[.5,1]},{label:"1.0～2.0",value:[1,2]},{label:"2.0～3.0",value:[2,3]},{label:"3.0以上",value:[3,-1]}],videoEngage:[{label:"1.0以下",value:[0,1]},{label:"1.0～2.0",value:[1,2]},{label:"2.0～3.0",value:[2,3]},{label:"3.0～4.0",value:[3,4]},{label:"4.0以上",value:[4,-1]}],cpmPic:[{label:"10以下",value:[0,10]},{label:"10～20",value:[10,20]},{label:"20～30",value:[20,30]},{label:"30～50",value:[30,50]},{label:"50以上",value:[50,-1]}],cpmVideo:[{label:"10以下",value:[0,10]},{label:"10～30",value:[10,30]},{label:"30～50",value:[30,50]},{label:"50～70",value:[50,70]},{label:"70以上",value:[70,-1]}],liveCount:[{label:"0次",value:[0,0]},{label:"1～5次",value:[1,5]},{label:"6～10次",value:[6,10]},{label:"10次以上",value:[10,-1]}],liveViewer:[{label:"0~5k",value:[0,5000]},{label:"5k~1w",value:[5000,10000]},{label:"1w~10w",value:[10000,100000]},{label:"10w~50w",value:[100000,500000]},{label:"50w以上",value:[500000,-1]}],liveGmv:[{label:"5千以下",value:[0,5000]},{label:"5千～1万",value:[5000,10000]},{label:"1万～10万",value:[10000,100000]},{label:"10万～50万",value:[100000,500000]},{label:"50万～100万",value:[500000,1000000]},{label:"100万～200万",value:[1000000,2000000]},{label:"200万～500万",value:[2000000,5000000]},{label:"500万以上",value:[5000000,-1]}]};
 function pgyKolRangeEq(a,b){if(a===b)return true;if(!a||!b)return false;return JSON.stringify(a.value)===JSON.stringify(b.value)}
-function pgyKolRangeChips(p){return o.jsx(PgyKolChips,{options:p.options||[],keyOf:function(n){return pgyKolNodeKey(n)},selected:Array.isArray(p.value)?p.value:p.value?[p.value]:[],onToggle:function(n){p.onToggle(n)}})}
-function pgyKolCollectLeafPaths(node,prefix){prefix=prefix||[];if(!node)return[];var here=prefix.concat([String(node.label||node.value||"")]);if(node.children&&node.children.length>0){var out=[];for(var i=0;i<node.children.length;i++)out=out.concat(pgyKolCollectLeafPaths(node.children[i],here));return out}return [here.join(" ")]}
-function pgyKolSchemaUnproven(fields){var m={};if(Array.isArray(fields)){fields.forEach(function(fd){if(fd&&fd.payloadProven===false&&Array.isArray(fd.uiKeys)){fd.uiKeys.forEach(function(k){m[k]=1})}})}window.__pgyKolUnproven=m;return m}
-function pgyKolNoteCatFallback(){return Object.keys(pgyKolNoteCategoryTree).map(function(k){return {label:k,value:k,children:pgyKolNoteCategoryTree[k]&&pgyKolNoteCategoryTree[k].nodes?pgyKolNoteCategoryTree[k].nodes.map(function(n){return {label:n.label,value:n.label,children:[]}}):[]}})}
-function PgyKolNoteCategoryPopup(p){var inds=p.nodes&&p.nodes.length?p.nodes:pgyKolNoteCatFallback();var ind=inds.find(function(n){return String(n.label||n.value)===p.industry})||inds[0]||null;var children=ind&&ind.children?ind.children:[];var leafPaths={};children.forEach(function(c){leafPaths[pgyKolNodeKey(c)]=pgyKolCollectLeafPaths(c,[String(ind.label||ind.value)])});function isAll(c){var paths=leafPaths[pgyKolNodeKey(c)]||[];return paths.length>0&&paths.every(function(pp){return p.selected.indexOf(pp)>=0})}function toggle(c){var paths=leafPaths[pgyKolNodeKey(c)]||[];var all=isAll(c);var next=p.selected.slice();paths.forEach(function(pp){var ix=next.indexOf(pp);if(all&&ix>=0)next=next.slice(0,ix).concat(next.slice(ix+1));else if(!all&&ix<0)next.push(pp)});p.onToggle(next)}var closeBtn=o.jsx(te,{size:"small",sx:{ml:"auto"},onClick:p.onClose,children:o.jsx(B,{icon:"mdi:close",width:18,height:18})});var header=o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:"笔记类目"}),closeBtn]})});var indRow=o.jsxs(x,{sx:{display:"flex",gap:.5,mb:1,flexWrap:"wrap"},children:inds.map(function(n){var lab=String(n.label||n.value||"");return o.jsx(f1,{key:pgyKolNodeKey(n),size:"small",label:lab,color:p.industry===lab?"primary":"default",variant:p.industry===lab?"filled":"outlined",onClick:function(){p.onSelectIndustry(lab)}})})});var leafRow=children.length>0?o.jsxs(x,{sx:{display:"flex",flexWrap:"wrap",gap:.5},children:children.map(function(c){var lab=String(c.label||c.value||"");return o.jsx(f1,{key:pgyKolNodeKey(c),size:"small",label:lab,color:isAll(c)?"primary":"default",variant:isAll(c)?"filled":"outlined",onClick:function(){toggle(c)}})})}):o.jsx(w,{variant:"body2",color:"text.secondary",children:"该行业暂无子类目"});var countLine=o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",mt:1},children:"已选 "+p.selected.length+" 项"});return o.jsxs(ue,{open:p.open,onClose:p.onClose,maxWidth:"md",fullWidth:true,children:[header,o.jsxs(pe,{children:[indRow,leafRow,countLine]})]})}
-function PgyKolIndustryPopup(p){var firsts=p.cfg&&p.cfg.nodes&&p.cfg.nodes.length?p.cfg.nodes:[];var firstSel=firsts.find(function(n){return String(n.label||n.value)===p.first})||null;var seconds=firstSel&&firstSel.children?firstSel.children:[];var closeBtn=o.jsx(te,{size:"small",sx:{ml:"auto"},onClick:p.onClose,children:o.jsx(B,{icon:"mdi:close",width:18,height:18})});var header=o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:"行业推荐博主"}),closeBtn]})});var tip=o.jsx(w,{variant:"caption",color:"text.secondary",children:"选择行业后，平台优先展示该行业下内容更匹配、数据更优质的博主"});var emptyTip=firsts.length===0?o.jsx(w,{variant:"body2",color:"text.secondary",children:"行业列表加载中…"}):null;var firstRow=firsts.length>0?o.jsxs(x,{children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"一级行业"}),o.jsx(PgyKolChips,{options:firsts,keyOf:function(n){return pgyKolNodeKey(n)},selected:p.first?[firsts.find(function(n){return String(n.label||n.value)===p.first})].filter(Boolean):[],onToggle:function(n){p.onFirst(String(n.label||n.value));p.onSecond("")}})]}):null;var secondRow=seconds.length>0?o.jsxs(x,{children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"二级行业"}),o.jsx(PgyKolChips,{options:seconds,keyOf:function(n){return pgyKolNodeKey(n)},selected:p.second?[seconds.find(function(n){return String(n.label||n.value)===p.second})].filter(Boolean):[],onToggle:function(n){p.onSecond(String(n.label||n.value))}})]}):null;return o.jsxs(ue,{open:p.open,onClose:p.onClose,maxWidth:"sm",fullWidth:true,children:[header,o.jsxs(pe,{children:[tip,emptyTip,firstRow,secondRow]})]})}
+
+/* ============ Phase 5.2：搜索历史（搜昵称） ============ */
+function pgyKolNickHistory() {
+  try {
+    var raw = window.localStorage.getItem("magiorix-pgy-kol-nick-history");
+    if (!raw) return [];
+    var arr = JSON.parse(raw);
+    return Array.isArray(arr)
+      ? arr.filter(function (s) { return typeof s === "string" && s.trim() !== ""; }).slice(0, 10)
+      : [];
+  } catch (e) {
+    return [];
+  }
+}
+function pgyKolNickHistoryAdd(kw) {
+  try {
+    var cur = pgyKolNickHistory();
+    var next = cur.filter(function (s) { return s !== kw; });
+    next.unshift(kw);
+    next = next.slice(0, 10);
+    window.localStorage.setItem("magiorix-pgy-kol-nick-history", JSON.stringify(next));
+    return next;
+  } catch (e) {
+    return cur;
+  }
+}
+function pgyKolNickHistoryClear() {
+  try {
+    window.localStorage.removeItem("magiorix-pgy-kol-nick-history");
+  } catch (e) {}
+}
+
+/* 按唯一键在选项树中查找节点（Popover 草稿 key 还原为节点）。 */
+function pgyKolFindNode(nodes, key) {
+  if (!Array.isArray(nodes)) return null;
+  for (var i = 0; i < nodes.length; i++) {
+    var n = nodes[i];
+    if (n && pgyKolNodeKey(n) === key) return n;
+    if (n && n.children && n.children.length) {
+      var f = pgyKolFindNode(n.children, key);
+      if (f) return f;
+    }
+  }
+  return null;
+}
+
+/* 热门活动「种收联动」徽标（真实响应 rawVersion.activityLabel）。 */
+function pgyKolActivityLabel(n) {
+  if (!n) return "";
+  return (n.rawVersion && n.rawVersion.activityLabel) || n.activityLabel || "";
+}
+
+/* 千赞笔记比例范围（40% 分档，Phase 5.1 实证口径）。 */
+var pgyKolRangeDefsPercent40 = [
+  { label: "40%以上", value: [40, null] },
+  { label: "30%～40%", value: [30, 40] },
+  { label: "20%～30%", value: [20, 30] },
+  { label: "10%～20%", value: [10, 20] },
+  { label: "10%以下", value: [null, 10] },
+];
+
+/* ============ Phase 5.2：紧凑触发器（28px / 14px / 红色选中） ============ */
+function PgyKolTrigger(p) {
+  var sel = !!p.selected, dis = !!p.disabled, dim = !!p.dim, cnt = p.count || 0, badge = p.badge || "";
+  var textColor = dis || dim ? "rgba(0,0,0,.25)" : sel ? "#ff2442" : "rgba(0,0,0,.7)";
+  var arrowIcon = p.arrowUp ? "solar:alt-arrow-up-bold-duotone" : "solar:alt-arrow-down-bold-duotone";
+  return o.jsxs(x, {
+    component: "button",
+    type: "button",
+    disabled: dis,
+    onClick: function (e) {
+      if (!dis && !dim) p.onOpen(e);
+    },
+    sx: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 0.5,
+      height: 28,
+      px: 0.75,
+      fontSize: 14,
+      lineHeight: "28px",
+      color: textColor,
+      bgcolor: sel ? "rgba(255,36,66,.08)" : "transparent",
+      border: 0,
+      borderRadius: 0.375,
+      cursor: dis ? "not-allowed" : "pointer",
+      fontFamily: "inherit",
+      whiteSpace: "nowrap",
+      flexShrink: 0,
+      boxSizing: "border-box",
+      verticalAlign: "middle",
+      userSelect: "none",
+    },
+    children: [
+      o.jsx(w, { component: "span", sx: { fontSize: 14, lineHeight: "28px", color: "inherit" }, children: p.label }),
+      p.help ? o.jsx(B, { icon: "mdi:help-circle-outline", width: 13, height: 13, style: { color: "rgba(0,0,0,.4)", flexShrink: 0 } }) : null,
+      badge ? o.jsx(x, {
+        sx: {
+          height: 14,
+          minWidth: 14,
+          px: 0.4,
+          fontSize: 10,
+          lineHeight: "14px",
+          color: "#fff",
+          bgcolor: "#ff2442",
+          borderRadius: 0.25,
+          textAlign: "center",
+          flexShrink: 0,
+        },
+        children: badge,
+      }) : null,
+      cnt > 0 ? o.jsx(w, { component: "span", sx: { fontSize: 12, lineHeight: "28px", color: sel ? "#ff2442" : "rgba(0,0,0,.45)" }, children: "（" + cnt + "）" }) : null,
+      p.arrow === false ? null : o.jsx(B, { icon: arrowIcon, width: 12, height: 12, style: { color: dis ? "rgba(0,0,0,.2)" : "rgba(0,0,0,.45)", flexShrink: 0 } }),
+    ],
+  });
+}
+
+/* ============ Phase 5.2：固定定位 Popover 外壳 ============ */
+function PgyKolPop(p) {
+  var posState = m.useState(0), posVersion = posState[0], setPosVersion = posState[1];
+  var anchor = p.anchor;
+  m.useEffect(function () {
+    function reposition() { setPosVersion(function (v) { return v + 1; }); }
+    reposition();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return function () {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [anchor, p.open]);
+  if (!p.open) return null;
+  var rect = anchor && typeof anchor.getBoundingClientRect === "function" ? anchor.getBoundingClientRect() : null;
+  var w = p.width || 260;
+  var gap = 6;
+  var preferredH = p.preferredHeight || 168;
+  var left = rect ? rect.left : 0;
+  var below = rect ? window.innerHeight - rect.bottom : 0;
+  var above = rect ? rect.top : 0;
+  var placeBelow = !rect || below >= preferredH + gap || below >= above;
+  var top = rect && placeBelow ? rect.bottom + gap : 8;
+  var bottom = rect && !placeBelow ? Math.max(8, window.innerHeight - rect.top + gap) : "auto";
+  if (rect && left + w > window.innerWidth - 8) left = Math.max(8, window.innerWidth - w - 8);
+  var availableH = rect ? (placeBelow ? below - gap - 8 : above - gap - 8) : window.innerHeight - 16;
+  var maxH = Math.max(0, Math.min(p.maxHeight || 360, window.innerHeight - 16, availableH));
+  return o.jsxs(x, {
+    children: [
+      o.jsx(x, { sx: { position: "fixed", left: 0, top: 0, right: 0, bottom: 0, zIndex: 1399 }, onClick: p.onClose }),
+      o.jsxs(x, {
+        sx: {
+          position: "fixed",
+          left: left,
+          top: top,
+          bottom: bottom,
+          zIndex: 1400,
+          width: w,
+          maxWidth: Math.max(240, window.innerWidth - 16),
+          maxHeight: maxH,
+          overflow: p.overflow || "hidden",
+          bgcolor: "#fff",
+          border: "1px solid #e5e6eb",
+          borderRadius: 0.5,
+          boxShadow: "0 4px 16px rgba(0,0,0,.12)",
+          p: 1,
+          display: "flex",
+          flexDirection: "column",
+        },
+        children: p.children,
+      }),
+    ],
+  });
+}
+
+function PgyKolPopHeader(p) {
+  return o.jsxs(x, {
+    sx: { display: "flex", alignItems: "center", gap: 1, mb: 0.75, pb: 0.5, borderBottom: "1px solid #f0f1f3", flexShrink: 0 },
+    children: [
+      o.jsx(w, { sx: { fontSize: 14, fontWeight: 600, color: "rgba(0,0,0,.85)" }, children: p.title }),
+      o.jsx(te, { size: "small", sx: { ml: "auto", p: 0.25 }, onClick: p.onClose, children: o.jsx(B, { icon: "mdi:close", width: 14, height: 14 }) }),
+    ],
+  });
+}
+
+/* ============ Phase 5.2：选项列表 Popover（单选即时关闭 / 多选草稿确定） ============ */
+function PgyKolOptionPop(p) {
+  var opts = p.options || [];
+  var ds = m.useState(null), draftState = ds[0], setDraftState = ds[1];
+  var base = Array.isArray(p.selectedKeys) ? p.selectedKeys : [];
+  var draft = draftState !== null ? draftState : base;
+  m.useEffect(function () {
+    if (p.open) setDraftState(null);
+  }, [p.open]);
+  function keyOf(n) {
+    return p.keyOf ? p.keyOf(n) : pgyKolNodeKey(n);
+  }
+  function toggle(n) {
+    var key = keyOf(n);
+    if (p.closeOnSelect) {
+      p.onToggle(n);
+      p.onClose();
+      return;
+    }
+    var i = draft.indexOf(key);
+    setDraftState(i >= 0 ? draft.slice(0, i).concat(draft.slice(i + 1)) : draft.concat([key]));
+  }
+  function clear() { setDraftState([]); }
+  function apply() { p.onApply(draft.slice()); p.onClose(); }
+  var single = !p.multi;
+  return o.jsx(PgyKolPop, {
+    open: p.open,
+    anchor: p.anchor,
+    onClose: p.onClose,
+    width: p.width || 220,
+    children: o.jsxs(x, {
+      sx: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 },
+      children: [
+        o.jsx(PgyKolPopHeader, { title: p.title, onClose: p.onClose }),
+        opts.length === 0
+          ? o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)", py: 1 }, children: "暂无选项" })
+          : single
+            ? o.jsx(x, {
+                sx: { display: "flex", flexDirection: "column", gap: 0.25, pt: 0.25 },
+                children: opts.map(function (n) {
+                  var key = keyOf(n), sel = draft.indexOf(key) >= 0;
+                  return o.jsx(x, {
+                    key: key,
+                    onClick: function () { toggle(n); },
+                    sx: {
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 0.5,
+                      height: 28,
+                      px: 1,
+                      fontSize: 14,
+                      color: sel ? "#ff2442" : "rgba(0,0,0,.7)",
+                      bgcolor: sel ? "rgba(255,36,66,.08)" : "transparent",
+                      borderRadius: 0.375,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    },
+                    children: [
+                      o.jsx(w, { sx: { flexGrow: 1, fontSize: 14, color: "inherit" }, children: p.display ? p.display(n) : pgyKolOptLabel(n) }),
+                      sel ? o.jsx(B, { icon: "mdi:check", width: 16, height: 16, style: { color: "#ff2442", flexShrink: 0 } }) : null,
+                    ],
+                  });
+                }),
+              })
+            : o.jsx(x, {
+                sx: { display: "flex", flexWrap: "wrap", gap: 0.5, pt: 0.25 },
+                children: opts.map(function (n) {
+                  var key = keyOf(n), sel = draft.indexOf(key) >= 0;
+                  return o.jsx(f1, {
+                    key: key,
+                    size: "small",
+                    label: p.display ? p.display(n) : pgyKolOptLabel(n),
+                    color: sel ? "primary" : "default",
+                    variant: sel ? "filled" : "outlined",
+                    onClick: function () { toggle(n); },
+                  });
+                }),
+              }),
+        p.multi
+          ? o.jsxs(x, {
+              sx: { display: "flex", alignItems: "center", gap: 1, mt: 1, pt: 0.5, borderTop: "1px solid #f0f1f3" },
+              children: [
+                o.jsx(w, { sx: { fontSize: 12, color: "rgba(0,0,0,.45)", mr: "auto" }, children: "已选 " + draft.length + " 项" }),
+                o.jsx($, { size: "small", variant: "outlined", onClick: clear, children: "清空" }),
+                o.jsx($, { size: "small", variant: "contained", onClick: apply, children: "确定" }),
+              ],
+            })
+          : null,
+      ],
+    }),
+  });
+}
+
+/* ============ Phase 5.2：单选范围 Popover（点击即选即关，再点清除） ============ */
+function PgyKolRangePop(p) {
+  var opts = p.options || [];
+  function pick(n) {
+    p.onToggle(pgyKolRangeEq(p.value, n) ? null : n);
+    p.onClose();
+  }
+  return o.jsx(PgyKolPop, {
+    open: p.open,
+    anchor: p.anchor,
+    onClose: p.onClose,
+    width: p.width || 220,
+    children: o.jsxs(x, {
+      children: [
+        o.jsx(PgyKolPopHeader, { title: p.title, onClose: p.onClose }),
+        o.jsx(x, {
+          sx: { display: "flex", flexDirection: "column", gap: 0.25, pt: 0.25 },
+          children: opts.map(function (n) {
+            var sel = pgyKolRangeEq(p.value, n);
+            return o.jsx(x, {
+              key: n.label,
+              onClick: function () { pick(n); },
+              sx: {
+                display: "flex",
+                alignItems: "center",
+                height: 28,
+                px: 1,
+                fontSize: 14,
+                color: sel ? "#ff2442" : "rgba(0,0,0,.7)",
+                bgcolor: sel ? "rgba(255,36,66,.08)" : "transparent",
+                borderRadius: 0.375,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              },
+              children: n.label,
+            });
+          }),
+        }),
+      ],
+    }),
+  });
+}
+
+/* ============ 官网数据表现控件：228px 单列范围 / 408px 组合 / 420px 品牌 ============ */
+function pgyKolOfficialRangeNode(lower, upper) {
+  var lo = lower === "" ? 0 : Number(lower), hi = upper === "" ? -1 : Number(upper);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi) || lo < 0 || (hi >= 0 && hi < lo)) return null;
+  return { label: String(lo) + "～" + (hi < 0 ? "不限" : String(hi)), value: [lo, hi] };
+}
+
+function pgyKolOfficialBoundsNode(lower, upper) {
+  if (lower === "" && upper === "") return null;
+  return pgyKolOfficialRangeNode(lower, upper);
+}
+
+function pgyKolNoteTypeLabel(value) {
+  for (var i = 0; i < pgyKolNoteTypeOptions.length; i++) if (pgyKolNoteTypeOptions[i].value === value) return pgyKolNoteTypeOptions[i].label;
+  return "不限";
+}
+
+function pgyKolOfficialRangeLabel(value) {
+  return value && value.label ? value.label : "";
+}
+
+function PgyKolOfficialFooter(p) {
+  return o.jsxs(x, {
+    sx: { display: "flex", alignItems: "center", gap: 1, mt: 1, pt: 1, borderTop: "1px solid #f0f1f3" },
+    children: [
+      o.jsx($, { size: "small", variant: "text", sx: { color: "rgba(0,0,0,.65)", mr: "auto" }, onClick: p.onReset, children: "重置" }),
+      o.jsx($, { size: "small", variant: "contained", disabled: !!p.disabled, onClick: p.onConfirm, children: "确定" }),
+    ],
+  });
+}
+
+function PgyKolOfficialRangeList(p) {
+  var options = p.options || [];
+  return o.jsx(x, {
+    sx: { display: "flex", flexDirection: "column" },
+    children: [{ label: "不限", value: null }].concat(options).map(function (n) {
+      var selected = n.value === null ? p.value === null : pgyKolRangeEq(p.value, n);
+      return o.jsxs(x, {
+        key: n.label,
+        onClick: function () { p.onSelect(n.value === null ? null : n); },
+        sx: { display: "flex", alignItems: "center", minHeight: 36, px: 1.5, bgcolor: selected ? "#f5f5f5" : "transparent", cursor: "pointer", fontSize: 14, color: "rgba(0,0,0,.78)" },
+        children: [
+          o.jsx(x, { sx: { width: 18, flexShrink: 0 }, children: selected ? o.jsx(B, { icon: "mdi:check", width: 16, height: 16, style: { color: "rgba(0,0,0,.65)" } }) : null }),
+          o.jsx(w, { sx: { fontSize: 14, color: "inherit" }, children: n.label }),
+        ],
+      });
+    }),
+  });
+}
+
+function PgyKolOfficialCustomRange(p) {
+  return o.jsxs(x, {
+    sx: { display: "flex", alignItems: "center", gap: p.suffix ? 0.25 : 0.5, p: 1, bgcolor: "#fafafa" },
+    children: [
+      o.jsx(ae, { size: "small", type: "number", placeholder: p.minPlaceholder || "0", value: p.lower, onChange: function (e) { p.onLower(e.target.value); }, inputProps: { min: 0 }, sx: { width: p.suffix ? 76 : 90, flexShrink: 0, "& .MuiInputBase-root": { height: 32, bgcolor: "#f5f5f5" }, "& input": { px: 0.75, fontSize: 12 } } }),
+      p.suffix ? o.jsx(w, { sx: { fontSize: 12, color: "rgba(0,0,0,.45)", ml: -0.5 }, children: p.suffix }) : null,
+      o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)" }, children: "～" }),
+      o.jsx(ae, { size: "small", type: "number", placeholder: p.maxPlaceholder || "9,999,999", value: p.upper, onChange: function (e) { p.onUpper(e.target.value); }, inputProps: { min: 0 }, sx: { width: p.suffix ? 76 : 90, flexShrink: 0, "& .MuiInputBase-root": { height: 32, bgcolor: "#f5f5f5" }, "& input": { px: 0.75, fontSize: 12 } } }),
+      p.suffix ? o.jsx(w, { sx: { fontSize: 12, color: "rgba(0,0,0,.45)", ml: -0.5 }, children: p.suffix }) : null,
+    ],
+  });
+}
+
+function PgyKolOfficialRangePop(p) {
+  var ds = m.useState(p.value || null), draft = ds[0], setDraft = ds[1];
+  var ls = m.useState(""), lower = ls[0], setLower = ls[1];
+  var us = m.useState(""), upper = us[0], setUpper = us[1];
+  m.useEffect(function () { if (p.open) { setDraft(p.value || null); setLower(""); setUpper(""); } }, [p.open]);
+  function reset() { setDraft(null); setLower(""); setUpper(""); }
+  function confirm() {
+    var custom = lower !== "" || upper !== "" ? pgyKolOfficialRangeNode(lower, upper) : null;
+    p.onApply(custom || draft || null);
+    p.onClose();
+  }
+  return o.jsx(PgyKolPop, {
+    open: p.open,
+    anchor: p.anchor,
+    onClose: p.onClose,
+    width: 228,
+    preferredHeight: Math.min(360, 112 + ((p.options || []).length + 1) * 36),
+    children: o.jsxs(x, {
+      children: [
+        o.jsx(PgyKolOfficialRangeList, { options: p.options, value: draft, onSelect: function (n) { setDraft(n); setLower(""); setUpper(""); } }),
+        o.jsx(PgyKolOfficialCustomRange, { lower: lower, upper: upper, onLower: setLower, onUpper: setUpper, minPlaceholder: p.minPlaceholder, maxPlaceholder: p.maxPlaceholder, suffix: p.suffix }),
+        o.jsx(PgyKolOfficialFooter, { onReset: reset, onConfirm: confirm }),
+      ],
+    }),
+  });
+}
+
+function PgyKolOfficialSimpleMenu(p) {
+  return o.jsx(PgyKolPop, {
+    open: p.open,
+    anchor: p.anchor,
+    onClose: p.onClose,
+    width: 228,
+    preferredHeight: Math.min(360, 12 + (p.options || []).length * 36),
+    children: o.jsx(x, {
+      sx: { display: "flex", flexDirection: "column" },
+      children: (p.options || []).map(function (n) {
+        var selected = p.value === n.value || (n.value === null && (p.value === null || p.value === undefined));
+        return o.jsxs(x, {
+          key: String(n.label),
+          onClick: function () { p.onSelect(n.value); p.onClose(); },
+          sx: { display: "flex", alignItems: "center", minHeight: 36, px: 1.5, bgcolor: selected ? "#f5f5f5" : "transparent", cursor: "pointer" },
+          children: [o.jsx(x, { sx: { width: 18 }, children: selected ? o.jsx(B, { icon: "mdi:check", width: 16, height: 16 }) : null }), o.jsx(w, { sx: { fontSize: 14 }, children: n.label })],
+        });
+      }),
+    }),
+  });
+}
+
+function PgyKolOfficialNestedRange(p) {
+  var ls = m.useState(""), lower = ls[0], setLower = ls[1];
+  var us = m.useState(""), upper = us[0], setUpper = us[1];
+  return o.jsxs(x, {
+    sx: { position: "absolute", top: p.openUp ? "auto" : 64, bottom: p.openUp ? 64 : "auto", left: p.left || 0, zIndex: 3, width: 228, bgcolor: "#fff", border: "1px solid #e5e6eb", boxShadow: "0 4px 16px rgba(0,0,0,.14)", borderRadius: 0.5, p: 1 },
+    children: [
+      o.jsx(PgyKolOfficialRangeList, { options: p.options, value: p.value, onSelect: p.onSelect }),
+      o.jsx(PgyKolOfficialCustomRange, { lower: lower, upper: upper, onLower: setLower, onUpper: setUpper, minPlaceholder: "0", maxPlaceholder: "9,999,999" }),
+      o.jsx(PgyKolOfficialFooter, { onReset: function () { setLower(""); setUpper(""); p.onSelect(null); }, onConfirm: function () { var n = pgyKolOfficialRangeNode(lower, upper); if (n) p.onSelect(n); } }),
+    ],
+  });
+}
+
+function PgyKolOfficialGroupPop(p) {
+  var groups = p.groups || [];
+  var anchorRect = p.anchor && p.anchor.getBoundingClientRect ? p.anchor.getBoundingClientRect() : null;
+  var nestedOpenUp = !!(anchorRect && anchorRect.top > window.innerHeight / 2);
+  var initial = {};
+  groups.forEach(function (g) { initial[g.key] = g.value || null; });
+  var ds = m.useState(initial), draft = ds[0], setDraft = ds[1];
+  var as = m.useState(null), active = as[0], setActive = as[1];
+  m.useEffect(function () { if (p.open) { var next = {}; groups.forEach(function (g) { next[g.key] = g.value || null; }); setDraft(next); setActive(null); } }, [p.open]);
+  function reset() { var next = {}; groups.forEach(function (g) { next[g.key] = null; }); setDraft(next); setActive(null); }
+  function choose(key, value) { setDraft(Object.assign({}, draft, (function () { var out = {}; out[key] = value; return out; })())); setActive(null); }
+  return o.jsx(PgyKolPop, {
+    open: p.open,
+    anchor: p.anchor,
+    onClose: p.onClose,
+    width: 408,
+    overflow: "visible",
+    preferredHeight: groups.length > 2 ? 200 : 124,
+    children: o.jsxs(x, {
+      sx: { position: "relative" },
+      children: [
+        o.jsx(x, {
+          sx: { display: "grid", gridTemplateColumns: groups.length === 1 ? "1fr" : "1fr 1fr", gap: 1.5 },
+          children: groups.map(function (g, index) {
+            return o.jsxs(x, {
+              key: g.key,
+              sx: { position: "relative", minWidth: 0 },
+              children: [
+                o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.72)", mb: 0.5 }, children: g.label }),
+                o.jsx(ae, { size: "small", fullWidth: true, placeholder: "请选择", value: pgyKolOfficialRangeLabel(draft[g.key]), onChange: function () {}, onClick: function () { setActive(active === g.key ? null : g.key); }, InputProps: { readOnly: true, endAdornment: o.jsx(B, { icon: active === g.key ? "solar:alt-arrow-up-bold-duotone" : "solar:alt-arrow-down-bold-duotone", width: 14, height: 14 }) }, sx: { "& .MuiInputBase-root": { height: 32, bgcolor: "#fafafa" } } }),
+                active === g.key ? o.jsx(PgyKolOfficialNestedRange, { openUp: nestedOpenUp, left: index % 2 === 0 ? 0 : -24, options: g.options, value: draft[g.key], onSelect: function (n) { choose(g.key, n); } }) : null,
+              ],
+            });
+          }),
+        }),
+        o.jsx(PgyKolOfficialFooter, { onReset: reset, onConfirm: function () { p.onApply(pgyKolClone(draft)); p.onClose(); } }),
+      ],
+    }),
+  });
+}
+
+function PgyKolOfficialMultiPop(p) {
+  var base = Array.isArray(p.selectedKeys) ? p.selectedKeys : [];
+  var ds = m.useState(base), draft = ds[0], setDraft = ds[1];
+  m.useEffect(function () { if (p.open) setDraft(base.slice()); }, [p.open]);
+  function toggle(n) { var key = pgyKolNodeKey(n), i = draft.indexOf(key); setDraft(i >= 0 ? draft.slice(0, i).concat(draft.slice(i + 1)) : draft.concat([key])); }
+  return o.jsx(PgyKolPop, {
+    open: p.open,
+    anchor: p.anchor,
+    onClose: p.onClose,
+    width: 228,
+    preferredHeight: Math.min(360, 64 + (p.options || []).length * 36),
+    children: o.jsxs(x, {
+      children: [
+        o.jsx(x, { sx: { display: "flex", flexDirection: "column" }, children: (p.options || []).map(function (n) { var key = pgyKolNodeKey(n); return o.jsx(PgyKolCheck, { key: key, label: n.label, checked: draft.indexOf(key) >= 0, onToggle: function () { toggle(n); } }); }) }),
+        o.jsx(PgyKolOfficialFooter, { onReset: function () { setDraft([]); }, onConfirm: function () { p.onApply(draft.slice()); p.onClose(); } }),
+      ],
+    }),
+  });
+}
+
+function PgyKolOfficialBrandPop(p) {
+  var ks = m.useState(""), keyword = ks[0], setKeyword = ks[1];
+  var os = m.useState([]), options = os[0], setOptions = os[1];
+  var ds = m.useState(Array.isArray(p.current) ? p.current.slice() : []), draft = ds[0], setDraft = ds[1];
+  var es = m.useState(!!p.excluded), excluded = es[0], setExcluded = es[1];
+  var timer = m.useRef(null);
+  m.useEffect(function () { if (p.open) { setKeyword(""); setOptions([]); setDraft(Array.isArray(p.current) ? p.current.slice() : []); setExcluded(!!p.excluded); } }, [p.open]);
+  function search(value) { var bridge = window.bridge && window.bridge.pgyKol; if (!bridge || !bridge.getConfig) return; bridge.getConfig({ provider: "brandSearch", keyword: value }).then(function (res) { if (res && res.ok) { var data = res.data || {}, list = data.options || data.nodes || (Array.isArray(res.data) ? res.data : []); setOptions(list); } }); }
+  function onKeyword(e) { var value = e.target.value; setKeyword(value); if (timer.current) window.clearTimeout(timer.current); timer.current = window.setTimeout(function () { search(value); }, 300); }
+  function toggle(n) { var value = pgyKolOptValue(n), i = draft.indexOf(value); setDraft(i >= 0 ? draft.slice(0, i).concat(draft.slice(i + 1)) : draft.concat([value])); }
+  return o.jsx(PgyKolPop, {
+    open: p.open,
+    anchor: p.anchor,
+    onClose: p.onClose,
+    width: 420,
+    preferredHeight: 188,
+    children: o.jsxs(x, {
+      children: [
+        o.jsx(w, { sx: { fontSize: 12, color: "rgba(0,0,0,.45)", mb: 0.75 }, children: "请至少选择3个品牌" }),
+        o.jsx(ae, { size: "small", fullWidth: true, placeholder: "请输入品牌名称", value: keyword, onChange: onKeyword, sx: { "& .MuiInputBase-root": { height: 32, bgcolor: "#fafafa" } } }),
+        options.length ? o.jsx(x, { sx: { display: "flex", flexWrap: "wrap", gap: 0.5, maxHeight: 120, overflowY: "auto", mt: 0.75 }, children: options.map(function (n) { var value = pgyKolOptValue(n), selected = draft.indexOf(value) >= 0; return o.jsx(f1, { key: String(value), size: "small", label: pgyKolOptLabel(n), color: selected ? "primary" : "default", variant: selected ? "filled" : "outlined", onClick: function () { toggle(n); } }); }) }) : null,
+        o.jsx(PgyKolCheck, { label: "剔除上述品牌已合作博主", checked: excluded, onToggle: function () { setExcluded(!excluded); } }),
+        o.jsx(PgyKolOfficialFooter, { disabled: draft.length < 3, onReset: function () { setDraft([]); setExcluded(false); }, onConfirm: function () { p.onApply(draft.slice(), excluded); p.onClose(); } }),
+      ],
+    }),
+  });
+}
+
+/* ============ Phase 5.2：多组单选范围 Popover（合作表现/传播规模/CPM/单价） ============ */
+function PgyKolRangeGroupsPop(p) {
+  var groups = p.groups || [];
+  return o.jsx(PgyKolPop, {
+    open: p.open,
+    anchor: p.anchor,
+    onClose: p.onClose,
+    width: p.width || 300,
+    children: o.jsxs(x, {
+      children: [
+        o.jsx(PgyKolPopHeader, { title: p.title, onClose: p.onClose }),
+        groups.map(function (g) {
+          return o.jsxs(x, {
+            key: g.key,
+            sx: { mb: 0.75 },
+            children: [
+              o.jsx(w, { sx: { fontSize: 12, color: "rgba(0,0,0,.45)", mb: 0.25 }, children: g.label }),
+              o.jsx(x, {
+                sx: { display: "flex", flexWrap: "wrap", gap: 0.5 },
+                children: g.options.map(function (n) {
+                  var sel = pgyKolRangeEq(g.value, n);
+                  return o.jsx(f1, {
+                    key: n.label,
+                    size: "small",
+                    label: n.label,
+                    color: sel ? "primary" : "default",
+                    variant: sel ? "filled" : "outlined",
+                    onClick: function () { g.onToggle(n); },
+                  });
+                }),
+              }),
+            ],
+          });
+        }),
+      ],
+    }),
+  });
+}
+
+/* ============ Phase 5.2：树形多选 Popover（二十大人群等，草稿 + 确定/清空） ============ */
+function PgyKolTreePop(p) {
+  var cfg = p.cfg;
+  var ds = m.useState(null), draftState = ds[0], setDraftState = ds[1];
+  var base = Array.isArray(p.selectedKeys) ? p.selectedKeys : [];
+  var draft = draftState !== null ? draftState : base;
+  m.useEffect(function () {
+    if (p.open) setDraftState(null);
+  }, [p.open]);
+  function toggle(n) {
+    var key = pgyKolNodeKey(n), i = draft.indexOf(key);
+    setDraftState(i >= 0 ? draft.slice(0, i).concat(draft.slice(i + 1)) : draft.concat([key]));
+  }
+  function clear() { setDraftState([]); }
+  function apply() { p.onApply(draft.slice()); p.onClose(); }
+  return o.jsx(PgyKolPop, {
+    open: p.open,
+    anchor: p.anchor,
+    onClose: p.onClose,
+    width: p.width || 300,
+    preferredHeight: 360,
+    children: o.jsxs(x, {
+      sx: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 },
+      children: [
+        o.jsx(PgyKolPopHeader, { title: p.title, onClose: p.onClose }),
+        cfg && cfg.error
+          ? o.jsx(oe, { severity: "error", children: "加载失败（错误码 " + (cfg.error.code || "unknown") + "）：" + (cfg.error.message || "未知错误") })
+          : cfg
+            ? o.jsxs(x, {
+                sx: { display: "flex", flexDirection: "column", minHeight: 0, flexGrow: 1, overflow: "hidden" },
+                children: [
+                  o.jsx(x, { sx: { minHeight: 0, flexGrow: 1, overflowY: "auto", pr: 0.25 }, children: o.jsx(PgyKolTree, {
+                    leafOnly: p.leafOnly,
+                    nodes: cfg.nodes || [],
+                    selected: draft,
+                    onToggle: toggle,
+                    display: p.display || function (n) { return n.fullPath || n.label || String(n.value); },
+                  }) }),
+                  p.hint ? o.jsx(w, { sx: { fontSize: 12, color: "rgba(0,0,0,.45)", display: "block", mt: 0.5, flexShrink: 0 }, children: p.hint }) : null,
+                  o.jsxs(x, {
+                    sx: { display: "flex", alignItems: "center", gap: 1, mt: 1, pt: 0.5, borderTop: "1px solid #f0f1f3", flexShrink: 0, position: "sticky", bottom: 0, bgcolor: "#fff" },
+                    children: [
+                      o.jsx(w, { sx: { fontSize: 12, color: "rgba(0,0,0,.45)", mr: "auto" }, children: "已选 " + draft.length + " 项" }),
+                      o.jsx($, { size: "small", variant: "outlined", onClick: clear, children: "清空" }),
+                      o.jsx($, { size: "small", variant: "contained", onClick: apply, children: "确定" }),
+                    ],
+                  }),
+                ],
+              })
+            : o.jsx(de, { size: 24 }),
+      ],
+    }),
+  });
+}
+
+/* ============ Phase 5.2：地域三级级联 Popover（省/市/区县） ============ */
+function PgyKolCascadePop(p) {
+  var rawNodes = p.cfg && p.cfg.nodes ? p.cfg.nodes : [];
+  // 官网地域为省/市/区县三级：若数据根层包含「中国」国家节点，
+  // 展示时跳过国家层，直接用其子节点作为省份列（选中节点仍携带完整
+  // fullPath 含 中国，序列化契约不变）。
+  var country = null;
+  for (var ci = 0; ci < rawNodes.length; ci++) {
+    if (rawNodes[ci].children && rawNodes[ci].children.length &&
+      (String(rawNodes[ci].label || "") === "中国" || String(rawNodes[ci].value || "") === "中国")) {
+      country = rawNodes[ci];
+      break;
+    }
+  }
+  var nodes = country ? country.children : rawNodes;
+  var st1 = m.useState(null), level1 = st1[0], setLevel1 = st1[1];
+  var st2 = m.useState(null), level2 = st2[0], setLevel2 = st2[1];
+  var st3 = m.useState(null), level3 = st3[0], setLevel3 = st3[1];
+  m.useEffect(function () {
+    if (p.open) {
+      setLevel1(null);
+      setLevel2(null);
+      setLevel3(null);
+    }
+  }, [p.open]);
+  var l1Children = level1 && level1.children ? level1.children : [];
+  var l2Children = level2 && level2.children ? level2.children : [];
+  function finish(n) {
+    p.onSelect(n);
+    p.onClose();
+  }
+  function pick1(n) {
+    setLevel1(n);
+    setLevel2(null);
+    setLevel3(null);
+    if (!n.children || !n.children.length) finish(n);
+  }
+  function pick2(n) {
+    setLevel2(n);
+    setLevel3(null);
+    if (!n.children || !n.children.length) finish(n);
+  }
+  function pick3(n) {
+    setLevel3(n);
+    finish(n);
+  }
+  function col(title, opts, selKey, pick) {
+    return o.jsxs(x, {
+      sx: { flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" },
+      children: [
+        o.jsx(w, { sx: { fontSize: 12, color: "rgba(0,0,0,.45)", mb: 0.25 }, children: title }),
+        o.jsx(x, {
+          sx: { minHeight: 0, flexGrow: 1, overflowY: "auto" },
+          children: opts.map(function (n) {
+            var k = pgyKolNodeKey(n), sel = k === selKey;
+            return o.jsx(x, {
+              key: k,
+              onClick: function () { pick(n); },
+              sx: {
+                display: "flex",
+                alignItems: "center",
+                minHeight: 26,
+                px: 0.75,
+                fontSize: 13,
+                color: sel ? "#ff2442" : "rgba(0,0,0,.7)",
+                bgcolor: sel ? "rgba(255,36,66,.08)" : "transparent",
+                borderRadius: 0.375,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              },
+              children: n.label || String(n.value),
+            });
+          }),
+        }),
+      ],
+    });
+  }
+  return o.jsx(PgyKolPop, {
+    open: p.open,
+    anchor: p.anchor,
+    onClose: p.onClose,
+    width: 420,
+    preferredHeight: 320,
+    children: o.jsxs(x, {
+      sx: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" },
+      children: [
+        o.jsx(PgyKolPopHeader, { title: p.title, onClose: p.onClose }),
+        nodes.length === 0
+          ? o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)", py: 1 }, children: "地域数据加载中…" })
+          : o.jsxs(x, {
+              sx: { display: "flex", gap: 1, flexGrow: 1, minHeight: 0, overflow: "hidden" },
+              children: [
+                col("省份", nodes, level1 ? pgyKolNodeKey(level1) : null, pick1),
+                l1Children.length > 0 ? col("城市", l1Children, level2 ? pgyKolNodeKey(level2) : null, pick2) : null,
+                l2Children.length > 0 ? col("区县", l2Children, level3 ? pgyKolNodeKey(level3) : null, pick3) : null,
+              ],
+            }),
+        o.jsxs(x, {
+          sx: { display: "flex", alignItems: "center", gap: 1, mt: 1, pt: 0.5, borderTop: "1px solid #f0f1f3", flexShrink: 0, position: "sticky", bottom: 0, bgcolor: "#fff" },
+          children: [
+            o.jsx(w, {
+              sx: { fontSize: 12, color: "rgba(0,0,0,.45)", mr: "auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+              children: "已选：" + ((level3 || level2 || level1) ? pgyKolOptLabel(level3 || level2 || level1) : "未选择"),
+            }),
+            o.jsx($, { size: "small", variant: "outlined", onClick: function () { p.onClear(); p.onClose(); }, children: "清空" }),
+            o.jsx($, { size: "small", variant: "contained", disabled: !level1, onClick: function () { finish(level3 || level2 || level1); }, children: "确定" }),
+          ],
+        }),
+      ],
+    }),
+  });
+}
+
+/* ============ Phase 5.2：粉丝量 Popover（预设 + 自定义上下限） ============ */
+function PgyKolFansNumPop(p) {
+  return o.jsx(PgyKolPop, {
+    open: p.open,
+    anchor: p.anchor,
+    onClose: p.onClose,
+    width: 280,
+    children: o.jsxs(x, {
+      children: [
+        o.jsx(PgyKolPopHeader, { title: "粉丝量", onClose: p.onClose }),
+        o.jsx(x, {
+          sx: { display: "flex", flexWrap: "wrap", gap: 0.5 },
+          children: pgyKolFansPresets.map(function (n) {
+            var sel = p.lower === n.lower && p.upper === n.upper;
+            return o.jsx(f1, {
+              key: n.label,
+              size: "small",
+              label: n.label,
+              color: sel ? "primary" : "default",
+              variant: sel ? "filled" : "outlined",
+              onClick: function () { p.onApply(n.lower, n.upper); p.onClose(); },
+            });
+          }),
+        }),
+        o.jsxs(x, {
+          sx: { display: "flex", alignItems: "center", gap: 0.5, mt: 1, pt: 0.5, borderTop: "1px solid #f0f1f3" },
+          children: [
+            o.jsx(ae, { size: "small", type: "number", placeholder: "下限", value: p.lower, onChange: function (e) { p.onLower(e.target.value); }, sx: { maxWidth: 100 } }),
+            o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)" }, children: "～" }),
+            o.jsx(ae, { size: "small", type: "number", placeholder: "上限", value: p.upper, onChange: function (e) { p.onUpper(e.target.value); }, sx: { maxWidth: 100 } }),
+            o.jsx($, { size: "small", variant: "contained", onClick: function () { p.onApply(p.lower, p.upper); p.onClose(); }, children: "确定" }),
+          ],
+        }),
+      ],
+    }),
+  });
+}
+
+/* ============ Phase 5.2：合作报价 Popover（图文/视频报价上下限） ============ */
+function PgyKolQuotePop(p) {
+  return o.jsx(PgyKolPop, {
+    open: p.open,
+    anchor: p.anchor,
+    onClose: p.onClose,
+    width: 300,
+    children: o.jsxs(x, {
+      children: [
+        o.jsx(PgyKolPopHeader, { title: "合作报价", onClose: p.onClose }),
+        o.jsx(PgyKolField, {
+          label: "图文报价",
+          children: [
+            o.jsx(ae, { size: "small", type: "number", placeholder: "下限", value: p.noteLower, onChange: function (e) { p.onNoteLower(e.target.value); }, sx: { maxWidth: 100 } }),
+            o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)" }, children: "～" }),
+            o.jsx(ae, { size: "small", type: "number", placeholder: "上限", value: p.noteUpper, onChange: function (e) { p.onNoteUpper(e.target.value); }, sx: { maxWidth: 100 } }),
+          ],
+        }),
+        o.jsx(PgyKolField, {
+          label: "视频报价",
+          children: [
+            o.jsx(ae, { size: "small", type: "number", placeholder: "下限", value: p.videoLower, onChange: function (e) { p.onVideoLower(e.target.value); }, sx: { maxWidth: 100 } }),
+            o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)" }, children: "～" }),
+            o.jsx(ae, { size: "small", type: "number", placeholder: "上限", value: p.videoUpper, onChange: function (e) { p.onVideoUpper(e.target.value); }, sx: { maxWidth: 100 } }),
+          ],
+        }),
+      ],
+    }),
+  });
+}
+
+/* ============ Phase 5.2：合作订单数 Popover ============ */
+function PgyKolOrderPop(p) {
+  return o.jsx(PgyKolPop, {
+    open: p.open,
+    anchor: p.anchor,
+    onClose: p.onClose,
+    width: 240,
+    children: o.jsxs(x, {
+      children: [
+        o.jsx(PgyKolPopHeader, { title: "合作订单数", onClose: p.onClose }),
+        o.jsxs(x, {
+          sx: { display: "flex", alignItems: "center", gap: 0.5 },
+          children: [
+            o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.7)" }, children: "≥" }),
+            o.jsx(ae, { size: "small", type: "number", placeholder: "订单数", value: p.value, onChange: function (e) { p.onChange(e.target.value); }, sx: { maxWidth: 120 } }),
+            o.jsx($, { size: "small", variant: "contained", onClick: p.onClose, children: "确定" }),
+          ],
+        }),
+      ],
+    }),
+  });
+}
+
+/* ============ Phase 5.2：官网式紧凑 checkbox 行 ============ */
+function PgyKolCheck(p) {
+  var dis = !!p.disabled;
+  return o.jsxs(x, {
+    sx: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 0.5,
+      height: 28,
+      cursor: dis ? "not-allowed" : "pointer",
+      opacity: dis ? 0.38 : 1,
+      userSelect: "none",
+    },
+    onClick: function () {
+      if (!dis) p.onToggle();
+    },
+    children: [
+      o.jsx(x, {
+        sx: {
+          width: 14,
+          height: 14,
+          borderRadius: 0.25,
+          border: "1px solid",
+          borderColor: p.checked ? "#ff2442" : "#c9cdd4",
+          bgcolor: p.checked ? "#ff2442" : "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 10,
+          color: "#fff",
+          flexShrink: 0,
+        },
+        children: p.checked ? "✓" : null,
+      }),
+      o.jsx(w, { sx: { fontSize: 14, color: dis ? "rgba(0,0,0,.25)" : "rgba(0,0,0,.7)", lineHeight: "28px" }, children: p.label }),
+    ],
+  });
+}
+
+/* ============ Phase 5.2：行内选项（营销目标/博主类目/精选博主/热门活动） ============ */
+function PgyKolInlineOptions(p) {
+  var keyOf = p.keyOf || pgyKolNodeKey;
+  var selected = p.selected || [];
+  return o.jsx(x, {
+    sx: { display: "flex", flexWrap: "wrap", gap: 0.5 },
+    children: p.options.map(function (n) {
+      var key = keyOf(n), sel = selected.indexOf(key) >= 0;
+      return o.jsx(PgyKolTrigger, {
+        key: key,
+        label: p.display ? p.display(n) : pgyKolOptLabel(n),
+        selected: sel,
+        arrow: false,
+        onOpen: function () { p.onToggle(n); },
+      });
+    }),
+  });
+}
+
+/* ============ Phase 5.2：搜索历史面板（搜昵称） ============ */
+function PgyKolHistoryPanel(p) {
+  var list = p.history || [];
+  if (list.length === 0) return null;
+  return o.jsxs(x, {
+    sx: { border: "1px solid #e5e6eb", borderRadius: 0.5, p: 1, mb: 0.75, bgcolor: "#fff" },
+    children: [
+      o.jsxs(x, {
+        sx: { display: "flex", alignItems: "center", mb: 0.5 },
+        children: [
+          o.jsx(w, { sx: { fontSize: 13, fontWeight: 600, color: "rgba(0,0,0,.85)", mr: "auto" }, children: "搜索历史" }),
+          o.jsx($, { size: "small", variant: "text", color: "error", onClick: p.onClear, children: "清空历史" }),
+        ],
+      }),
+      o.jsx(x, {
+        sx: { display: "flex", flexWrap: "wrap", gap: 0.5 },
+        children: list.map(function (kw) {
+          return o.jsx(f1, { key: kw, size: "small", variant: "outlined", label: kw, onClick: function () { p.onPick(kw); } });
+        }),
+      }),
+    ],
+  });
+}
+
+/* ============ Phase 5.2：矩阵分区与行（左侧窄列 + 右侧内容） ============ */
+function PgyKolMatrixSection(p) {
+  return o.jsxs(x, {
+    sx: { display: "flex", borderBottom: "1px solid #f0f1f3" },
+    children: [
+      o.jsx(w, {
+        sx: { width: 96, flexShrink: 0, pt: 1.5, fontSize: 14, fontWeight: 600, color: "rgba(0,0,0,.85)" },
+        children: p.title,
+      }),
+      o.jsx(x, {
+        sx: { flexGrow: 1, minWidth: 0, py: 1 },
+        children: p.children,
+      }),
+    ],
+  });
+}
+
+function PgyKolMatrixRow(p) {
+  return o.jsxs(x, {
+    sx: { display: "flex", alignItems: "center", minHeight: 36, gap: 1, py: 0.25 },
+    children: [
+      p.label
+        ? o.jsx(w, {
+            sx: { width: 88, flexShrink: 0, fontSize: 13, color: "rgba(0,0,0,.45)", textAlign: "right", lineHeight: "28px" },
+            children: p.label,
+          })
+        : null,
+      o.jsxs(x, {
+        sx: { flexGrow: 1, minWidth: 0, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 0.5 },
+        children: p.children,
+      }),
+    ],
+  });
+}
+
+/* 紧凑字段（弹层内 label + 控件） */
+function PgyKolField(p) {
+  return o.jsxs(x, {
+    sx: { display: "flex", alignItems: "center", gap: 0.5, py: 0.25 },
+    children: [
+      o.jsx(w, { sx: { flexShrink: 0, fontSize: 13, color: "rgba(0,0,0,.45)", minWidth: p.minWidth || 56 }, children: p.label }),
+      p.children,
+    ],
+  });
+}
+
+/* ============ Phase 5.2：展示指标弹窗（官网两栏式：可添加列 / 已添加） ============ */
+function PgyKolColumnDialog(p) {
+  var fixedIds = pgyKolFixedColumnIds(), list = p.columns || [];
+  var officialColumns = pgyKolOfficialMetricColumns(list);
+  var extensionColumns = list.filter(pgyKolIsExtensionColumn);
+  var groups = [];
+  officialColumns.forEach(function (c) {
+    var g = pgyKolColumnGroupOf(c);
+    if (g !== "固定列" && groups.indexOf(g) < 0) groups.push(g);
+  });
+  var ds = m.useState(null), draftState = ds[0], setDraftState = ds[1];
+  var ss = m.useState(""), search = ss[0], setSearch = ss[1];
+  var effective = draftState !== null ? draftState : (p.selected || []);
+  var filtered = list.filter(function (c) { return search === "" || (c.label || "").indexOf(search) >= 0; });
+  var officialCount = officialColumns.length; /* 官网主列表：41 项（固定「操作」不计指标）。 */
+  function fixedLabel(id) {
+    if (id === "kolInfo") return "博主信息";
+    if (id === "recentNotes") return "近期笔记";
+    if (id === "actions") return "操作";
+    return id;
+  }
+  function colOf(id) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) return list[i];
+    }
+    return null;
+  }
+  function toggleDraft(id) {
+    if (fixedIds.indexOf(id) >= 0) return;
+    setDraftState(function (prev) {
+      var cur = (prev !== null ? prev : (p.selected || [])).slice(), i = cur.indexOf(id);
+      if (i >= 0) return cur.slice(0, i).concat(cur.slice(i + 1));
+      if (id === "price" || id === "picturePrice" || id === "videoPrice") {
+        cur = cur.filter(function (c) { return c !== "price" && c !== "picturePrice" && c !== "videoPrice"; });
+      }
+      return cur.concat([id]);
+    });
+  }
+  function clearDraft() {
+    setDraftState(fixedIds.slice());
+  }
+  function moveDraft(id, dir) {
+    setDraftState(function (prev) {
+      var cur = (prev !== null ? prev : (p.selected || [])).slice(), i = cur.indexOf(id);
+      if (i < 0) return cur;
+      var j = i + dir;
+      if (j < 0 || j >= cur.length) return cur;
+      var tmp = cur[i];
+      cur[i] = cur[j];
+      cur[j] = tmp;
+      return cur;
+    });
+  }
+  function apply() {
+    p.onApply(effective.slice());
+    setDraftState(null);
+    setSearch("");
+    p.onClose();
+  }
+  function cancel() {
+    setDraftState(null);
+    setSearch("");
+    p.onClose();
+  }
+  function checkBox(c) {
+    var sel = effective.indexOf(c.id) >= 0;
+    var radio = c.id === "price" || c.id === "picturePrice" || c.id === "videoPrice";
+    return o.jsxs(x, {
+      key: c.id,
+      onClick: function () { toggleDraft(c.id); },
+      sx: { display: "flex", alignItems: "center", gap: 0.5, minHeight: 28, cursor: c.fixed ? "default" : "pointer", px: 0.25 },
+      children: [
+        o.jsx(x, {
+          sx: {
+            width: 14,
+            height: 14,
+            borderRadius: radio ? 7 : 2,
+            border: "1px solid",
+            borderColor: sel ? "#ff2442" : "#c9cdd4",
+            bgcolor: sel ? "#ff2442" : "#fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 10,
+            color: "#fff",
+            flexShrink: 0,
+          },
+          children: radio ? (sel ? "●" : null) : (sel ? "✓" : null),
+        }),
+        o.jsx(w, { sx: { fontSize: 13, color: c.fixed ? "rgba(0,0,0,.45)" : "rgba(0,0,0,.7)" }, children: c.label || c.id }),
+      ],
+    });
+  }
+  function rightRow(id) {
+    var c = colOf(id), label = c ? c.label : fixedLabel(id);
+    var fixed = fixedIds.indexOf(id) >= 0;
+    var idx = effective.indexOf(id), first = idx === 0, last = idx === effective.length - 1;
+    return o.jsxs(x, {
+      key: id,
+      sx: { display: "flex", alignItems: "center", gap: 0.5, minHeight: 30 },
+      children: [
+        fixed
+          ? o.jsx(B, { icon: "solar:lock-bold", width: 13, height: 13, style: { color: "rgba(0,0,0,.35)", flexShrink: 0 } })
+          : o.jsx(B, { icon: "mdi:drag-vertical", width: 14, height: 14, style: { color: "rgba(0,0,0,.25)", flexShrink: 0 } }),
+        o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.7)", flexGrow: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: label }),
+        fixed
+          ? null
+          : o.jsx($, { size: "small", sx: { minWidth: 26, p: 0 }, disabled: first, onClick: function () { moveDraft(id, -1); }, children: "↑" }),
+        fixed
+          ? null
+          : o.jsx($, { size: "small", sx: { minWidth: 26, p: 0 }, disabled: last, onClick: function () { moveDraft(id, 1); }, children: "↓" }),
+        fixed
+          ? null
+          : o.jsx(te, { size: "small", sx: { p: 0.25 }, onClick: function () { toggleDraft(id); }, children: o.jsx(B, { icon: "mdi:close", width: 14, height: 14 }) }),
+      ],
+    });
+  }
+  return o.jsxs(ue, {
+    open: p.open,
+    onClose: cancel,
+    maxWidth: "md",
+    fullWidth: true,
+    children: [
+      o.jsx(be, {
+        children: o.jsxs(x, {
+          sx: { display: "flex", alignItems: "center", gap: 1 },
+          children: [
+            o.jsx(w, { variant: "subtitle1", fontWeight: 600, children: "自定义列" }),
+            o.jsx(te, { size: "small", sx: { ml: "auto", p: 0.25 }, onClick: cancel, children: o.jsx(B, { icon: "mdi:close", width: 18, height: 18 }) }),
+          ],
+        }),
+      }),
+      o.jsxs(pe, {
+        sx: { display: "flex", gap: 2, minHeight: 420 },
+        children: [
+          /* 左：可添加列 */
+          o.jsxs(x, {
+            sx: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column" },
+            children: [
+              o.jsx(w, { sx: { fontSize: 13, fontWeight: 600, color: "rgba(0,0,0,.85)", mb: 0.5 }, children: "官网展示指标（" + officialCount + "）" }),
+              o.jsx(ae, { size: "small", fullWidth: true, placeholder: "请输入筛选条件", value: search, onChange: function (e) { setSearch(e.target.value); }, sx: { mb: 1 } }),
+              p.error ? o.jsx(oe, { severity: "error", sx: { mb: 1 }, children: "字段加载失败（错误码 " + (p.error.code || "unknown") + "）：" + (p.error.message || "未知错误") }) : null,
+              o.jsx(x, {
+                sx: { flex: 1, overflowY: "auto", maxHeight: 360 },
+                children: [
+                  o.jsxs(x, {
+                    key: "fixed-columns",
+                    sx: { mb: 1 },
+                    children: [
+                      o.jsx(w, { sx: { fontSize: 12, fontWeight: 600, color: "rgba(0,0,0,.6)", mb: 0.25 }, children: "固定列" }),
+                      fixedIds.map(function (id) {
+                        var c = colOf(id);
+                        return checkBox({ id: id, label: c && c.label || fixedLabel(id), group: "固定列", fixed: true });
+                      }),
+                    ],
+                  }),
+                ].concat(groups.map(function (g) {
+                  var cols;
+                  cols = filtered.filter(function (c) { return !pgyKolIsExtensionColumn(c) && c.id !== "actions" && pgyKolColumnGroupOf(c) === g; });
+                  if (cols.length === 0) return null;
+                  return o.jsxs(x, {
+                    key: g,
+                    sx: { mb: 1 },
+                    children: [
+                      o.jsx(w, { sx: { fontSize: 12, fontWeight: 600, color: "rgba(0,0,0,.6)", mb: 0.25 }, children: g }),
+                      cols.map(checkBox),
+                    ],
+                  });
+                })).concat(extensionColumns.filter(function (c) { return search === "" || (c.label || "").indexOf(search) >= 0; }).length ? [o.jsxs(x, {
+                  key: "magiorix-extension-columns",
+                  sx: { mt: 1, pt: 0.75, borderTop: "1px solid #f0f1f3" },
+                  children: [
+                    o.jsx(w, { sx: { fontSize: 12, fontWeight: 600, color: "rgba(0,0,0,.6)", mb: 0.25 }, children: "Magiorix 扩展字段（" + extensionColumns.length + "）" }),
+                    extensionColumns.filter(function (c) { return search === "" || (c.label || "").indexOf(search) >= 0; }).map(checkBox),
+                  ],
+                })] : []),
+              }),
+            ],
+          }),
+          /* 右：已添加 */
+          o.jsxs(x, {
+            sx: { width: 264, flexShrink: 0, borderLeft: "1px solid #f0f1f3", pl: 1.5, display: "flex", flexDirection: "column" },
+            children: [
+              o.jsxs(x, {
+                sx: { display: "flex", alignItems: "center", gap: 1, mb: 0.5 },
+                children: [
+                  o.jsx(w, { sx: { fontSize: 13, fontWeight: 600, color: "rgba(0,0,0,.85)", mr: "auto" }, children: "已添加 " + effective.length + " 项" }),
+                  o.jsx($, { size: "small", variant: "text", onClick: clearDraft, children: "清空" }),
+                ],
+              }),
+              o.jsx(x, {
+                sx: { overflowY: "auto", maxHeight: 360 },
+                children: [
+                  fixedIds.map(rightRow),
+                  o.jsx(w, { sx: { fontSize: 11, color: "rgba(0,0,0,.35)", display: "block", py: 0.5, borderBottom: "1px solid #f0f1f3", mb: 0.5 }, children: "以上为横向固定列" }),
+                  effective.filter(function (id) { return fixedIds.indexOf(id) < 0; }).map(rightRow),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+      o.jsxs(_e, {
+        children: [
+          o.jsx($, { onClick: cancel, children: "取消" }),
+          o.jsx($, { variant: "contained", onClick: apply, children: "确定" }),
+        ],
+      }),
+    ],
+  });
+}
+
+
+/* ============ Phase 5.2：找博主页面 ============ */
+function PgyKolSearchPage() {
+  var st = m.useState("idle"), status = st[0], setStatus = st[1];
+  var er = m.useState(null), error = er[0], setError = er[1];
+  var cf = m.useState({}), configs = cf[0], setConfigs = cf[1];
+  var fs0 = m.useState(pgyKolDefaultFilter()), filter = fs0[0], setFilterState = fs0[1];
+  var pv = m.useState(""), preview = pv[0], setPreview = pv[1];
+  var rs = m.useState(null), result = rs[0], setResult = rs[1];
+  var cl = m.useState(null), columnList = cl[0], setColumnList = cl[1];
+  var ce2 = m.useState(null), columnError = ce2[0], setColumnError = ce2[1];
+  var sc2 = m.useState([]), selectedColumns = sc2[0], setSelectedColumns = sc2[1];
+  var colOpen = m.useState(false), columnOpen = colOpen[0], setColumnOpen = colOpen[1];
+  var iop = m.useState(false), industryPopupOpen = iop[0], setIndustryPopupOpen = iop[1];
+  var catOpen = m.useState(false), categoryOpen = catOpen[0], setCategoryOpen = catOpen[1];
+  var catInd = m.useState("汽车"), catIndustry = catInd[0], setCatIndustry = catInd[1];
+  var brandPopup = m.useState(null), brandPopupMode = brandPopup[0], setBrandPopupMode = brandPopup[1];
+  var showAllCat = m.useState(false), showAllCategory = showAllCat[0], setShowAllCategory = showAllCat[1];
+  var restored = m.useState(false), restoredNotice = restored[0], setRestoredNotice = restored[1];
+  var hist = m.useState(pgyKolNickHistory()), history = hist[0], setHistory = hist[1];
+  var mopen = m.useState(true), matrixOpen = mopen[0], setMatrixOpen = mopen[1];
+  var adv = m.useState(false), advancedOpen = adv[0], setAdvancedOpen = adv[1]; /* 高级信息默认收起 */
+  var popst = m.useState({ id: null, anchor: null }), pop = popst[0], setPop = popst[1];
+  var khint = m.useState(false), keywordHint = khint[0], setKeywordHint = khint[1];
+  var tid2 = m.useState(null), currentTaskId = tid2[0], setCurrentTaskId = tid2[1];
+  var ct2 = m.useState(null), currentTask = ct2[0], setCurrentTask = ct2[1];
+  var tl2 = m.useState([]), taskList = tl2[0], setTaskList = tl2[1];
+  var tle = m.useState(null), taskListError = tle[0], setTaskListError = tle[1];
+  var tl3 = m.useState(false), taskLoading = tl3[0], setTaskLoading = tl3[1];
+  var bzy = m.useState(false), batchBusy = bzy[0], setBatchBusy = bzy[1];
+  var ber = m.useState(null), batchError = ber[0], setBatchError = ber[1];
+  var bnt = m.useState(null), batchNotice = bnt[0], setBatchNotice = bnt[1];
+  var snt = m.useState(null), searchNotice = snt[0], setSearchNotice = snt[1];
+  var cvw = m.useState({ appliedFilter: null, appliedRequestKey: null, isDirty: true }), coordinatorView = cvw[0], setCoordinatorView = cvw[1];
+  var coordinatorRef = m.useRef(null);
+  var taskDetailRef = m.useRef(null);
+  if (!coordinatorRef.current) {
+    coordinatorRef.current = pgyKolCreateSearchCoordinator({
+      bridge: function () { return window.bridge && window.bridge.pgyKol; },
+      onDraft: function (next) { setFilterState(next); },
+      onState: function (next) {
+        setCoordinatorView(next);
+        setStatus(next.status);
+        setError(next.error);
+        setResult(next.result);
+      },
+      onHistory: function (keyword) { setHistory(pgyKolNickHistoryAdd(keyword)); },
+      onNotice: function (message) {
+        if (message === "请先确定筛选并查询") setBatchError({ code: "filter-not-applied", message: message });
+        else setSearchNotice(message);
+      },
+    });
+  }
+  var searchCoordinator = coordinatorRef.current;
+  function setFilter(next) { return searchCoordinator.editDraft(next); }
+
+  /* 路由级宽内容标记：只在找博主页存在时由外层收起重复二级导航，
+   * 全局平台主导航不在本组件的职责范围内。 */
+  m.useEffect(function () {
+    document.documentElement.classList.add("magiorix-pgy-kol-wide");
+    /* 二级导航没有稳定的 class（构建时会 hash），只按它同时拥有的两条
+     * 蒲公英采集入口定位。最左侧平台主导航不含这两个入口，因此不会被隐藏。 */
+    var hidden = null;
+    function closestCollectorNav() {
+      var blogger = null, note = null;
+      var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+      var textNode;
+      while ((textNode = walker.nextNode())) {
+        var text = (textNode.nodeValue || "").trim();
+        if (text === "蒲公英博主采集") blogger = textNode.parentElement;
+        if (text === "蒲公英笔记采集") note = textNode.parentElement;
+      }
+      if (!blogger || !note) return null;
+      var common = null;
+      for (var el = blogger.parentElement; el && el !== document.body; el = el.parentElement) {
+        if (el.contains(note)) { common = el; break; }
+      }
+      if (!common) return null;
+      var widthOwner = null;
+      for (var cur = common; cur && cur !== document.body; cur = cur.parentElement) {
+        var inlineWidth = cur.style && cur.style.width ? parseFloat(cur.style.width) : NaN;
+        var rectWidth = typeof cur.getBoundingClientRect === "function" ? Number(cur.getBoundingClientRect().width) : NaN;
+        var computedWidth = NaN;
+        if (window.getComputedStyle) {
+          var computed = window.getComputedStyle(cur);
+          computedWidth = computed ? parseFloat(computed.width) : NaN;
+        }
+        var width = Number.isFinite(inlineWidth) ? inlineWidth : Number.isFinite(rectWidth) && rectWidth > 0 ? rectWidth : computedWidth;
+        if (Number.isFinite(width) && width >= 140 && width <= 280) widthOwner = cur;
+        if (widthOwner && Number.isFinite(width) && width > 360) break;
+      }
+      return widthOwner || common;
+    }
+    function applyWideLayout() {
+      var nav = closestCollectorNav();
+      if (!nav || hidden && nav === hidden.node) return;
+      if (hidden && hidden.node) {
+        hidden.node.style.display = hidden.display;
+        if (hidden.attribute === null) hidden.node.removeAttribute("data-magiorix-pgy-kol-secondary-nav");
+        else hidden.node.setAttribute("data-magiorix-pgy-kol-secondary-nav", hidden.attribute);
+      }
+      hidden = { node: nav, display: nav.style.display || "", attribute: nav.getAttribute ? nav.getAttribute("data-magiorix-pgy-kol-secondary-nav") : null };
+      nav.setAttribute("data-magiorix-pgy-kol-secondary-nav", "hidden");
+      nav.style.display = "none";
+    }
+    var first = window.setTimeout(applyWideLayout, 0);
+    var second = window.setTimeout(applyWideLayout, 160);
+    var observer = window.MutationObserver ? new window.MutationObserver(applyWideLayout) : null;
+    if (observer && document.body) observer.observe(document.body, { childList: true, subtree: true });
+    return function () {
+      window.clearTimeout(first); window.clearTimeout(second);
+      if (observer) observer.disconnect();
+      if (hidden && hidden.node) {
+        hidden.node.style.display = hidden.display;
+        if (hidden.attribute === null) hidden.node.removeAttribute("data-magiorix-pgy-kol-secondary-nav");
+        else hidden.node.setAttribute("data-magiorix-pgy-kol-secondary-nav", hidden.attribute);
+      }
+      document.documentElement.classList.remove("magiorix-pgy-kol-wide");
+    };
+  }, []);
+
+  /* 配置加载：地域/行业特色画像/二十大人群/内容题材/预估消费行为/笔记类目/行业/热门活动，
+   * 以及 Schema 字段（未实证集合唯一来源）。 */
+  m.useEffect(function () {
+    var bridge = window.bridge && window.bridge.pgyKol;
+    if (!bridge) return;
+    var tasks = [
+      ["areas", { provider: "areas" }],
+      ["automotive", { provider: "kolTagsV2", section: "automotiveIndustryTag" }],
+      ["audience20", { provider: "kolTagsV2", section: "audience20" }],
+      ["contentTheme", { provider: "kolTagsV2", section: "contentTheme" }],
+      ["consumeBehavior", { provider: "consumeBehavior" }],
+      ["noteCategory", { provider: "specialIndustryData" }],
+      ["industry", { provider: "kolTagsV2", section: "industryTags" }],
+      ["activities", { provider: "activities" }],
+    ];
+    var schemaP = bridge.getSchemaFields ? bridge.getSchemaFields() : Promise.resolve({ ok: false, error: { code: "unknown", message: "schema 不可用" } });
+    schemaP.then(function (res) {
+      if (res && res.ok && Array.isArray(res.data)) pgyKolSchemaUnproven(res.data);
+    }).catch(function () {});
+    tasks.forEach(function (t) {
+      bridge.getConfig(t[1]).then(function (res) {
+        setConfigs(function (prev) {
+          var next = Object.assign({}, prev);
+          if (res && res.ok) {
+            next[t[0]] = { source: res.data && res.data.source || "live", warning: res.data && res.data.warning, nodes: res.data && res.data.nodes || [], options: res.data && res.data.options || [] };
+          } else {
+            next[t[0]] = { error: res && res.error ? res.error : { code: "unknown", message: "配置加载失败" } };
+          }
+          return next;
+        });
+      }).catch(function (e) {
+        setConfigs(function (prev) {
+          var next = Object.assign({}, prev);
+          next[t[0]] = { error: { code: e && e.code || "unknown", message: e && e.message || String(e) } };
+          return next;
+        });
+      });
+    });
+  }, []);
+
+  /* 重启恢复上次筛选。 */
+  m.useEffect(function () {
+    var saved = pgyKolReadJson("magiorix-pgy-kol-filters");
+    if (saved && typeof saved === "object" && saved.filter && typeof saved.filter === "object") {
+      var next = Object.assign({}, pgyKolDefaultFilter(), saved.filter);
+      if (saved.searchType === 0 || saved.searchType === 1) next.searchType = saved.searchType;
+      if (typeof saved.keyword === "string") next.keyword = saved.keyword;
+      searchCoordinator.restore(next);
+      setRestoredNotice(true);
+    }
+  }, []);
+
+  /* 展示指标（column registry 单一来源）。 */
+  m.useEffect(function () {
+    var bridge = window.bridge && window.bridge.pgyKol;
+    if (!bridge || !bridge.getColumns) return;
+    bridge.getColumns().then(function (res) {
+      if (res && res.ok && Array.isArray(res.data)) {
+        setColumnList(res.data);
+        var saved = pgyKolReadJson("magiorix-pgy-kol-filters"), stored = Array.isArray(saved && saved.selectedColumns) ? saved.selectedColumns : null;
+        if (!stored) {
+          var cols = pgyKolReadJson("magiorix-pgy-kol-columns");
+          if (Array.isArray(cols)) stored = cols;
+        }
+        setSelectedColumns(pgyKolResolveColumns(res.data, stored));
+        setColumnError(null);
+      } else {
+        setColumnError(res && res.error || { code: "unknown", message: "字段列表加载失败" });
+      }
+    }).catch(function (e) {
+      setColumnError({ code: e && e.code || "unknown", message: e && e.message || String(e) });
+    });
+  }, []);
+
+  m.useEffect(function () { refreshTaskList(); }, []);
+  m.useEffect(function () {
+    var bridge = window.bridge && window.bridge.pgyKol;
+    if (!bridge || !bridge.onBatchEvent) return;
+    var dispose = bridge.onBatchEvent(function (ev) {
+      if (currentTaskId) loadTask(currentTaskId);
+      refreshTaskList();
+    });
+    return function () { if (dispose && typeof dispose === "function") dispose(); };
+  }, [currentTaskId]);
+  m.useEffect(function () {
+    if (!currentTaskId || !currentTask || currentTask.taskId !== currentTaskId) return;
+    var frame = window.requestAnimationFrame ? window.requestAnimationFrame(function () {
+      var node = taskDetailRef.current;
+      if (node && typeof node.scrollIntoView === "function") node.scrollIntoView({ behavior: "smooth", block: "start" });
+    }) : null;
+    return function () { if (frame !== null && window.cancelAnimationFrame) window.cancelAnimationFrame(frame); };
+  }, [currentTaskId, currentTask && currentTask.taskId]);
+
+  /* Payload 预览（未实证字段仅预览，真实搜索/采集被 IPC 门控）。 */
+  m.useEffect(function () {
+    var bridge = window.bridge && window.bridge.pgyKol;
+    if (!bridge) {
+      setPreview("");
+      return;
+    }
+    var timer = window.setTimeout(function () {
+      bridge.previewPayload(pgyKolToFilterState(filter)).then(function (res) {
+        if (res && res.ok) {
+          setPreview(typeof res.data === "string" ? res.data : JSON.stringify(res.data, null, 2));
+        } else {
+          setPreview("预览不可用：" + ((res && res.error && res.error.message) || "未知错误"));
+        }
+      }).catch(function (e) {
+        setPreview("预览不可用：" + ((e && e.message) || String(e)));
+      });
+    }, 300);
+    return function () { window.clearTimeout(timer); };
+  }, [filter]);
+
+  /* 筛选与展示指标持久化。 */
+  m.useEffect(function () {
+    var timer = window.setTimeout(function () {
+      pgyKolWriteJson("magiorix-pgy-kol-filters", { searchType: filter.searchType, keyword: filter.keyword, filter: filter, selectedColumns: selectedColumns });
+    }, 400);
+    return function () { window.clearTimeout(timer); };
+  }, [filter, selectedColumns]);
+
+  var update = m.useCallback(function (patch) {
+    setFilter(function (prev) { return Object.assign({}, prev, patch); });
+  }, []);
+  var toggleArr = m.useCallback(function (key, node) {
+    setFilter(function (prev) {
+      var cur = prev[key] || [], found = -1;
+      for (var i = 0; i < cur.length; i++) {
+        if (pgyKolNodeKey(cur[i]) === pgyKolNodeKey(node)) { found = i; break; }
+      }
+      var next = found >= 0 ? cur.slice(0, found).concat(cur.slice(found + 1)) : cur.concat([node]);
+      var patch = {};
+      patch[key] = next;
+      return Object.assign({}, prev, patch);
+    });
+  }, []);
+  var toggleSingle = m.useCallback(function (key, value) {
+    setFilter(function (prev) {
+      var patch = {};
+      patch[key] = prev[key] === value ? null : value;
+      return Object.assign({}, prev, patch);
+    });
+  }, []);
+  var toggleRange = m.useCallback(function (key, node) {
+    setFilter(function (prev) {
+      var patch = {};
+      patch[key] = pgyKolRangeEq(prev[key], node) ? null : node;
+      return Object.assign({}, prev, patch);
+    });
+  }, []);
+  var toggleWithNone = m.useCallback(function (key, value) {
+    setFilter(function (prev) {
+      var patch = {};
+      patch[key] = value === "不限" ? null : (prev[key] === value ? null : value);
+      return Object.assign({}, prev, patch);
+    });
+  }, []);
+  var toggleBool = m.useCallback(function (key) {
+    setFilter(function (prev) {
+      var patch = {};
+      patch[key] = !prev[key];
+      return Object.assign({}, prev, patch);
+    });
+  }, []);
+  var toggleCategory = m.useCallback(function (value) {
+    setFilter(function (prev) {
+      var cur = prev.contentTag || [], next;
+      if (value === "全部") {
+        next = cur.indexOf("全部") >= 0 ? [] : ["全部"];
+      } else {
+        next = cur.slice();
+        var i = next.indexOf("全部");
+        if (i >= 0) next = next.slice(0, i).concat(next.slice(i + 1));
+        var j = next.indexOf(value);
+        if (j >= 0) next = next.slice(0, j).concat(next.slice(j + 1));
+        else next.push(value);
+      }
+      var patch = {};
+      patch.contentTag = next;
+      return Object.assign({}, prev, patch);
+    });
+  }, []);
+  var openPop = function (id, e) {
+    setPop({ id: id, anchor: e && e.currentTarget ? e.currentTarget : null });
+  };
+  var closePop = function () {
+    setPop({ id: null, anchor: null });
+  };
+
+  /* 顶部搜索、Enter 与底部全局确定复用唯一正式查询入口。 */
+  var applyAndSearch = function () {
+    setKeywordHint(false);
+    setSearchNotice(null);
+    return searchCoordinator.applyAndSearch().then(function (res) {
+      if (res && res.ok) setBatchError(null);
+      return res;
+    });
+  };
+
+  var loadTask = function (tid) {
+    var bridge = window.bridge && window.bridge.pgyKol;
+    if (!bridge || !bridge.batchGet || !tid) return;
+    setTaskLoading(true);
+    bridge.batchGet({ taskId: tid }).then(function (res) {
+      setTaskLoading(false);
+      if (res && res.ok) {
+        setCurrentTask(res.data);
+        setBatchError(null);
+      } else {
+        setBatchError(res && res.error || { code: "unknown", message: "任务详情加载失败" });
+      }
+    }).catch(function (e) {
+      setTaskLoading(false);
+      setBatchError({ code: e && e.code || "unknown", message: e && e.message || String(e) });
+    });
+  };
+  var refreshTaskList = function () {
+    var bridge = window.bridge && window.bridge.pgyKol;
+    if (!bridge || !bridge.batchList) return;
+    bridge.batchList().then(function (res) {
+      if (res && res.ok && Array.isArray(res.data)) {
+        setTaskList(res.data);
+        setTaskListError(null);
+      } else {
+        setTaskListError(res && res.error || { code: "unknown", message: "任务历史加载失败" });
+      }
+    }).catch(function (e) {
+      setTaskListError({ code: e && e.code || "unknown", message: e && e.message || String(e) });
+    });
+  };
+  var startBatch = function () {
+    if (batchBusy) return;
+    var exportColumns = pgyKolExportColumnIds(columnList, selectedColumns);
+    if (exportColumns.length === 0) {
+      setBatchError({ code: "invalid-input", message: "请至少选择一个可导出的展示字段" });
+      return;
+    }
+    if (!coordinatorView.appliedFilter || coordinatorView.isDirty) {
+      setBatchError({ code: "filter-not-applied", message: "请先确定筛选并查询" });
+      return;
+    }
+    setBatchBusy(true);
+    setBatchError(null);
+    searchCoordinator.startBatch(exportColumns).then(function (res) {
+      setBatchBusy(false);
+      if (res && res.ok) {
+        var tid = res.data && res.data.taskId;
+        if (tid) {
+          setCurrentTaskId(tid);
+          loadTask(tid);
+        }
+        refreshTaskList();
+      } else {
+        setBatchError(res && res.error || { code: "unknown", message: "采集启动失败" });
+      }
+    }).catch(function (e) {
+      setBatchBusy(false);
+      setBatchError({ code: e && e.code || "unknown", message: e && e.message || String(e) });
+    });
+  };
+  var pauseBatch = function () {
+    var bridge = window.bridge && window.bridge.pgyKol, tid = currentTaskId;
+    if (!bridge || !tid) return;
+    setBatchBusy(true);
+    setBatchError(null);
+    bridge.batchPause({ taskId: tid }).then(function (res) {
+      setBatchBusy(false);
+      if (res && res.ok) {
+        loadTask(tid);
+        refreshTaskList();
+      } else {
+        setBatchError(res && res.error || { code: "unknown", message: "任务操作失败" });
+      }
+    }).catch(function (e) {
+      setBatchBusy(false);
+      setBatchError({ code: e && e.code || "unknown", message: e && e.message || String(e) });
+    });
+  };
+  var resumeBatch = function (budgets) {
+    var bridge = window.bridge && window.bridge.pgyKol, tid = currentTaskId;
+    if (!bridge || !tid) return;
+    setBatchBusy(true);
+    setBatchError(null);
+    bridge.batchResume(budgets ? { taskId: tid, budgets: budgets } : { taskId: tid }).then(function (res) {
+      setBatchBusy(false);
+      if (res && res.ok) {
+        loadTask(tid);
+        refreshTaskList();
+      } else {
+        setBatchError(res && res.error || { code: "unknown", message: "任务操作失败" });
+      }
+    }).catch(function (e) {
+      setBatchBusy(false);
+      setBatchError({ code: e && e.code || "unknown", message: e && e.message || String(e) });
+    });
+  };
+  var cancelBatch = function () {
+    var bridge = window.bridge && window.bridge.pgyKol, tid = currentTaskId;
+    if (!bridge || !tid) return;
+    setBatchBusy(true);
+    setBatchError(null);
+    bridge.batchCancel({ taskId: tid }).then(function (res) {
+      setBatchBusy(false);
+      if (res && res.ok) {
+        loadTask(tid);
+        refreshTaskList();
+      } else {
+        setBatchError(res && res.error || { code: "unknown", message: "任务操作失败" });
+      }
+    }).catch(function (e) {
+      setBatchBusy(false);
+      setBatchError({ code: e && e.code || "unknown", message: e && e.message || String(e) });
+    });
+  };
+  var exportTask = function (tid) {
+    var bridge = window.bridge && window.bridge.pgyKol;
+    if (!bridge || !bridge.batchExport || !tid) return;
+    setBatchBusy(true);
+    setBatchError(null);
+    setBatchNotice(null);
+    bridge.batchExport({ taskId: tid }).then(function (res) {
+      setBatchBusy(false);
+      if (res && res.ok) {
+        setBatchNotice("导出已提交：" + tid + "（完整数据以导出文件为准）");
+      } else {
+        setBatchError(res && res.error || { code: "unknown", message: "导出失败" });
+      }
+    }).catch(function (e) {
+      setBatchBusy(false);
+      setBatchError({ code: e && e.code || "unknown", message: e && e.message || String(e) });
+    });
+  };
+  var selectTask = function (tid) {
+    setCurrentTaskId(tid);
+    loadTask(tid);
+  };
+  var applyBrands = function (ids) {
+    if (brandPopupMode === "recent") {
+      update({ tradeReportBrandIdSet: ids, audienceGroup: null });
+    } else {
+      update({ brands: ids, audienceGroup: null });
+    }
+  };
+  var clearAll = function () {
+    setFilter(pgyKolDefaultFilter());
+    pgyKolClearJson("magiorix-pgy-kol-filters");
+    setRestoredNotice(false);
+    setShowAllCategory(false);
+    setKeywordHint(false);
+  };
+  var openNoteCategory = function (ind) {
+    setCatIndustry(ind);
+    setCategoryOpen(true);
+  };
+  var applyLocation = function (node) {
+    update({ location: node });
+  };
+  var clearLocation = function () {
+    update({ location: null });
+  };
+  var applyFansLocation = function (node) {
+    update({ fansLocation: node });
+  };
+  var clearFansLocation = function () {
+    update({ fansLocation: null });
+  };
+  var setFansNumber = function (lo, hi) {
+    update({ fansNumberLower: lo, fansNumberUpper: hi });
+  };
+  var toggleActivity = function (n) {
+    var v = pgyKolOptValue(n);
+    setFilter(function (prev) {
+      var cur = prev.activityCodes || [], i = cur.indexOf(v), next = i >= 0 ? cur.slice(0, i).concat(cur.slice(i + 1)) : cur.concat([v]);
+      var patch = {};
+      patch.activityCodes = next;
+      return Object.assign({}, prev, patch);
+    });
+  };
+  var togglePreset = function (n) {
+    if (pgyKolPresetActive(n, filter)) {
+      setFansNumber("", "");
+    } else {
+      setFansNumber(n.lower, n.upper);
+    }
+  };
+  var oneClickExclude = function () {
+    update({ excludeLowActive: true, fansNumUp: true, excludedTradeReportBrand: !!hasBrands, excludedTradeInviteReportBrand: !!hasBrands });
+  };
+
+  if (!pgyKolDevEnabled()) {
+    return o.jsx(x, { sx: { p: 4 }, children: o.jsx(oe, { severity: "warning", children: "功能未开启" }) });
+  }
+
+  var bridgeOk = !!(window.bridge && window.bridge.pgyKol);
+  var areasCfg = configs.areas || null;
+  var autoCfg = configs.automotive || null;
+  var audCfg = configs.audience20 || null;
+  var themeCfg = configs.contentTheme || null;
+  var consumeCfg = configs.consumeBehavior || null;
+  var audGroupCfg = configs.audienceGroup || null;
+  var actCfg = configs.activities || null;
+  var autoLeaves = [];
+  var batchRunning = currentTask && currentTask.status === "running";
+  var hasBrands = filter.brands && filter.brands.length > 0;
+  var catOptions = showAllCategory ? pgyKolCategoryFull : pgyKolCategoryCommon;
+  filter.automotive.forEach(function (n) { pgyKolFlattenLeaves(n, autoLeaves); });
+
+  /* 已选条件摘要（含 Schema 驱动的【待实证】后缀）。 */
+  var summary = [], unprovenKeys = pgyKolUnprovenSet();
+  var hasUnprovenSel = Object.keys(filter).some(function (k) {
+    var v = filter[k];
+    if (!unprovenKeys[k] || v === undefined || v === null || v === "") return false;
+    return !Array.isArray(v) || v.length > 0;
+  });
+  function sumAdd(key, label, onDelete) { summary.push({ key: key, label: label, onDelete: onDelete }); }
+  if (filter.searchType === 0) sumAdd("searchType", "搜昵称", function () { update({ searchType: 1 }); });
+  if (filter.keyword) sumAdd("keyword", "关键词：" + filter.keyword, function () { update({ keyword: "" }); });
+  if (filter.marketTarget) sumAdd("marketTarget", "营销目标：" + filter.marketTarget, function () { update({ marketTarget: null }); });
+  if (filter.audienceGroup) sumAdd("audienceGroup", "人群目标：" + filter.audienceGroup, function () { update({ audienceGroup: null }); });
+  if (filter.brands && filter.brands.length) sumAdd("brands", "合作品牌 " + filter.brands.length + " 个", function () { update({ brands: [] }); });
+  if (filter.contentTag && filter.contentTag.length) sumAdd("contentTag", "类目：" + filter.contentTag.join("、"), function () { update({ contentTag: [] }); });
+  if (filter.personalTags && filter.personalTags.length) sumAdd("personalTags", "家庭身份 " + filter.personalTags.length + " 项", function () { update({ personalTags: [] }); });
+  if (filter.featureTags && filter.featureTags.length) sumAdd("featureTags", "职业/特色 " + filter.featureTags.length + " 项", function () { update({ featureTags: [] }); });
+  if (filter.coopCredit) sumAdd("coopCredit", "合作信用度：" + filter.coopCredit.label, function () { update({ coopCredit: null }); });
+  if (filter.coopImpMedin) sumAdd("coopImpMedin", "传播-曝光：" + filter.coopImpMedin.label, function () { update({ coopImpMedin: null }); });
+  if (filter.coopReadMid) sumAdd("coopReadMid", "传播-阅读：" + filter.coopReadMid.label, function () { update({ coopReadMid: null }); });
+  if (filter.coopInterMid) sumAdd("coopInterMid", "传播-互动：" + filter.coopInterMid.label, function () { update({ coopInterMid: null }); });
+  if (filter.coopOverflowMid) sumAdd("coopOverflowMid", "传播-外溢中位：" + filter.coopOverflowMid.label, function () { update({ coopOverflowMid: null }); });
+  if (filter.estimatePicReadCost) sumAdd("estimatePicReadCost", "图文阅读单价：" + filter.estimatePicReadCost.label, function () { update({ estimatePicReadCost: null }); });
+  if (filter.estimateVideoReadCost) sumAdd("estimateVideoReadCost", "视频阅读单价：" + filter.estimateVideoReadCost.label, function () { update({ estimateVideoReadCost: null }); });
+  if (filter.estimatePicEngageCost) sumAdd("estimatePicEngageCost", "图文互动单价：" + filter.estimatePicEngageCost.label, function () { update({ estimatePicEngageCost: null }); });
+  if (filter.estimateVideoEngageCost) sumAdd("estimateVideoEngageCost", "视频互动单价：" + filter.estimateVideoEngageCost.label, function () { update({ estimateVideoEngageCost: null }); });
+  if (filter.estimatePictureCpm) sumAdd("estimatePictureCpm", "图文CPM：" + filter.estimatePictureCpm.label, function () { update({ estimatePictureCpm: null }); });
+  if (filter.estimateVideoCpm) sumAdd("estimateVideoCpm", "视频CPM：" + filter.estimateVideoCpm.label, function () { update({ estimateVideoCpm: null }); });
+  if (filter.overflowCost) sumAdd("overflowCost", "外溢进店单价：" + filter.overflowCost.label, function () { update({ overflowCost: null }); });
+  if (filter.liveCount30d && filter.liveCount30d.length) sumAdd("liveCount30d", "直播场次 " + filter.liveCount30d.length + " 项", function () { update({ liveCount30d: [] }); });
+  if (filter.avgLiveViewer && filter.avgLiveViewer.length) sumAdd("avgLiveViewer", "观播人数 " + filter.avgLiveViewer.length + " 项", function () { update({ avgLiveViewer: [] }); });
+  if (filter.avgLiveGmv && filter.avgLiveGmv.length) sumAdd("avgLiveGmv", "场均销售额 " + filter.avgLiveGmv.length + " 项", function () { update({ avgLiveGmv: [] }); });
+  if (filter.noteCategory && filter.noteCategory.length) sumAdd("noteCategory", "笔记类目 " + filter.noteCategory.length + " 项", function () { update({ noteCategory: [] }); });
+  if (filter.inStar === true) sumAdd("inStar", "精选博主：明星", function () { update({ inStar: false }); });
+  if (filter.isHighQualityFlag === true) sumAdd("isHighQualityFlag", "精选博主：优质博主", function () { update({ isHighQualityFlag: false }); });
+  if (filter.newHighQuality === true) sumAdd("newHighQuality", "精选博主：新锐博主", function () { update({ newHighQuality: false }); });
+  if (filter.hasBuyerCoopAuthFlag === true) sumAdd("hasBuyerCoopAuthFlag", "精选博主：笔记+直播均可合作", function () { update({ hasBuyerCoopAuthFlag: false }); });
+  if (filter.filterIntention === true) sumAdd("filterIntention", "精选博主：意向行业匹配", function () { update({ filterIntention: false }); });
+  if (filter.firstIndustry) sumAdd("firstIndustry", "行业推荐：" + filter.firstIndustry + (filter.secondIndustry ? "-" + filter.secondIndustry : ""), function () { update({ firstIndustry: "", secondIndustry: "" }); });
+  if (filter.gender) sumAdd("gender", "性别：" + filter.gender, function () { update({ gender: null }); });
+  if (filter.location) sumAdd("location", "地域：" + pgyKolOptLabel(filter.location), function () { update({ location: null }); });
+  if (filter.audience20 && filter.audience20.length) sumAdd("audience20", "二十大人群 " + filter.audience20.length + " 项", function () { update({ audience20: [] }); });
+  if (filter.automotive && filter.automotive.length) sumAdd("automotive", "行业特色画像 " + filter.automotive.length + " 项", function () { update({ automotive: [] }); });
+  if (filter.consumeBehavior && filter.consumeBehavior.length) sumAdd("consumeBehavior", "消费行为 " + filter.consumeBehavior.length + " 项", function () { update({ consumeBehavior: [] }); });
+  if (filter.signed) sumAdd("signed", "签约：" + filter.signed, function () { update({ signed: null }); });
+  if (filter.contentSceneLabel && filter.contentSceneLabel.length) sumAdd("contentSceneLabel", "擅长内容 " + filter.contentSceneLabel.length + " 项", function () { update({ contentSceneLabel: [] }); });
+  if (filter.contentTheme && filter.contentTheme.length) sumAdd("contentTheme", "内容题材 " + filter.contentTheme.length + " 项", function () { update({ contentTheme: [] }); });
+  if (filter.fansNumberLower !== "" || filter.fansNumberUpper !== "") sumAdd("fansNum", "粉丝量：" + (filter.fansNumberLower || "0") + "～" + (filter.fansNumberUpper || "不限"), function () { setFansNumber("", ""); });
+  if (filter.fansAge) sumAdd("fansAge", "粉丝年龄：" + filter.fansAge, function () { update({ fansAge: null }); });
+  if (filter.fansGender) sumAdd("fansGender", "粉丝性别：" + filter.fansGender, function () { update({ fansGender: null }); });
+  if (filter.fansLocation) sumAdd("fansLocation", "粉丝地域：" + pgyKolOptLabel(filter.fansLocation), function () { update({ fansLocation: null }); });
+  if (filter.fansMaritalStatus) sumAdd("fansMaritalStatus", "婚恋状态：" + filter.fansMaritalStatus, function () { update({ fansMaritalStatus: null }); });
+  if (filter.fansConsumptionLevel) sumAdd("fansConsumptionLevel", "消费水平：" + filter.fansConsumptionLevel, function () { update({ fansConsumptionLevel: null }); });
+  if (filter.fansChildAgeInfo && filter.fansChildAgeInfo.length) sumAdd("fansChildAgeInfo", "母婴阶段 " + filter.fansChildAgeInfo.length + " 项", function () { update({ fansChildAgeInfo: [] }); });
+  if (filter.fansDevicePrice && filter.fansDevicePrice.length) sumAdd("fansDevicePrice", "手机价格 " + filter.fansDevicePrice.length + " 项", function () { update({ fansDevicePrice: [] }); });
+  if (filter.fansDeviceBrand && filter.fansDeviceBrand.length) sumAdd("fansDeviceBrand", "手机品牌 " + filter.fansDeviceBrand.length + " 项", function () { update({ fansDeviceBrand: [] }); });
+  if (filter.accumCommonImpMedinNum30d) sumAdd("impMed", "曝光中位数：" + filter.accumCommonImpMedinNum30d.label, function () { update({ accumCommonImpMedinNum30d: null }); });
+  if (filter.readMidNor30) sumAdd("readMid", "阅读中位数：" + filter.readMidNor30.label, function () { update({ readMidNor30: null }); });
+  if (filter.interMidNor30) sumAdd("interMid", "互动中位数：" + filter.interMidNor30.label, function () { update({ interMidNor30: null }); });
+  if (filter.thousandLikePercent30) sumAdd("thousand", "千赞笔记比例：" + filter.thousandLikePercent30.label, function () { update({ thousandLikePercent30: null }); });
+  if (filter.noteType) sumAdd("noteType", "笔记类型：" + pgyKolNoteTypeLabel(filter.noteType), function () { update({ noteType: null }); });
+  if (filter.notePriceLower !== "" || filter.notePriceUpper !== "") sumAdd("notePrice", "图文报价：" + (filter.notePriceLower || "0") + "～" + (filter.notePriceUpper || "不限"), function () { update({ notePriceLower: "", notePriceUpper: "" }); });
+  if (filter.videoPriceLower !== "" || filter.videoPriceUpper !== "") sumAdd("videoPrice", "视频报价：" + (filter.videoPriceLower || "0") + "～" + (filter.videoPriceUpper || "不限"), function () { update({ videoPriceLower: "", videoPriceUpper: "" }); });
+  if (filter.progressOrderCnt) sumAdd("progressOrderCnt", "合作订单数：" + filter.progressOrderCnt.label, function () { update({ progressOrderCnt: null }); });
+  if (filter.tradeType && filter.tradeType !== "不限") sumAdd("tradeType", "近期合作行业：" + filter.tradeType, function () { update({ tradeType: null }); });
+  if (filter.tradeReportBrandIdSet && filter.tradeReportBrandIdSet.length) sumAdd("tradeBrand", "近期合作品牌 " + filter.tradeReportBrandIdSet.length + " 个", function () { update({ tradeReportBrandIdSet: [] }); });
+  if (filter.activityCodes && filter.activityCodes.length) sumAdd("activityCodes", "热门活动 " + filter.activityCodes.length + " 项", function () { update({ activityCodes: [] }); });
+  if (filter.excludeLowActive) sumAdd("excludeLowActive", "剔除低活博主", function () { update({ excludeLowActive: false }); });
+  if (filter.fansNumUp) sumAdd("fansNumUp", "剔除掉粉博主", function () { update({ fansNumUp: false }); });
+  if (filter.excludedTradeReportBrand) sumAdd("excludedTradeReportBrand", "剔除已合作博主", function () { update({ excludedTradeReportBrand: false }); });
+  if (filter.excludedTradeInviteReportBrand) sumAdd("excludedTradeInviteReportBrand", "剔除已邀约博主", function () { update({ excludedTradeInviteReportBrand: false }); });
+
+
+  var allExcludeOn = filter.excludeLowActive && filter.fansNumUp && (!hasBrands || (filter.excludedTradeReportBrand && filter.excludedTradeInviteReportBrand));
+  var coopCount = (filter.coopImpMedin ? 1 : 0) + (filter.coopReadMid ? 1 : 0) + (filter.coopInterMid ? 1 : 0) + (filter.coopOverflowMid ? 1 : 0);
+  var industryCount = filter.firstIndustry ? (filter.secondIndustry ? 2 : 1) : 0;
+  var noteCats = configs.noteCategory && configs.noteCategory.nodes && configs.noteCategory.nodes.length ? configs.noteCategory.nodes : pgyKolNoteCatFallback();
+  var actList = actCfg && actCfg.nodes && actCfg.nodes.length ? actCfg.nodes : actCfg && actCfg.options && actCfg.options.length ? actCfg.options : [];
+  var keysToNodes = function (list, keys) {
+    return keys.map(function (k) { return pgyKolFindNode(list, k); }).filter(Boolean);
+  };
+  var selectedOptionKeys = function (list, nodes) {
+    var allowed = {};
+    list.forEach(function (node) { allowed[pgyKolNodeKey(node)] = true; });
+    return (nodes || []).map(function (node) { return pgyKolNodeKey(node); }).filter(function (key) { return allowed[key]; });
+  };
+  var replaceOptionGroup = function (current, list, keys) {
+    var own = {};
+    list.forEach(function (node) { own[pgyKolNodeKey(node)] = true; });
+    var merged = (current || []).filter(function (node) { return !own[pgyKolNodeKey(node)]; }).concat(keysToNodes(list, keys));
+    var order = {};
+    pgyKolCareerOptions.concat(pgyKolFeatureOptions).forEach(function (node, index) { order[pgyKolNodeKey(node)] = index; });
+    return merged.map(function (node, index) { return { node: node, index: index }; }).sort(function (a, b) {
+      var ak = pgyKolNodeKey(a.node), bk = pgyKolNodeKey(b.node), ai = Object.prototype.hasOwnProperty.call(order, ak) ? order[ak] : 10000 + a.index, bi = Object.prototype.hasOwnProperty.call(order, bk) ? order[bk] : 10000 + b.index;
+      return ai - bi;
+    }).map(function (entry) { return entry.node; });
+  };
+
+  return o.jsx(x, {
+    sx: { p: 2, bgcolor: "#f5f6f7", minHeight: "100vh" },
+    children: o.jsxs(x, {
+      sx: { width: "100%", maxWidth: "none", margin: "0 auto", bgcolor: "#fff", border: "1px solid #ebedf0", borderRadius: 1, p: 2 },
+      children: [
+        /* 页面头部 */
+        o.jsxs(x, {
+          sx: { display: "flex", alignItems: "center", gap: 1.5, mb: 1.5 },
+          children: [
+            o.jsx(x, {
+              sx: { width: 28, height: 28, borderRadius: 0.5, background: "linear-gradient(135deg,#FF6C40,#FF3030)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0 },
+              children: o.jsx(B, { icon: "mdi:account-search", width: 18, height: 18 }),
+            }),
+            o.jsx(w, { variant: "h4", fontWeight: "bold", children: "找博主" }),
+            o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)", ml: 1 }, children: "蒲公英博主原生筛选。开发开关开启后显示菜单与路由，关闭时页面不可达。" }),
+          ],
+        }),
+        !bridgeOk ? o.jsx(oe, { severity: "error", sx: { mb: 1.5 }, children: "当前环境不支持蒲公英找博主（bridge 缺失）" }) : null,
+        restoredNotice ? o.jsx(oe, { severity: "info", sx: { mb: 1.5 }, onClose: function () { setRestoredNotice(false); }, children: "已恢复筛选，请点击确定后查询" }) : null,
+        searchNotice ? o.jsx(oe, { severity: "info", sx: { mb: 1 }, onClose: function () { setSearchNotice(null); }, children: searchNotice }) : null,
+
+        /* 顶部搜索区：搜笔记/搜昵称切换 + 关键词 + 搜索按钮 + 合作品牌 */
+        o.jsxs(x, {
+          sx: { display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.75 },
+          children: [
+            o.jsxs(x, {
+              sx: { display: "inline-flex", alignItems: "center", gap: 0.25, p: 0.25, borderRadius: 0.5, bgcolor: "transparent" },
+              children: [
+                o.jsx($, { size: "small", variant: "text", sx: { borderRadius: 0.375, minHeight: 28, px: 1, bgcolor: filter.searchType === 1 ? "rgba(255,36,66,.08)" : "transparent", color: filter.searchType === 1 ? "#ff2442" : "rgba(0,0,0,.7)", minWidth: 64 }, onClick: function () { update({ searchType: 1 }); }, children: "搜笔记" }),
+                o.jsx($, { size: "small", variant: "text", sx: { borderRadius: 0.375, minHeight: 28, px: 1, bgcolor: filter.searchType === 0 ? "rgba(255,36,66,.08)" : "transparent", color: filter.searchType === 0 ? "#ff2442" : "rgba(0,0,0,.7)", minWidth: 64 }, onClick: function () { update({ searchType: 0 }); }, children: "搜昵称" }),
+              ],
+            }),
+            o.jsx(ae, {
+              size: "small",
+              value: filter.keyword,
+              placeholder: filter.searchType === 1 ? "按笔记关键词找博主，试试搜" : "按博主昵称/小红书号找博主",
+              onChange: function (e) { update({ keyword: e.target.value }); setKeywordHint(false); },
+              onKeyDown: function (e) { if (e.key === "Enter") { if (e.preventDefault) e.preventDefault(); applyAndSearch(); } },
+              sx: { minWidth: 320, maxWidth: 520, flexGrow: 1 },
+            }),
+            o.jsx($, {
+              variant: "contained",
+              size: "medium",
+              onClick: applyAndSearch,
+              sx: { bgcolor: "#ff2442", color: "#fff", minWidth: 72 },
+              startIcon: status === "loading" ? o.jsx(de, { size: 18, color: "inherit" }) : o.jsx(B, { icon: "mdi:account-search", width: 18, height: 18 }),
+              children: status === "loading" ? "搜索中..." : "搜索",
+            }),
+            o.jsxs(x, {
+              children: [
+                o.jsx($, {
+                  size: "small",
+                  variant: hasBrands ? "contained" : "outlined",
+                  color: hasBrands ? "primary" : "inherit",
+                  onClick: function () { setBrandPopupMode("recommend"); },
+                  children: "合作品牌智能推荐" + (hasBrands ? "（" + filter.brands.length + "）" : ""),
+                }),
+                !hasBrands ? o.jsx(w, { sx: { fontSize: 12, color: "rgba(0,0,0,.35)", display: "block", mt: 0.25 }, children: "请选择您的合作品牌" }) : null,
+              ],
+            }),
+          ],
+        }),
+
+        /* 搜昵称：搜索历史 + 清空历史 */
+        filter.searchType === 0 ? o.jsx(PgyKolHistoryPanel, {
+          history: history,
+          onPick: function (kw) { update({ keyword: kw }); },
+          onClear: function () { pgyKolNickHistoryClear(); setHistory([]); },
+        }) : null,
+        keywordHint ? o.jsx(w, { sx: { fontSize: 13, color: "#ff2442", display: "block", mb: 0.5 }, children: "请输入搜索关键词后再搜索" }) : null,
+
+        /* 未实证（人群目标）提示 */
+        hasUnprovenSel ? o.jsx(oe, { severity: "info", sx: { mb: 1 }, children: "人群目标（按博主粉丝推荐）依赖合作品牌：当前账号未绑定品牌，官网禁用该筛选；无法实证前不参与查询与采集。" }) : null,
+
+        /* 已选条件 + 收起筛选 + 一键清空 */
+        o.jsxs(x, {
+          sx: { display: "flex", alignItems: "center", gap: 1, mb: 1 },
+          children: [
+            o.jsx(w, { sx: { flexShrink: 0, fontSize: 14, fontWeight: 600, color: "rgba(0,0,0,.85)" }, children: "已选条件" }),
+            o.jsx(x, {
+              sx: { flexGrow: 1, display: "flex", alignItems: "center", gap: 0.5, overflowX: "auto", py: 0.25 },
+              children: summary.length === 0
+                ? o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)" }, children: "暂无筛选条件" })
+                : summary.map(function (s) {
+                    return o.jsx(f1, { key: s.key, size: "small", variant: "outlined", label: (pgyKolUnprovenSet()[s.key] ? "【待实证】" : "") + s.label, onDelete: s.onDelete });
+                  }),
+            }),
+            o.jsx($, { size: "small", variant: "outlined", onClick: function () { setMatrixOpen(!matrixOpen); }, children: matrixOpen ? "收起筛选" : "展开筛选" }),
+            o.jsx($, { size: "small", variant: "outlined", color: "error", onClick: clearAll, children: "一键清空" }),
+          ],
+        }),
+
+        /* 官网矩阵：合作目标 / 匹配度 / 数据表现 / 平台推荐 / 常规剔除 */
+        matrixOpen ? o.jsxs(x, {
+          sx: { border: "1px solid #ebedf0", borderRadius: 1, mb: 1.5, overflow: "hidden" },
+          children: [
+            o.jsx(PgyKolMatrixSection, {
+              title: "合作目标",
+              children: o.jsxs(x, {
+                children: [
+                  o.jsx(PgyKolMatrixRow, {
+                    label: "营销目标",
+                    children: o.jsx(PgyKolInlineOptions, {
+                      options: pgyKolMarketOptions,
+                      keyOf: function (n) { return n.value; },
+                      selected: filter.marketTarget ? [filter.marketTarget] : [],
+                      onToggle: function (n) { update({ marketTarget: filter.marketTarget === n.value ? null : n.value }); },
+                    }),
+                  }),
+                  o.jsx(PgyKolMatrixRow, {
+                    label: "人群目标",
+                    children: [
+                      o.jsx(PgyKolTrigger, { label: "按博主粉丝推荐", selected: !!filter.audienceGroup, disabled: !hasBrands, onOpen: function (e) { openPop("audGroup", e); } }),
+                      !hasBrands ? o.jsx(w, { sx: { fontSize: 12, color: "rgba(0,0,0,.35)" }, children: "未选择合作品牌时不可用" }) : null,
+                    ],
+                  }),
+                ],
+              }),
+            }),
+            o.jsx(PgyKolMatrixSection, {
+              title: "匹配度",
+              children: o.jsxs(x, {
+                children: [
+                  o.jsx(PgyKolMatrixRow, {
+                    label: "博主类目",
+                    children: [
+                      o.jsx(PgyKolInlineOptions, {
+                        options: catOptions.map(function (v) { return { value: v, label: v }; }),
+                        keyOf: function (n) { return n.value; },
+                        selected: filter.contentTag.slice(),
+                        onToggle: function (n) { toggleCategory(n.value); },
+                      }),
+                      o.jsx(PgyKolTrigger, { label: showAllCategory ? "收起" : "展开", arrowUp: showAllCategory, onOpen: function () { setShowAllCategory(!showAllCategory); } }),
+                    ],
+                  }),
+                  o.jsx(PgyKolMatrixRow, {
+                    label: "博主人设",
+                    children: [
+                      o.jsx(PgyKolTrigger, { label: "家庭身份", count: filter.personalTags.length, onOpen: function (e) { openPop("family", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "职业身份", count: selectedOptionKeys(pgyKolCareerOptions, filter.featureTags).length, onOpen: function (e) { openPop("career", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "特色背景", count: selectedOptionKeys(pgyKolFeatureOptions, filter.featureTags).length, onOpen: function (e) { openPop("feature", e); } }),
+                    ],
+                  }),
+                  o.jsx(PgyKolMatrixRow, {
+                    label: "博主画像",
+                    children: [
+                      o.jsx(PgyKolTrigger, { label: "性别", count: filter.gender ? 1 : 0, onOpen: function (e) { openPop("gender", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "地域", count: filter.location ? 1 : 0, onOpen: function (e) { openPop("location", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "二十大人群", badge: "新", count: filter.audience20.length, onOpen: function (e) { openPop("audience20", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "行业特色画像", badge: "新", count: filter.automotive.length, onOpen: function (e) { openPop("automotive", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "预估消费行为", badge: "新", count: filter.consumeBehavior.length, onOpen: function (e) { openPop("consume", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "签约情况", count: filter.signed ? 1 : 0, onOpen: function (e) { openPop("signed", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "擅长内容", count: filter.contentSceneLabel.length, onOpen: function (e) { openPop("scene", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "内容题材", badge: "新", count: filter.contentTheme.length, onOpen: function (e) { openPop("theme", e); } }),
+                    ],
+                  }),
+                  o.jsx(PgyKolMatrixRow, {
+                    label: "粉丝画像",
+                    children: [
+                      o.jsx(PgyKolTrigger, { label: "粉丝量", count: filter.fansNumberLower !== "" || filter.fansNumberUpper !== "" ? 1 : 0, onOpen: function (e) { openPop("fansNum", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "粉丝年龄", count: filter.fansAge ? 1 : 0, onOpen: function (e) { openPop("fansAge", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "粉丝性别", count: filter.fansGender ? 1 : 0, onOpen: function (e) { openPop("fansGender", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "粉丝地域", count: filter.fansLocation ? 1 : 0, onOpen: function (e) { openPop("fansLocation", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "婚恋状态", count: filter.fansMaritalStatus ? 1 : 0, onOpen: function (e) { openPop("marital", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "消费水平", count: filter.fansConsumptionLevel ? 1 : 0, onOpen: function (e) { openPop("consumption", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "母婴阶段", count: filter.fansChildAgeInfo.length, onOpen: function (e) { openPop("childAge", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "手机价格", count: filter.fansDevicePrice.length, onOpen: function (e) { openPop("devicePrice", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "手机品牌", count: filter.fansDeviceBrand.length, onOpen: function (e) { openPop("deviceBrand", e); } }),
+                    ],
+                  }),
+                  o.jsx(PgyKolMatrixRow, {
+                    label: "笔记类目",
+                    children: [
+                      noteCats.map(function (ind) {
+                        var lab = String(ind.label || ind.value || "");
+                        var hasKids = !!(ind.children && ind.children.length);
+                        return o.jsx(PgyKolTrigger, { key: pgyKolNodeKey(ind), label: lab, arrow: false, badge: hasKids ? "新" : null, dim: !hasKids, onOpen: function () { openNoteCategory(lab); } });
+                      }),
+                      o.jsx(w, { sx: { fontSize: 12, color: "rgba(0,0,0,.45)" }, children: "已选 " + filter.noteCategory.length + " 项" }),
+                    ],
+                  }),
+                ],
+              }),
+            }),
+            o.jsx(PgyKolMatrixSection, {
+              title: "数据表现",
+              children: o.jsxs(x, {
+                children: [
+                  o.jsx(PgyKolMatrixRow, {
+                    label: "日常笔记",
+                    children: [
+                      o.jsx(PgyKolTrigger, { label: "曝光中位数", help: true, arrowUp: pop && pop.id === "impMed", count: filter.accumCommonImpMedinNum30d ? 1 : 0, onOpen: function (e) { openPop("impMed", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "阅读中位数", help: true, arrowUp: pop && pop.id === "readMid", count: filter.readMidNor30 ? 1 : 0, onOpen: function (e) { openPop("readMid", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "互动中位数", help: true, arrowUp: pop && pop.id === "interMid", count: filter.interMidNor30 ? 1 : 0, onOpen: function (e) { openPop("interMid", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "千赞笔记比例", help: true, arrowUp: pop && pop.id === "thousand", count: filter.thousandLikePercent30 ? 1 : 0, onOpen: function (e) { openPop("thousand", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "笔记类型", arrowUp: pop && pop.id === "noteType", count: filter.noteType ? 1 : 0, onOpen: function (e) { openPop("noteType", e); } }),
+                    ],
+                  }),
+                  o.jsx(PgyKolMatrixRow, {
+                    label: "合作笔记",
+                    children: [
+                      o.jsx(w, { sx: { width: 80, flexShrink: 0, fontSize: 13, color: "rgba(0,0,0,.35)", textAlign: "right", mr: 0.5 }, children: "合作表现" }),
+                      o.jsx(PgyKolTrigger, { label: "合作报价", arrowUp: pop && pop.id === "coopQuote", count: (filter.notePriceLower !== "" || filter.notePriceUpper !== "" ? 1 : 0) + (filter.videoPriceLower !== "" || filter.videoPriceUpper !== "" ? 1 : 0), onOpen: function (e) { openPop("coopQuote", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "合作信用度", arrowUp: pop && pop.id === "coopCredit", count: filter.coopCredit ? 1 : 0, onOpen: function (e) { openPop("coopCredit", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "合作订单数", help: true, arrowUp: pop && pop.id === "coopOrder", count: filter.progressOrderCnt ? 1 : 0, onOpen: function (e) { openPop("coopOrder", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "近期合作行业", arrowUp: pop && pop.id === "recentIndustry", count: filter.tradeType && filter.tradeType !== "不限" ? 1 : 0, onOpen: function (e) { openPop("recentIndustry", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "近期合作品牌", help: true, arrowUp: pop && pop.id === "recentBrand", count: filter.tradeReportBrandIdSet.length, onOpen: function (e) { openPop("recentBrand", e); } }),
+                    ],
+                  }),
+                  o.jsx(PgyKolMatrixRow, {
+                    label: "数据表现",
+                    children: [
+                      o.jsx(PgyKolTrigger, { label: "传播规模", arrowUp: pop && pop.id === "spread", count: coopCount, onOpen: function (e) { openPop("spread", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "预估CPM", arrowUp: pop && pop.id === "cpm", count: (filter.estimatePictureCpm ? 1 : 0) + (filter.estimateVideoCpm ? 1 : 0), onOpen: function (e) { openPop("cpm", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "预估阅读单价", arrowUp: pop && pop.id === "readPrice", count: (filter.estimatePicReadCost ? 1 : 0) + (filter.estimateVideoReadCost ? 1 : 0), onOpen: function (e) { openPop("readPrice", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "预估互动单价", arrowUp: pop && pop.id === "engagePrice", count: (filter.estimatePicEngageCost ? 1 : 0) + (filter.estimateVideoEngageCost ? 1 : 0), onOpen: function (e) { openPop("engagePrice", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "外溢进店单价", help: true, arrowUp: pop && pop.id === "overflow", count: filter.overflowCost ? 1 : 0, onOpen: function (e) { openPop("overflow", e); } }),
+                    ],
+                  }),
+                  o.jsx(PgyKolMatrixRow, {
+                    label: "直播数据",
+                    children: [
+                      o.jsx(PgyKolTrigger, { label: "近30天直播场次", arrowUp: pop && pop.id === "liveCount", count: filter.liveCount30d.length, onOpen: function (e) { openPop("liveCount", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "场均观播人数", arrowUp: pop && pop.id === "liveViewer", count: filter.avgLiveViewer.length, onOpen: function (e) { openPop("liveViewer", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "场均销售额", arrowUp: pop && pop.id === "liveGmv", count: filter.avgLiveGmv.length, onOpen: function (e) { openPop("liveGmv", e); } }),
+                    ],
+                  }),
+                ],
+              }),
+            }),
+            o.jsx(PgyKolMatrixSection, {
+              title: "平台推荐",
+              children: o.jsxs(x, {
+                children: [
+                  o.jsx(PgyKolMatrixRow, {
+                    label: "精选博主",
+                    children: [
+                      pgyKolFeaturedOptions.map(function (n) {
+                        return o.jsx(PgyKolCheck, { key: n.key, label: n.value, checked: filter[n.key] === true, onToggle: function () { toggleBool(n.key); } });
+                      }),
+                      o.jsx(PgyKolCheck, { label: "行业推荐博主", checked: !!filter.firstIndustry, onToggle: function () { setIndustryPopupOpen(true); } }),
+                    ],
+                  }),
+                  o.jsx(PgyKolMatrixRow, {
+                    label: "热门活动",
+                    children: [
+                      actCfg && actCfg.error ? o.jsx(oe, { severity: "warning", sx: { py: 0.25, my: 0 }, children: "热门活动加载失败，不影响其它筛选：" + (actCfg.error.message || "未知错误") }) : null,
+                      actList.map(function (n) {
+                        var v = pgyKolOptValue(n), sel = filter.activityCodes.indexOf(v) >= 0, lab = pgyKolActivityLabel(n);
+                        return o.jsx(PgyKolCheck, { key: String(v), label: (lab ? lab + " " : "") + pgyKolOptLabel(n), checked: sel, onToggle: function () { toggleActivity(n); } });
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            }),
+            o.jsx(PgyKolMatrixSection, {
+              title: "常规剔除",
+              children: o.jsxs(x, {
+                sx: { display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", minHeight: 36 },
+                children: [
+                  o.jsx($, { size: "small", variant: allExcludeOn ? "contained" : "outlined", color: "error", onClick: oneClickExclude, children: "一键剔除" }),
+                  o.jsx(PgyKolCheck, { label: "剔除低活博主", checked: filter.excludeLowActive, onToggle: function () { toggleBool("excludeLowActive"); } }),
+                  o.jsx(PgyKolCheck, { label: "剔除掉粉博主", checked: filter.fansNumUp, onToggle: function () { toggleBool("fansNumUp"); } }),
+                  o.jsx(PgyKolCheck, { label: "剔除已合作博主", checked: filter.excludedTradeReportBrand, disabled: !hasBrands, onToggle: function () { toggleBool("excludedTradeReportBrand"); } }),
+                  o.jsx(PgyKolCheck, { label: "剔除已邀约博主", checked: filter.excludedTradeInviteReportBrand, disabled: !hasBrands, onToggle: function () { toggleBool("excludedTradeInviteReportBrand"); } }),
+                ],
+              }),
+            }),
+          ],
+        }) : null,
+
+        /* 全局确定操作栏：此前所有控件只编辑草稿，到这里才正式搜索。 */
+        o.jsxs(x, {
+          sx: { display: "flex", alignItems: "center", gap: 1, justifyContent: "flex-end", borderTop: "1px solid #ebedf0", pt: 1.25, mb: 1.5, flexWrap: "wrap" },
+          children: [
+            o.jsx(w, { sx: { fontSize: 13, color: coordinatorView.isDirty ? "#ff2442" : "rgba(0,0,0,.45)", mr: "auto" }, children: coordinatorView.appliedFilter ? coordinatorView.isDirty ? "筛选已修改，点击确定后更新结果" : "当前筛选已确定" : "请点击确定筛选后查询" }),
+            o.jsx($, { size: "small", variant: "outlined", onClick: function () { setMatrixOpen(!matrixOpen); }, children: matrixOpen ? "收起筛选" : "展开筛选" }),
+            o.jsx($, { variant: "contained", size: "medium", onClick: applyAndSearch, sx: { bgcolor: "#ff2442", color: "#fff", minWidth: 112 }, startIcon: status === "loading" ? o.jsx(de, { size: 18, color: "inherit" }) : null, children: status === "loading" ? "查询中..." : "确定筛选" }),
+          ],
+        }),
+
+        status === "loading" ? o.jsx(Q1, { sx: { mt: 1 } }) : null,
+        status === "auth-expired" ? o.jsx(oe, { severity: "error", sx: { mt: 1 }, children: "蒲公英登录已失效，请重新授权" }) : null,
+        status === "error" && error ? o.jsx(oe, { severity: "error", sx: { mt: 1 }, children: "查询失败（错误码 " + (error.code || "unknown") + "）：" + (error.message || "未知错误") }) : null,
+
+        /* 结果区 */
+        result ? o.jsxs(x, {
+          sx: { mt: 2 },
+          children: [
+            coordinatorView.isDirty ? o.jsx(oe, { severity: "warning", sx: { mb: 1 }, children: "筛选条件已修改，当前结果仍基于上一次确定的条件。" }) : null,
+            o.jsxs(x, {
+              sx: { display: "flex", alignItems: "center", gap: 1, mb: 1, flexWrap: "wrap" },
+              children: [
+                o.jsx(w, { variant: "h6", children: "共 " + (result.total != null ? result.total : "?") + " 位博主" }),
+                o.jsx(f1, { size: "small", label: "当前展示 " + (result.kols ? result.kols.length : 0) + " 条" }),
+                o.jsx(f1, { size: "small", variant: "outlined", label: "预览 " + (result.kols ? result.kols.length : 0) + " 条 / 已持久化 " + pgyKolCount(currentTask, "raw") + " 条（完整数据以导出为准）" }),
+                result.capSignal && result.capSignal.capped ? o.jsx(f1, { size: "small", color: "warning", label: "结果可能超过 5000" }) : null,
+                result.quarantinedFields && result.quarantinedFields.length > 0 ? o.jsx(f1, { size: "small", variant: "outlined", label: "未知字段 " + result.quarantinedFields.length + " 个已隔离" }) : null,
+              ],
+            }),
+            result.capSignal && result.capSignal.capped ? o.jsx(oe, { severity: "warning", sx: { mb: 1 }, children: "结果可能超过 5000，完整性未证明" }) : null,
+            o.jsx(PgyKolResultTable, { result: result, columns: selectedColumns, list: columnList }),
+          ],
+        }) : null,
+
+        /* 批量采集与任务历史属于结果工具：放在官网结果工具栏和表格之后。 */
+        o.jsxs(x, {
+          sx: { display: "flex", alignItems: "center", gap: 1.5, mt: result ? 2 : 1, mb: 1, flexWrap: "wrap" },
+          children: [
+            o.jsx($, { variant: "outlined", size: "medium", onClick: function () { setColumnOpen(true); }, children: "选择展示指标" }),
+            o.jsx($, { variant: "contained", color: "secondary", size: "medium", onClick: startBatch, disabled: batchBusy || batchRunning, startIcon: batchBusy ? o.jsx(de, { size: 18, color: "inherit" }) : null, children: batchBusy ? "启动中..." : "开始采集" }),
+            status === "empty" ? o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)" }, children: "没有匹配的博主" }) : null,
+          ],
+        }),
+        batchError ? o.jsx(oe, { severity: "error", sx: { mt: 1 }, children: pgyKolBatchErrorMessage(batchError) }) : null,
+        batchNotice ? o.jsx(oe, { severity: "success", sx: { mt: 1 }, children: batchNotice }) : null,
+        o.jsx(x, { ref: taskDetailRef, children: o.jsx(PgyKolBatchPanel, { task: currentTask, onPause: pauseBatch, onResume: resumeBatch, onResumeWithBudgets: function (budgets) { resumeBatch(budgets); }, onCancel: cancelBatch, onExport: function () { exportTask(currentTaskId); } }) }),
+        taskLoading ? o.jsx(Q1, { sx: { mt: 1 } }) : null,
+        o.jsx(PgyKolTaskHistory, { tasks: taskList, error: taskListError, onSelect: selectTask, onExport: exportTask }),
+
+        /* 高级信息不占据官网主流程；默认折叠，仍保留原始 Payload 供排查。 */
+        o.jsxs(xe, {
+          variant: "outlined",
+          sx: { mt: 2 },
+          children: [
+            o.jsxs(We, {
+              sx: { pb: advancedOpen ? 1 : "12px!important", "&:last-child": { pb: advancedOpen ? 1 : "12px!important" } },
+              children: [
+                o.jsxs(x, {
+                  component: "button",
+                  type: "button",
+                  onClick: function () { setAdvancedOpen(!advancedOpen); },
+                  sx: { display: "flex", alignItems: "center", width: "100%", p: 0, border: 0, bgcolor: "transparent", cursor: "pointer", color: "rgba(0,0,0,.7)", textAlign: "left" },
+                  children: [
+                    o.jsx(w, { variant: "subtitle2", fontWeight: 600, children: "高级信息" }),
+                    o.jsx(w, { sx: { ml: 0.75, fontSize: 12, color: "rgba(0,0,0,.45)" }, children: "待确认条件的本地 Payload 预览" }),
+                    o.jsx(B, { icon: advancedOpen ? "solar:alt-arrow-up-bold-duotone" : "solar:alt-arrow-down-bold-duotone", width: 14, height: 14, style: { marginLeft: "auto", color: "rgba(0,0,0,.45)" } }),
+                  ],
+                }),
+                advancedOpen ? o.jsxs(x, { children: [
+                  o.jsx(w, { sx: { mt: 1, fontSize: 12, color: "rgba(0,0,0,.45)" }, children: "这是待确认条件的本地 Payload 预览，不会请求蒲公英接口。" }),
+                  o.jsx(x, {
+                    component: "pre",
+                    sx: { mt: 0.5, mb: 0, maxHeight: 160, overflow: "auto", p: 1, bgcolor: "#fafafa", borderRadius: 0.5, fontSize: 11, fontFamily: "monospace", whiteSpace: "pre-wrap", wordBreak: "break-all" },
+                    children: preview || "（未配置筛选条件）",
+                  }),
+                ] }) : null,
+              ],
+            }),
+          ],
+        }),
+
+        /* 弹窗 */
+        o.jsx(PgyKolColumnDialog, { open: columnOpen, onClose: function () { setColumnOpen(false); }, columns: columnList, error: columnError, selected: selectedColumns, onApply: function (ids) { setSelectedColumns(ids); pgyKolWriteJson("magiorix-pgy-kol-columns", ids); } }),
+        o.jsx(PgyKolBrandPopup, { open: brandPopupMode != null, onClose: function () { setBrandPopupMode(null); }, mode: brandPopupMode, current: brandPopupMode === "recent" ? filter.tradeReportBrandIdSet : filter.brands, onApply: applyBrands }),
+        o.jsx(PgyKolNoteCategoryPopup, { open: categoryOpen, onClose: function () { setCategoryOpen(false); }, nodes: noteCats, industry: catIndustry, onSelectIndustry: setCatIndustry, selected: filter.noteCategory, onToggle: function (next) { update({ noteCategory: next }); } }),
+        o.jsx(PgyKolIndustryPopup, { open: industryPopupOpen, onClose: function () { setIndustryPopupOpen(false); }, cfg: configs.industry, first: filter.firstIndustry, second: filter.secondIndustry, onFirst: function (v) { update({ firstIndustry: v }); }, onSecond: function (v) { update({ secondIndustry: v }); } }),
+
+        /* Popover：人群目标 */
+        pop.id === "audGroup" ? o.jsx(PgyKolOptionPop, {
+          open: true,
+          anchor: pop.anchor,
+          onClose: closePop,
+          title: "人群目标",
+          options: audGroupCfg && audGroupCfg.options && audGroupCfg.options.length ? audGroupCfg.options : audGroupCfg && audGroupCfg.nodes && audGroupCfg.nodes.length ? audGroupCfg.nodes : pgyKolAudienceFallback,
+          keyOf: function (n) { return pgyKolOptValue(n); },
+          selectedKeys: filter.audienceGroup ? [filter.audienceGroup] : [],
+          closeOnSelect: true,
+          onToggle: function (n) { toggleSingle("audienceGroup", pgyKolOptValue(n)); },
+        }) : null,
+        /* Popover：博主人设 */
+        pop.id === "family" ? o.jsx(PgyKolOptionPop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "家庭身份", multi: true,
+          options: pgyKolFamilyOptions, selectedKeys: filter.personalTags.map(function (n) { return pgyKolNodeKey(n); }),
+          onApply: function (keys) { update({ personalTags: keysToNodes(pgyKolFamilyOptions, keys) }); },
+        }) : null,
+        pop.id === "career" ? o.jsx(PgyKolOptionPop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "职业身份", multi: true,
+          options: pgyKolCareerOptions, selectedKeys: selectedOptionKeys(pgyKolCareerOptions, filter.featureTags),
+          onApply: function (keys) { update({ featureTags: replaceOptionGroup(filter.featureTags, pgyKolCareerOptions, keys) }); },
+        }) : null,
+        pop.id === "feature" ? o.jsx(PgyKolOptionPop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "特色背景", multi: true,
+          options: pgyKolFeatureOptions, selectedKeys: selectedOptionKeys(pgyKolFeatureOptions, filter.featureTags),
+          onApply: function (keys) { update({ featureTags: replaceOptionGroup(filter.featureTags, pgyKolFeatureOptions, keys) }); },
+        }) : null,
+        /* Popover：博主画像 */
+        pop.id === "gender" ? o.jsx(PgyKolOptionPop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "性别",
+          options: pgyKolGenderOptions, keyOf: function (n) { return n.value; }, selectedKeys: filter.gender ? [filter.gender] : [], closeOnSelect: true,
+          onToggle: function (n) { toggleWithNone("gender", n.value); },
+        }) : null,
+        pop.id === "location" ? o.jsx(PgyKolCascadePop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "地域", cfg: areasCfg,
+          onSelect: applyLocation, onClear: clearLocation,
+        }) : null,
+        pop.id === "audience20" ? o.jsx(PgyKolTreePop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "二十大人群", cfg: audCfg, leafOnly: true,
+          selectedKeys: filter.audience20.map(function (n) { return pgyKolNodeKey(n); }),
+          onApply: function (keys) { update({ audience20: keysToNodes(audCfg ? audCfg.nodes : [], keys) }); },
+          display: function (n) { return n.fullPath || n.label || String(n.value); },
+        }) : null,
+        pop.id === "automotive" ? o.jsx(PgyKolTreePop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "行业特色画像", cfg: autoCfg,
+          selectedKeys: filter.automotive.map(function (n) { return pgyKolNodeKey(n); }),
+          onApply: function (keys) { update({ automotive: keysToNodes(autoCfg ? autoCfg.nodes : [], keys) }); },
+          hint: filter.automotive.length > 0 ? "选中父节点时展开叶子 ID：" + autoLeaves.join("、") : null,
+        }) : null,
+        pop.id === "consume" ? o.jsx(PgyKolTreePop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "预估消费行为", cfg: consumeCfg,
+          selectedKeys: filter.consumeBehavior.map(function (n) { return pgyKolNodeKey(n); }),
+          onApply: function (keys) { update({ consumeBehavior: keysToNodes(consumeCfg ? consumeCfg.nodes : [], keys) }); },
+        }) : null,
+        pop.id === "signed" ? o.jsx(PgyKolOptionPop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "签约情况",
+          options: pgyKolSignedOptions, keyOf: function (n) { return n.value; }, selectedKeys: filter.signed ? [filter.signed] : [], closeOnSelect: true,
+          onToggle: function (n) { toggleWithNone("signed", n.value); },
+        }) : null,
+        pop.id === "scene" ? o.jsx(PgyKolOptionPop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "擅长内容", multi: true,
+          options: pgyKolSceneOptions, selectedKeys: filter.contentSceneLabel.map(function (n) { return pgyKolNodeKey(n); }),
+          onApply: function (keys) { update({ contentSceneLabel: keysToNodes(pgyKolSceneOptions, keys) }); },
+        }) : null,
+        pop.id === "theme" ? o.jsx(PgyKolTreePop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "内容题材", cfg: themeCfg,
+          selectedKeys: filter.contentTheme.map(function (n) { return pgyKolNodeKey(n); }),
+          onApply: function (keys) { update({ contentTheme: keysToNodes(themeCfg ? themeCfg.nodes : [], keys) }); },
+        }) : null,
+        /* Popover：粉丝画像 */
+        pop.id === "fansNum" ? o.jsx(PgyKolFansNumPop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          lower: filter.fansNumberLower, upper: filter.fansNumberUpper,
+          onLower: function (v) { update({ fansNumberLower: v }); },
+          onUpper: function (v) { update({ fansNumberUpper: v }); },
+          onApply: setFansNumber,
+        }) : null,
+        pop.id === "fansAge" ? o.jsx(PgyKolOptionPop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "粉丝年龄",
+          options: pgyKolFansAgeOptions, keyOf: function (n) { return n.value; }, selectedKeys: filter.fansAge ? [filter.fansAge] : [], closeOnSelect: true,
+          onToggle: function (n) { toggleSingle("fansAge", n.value); },
+        }) : null,
+        pop.id === "fansGender" ? o.jsx(PgyKolOptionPop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "粉丝性别",
+          options: pgyKolFansGenderOptions, keyOf: function (n) { return n.value; }, selectedKeys: filter.fansGender ? [filter.fansGender] : [], closeOnSelect: true,
+          onToggle: function (n) { toggleWithNone("fansGender", n.value); },
+        }) : null,
+        pop.id === "fansLocation" ? o.jsx(PgyKolCascadePop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "粉丝地域", cfg: areasCfg,
+          onSelect: applyFansLocation, onClear: clearFansLocation,
+        }) : null,
+        pop.id === "marital" ? o.jsx(PgyKolOptionPop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "婚恋状态",
+          options: pgyKolMaritalOptions, keyOf: function (n) { return n.value; }, selectedKeys: filter.fansMaritalStatus ? [filter.fansMaritalStatus] : [], closeOnSelect: true,
+          onToggle: function (n) { toggleWithNone("fansMaritalStatus", n.value); },
+        }) : null,
+        pop.id === "consumption" ? o.jsx(PgyKolOptionPop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "消费水平",
+          options: pgyKolConsumptionOptions, keyOf: function (n) { return n.value; }, selectedKeys: filter.fansConsumptionLevel ? [filter.fansConsumptionLevel] : [], closeOnSelect: true,
+          onToggle: function (n) { toggleWithNone("fansConsumptionLevel", n.value); },
+        }) : null,
+        pop.id === "childAge" ? o.jsx(PgyKolOptionPop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "母婴阶段", multi: true,
+          options: pgyKolChildAgeOptions, selectedKeys: filter.fansChildAgeInfo.map(function (n) { return pgyKolNodeKey(n); }),
+          onApply: function (keys) { update({ fansChildAgeInfo: keysToNodes(pgyKolChildAgeOptions, keys) }); },
+        }) : null,
+        pop.id === "devicePrice" ? o.jsx(PgyKolOptionPop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "手机价格", multi: true,
+          options: pgyKolDevicePriceOptions, selectedKeys: filter.fansDevicePrice.map(function (n) { return pgyKolNodeKey(n); }),
+          onApply: function (keys) { update({ fansDevicePrice: keysToNodes(pgyKolDevicePriceOptions, keys) }); },
+        }) : null,
+        pop.id === "deviceBrand" ? o.jsx(PgyKolOptionPop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "手机品牌", multi: true,
+          options: pgyKolDeviceBrandOptions, selectedKeys: filter.fansDeviceBrand.map(function (n) { return pgyKolNodeKey(n); }),
+          onApply: function (keys) { update({ fansDeviceBrand: keysToNodes(pgyKolDeviceBrandOptions, keys) }); },
+        }) : null,
+        /* Popover：日常笔记 */
+        pop.id === "impMed" ? o.jsx(PgyKolOfficialRangePop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          options: pgyKolRangeDefs.imp50w, value: filter.accumCommonImpMedinNum30d,
+          minPlaceholder: "0", maxPlaceholder: "9,999,999",
+          onApply: function (n) { update({ accumCommonImpMedinNum30d: n }); },
+        }) : null,
+        pop.id === "readMid" ? o.jsx(PgyKolOfficialRangePop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          options: pgyKolRangeDefs.imp50w, value: filter.readMidNor30,
+          minPlaceholder: "0", maxPlaceholder: "9,999,999",
+          onApply: function (n) { update({ readMidNor30: n }); },
+        }) : null,
+        pop.id === "interMid" ? o.jsx(PgyKolOfficialRangePop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          options: pgyKolRangeDefs.inter2000, value: filter.interMidNor30,
+          minPlaceholder: "0", maxPlaceholder: "9,999,999",
+          onApply: function (n) { update({ interMidNor30: n }); },
+        }) : null,
+        pop.id === "thousand" ? o.jsx(PgyKolOfficialRangePop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          options: pgyKolRangeDefsPercent40, value: filter.thousandLikePercent30,
+          minPlaceholder: "0", maxPlaceholder: "100", suffix: "%",
+          onApply: function (n) { update({ thousandLikePercent30: n }); },
+        }) : null,
+        pop.id === "noteType" ? o.jsx(PgyKolOfficialSimpleMenu, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          options: pgyKolNoteTypeOptions, value: filter.noteType,
+          onSelect: function (value) { update({ noteType: value }); },
+        }) : null,
+        /* Popover：合作笔记 */
+        pop.id === "coopQuote" ? o.jsx(PgyKolOfficialGroupPop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          groups: [
+            { key: "pic", label: "图文笔记", options: pgyKolRangeDefs.quote, value: pgyKolOfficialBoundsNode(filter.notePriceLower, filter.notePriceUpper) },
+            { key: "video", label: "视频笔记", options: pgyKolRangeDefs.quote, value: pgyKolOfficialBoundsNode(filter.videoPriceLower, filter.videoPriceUpper) },
+          ],
+          onApply: function (draft) {
+            var pic = draft.pic, video = draft.video;
+            update({
+              notePriceLower: pic ? String(pic.value[0]) : "",
+              notePriceUpper: pic && pic.value[1] >= 0 ? String(pic.value[1]) : "",
+              videoPriceLower: video ? String(video.value[0]) : "",
+              videoPriceUpper: video && video.value[1] >= 0 ? String(video.value[1]) : "",
+            });
+          },
+        }) : null,
+        pop.id === "coopCredit" ? o.jsx(PgyKolOfficialGroupPop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          groups: [{ key: "invite", label: "邀约48h回复率", options: pgyKolRangeDefs.inviteReply, value: filter.coopCredit }],
+          onApply: function (draft) { update({ coopCredit: draft.invite || null }); },
+        }) : null,
+        pop.id === "coopOrder" ? o.jsx(PgyKolOfficialRangePop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          options: [],
+          value: filter.progressOrderCnt,
+          minPlaceholder: "0", maxPlaceholder: "99999",
+          onApply: function (n) { update({ progressOrderCnt: n }); },
+        }) : null,
+        pop.id === "recentIndustry" ? o.jsx(PgyKolOfficialSimpleMenu, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          options: pgyKolRecentIndustryOptions, value: filter.tradeType || "不限",
+          onSelect: function (value) { update({ tradeType: value === "不限" ? null : value }); },
+        }) : null,
+        pop.id === "recentBrand" ? o.jsx(PgyKolOfficialBrandPop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          current: filter.tradeReportBrandIdSet,
+          excluded: filter.excludedTradeReportBrandId === true,
+          onApply: function (ids, excluded) { update({ tradeReportBrandIdSet: ids, excludedTradeReportBrandId: excluded }); },
+        }) : null,
+        /* Popover：数据表现 */
+        pop.id === "spread" ? o.jsx(PgyKolOfficialGroupPop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          groups: [
+            { key: "imp", label: "曝光中位数", options: pgyKolRangeDefs.imp50w, value: filter.coopImpMedin },
+            { key: "read", label: "阅读中位数", options: pgyKolRangeDefs.imp50w, value: filter.coopReadMid },
+            { key: "inter", label: "互动中位数", options: pgyKolRangeDefs.inter2000, value: filter.coopInterMid },
+            { key: "overflow", label: "外溢进店中位数", options: pgyKolRangeDefs.overflow10000, value: filter.coopOverflowMid },
+          ],
+          onApply: function (draft) { update({ coopImpMedin: draft.imp || null, coopReadMid: draft.read || null, coopInterMid: draft.inter || null, coopOverflowMid: draft.overflow || null }); },
+        }) : null,
+        pop.id === "cpm" ? o.jsx(PgyKolOfficialGroupPop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          groups: [
+            { key: "pic", label: "预估图文CPM", options: pgyKolRangeDefs.cpmPic, value: filter.estimatePictureCpm },
+            { key: "video", label: "预估视频CPM", options: pgyKolRangeDefs.cpmVideo, value: filter.estimateVideoCpm },
+          ],
+          onApply: function (draft) { update({ estimatePictureCpm: draft.pic || null, estimateVideoCpm: draft.video || null }); },
+        }) : null,
+        pop.id === "readPrice" ? o.jsx(PgyKolOfficialGroupPop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          groups: [
+            { key: "pic", label: "图文笔记阅读单价", options: pgyKolRangeDefs.picRead, value: filter.estimatePicReadCost },
+            { key: "video", label: "视频笔记阅读单价", options: pgyKolRangeDefs.videoRead, value: filter.estimateVideoReadCost },
+          ],
+          onApply: function (draft) { update({ estimatePicReadCost: draft.pic || null, estimateVideoReadCost: draft.video || null }); },
+        }) : null,
+        pop.id === "engagePrice" ? o.jsx(PgyKolOfficialGroupPop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          groups: [
+            { key: "pic", label: "预估图文互动单价", options: pgyKolRangeDefs.picEngage, value: filter.estimatePicEngageCost },
+            { key: "video", label: "预估视频互动单价", options: pgyKolRangeDefs.videoEngage, value: filter.estimateVideoEngageCost },
+          ],
+          onApply: function (draft) { update({ estimatePicEngageCost: draft.pic || null, estimateVideoEngageCost: draft.video || null }); },
+        }) : null,
+        pop.id === "overflow" ? o.jsx(PgyKolOfficialRangePop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          options: pgyKolRangeDefs.cpuv, value: filter.overflowCost,
+          minPlaceholder: "0", maxPlaceholder: "9,999,999",
+          onApply: function (n) { update({ overflowCost: n }); },
+        }) : null,
+        /* Popover：直播数据（多选） */
+        pop.id === "liveCount" ? o.jsx(PgyKolOfficialMultiPop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          options: pgyKolRangeDefs.liveCount, selectedKeys: filter.liveCount30d.map(function (n) { return pgyKolNodeKey(n); }),
+          onApply: function (keys) { update({ liveCount30d: keysToNodes(pgyKolRangeDefs.liveCount, keys) }); },
+        }) : null,
+        pop.id === "liveViewer" ? o.jsx(PgyKolOfficialMultiPop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          options: pgyKolRangeDefs.liveViewer, selectedKeys: filter.avgLiveViewer.map(function (n) { return pgyKolNodeKey(n); }),
+          onApply: function (keys) { update({ avgLiveViewer: keysToNodes(pgyKolRangeDefs.liveViewer, keys) }); },
+        }) : null,
+        pop.id === "liveGmv" ? o.jsx(PgyKolOfficialMultiPop, {
+          open: true, anchor: pop.anchor, onClose: closePop,
+          options: pgyKolRangeDefs.liveGmv, selectedKeys: filter.avgLiveGmv.map(function (n) { return pgyKolNodeKey(n); }),
+          onApply: function (keys) { update({ avgLiveGmv: keysToNodes(pgyKolRangeDefs.liveGmv, keys) }); },
+        }) : null,
+      ],
+    }),
+  });
+}
+
+/* ============================================================
+ * Phase 5.2 官网高保真复刻页面源码（注入 bundle 的单一权威来源）。
+ * 结构：紧凑矩阵（一级分区左侧窄列 + 右侧行）；复杂筛选项 = 28px 触发器 +
+ * 贴近触发器的 Popover；选中红色小面积；禁用低透明度；未实证字段由
+ * window.__pgyKolUnproven（Schema 单一来源）驱动【待实证】标注。
+ * 注意：本文件会被原样注入浏览器 bundle，必须以 pgyKolDevEnabled 开头
+ * （bundle 内容守卫锚点），禁止反引号与模板插值；末尾不得有换行，
+ * 否则注入分隔符会产生双换行破坏内容守卫的幂等哈希。
+ * ============================================================ */
 
 function si(e){if(V1.has(e))return V1.get(e);let t=e.replace(/\.(tsx?|jsx?)$/,"");t.startsWith("pages/")&&(t=t.slice(6)),t.endsWith("/index")&&(t=t.slice(0,-6));const r=`../pages/${t}/index.tsx`,a=li[r];if(!a){console.warn(`[RouteGenerator] Component not found: ${e} (${r})`);const l=m.lazy(()=>Promise.resolve({default:()=>o.jsxs(x,{sx:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",minHeight:400,gap:2},children:[o.jsx(po,{sx:{fontSize:64,color:"text.secondary"}}),o.jsx(w,{variant:"h6",children:"当前版本不支持此功能"}),o.jsx(w,{variant:"body2",color:"text.secondary",children:"请升级应用到最新版本以使用该功能"}),o.jsx($,{variant:"contained",size:"small",onClick:()=>{var s,i;(i=(s=window.bridge)==null?void 0:s.updater)==null||i.checkForUpdates()},children:"检查更新"})]})}));return V1.set(e,l),l}const n=m.lazy(()=>a().then(l=>l.default?l:(console.error(`Component has no default export: ${e}`),{default:()=>o.jsxs(x,{sx:{p:3},children:[o.jsx("h2",{children:"组件导出错误"}),o.jsxs("p",{children:["组件路径: ",e]}),o.jsx("p",{children:"该组件没有默认导出，请确保使用 export default"})]})})));return V1.set(e,n),n}function ii(e){const t=[];function r(a){if(a.path&&a.component)try{const n=si(a.component);t.push({path:a.path.startsWith("/")?a.path.slice(1):a.path,element:o.jsx(m.Suspense,{fallback:o.jsx(ni,{}),children:o.jsx(n,{})})})}catch(n){console.error(`Failed to create route for menu: ${a.name}`,n)}a.children&&a.children.length>0&&a.children.forEach(r)}return e.forEach(r),t}const $1={signIn:{path:"/sign-in",element:o.jsx(gs,{children:o.jsx(Sr,{})})},notFound:{path:"*",element:o.jsx(K1,{to:"/",replace:!0})}},s2=[{index:!0,element:o.jsx(K1,{to:"/database/xhs/pgy-blogger",replace:!0})},{path:"profile",element:o.jsx(Er,{})},{path:"enterprise/info",element:o.jsx(Ar,{})}];function ci(e){return m.useMemo(()=>{if(!e||e.length===0)return u0([{path:"/",element:o.jsx(q0,{children:o.jsx(Q0,{})}),children:s2},$1.signIn,$1.notFound]);const t=ii(e),r=[...s2,...t];return u0([{path:"/",element:o.jsx(q0,{children:o.jsx(Q0,{})}),children:r},$1.signIn,$1.notFound])},[e])}function di(e){const t=parseInt(e,10);return t<1024?`${t} B`:t<1024*1024?`${(t/1024).toFixed(2)} KB`:t<1024*1024*1024?`${(t/(1024*1024)).toFixed(2)} MB`:`${(t/(1024*1024*1024)).toFixed(2)} GB`}function ui(){const{dialogOpen:e,updateInfo:t,downloadStatus:r,progress:a,error:n,startDownload:l,installUpdate:s,closeDialog:i}=it(),d=r==="downloading",c=r==="downloaded",u=()=>{l()},f=()=>{s()},b=()=>{i()};return o.jsxs(ue,{open:e,onClose:b,disableEscapeKeyDown:!1,maxWidth:"sm",fullWidth:!0,children:[o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(B,{icon:"solar:cloud-download-bold-duotone",width:24,height:24}),o.jsxs(w,{variant:"h6",children:["发现新版本 ",t==null?void 0:t.version]})]})}),o.jsxs(pe,{children:[n&&o.jsx(oe,{severity:"error",sx:{mb:2},children:n}),!1&&o.jsx(oe,{severity:"warning",sx:{mb:2},children:"这是一个强制更新，您必须更新才能继续使用应用"}),(t==null?void 0:t.updateLog)&&o.jsxs(x,{sx:{mb:2},children:[o.jsx(w,{variant:"subtitle2",gutterBottom:!0,children:"更新内容："}),o.jsx(w,{variant:"body2",color:"text.secondary",sx:{whiteSpace:"pre-wrap",bgcolor:"action.hover",p:2,borderRadius:1,maxHeight:200,overflow:"auto"},children:t.updateLog})]}),(t==null?void 0:t.fileSize)&&o.jsxs(w,{variant:"body2",color:"text.secondary",sx:{mb:2},children:["文件大小：",di(t.fileSize)]}),d&&o.jsxs(x,{sx:{mt:2},children:[o.jsxs(x,{sx:{display:"flex",justifyContent:"space-between",mb:1},children:[o.jsx(w,{variant:"body2",color:"text.secondary",children:"正在下载..."}),o.jsxs(w,{variant:"body2",color:"text.secondary",children:[(a==null?void 0:a.percent)??0,"%"]})]}),o.jsx(Q1,{variant:"determinate",value:(a==null?void 0:a.percent)??0})]}),c&&o.jsx(oe,{severity:"success",sx:{mt:2},children:'下载完成，点击"立即安装"重启应用'})]}),o.jsxs(_e,{children:[!c&&!d&&o.jsx($,{onClick:b,children:"稍后提醒"}),!d&&!c&&o.jsx($,{onClick:u,variant:"contained",startIcon:o.jsx(B,{icon:"solar:download-bold"}),children:"立即更新"}),c&&o.jsx($,{onClick:f,variant:"contained",startIcon:o.jsx(B,{icon:"solar:restart-bold"}),children:"立即安装"})]})]})}const _r=Ce(e=>({updateInfo:null,downloadProgress:0,dialogOpen:!1,error:"",closeDialog:()=>{e({dialogOpen:!1})},restartApp:()=>{var t,r;(r=(t=window.bridge)==null?void 0:t.assetsUpdate)==null||r.restartApp()},onUpdateAvailable:t=>{e({updateInfo:t,error:""})},onDownloadProgress:t=>{e({downloadProgress:t})},onUpdateDownloaded:t=>{e({dialogOpen:!0,downloadProgress:100})},onUpdateError:t=>{e({error:t,dialogOpen:!1})}}));function pi(){const{dialogOpen:e,updateInfo:t,restartApp:r,closeDialog:a}=_r(),n=()=>{r()},l=()=>{a()};return o.jsxs(ue,{open:e,onClose:l,maxWidth:"sm",fullWidth:!0,children:[o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(B,{icon:"solar:check-circle-bold-duotone",width:28,height:28,style:{color:"#4caf50"}}),o.jsx(w,{variant:"h6",children:"新版本已准备就绪"})]})}),o.jsxs(pe,{children:[o.jsxs(w,{variant:"subtitle1",sx:{mb:2,fontWeight:500},children:["版本 ",t==null?void 0:t.version]}),(t==null?void 0:t.releaseNotes)&&o.jsx(x,{sx:{mb:2,p:2,bgcolor:"background.paper",borderRadius:1,border:"1px solid",borderColor:"divider"},children:o.jsx(w,{variant:"body2",sx:{whiteSpace:"pre-line",lineHeight:1.8},children:t.releaseNotes})}),o.jsxs(w,{variant:"caption",color:"text.secondary",sx:{display:"flex",alignItems:"center",gap:.5,mt:2},children:[o.jsx(B,{icon:"solar:check-circle-linear",width:16,height:16}),"已经完成升级，重启应用即可生效"]})]}),o.jsxs(_e,{children:[o.jsx($,{onClick:l,color:"inherit",children:"稍后提醒"}),o.jsx($,{onClick:n,variant:"contained",autoFocus:!0,children:"立即重启"})]})]})}function hi(){const e=m.useRef(!1);m.useEffect(()=>{var r;if(!((r=window.bridge)!=null&&r.updater)||e.current)return;e.current=!0;const t=()=>it.getState();window.bridge.updater.onUpdateAvailable(a=>{t().onUpdateAvailable(a)}),window.bridge.updater.onUpdateNotAvailable(()=>{t().onUpdateNotAvailable()}),window.bridge.updater.onDownloadProgress(a=>{t().onDownloadProgress(a)}),window.bridge.updater.onUpdateDownloaded(()=>{t().onUpdateDownloaded()}),window.bridge.updater.onUpdateError(a=>{t().onUpdateError(a)}),window.bridge.updater.onManualInstall(({filePath:a})=>{t().onUpdateError(`请手动安装更新文件：${a}`)})},[])}function fi(){const e=m.useRef(!1);m.useEffect(()=>{var s,i,d,c,u,f,b,C,h;if(!((s=window.bridge)!=null&&s.assetsUpdate)||e.current)return;e.current=!0;const t=()=>_r.getState(),r=(d=(i=window.bridge.assetsUpdate).onUpdateAvailable)==null?void 0:d.call(i,g=>{t().onUpdateAvailable(g)}),a=(u=(c=window.bridge.assetsUpdate).onDownloadProgress)==null?void 0:u.call(c,g=>{t().onDownloadProgress(g)}),n=(b=(f=window.bridge.assetsUpdate).onUpdateDownloaded)==null?void 0:b.call(f,g=>{t().onUpdateDownloaded(g)}),l=(h=(C=window.bridge.assetsUpdate).onUpdateError)==null?void 0:h.call(C,g=>{t().onUpdateError(g)});return()=>{r==null||r(),a==null||a(),n==null||n(),l==null||l()}},[])}function mi(){const{mode:e,primaryColor:t}=X2(),{menus:r}=Se();hi(),fi();const a=m.useMemo(()=>Gn(e,t),[e,t]),n=ci(r);return m.useEffect(()=>{var s,i;return(i=(s=window.bridge)==null?void 0:s.system.navigation)==null?void 0:i.onOpenRoute(({route:d})=>{n.navigate(d)})},[n]),o.jsxs(ho,{theme:a,children:[o.jsx(fo,{}),o.jsxs(ms,{children:[o.jsx(go,{router:n}),o.jsx(ui,{}),o.jsx(pi,{})]})]})}C2(Yo);C2(Jo);Qt().then(e=>{console.log("=== FINGERPRINT HASH ===",e)});ee.BASE="https://magiorix.red-magic.cn";ee.HEADERS=async()=>{const e=localStorage.getItem("auth-storage");if(e)try{const{state:t}=JSON.parse(e);if(t!=null&&t.token)return{satoken:t.token}}catch{}return{}};At.createRoot(document.getElementById("root")).render(o.jsx(i2.StrictMode,{children:o.jsx(mi,{})}));export{Ks as $,u5 as A,Y0 as B,Mt as C,Vn as D,Xi as E,is as F,Qi as G,ec as H,B as I,Zi as J,Vi as K,Hi as L,Bi as M,Ji as N,ee as O,hr as P,os as Q,as as R,Qs as S,ac as T,ns as U,Fi as V,h5 as W,$n as X,Zs as Y,t5 as Z,G as _,p1 as a,r5 as a0,$i as a1,rc as a2,p5 as a3,q5 as a4,ze as a5,Ui as a6,Gi as a7,qi as a8,Ki as a9,Yi as aa,we as b,re as c,W as d,Ee as e,Q2 as f,Wi as g,Us as h,fs as i,ne as j,Z2 as k,yr as l,tc as m,qs as n,Js as o,nc as p,Xs as q,n5 as r,hs as s,X1 as t,e0 as u,Vt as v,oc as w,G0 as x,d5 as y,lc as z};
 // magiorix.login.method

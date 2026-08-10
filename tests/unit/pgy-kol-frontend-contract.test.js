@@ -2,47 +2,215 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 
 const projectRoot = path.resolve(__dirname, "../..");
 const mainBundlePath = path.join(projectRoot, "assets", "1.2.0", "assets", "index-B09sHfUO.js");
 const patchScriptPath = path.join(projectRoot, "scripts", "apply-magiorix-frontend-patches.js");
+const pageSourcePath = path.join(projectRoot, "scripts", "pgy-kol-phase52-page-source.js");
 const preloadPath = path.join(projectRoot, "app-source", "dist-electron", "preload.mjs");
+const acceptanceDriverPath = path.join(projectRoot, "artifacts", "verification", "pgy-phase52-acceptance", "driver.js");
 
 const script = fs.readFileSync(patchScriptPath, "utf8");
+const pageSource = fs.readFileSync(pageSourcePath, "utf8");
 const bundle = fs.readFileSync(mainBundlePath, "utf8");
 const preload = fs.readFileSync(preloadPath, "utf8");
+const acceptanceDriver = fs.readFileSync(acceptanceDriverPath, "utf8");
 
 const legacyFrontendBrandPattern = /(?:\bzs\.|@zsdesktop|PYGdata|Emagic(?:DataCrawler| Data Crawler)?|易美(?:传播|数据抓取)?)/i;
 
-// Phase 5.1：页面源码以「基线模板 + pairs + helpers」的最终形态为准（单一来源），
-// 与 apply-magiorix-frontend-patches.js 中的 pgyKolSearchPageSource51 计算一致。
-function extractEmbeddedPageSource() {
-  const anchor = "const pgyKolSearchPageSource = `";
-  const start = script.indexOf(anchor);
-  assert.ok(start >= 0, "patch script must embed the pgy-kol page source in a template literal");
-  const bodyStart = start + anchor.length;
-  // 基线模板字面量以行尾 "`;" 闭合（pgyKolSearchPageSource51 之前）。
-  const closeMarker = "`;";
-  const bodyEnd = script.indexOf(closeMarker, bodyStart);
-  assert.ok(bodyEnd > bodyStart, "pgy-kol page source template literal must be closed");
-  const baseSource = script.slice(bodyStart, bodyEnd);
-  const pairsPath = path.join(projectRoot, "scripts", "pgy-kol-phase51-pairs.json");
-  const phase51 = JSON.parse(fs.readFileSync(pairsPath, "utf8"));
-  let source = baseSource;
-  for (const item of phase51.pairs) {
-    assert.ok(source.includes(item.from), `Phase 5.1 pair target must exist: ${item.label}`);
-    assert.equal(
-      source.indexOf(item.from),
-      source.lastIndexOf(item.from),
-      `Phase 5.1 pair target must be unique: ${item.label}`,
-    );
-    source = source.replace(item.from, item.to);
-  }
-  return `${source}\n${phase51.helpers}`;
+function jsx(type, props) {
+  return { type, props: props || {} };
 }
 
-const pageSource = extractEmbeddedPageSource();
+function pageRuntime(extra) {
+  const runtime = {
+    console,
+    Promise,
+    setTimeout,
+    clearTimeout,
+    o: { jsx, jsxs: jsx },
+    m: {
+      useState(initial) {
+        let value = typeof initial === "function" ? initial() : initial;
+        return [value, (next) => { value = typeof next === "function" ? next(value) : next; }];
+      },
+      useEffect() {},
+      useCallback(fn) { return fn; },
+      useRef(initial) { return { current: initial }; },
+    },
+    window: {
+      innerWidth: 1280,
+      innerHeight: 631,
+      addEventListener() {},
+      removeEventListener() {},
+      setTimeout,
+      clearTimeout,
+      localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+    },
+    document: { documentElement: { classList: { add() {}, remove() {} } } },
+    NodeFilter: { SHOW_TEXT: 4 },
+  };
+  const componentNames = new Set();
+  const declaredNames = new Set();
+  for (const match of pageSource.matchAll(/function\s+([A-Za-z_$][\w$]*)\s*\(/g)) declaredNames.add(match[1]);
+  for (const match of pageSource.matchAll(/o\.jsx?s?\(([A-Za-z_$][\w$]*)/g)) componentNames.add(match[1]);
+  for (const name of componentNames) if (!declaredNames.has(name) && !(name in runtime)) runtime[name] = name;
+  Object.assign(runtime, extra || {});
+  vm.createContext(runtime);
+  vm.runInContext(pageSource, runtime, { filename: pageSourcePath });
+  return runtime;
+}
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+
+function vnodeChildren(node) {
+  if (node == null || typeof node === "boolean") return [];
+  if (Array.isArray(node)) return node;
+  if (typeof node !== "object") return [];
+  return [node.props && node.props.children];
+}
+
+function findVnodes(root, predicate) {
+  const found = [];
+  const seen = new Set();
+  function walk(node) {
+    if (node == null || typeof node === "boolean") return;
+    if (Array.isArray(node)) { node.forEach(walk); return; }
+    if (typeof node !== "object" || seen.has(node)) return;
+    seen.add(node);
+    if (predicate(node)) found.push(node);
+    vnodeChildren(node).forEach(walk);
+  }
+  walk(root);
+  return found;
+}
+
+function createCoordinator(bridge, options) {
+  const runtime = pageRuntime();
+  assert.equal(typeof runtime.pgyKolCreateSearchCoordinator, "function", "page must expose its executable draft/applied coordinator");
+  return runtime.pgyKolCreateSearchCoordinator(Object.assign({ bridge }, options || {}));
+}
+
+function successResult() {
+  return { ok: true, data: { kols: [{ userId: "fixture-user" }] } };
+}
+
+function statefulRenderer(runtime, component, props, refElement) {
+  const slots = [];
+  const effects = [];
+  let cursor = 0;
+  let pendingEffects = [];
+  function changed(a, b) {
+    if (!a || !b || a.length !== b.length) return true;
+    return a.some((value, index) => !Object.is(value, b[index]));
+  }
+  runtime.m = {
+    useState(initial) {
+      const index = cursor++;
+      if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial;
+      return [slots[index], (next) => { slots[index] = typeof next === "function" ? next(slots[index]) : next; }];
+    },
+    useEffect(fn, deps) {
+      const index = cursor++;
+      const previous = effects[index];
+      if (!previous || changed(deps, previous.deps)) pendingEffects.push({ index, fn, deps });
+    },
+    useCallback(fn) { cursor += 1; return fn; },
+    useRef(initial) {
+      const index = cursor++;
+      if (!(index in slots)) slots[index] = { current: initial };
+      return slots[index];
+    },
+  };
+  function mountRefs(tree) {
+    findVnodes(tree, (node) => {
+      const ref = node.props && node.props.ref;
+      if (typeof ref === "function") ref(refElement);
+      else if (ref && typeof ref === "object") ref.current = refElement;
+      return false;
+    });
+  }
+  function render() {
+    cursor = 0;
+    pendingEffects = [];
+    const tree = component(props || {});
+    mountRefs(tree);
+    for (const next of pendingEffects) {
+      const previous = effects[next.index];
+      if (previous && typeof previous.cleanup === "function") previous.cleanup();
+      effects[next.index] = { deps: next.deps, cleanup: next.fn() };
+    }
+    return tree;
+  }
+  return { render };
+}
+
+function searchPageHarness(searchFirstPage, options) {
+  options = options || {};
+  const bridge = {
+    getSchemaFields() { return Promise.resolve({ ok: true, data: [] }); },
+    getConfig() { return Promise.resolve({ ok: true, data: { nodes: [], options: [] } }); },
+    getColumns() { return Promise.resolve({ ok: true, data: [{ id: "nickname", responsePath: "nickname", defaultDisplay: true }] }); },
+    previewPayload() { return Promise.resolve({ ok: true, data: {} }); },
+    batchList() { return Promise.resolve({ ok: true, data: [] }); },
+    onBatchEvent() { return () => {}; },
+    searchFirstPage,
+  };
+  const runtime = pageRuntime({
+    document: {
+      documentElement: { classList: { add() {}, remove() {} } },
+      createTreeWalker() { return { nextNode() { return null; } }; },
+      body: {},
+    },
+    window: {
+      innerWidth: 1280,
+      innerHeight: 631,
+      bridge: { pgyKol: bridge },
+      localStorage: {
+        getItem(key) {
+          if (key === "magiorix-pgy-kol-enabled") return "1";
+          if (key === "magiorix-pgy-kol-filters" && options.savedFilters) return JSON.stringify(options.savedFilters);
+          return null;
+        },
+        setItem() {},
+        removeItem() {},
+      },
+      setTimeout() { return 1; },
+      clearTimeout() {},
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  });
+  const renderer = statefulRenderer(runtime, runtime.PgyKolSearchPage, {}, { scrollIntoView() {} });
+  return { bridge, runtime, renderer };
+}
+
+function editRepresentativePageDraft(runtime, renderer) {
+  let tree = renderer.render();
+  const keywordInput = findVnodes(tree, (node) => node.props && typeof node.props.placeholder === "string" && node.props.placeholder.indexOf("找博主") >= 0)[0];
+  const marketing = findVnodes(tree, (node) => node.type === runtime.PgyKolInlineOptions && node.props && Array.isArray(node.props.options) && node.props.options.some((option) => option.value === "种草"))[0];
+  const genderTrigger = findVnodes(tree, (node) => node.type === runtime.PgyKolTrigger && node.props && node.props.label === "性别")[0];
+  const excludeLowActive = findVnodes(tree, (node) => node.type === runtime.PgyKolCheck && node.props && node.props.label === "剔除低活博主")[0];
+  assert.ok(keywordInput && marketing && genderTrigger && excludeLowActive, "representative page draft controls must render");
+  keywordInput.props.onChange({ target: { value: "  页面完整条件  " } });
+  marketing.props.onToggle({ value: "种草", label: "种草" });
+  excludeLowActive.props.onToggle();
+  genderTrigger.props.onOpen({ currentTarget: {} });
+  tree = renderer.render();
+  const genderPopover = findVnodes(tree, (node) => node.type === runtime.PgyKolOptionPop && node.props && node.props.title === "性别")[0];
+  assert.ok(genderPopover, "gender popover must render from the real page handler");
+  genderPopover.props.onToggle({ value: "女", label: "女" });
+  return renderer.render();
+}
+
+// Phase 5.2：页面源码单一权威来源为 scripts/pgy-kol-phase52-page-source.js，
+// 由 apply-magiorix-frontend-patches.js 直接 readFileSync 注入 bundle。
 test("pgy-kol page source is syntactically valid JavaScript", () => {
   assert.doesNotThrow(() => {
     // eslint-disable-next-line no-new-func
@@ -50,7 +218,1090 @@ test("pgy-kol page source is syntactically valid JavaScript", () => {
   }, "embedded pgy-kol page source must parse as valid JavaScript");
 });
 
-test("Phase 5 page source carries the required copy", () => {
+test("draft edits, including a popover confirm, never call searchFirstPage", () => {
+  let searches = 0;
+  const coordinator = createCoordinator({
+    searchFirstPage() { searches += 1; return Promise.resolve(successResult()); },
+  });
+  const tenPatches = [
+    { marketTarget: "种草" },
+    { contentTag: ["美妆"] },
+    { gender: "女" },
+    { location: { value: "310000", label: "上海" } },
+    { audience20: [{ value: "a20", label: "人群" }] },
+    { fansNumberLower: "10000" },
+    { fansNumberUpper: "50000" },
+    { noteType: 1 },
+    { inStar: true },
+    { excludeLowActive: true },
+  ];
+  tenPatches.forEach((patch) => coordinator.editDraft(patch));
+  assert.equal(searches, 0, "ten independent draft edits must not search");
+  coordinator.editDraft({ audience20: [{ value: "a20-confirmed", label: "弹层确定" }] });
+  assert.equal(searches, 0, "a popover's internal confirm only applies its local selection to draft");
+  assert.equal(coordinator.getState().isDirty, true);
+});
+
+test("global apply searches exactly once and blocks double-click / consecutive Enter while loading", async () => {
+  const pending = deferred();
+  const calls = [];
+  const coordinator = createCoordinator({
+    searchFirstPage(filterState) { calls.push(JSON.parse(JSON.stringify(filterState))); return pending.promise; },
+  });
+  coordinator.editDraft({ keyword: "  测试昵称  ", searchType: 0, gender: "女" });
+  const click = coordinator.applyAndSearch();
+  const doubleClick = coordinator.applyAndSearch();
+  const enter = coordinator.applyAndSearch();
+  assert.strictEqual(doubleClick, click, "same-key double click must reuse the exact in-flight Promise");
+  assert.strictEqual(enter, click, "same-key Enter must reuse the exact in-flight Promise");
+  assert.equal(calls.length, 1, "all global submit entrances must share the same in-flight guard");
+  assert.equal(calls[0].keyword, "测试昵称", "the applied snapshot must be normalized before the request");
+  pending.resolve(successResult());
+  await Promise.all([click, doubleClick, enter]);
+  assert.equal(coordinator.getState().status, "loaded");
+  assert.equal(coordinator.getState().isDirty, false);
+});
+
+test("same request key in flight applies the latest complete submitted draft", async () => {
+  const pending = deferred();
+  const searchCalls = [];
+  const batchCalls = [];
+  const coordinator = createCoordinator({
+    searchFirstPage(filterState) {
+      searchCalls.push(JSON.parse(JSON.stringify(filterState)));
+      return pending.promise;
+    },
+    batchStart(payload) {
+      batchCalls.push(JSON.parse(JSON.stringify(payload)));
+      return Promise.resolve({ ok: true, data: { taskId: "fixture" } });
+    },
+  });
+  coordinator.editDraft({ featureTags: [{ value: "X", label: "X" }], contentSceneLabel: [] });
+  const first = coordinator.applyAndSearch();
+  coordinator.editDraft({ featureTags: [], contentSceneLabel: [{ value: "X", label: "X" }] });
+  const latest = coordinator.applyAndSearch();
+
+  assert.strictEqual(latest, first, "equivalent request keys must reuse the exact in-flight Promise");
+  assert.equal(searchCalls.length, 1);
+  assert.deepEqual(searchCalls[0].featureTags, ["X"]);
+  pending.resolve(successResult());
+  await latest;
+
+  const state = coordinator.getState();
+  assert.deepEqual(JSON.parse(JSON.stringify(state.appliedFilter.featureTags)), []);
+  assert.deepEqual(JSON.parse(JSON.stringify(state.appliedFilter.contentSceneLabel)), [{ value: "X", label: "X" }]);
+  assert.equal(state.isDirty, false, "latest full draft must be the frozen applied UI snapshot");
+  await coordinator.startBatch(["nickname"]);
+  assert.equal(batchCalls.length, 1);
+  assert.deepEqual(batchCalls[0].filterState, searchCalls[0], "batch still uses the one frozen request snapshot");
+});
+
+test("formal submit reads the complete current draft and builds one normalized filterState", async () => {
+  const calls = [];
+  const coordinator = createCoordinator({
+    searchFirstPage(filterState) { calls.push(JSON.parse(JSON.stringify(filterState))); return Promise.resolve(successResult()); },
+  });
+  const personalTag = { value: "宝妈", label: "宝妈" };
+  const featureTag = { value: "医生", label: "医生" };
+  const location = { value: "310000", label: "上海", path: "中国 上海" };
+  const audience20 = { value: "a20", label: "人群", fullPath: "人群 人群A" };
+  const automotive = { value: "auto", label: "汽车", children: [{ value: "leaf", label: "叶子" }] };
+  const consume = { value: "consume", label: "高消费", path: "消费 高消费" };
+  const theme = { value: "theme", label: "教程", fullPath: "内容 教程" };
+  const scene = { value: "开箱测评", label: "开箱测评" };
+  const noteCategory = { value: "note", label: "美妆", fullPath: "美妆 彩妆" };
+  const range = (value) => ({ value, label: value.join("-") });
+
+  coordinator.editDraft({
+    searchType: 0,
+    keyword: "  完整条件  ",
+    marketTarget: "种草",
+    audienceGroup: "unproven-crowd",
+    brands: ["brand-gate-only"],
+    personalTags: [personalTag],
+    featureTags: [featureTag],
+    gender: "女",
+    location,
+    audience20: [audience20],
+    automotive: [automotive],
+    consumeBehavior: [consume],
+    signed: "已签约",
+    contentSceneLabel: [scene],
+    contentTheme: [theme],
+    fansNumberLower: "10000",
+    fansNumberUpper: "50000",
+    fansAge: "18-24",
+    fansGender: "女",
+    fansLocation: location,
+    fansMaritalStatus: "已婚",
+    fansConsumptionLevel: "高",
+    fansChildAgeInfo: [{ value: "0-3", label: "0-3岁" }],
+    fansDevicePrice: [{ value: "5000+", label: "5000元以上" }],
+    fansDeviceBrand: [{ value: "Apple", label: "Apple" }],
+    accumCommonImpMedinNum30d: range([1000, 5000]),
+    readMidNor30: range([500, 1000]),
+    interMidNor30: range([100, 500]),
+    thousandLikePercent30: range([0.1, 0.2]),
+    noteType: 1,
+    notePriceLower: "100",
+    notePriceUpper: "500",
+    videoPriceLower: "200",
+    videoPriceUpper: "800",
+    coopCredit: range([0.8, 1]),
+    progressOrderCnt: { label: "0～3", value: [0, 3] },
+    tradeType: "母婴",
+    tradeReportBrandIdSet: ["recent-brand"],
+    coopImpMedin: range([1000, 5000]),
+    coopReadMid: range([500, 1000]),
+    coopInterMid: range([100, 500]),
+    coopOverflowMid: range([10, 50]),
+    estimatePicReadCost: range([1, 2]),
+    estimateVideoReadCost: range([2, 3]),
+    estimatePicEngageCost: range([3, 4]),
+    estimateVideoEngageCost: range([4, 5]),
+    estimatePictureCpm: range([5, 6]),
+    estimateVideoCpm: range([6, 7]),
+    overflowCost: range([7, 8]),
+    liveCount30d: [{ value: "1-3", label: "1-3场" }],
+    avgLiveViewer: [{ value: "1000-5000", label: "1000-5000" }],
+    avgLiveGmv: [{ value: "1w-5w", label: "1万-5万" }],
+    noteCategory: [noteCategory],
+    inStar: true,
+    newHighQuality: true,
+    isHighQualityFlag: true,
+    hasBuyerCoopAuthFlag: true,
+    filterIntention: true,
+    firstIndustry: "美妆",
+    secondIndustry: "彩妆",
+    activityCodes: ["activity-1"],
+    excludeLowActive: true,
+    fansNumUp: true,
+    excludedTradeReportBrand: true,
+    excludedTradeInviteReportBrand: true,
+    contentTag: ["全部", "美妆"],
+  });
+  await coordinator.applyAndSearch();
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], {
+    searchType: 0,
+    keyword: "完整条件",
+    marketTarget: "种草",
+    personalTags: ["宝妈"],
+    featureTags: ["医生", "开箱测评"],
+    gender: "女",
+    location: [location],
+    signed: "已签约",
+    top20CrowdsLabel: [audience20],
+    industrySpecificCrowdsMotorDom: [automotive],
+    kolInfoConsumBehaviorLabel: [consume],
+    contentThemeLabel: [theme],
+    fansNumberLower: 10000,
+    fansNumberUpper: 50000,
+    fansAge: "18-24",
+    fansGender: "女",
+    fansLocation: location,
+    fansMaritalStatus: "已婚",
+    fansConsumptionLevel: "高",
+    fansChildAgeInfo: [{ value: "0-3", label: "0-3岁" }],
+    fansDevicePrice: [{ value: "5000+", label: "5000元以上" }],
+    fansDeviceBrand: [{ value: "Apple", label: "Apple" }],
+    accumCommonImpMedinNum30d: [1000, 5000],
+    readMidNor30: [500, 1000],
+    interMidNor30: [100, 500],
+    thousandLikePercent30: [0.1, 0.2],
+    noteType: 1,
+    notePriceLower: 100,
+    notePriceUpper: 500,
+    videoPriceLower: 200,
+    videoPriceUpper: 800,
+    progressOrderCnt: [0, 3],
+    tradeType: "母婴",
+    tradeReportBrandIdSet: ["recent-brand"],
+    activityCodes: ["activity-1"],
+    excludeLowActive: true,
+    fansNumUp: 1,
+    excludedTradeReportBrand: true,
+    excludedTradeInviteReportBrand: true,
+    contentTag: ["美妆"],
+    inviteReply48hNumRatio: [0.8, 1],
+    accumCoopImpMedinNum30d: [1000, 5000],
+    readMidCoop30: [500, 1000],
+    interMidCoop30: [100, 500],
+    mCpuv30d: [10, 50],
+    estimatePicReadPrice: [1, 2],
+    estimateVideoReadPrice: [2, 3],
+    estimatePictureEngageCost: [3, 4],
+    estimateVideoEngageCost: [4, 5],
+    estimatePictureCpm: [5, 6],
+    estimateVideoCpm: [6, 7],
+    estimateCpuv30d: [7, 8],
+    "filterList.kliveCnt30d": ["1-3"],
+    "filterList.avgLiveViewerNum": ["1000-5000"],
+    "filterList.avgAgmv90d": ["1w-5w"],
+    contentSceneLabel: [noteCategory],
+    inStar: 1,
+    newHighQuality: 1,
+    filterIntention: true,
+    "flagList.isHighQuality": true,
+    "flagList.hasBuyerCoopAuth": true,
+    firstIndustry: "美妆",
+    secondIndustry: "彩妆",
+  }, "the formal request must contain every proven draft condition after one normalization path");
+  assert.equal(Object.hasOwn(calls[0], "audienceGroup"), false, "the schema-marked unproven field must remain excluded from formal search");
+  assert.equal(Object.hasOwn(calls[0], "brands"), false, "brand selection is a local gate, not a search filter field");
+});
+
+test("successful request keys deduplicate, failed keys can retry, and nickname history waits for success", async () => {
+  let mode = "success";
+  let calls = 0;
+  const history = [];
+  const coordinator = createCoordinator({
+    searchFirstPage() {
+      calls += 1;
+      return Promise.resolve(mode === "success" ? successResult() : { ok: false, error: { code: "risk-control", message: "fixture" } });
+    },
+  }, { onHistory(keyword) { history.push(keyword); } });
+  coordinator.editDraft({ searchType: 0, keyword: "昵称A" });
+  await coordinator.applyAndSearch();
+  await coordinator.applyAndSearch();
+  assert.equal(calls, 1, "the same successful request key must not search again");
+  assert.deepEqual(history, ["昵称A"], "successful nickname search is written once");
+
+  coordinator.editDraft({ keyword: "昵称B" });
+  mode = "error";
+  await coordinator.applyAndSearch();
+  await coordinator.applyAndSearch();
+  assert.equal(calls, 3, "the same failed request key must remain retryable");
+  assert.deepEqual(history, ["昵称A"], "failed nickname searches must not enter success history");
+});
+
+test("restored filters do not auto-search and empty keyword plus a real filter can be applied", async () => {
+  const calls = [];
+  const coordinator = createCoordinator({
+    searchFirstPage(filterState) { calls.push(JSON.parse(JSON.stringify(filterState))); return Promise.resolve(successResult()); },
+  });
+  coordinator.restore({ searchType: 1, keyword: "restored", gender: "女" });
+  assert.equal(calls.length, 0, "restoring persisted draft must not search");
+  assert.equal(coordinator.getState().appliedFilter, null, "restored state is draft-only");
+  coordinator.editDraft({ keyword: "", gender: "男" });
+  await coordinator.applyAndSearch();
+  assert.equal(calls.length, 1);
+  assert.equal(Object.prototype.hasOwnProperty.call(calls[0], "keyword"), false, "empty keyword must be omitted from the formal request");
+  assert.equal(calls[0].gender, "男");
+});
+
+test("the mounted page restores persisted draft without querying or creating an applied snapshot", () => {
+  const calls = [];
+  const harness = searchPageHarness((filterState) => {
+    calls.push(filterState);
+    return Promise.resolve(successResult());
+  }, {
+    savedFilters: {
+      searchType: 0,
+      keyword: "重启草稿",
+      filter: { searchType: 0, keyword: "重启草稿", gender: "女", contentTag: ["美妆"] },
+      selectedColumns: ["kolInfo", "recentNotes", "actions", "nickname"],
+    },
+  });
+  harness.renderer.render();
+  const tree = harness.renderer.render();
+  const keywordInput = findVnodes(tree, (node) => node.props && typeof node.props.placeholder === "string" && node.props.placeholder.indexOf("找博主") >= 0)[0];
+  assert.equal(calls.length, 0, "mounting a restored page must not call searchFirstPage");
+  assert.equal(keywordInput.props.value, "重启草稿", "persisted keyword must restore into visible draft");
+  assert.ok(findVnodes(tree, (node) => node.props && node.props.children === "已恢复筛选，请点击确定后查询").length > 0);
+  assert.ok(findVnodes(tree, (node) => node.props && node.props.children === "请点击确定筛选后查询").length > 0, "restored draft must remain unapplied");
+});
+
+test("batch start requires a clean applied snapshot and never consumes dirty draft", async () => {
+  const searchCalls = [];
+  const batchCalls = [];
+  const bridge = {
+    searchFirstPage(filterState) { searchCalls.push(JSON.parse(JSON.stringify(filterState))); return Promise.resolve(successResult()); },
+    batchStart(payload) { batchCalls.push(JSON.parse(JSON.stringify(payload))); return Promise.resolve({ ok: true, data: { taskId: "fixture-task" } }); },
+  };
+  const coordinator = createCoordinator(bridge);
+  await coordinator.startBatch(["nickname"]);
+  assert.equal(batchCalls.length, 0, "batch must be blocked before any applied query exists");
+
+  coordinator.editDraft({ keyword: "", gender: "女", contentTag: ["美妆"] });
+  await coordinator.applyAndSearch();
+  assert.equal(searchCalls.length, 1);
+  coordinator.editDraft({ gender: "男" });
+  await coordinator.startBatch(["nickname"]);
+  assert.equal(batchCalls.length, 0, "batch must be blocked while draft differs from applied");
+
+  coordinator.editDraft({ gender: "女" });
+  await coordinator.startBatch(["nickname"]);
+  assert.equal(batchCalls.length, 1);
+  assert.deepEqual(batchCalls[0].filterState, searchCalls[0], "batch must use the frozen applied request snapshot");
+  assert.deepEqual(batchCalls[0].columns, ["nickname"]);
+});
+
+test("late responses cannot overwrite a newer applied request", async () => {
+  const first = deferred();
+  const second = deferred();
+  const queue = [first, second];
+  const coordinator = createCoordinator({ searchFirstPage() { return queue.shift().promise; } });
+  coordinator.editDraft({ keyword: "first" });
+  const firstRequest = coordinator.applyAndSearch();
+  coordinator.editDraft({ keyword: "second" });
+  const secondRequest = coordinator.applyAndSearch();
+  second.resolve({ ok: true, data: { kols: [{ userId: "second-result" }] } });
+  await secondRequest;
+  first.resolve({ ok: true, data: { kols: [{ userId: "stale-result" }] } });
+  await firstRequest;
+  const state = coordinator.getState();
+  assert.equal(state.appliedFilter.keyword, "second");
+  assert.equal(state.result.kols[0].userId, "second-result");
+});
+
+test("A-B-A reuses A by key and only the latest explicit intent may apply", async () => {
+  const first = deferred();
+  const second = deferred();
+  const calls = [];
+  const coordinator = createCoordinator({
+    searchFirstPage(filterState) {
+      calls.push(filterState.keyword);
+      return filterState.keyword === "A" ? first.promise : second.promise;
+    },
+  });
+  coordinator.editDraft({ keyword: "A" });
+  const requestA = coordinator.applyAndSearch();
+  coordinator.editDraft({ keyword: "B" });
+  const requestB = coordinator.applyAndSearch();
+  coordinator.editDraft({ keyword: "A" });
+  const reusedA = coordinator.applyAndSearch();
+
+  assert.strictEqual(reusedA, requestA, "A must reuse its still-running keyed Promise after B starts");
+  assert.deepEqual(calls, ["A", "B"], "A-B-A must issue only two remote searches");
+  second.resolve({ ok: true, data: { kols: [{ userId: "B-result" }] } });
+  assert.equal((await requestB).stale, true, "B is stale after the user's final explicit A submit");
+  assert.equal(coordinator.getState().appliedFilter, null, "stale B must not become applied while A is pending");
+  first.resolve({ ok: true, data: { kols: [{ userId: "A-result" }] } });
+  await requestA;
+  assert.equal(coordinator.getState().appliedFilter.keyword, "A");
+  assert.equal(coordinator.getState().result.kols[0].userId, "A-result");
+});
+
+test("reusing pending A after B already failed clears the obsolete B error", async () => {
+  const pendingA = deferred();
+  const pendingB = deferred();
+  const coordinator = createCoordinator({
+    searchFirstPage(filterState) { return filterState.keyword === "A" ? pendingA.promise : pendingB.promise; },
+  });
+  coordinator.editDraft({ keyword: "A" });
+  const requestA = coordinator.applyAndSearch();
+  coordinator.editDraft({ keyword: "B" });
+  const requestB = coordinator.applyAndSearch();
+  pendingB.resolve({ ok: false, error: { code: "risk-control", message: "B failed" } });
+  await requestB;
+  assert.equal(coordinator.getState().status, "error");
+  assert.equal(coordinator.getState().error.code, "risk-control");
+
+  coordinator.editDraft({ keyword: "A" });
+  const reusedA = coordinator.applyAndSearch();
+  assert.strictEqual(reusedA, requestA);
+  assert.equal(coordinator.getState().status, "loading", "latest explicit A intent must be visibly pending");
+  assert.equal(coordinator.getState().error, null, "obsolete B error must be cleared immediately");
+  pendingA.resolve({ ok: true, data: { kols: [{ userId: "A-result" }] } });
+  await reusedA;
+  assert.equal(coordinator.getState().appliedFilter.keyword, "A");
+});
+
+test("successful A re-confirmed during pending B invalidates B without another request", async () => {
+  const pendingB = deferred();
+  const calls = [];
+  const coordinator = createCoordinator({
+    searchFirstPage(filterState) {
+      calls.push(filterState.keyword);
+      if (filterState.keyword === "A") return Promise.resolve({ ok: true, data: { kols: [{ userId: "A-result" }] } });
+      return pendingB.promise;
+    },
+  });
+  coordinator.editDraft({ keyword: "A" });
+  await coordinator.applyAndSearch();
+  coordinator.editDraft({ keyword: "B" });
+  const requestB = coordinator.applyAndSearch();
+  coordinator.editDraft({ keyword: "A" });
+  const repeatA = await coordinator.applyAndSearch();
+
+  assert.equal(repeatA.skipped, true);
+  assert.deepEqual(calls, ["A", "B"], "successful A must deduplicate even while B is pending");
+  pendingB.resolve({ ok: true, data: { kols: [{ userId: "late-B" }] } });
+  assert.equal((await requestB).stale, true);
+  const state = coordinator.getState();
+  assert.equal(state.appliedFilter.keyword, "A");
+  assert.equal(state.result.kols[0].userId, "A-result");
+});
+
+test("failed B preserves applied A and only the frozen A snapshot can start batch", async () => {
+  const searchCalls = [];
+  const batchCalls = [];
+  const coordinator = createCoordinator({
+    searchFirstPage(filterState) {
+      searchCalls.push(JSON.parse(JSON.stringify(filterState)));
+      return Promise.resolve(filterState.keyword === "A"
+        ? { ok: true, data: { kols: [{ userId: "A-result" }] } }
+        : { ok: false, error: { code: "risk-control", message: "fixture B failed" } });
+    },
+    batchStart(payload) { batchCalls.push(JSON.parse(JSON.stringify(payload))); return Promise.resolve({ ok: true, data: { taskId: "fixture" } }); },
+  });
+  coordinator.editDraft({ keyword: "A", gender: "女" });
+  await coordinator.applyAndSearch();
+  coordinator.editDraft({ keyword: "B", gender: "男" });
+  await coordinator.applyAndSearch();
+
+  let state = coordinator.getState();
+  assert.equal(state.status, "error");
+  assert.equal(state.appliedFilter.keyword, "A", "failed B must not replace applied A");
+  assert.equal(state.result.kols[0].userId, "A-result", "failed B must keep A results visible");
+  assert.equal(state.isDirty, true);
+  await coordinator.startBatch(["nickname"]);
+  assert.equal(batchCalls.length, 0, "dirty failed B must block batch");
+
+  coordinator.editDraft({ keyword: "A", gender: "女" });
+  await coordinator.startBatch(["nickname"]);
+  assert.equal(batchCalls.length, 1);
+  assert.deepEqual(batchCalls[0].filterState, searchCalls[0], "batch must use the private frozen A request snapshot");
+  assert.equal(searchCalls.length, 2, "returning draft to A for batch must not query again");
+  state = coordinator.getState();
+  assert.equal(state.appliedFilter.keyword, "A");
+});
+
+test("top search, Enter, and the global confirm are wired to one guarded apply action", async () => {
+  const pending = deferred();
+  let searches = 0;
+  const bridge = {
+    getSchemaFields() { return Promise.resolve({ ok: true, data: [] }); },
+    getConfig() { return Promise.resolve({ ok: true, data: { nodes: [], options: [] } }); },
+    getColumns() { return Promise.resolve({ ok: true, data: [{ id: "nickname", responsePath: "nickname", defaultDisplay: true }] }); },
+    previewPayload() { return Promise.resolve({ ok: true, data: {} }); },
+    batchList() { return Promise.resolve({ ok: true, data: [] }); },
+    onBatchEvent() { return () => {}; },
+    searchFirstPage() { searches += 1; return pending.promise; },
+  };
+  const runtime = pageRuntime({
+    document: {
+      documentElement: { classList: { add() {}, remove() {} } },
+      createTreeWalker() { return { nextNode() { return null; } }; },
+      body: {},
+    },
+    window: {
+      innerWidth: 1280,
+      innerHeight: 631,
+      bridge: { pgyKol: bridge },
+      localStorage: { getItem(key) { return key === "magiorix-pgy-kol-enabled" ? "1" : null; }, setItem() {}, removeItem() {} },
+      setTimeout() { return 1; },
+      clearTimeout() {},
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  });
+  const renderer = statefulRenderer(runtime, runtime.PgyKolSearchPage, {}, { scrollIntoView() {} });
+  let tree = renderer.render();
+  await new Promise(setImmediate);
+  tree = renderer.render();
+  const globalConfirm = findVnodes(tree, (node) => node.props && node.props.children === "确定筛选")[0];
+  const topSearch = findVnodes(tree, (node) => node.props && node.props.children === "搜索")[0];
+  const keywordInput = findVnodes(tree, (node) => node.props && typeof node.props.placeholder === "string" && node.props.placeholder.indexOf("找博主") >= 0)[0];
+  const batchStart = findVnodes(tree, (node) => node.props && node.props.children === "开始采集")[0];
+  assert.ok(globalConfirm && topSearch && keywordInput && batchStart, "all three formal-query entrances and batch start must render");
+  batchStart.props.onClick();
+  tree = renderer.render();
+  assert.ok(findVnodes(tree, (node) => node.props && node.props.children === "请先确定筛选并查询").length > 0, "dirty batch attempt must show its blocking error");
+  globalConfirm.props.onClick();
+  topSearch.props.onClick();
+  keywordInput.props.onKeyDown({ key: "Enter", preventDefault() {} });
+  assert.equal(searches, 1, "three rapid entrances must still produce one bridge request");
+  pending.resolve(successResult());
+  await new Promise(setImmediate);
+  tree = renderer.render();
+  assert.equal(findVnodes(tree, (node) => node.props && node.props.children === "请先确定筛选并查询").length, 0, "successful explicit query must clear the stale batch-blocking error");
+  const draftCheck = findVnodes(tree, (node) => node.type === runtime.PgyKolCheck && node.props && typeof node.props.onToggle === "function")[0];
+  assert.ok(draftCheck, "a visible filter editor must remain available after results load");
+  draftCheck.props.onToggle();
+  tree = renderer.render();
+  assert.ok(findVnodes(tree, (node) => node.props && node.props.children === "筛选条件已修改，当前结果仍基于上一次确定的条件。").length > 0, "dirty draft must visibly mark retained results as stale");
+});
+
+test("top search, Enter, and bottom confirm independently submit byte-equivalent complete page drafts", async () => {
+  const payloads = [];
+  for (const entrance of ["top", "enter", "bottom"]) {
+    const calls = [];
+    const harness = searchPageHarness((filterState) => {
+      calls.push(JSON.parse(JSON.stringify(filterState)));
+      return Promise.resolve(successResult());
+    });
+    const tree = editRepresentativePageDraft(harness.runtime, harness.renderer);
+    const topSearch = findVnodes(tree, (node) => node.props && node.props.children === "搜索")[0];
+    const bottomConfirm = findVnodes(tree, (node) => node.props && node.props.children === "确定筛选")[0];
+    const keywordInput = findVnodes(tree, (node) => node.props && typeof node.props.placeholder === "string" && node.props.placeholder.indexOf("找博主") >= 0)[0];
+    assert.ok(topSearch && bottomConfirm && keywordInput);
+    if (entrance === "top") topSearch.props.onClick();
+    if (entrance === "enter") keywordInput.props.onKeyDown({ key: "Enter", preventDefault() {} });
+    if (entrance === "bottom") bottomConfirm.props.onClick();
+    await new Promise(setImmediate);
+    assert.equal(calls.length, 1, entrance + " must make one formal request");
+    payloads.push(calls[0]);
+  }
+  const expected = { searchType: 1, keyword: "页面完整条件", marketTarget: "种草", gender: "女", excludeLowActive: true };
+  assert.deepEqual(payloads[0], expected, "top search must include the keyword and every edited page filter");
+  assert.deepEqual(payloads[1], payloads[0], "Enter must use the exact same normalized payload as top search");
+  assert.deepEqual(payloads[2], payloads[0], "bottom confirm must use the exact same normalized payload as top search");
+});
+
+test("career and feature popover confirms preserve each other's featureTags in both orders", async () => {
+  for (const order of [
+    [{ trigger: "职业身份", title: "职业身份", key: "医生:医生" }, { trigger: "特色背景", title: "特色背景", key: "海外生活:海外生活" }],
+    [{ trigger: "特色背景", title: "特色背景", key: "海外生活:海外生活" }, { trigger: "职业身份", title: "职业身份", key: "医生:医生" }],
+  ]) {
+    const calls = [];
+    const harness = searchPageHarness((filterState) => {
+      calls.push(JSON.parse(JSON.stringify(filterState)));
+      return Promise.resolve(successResult());
+    });
+    for (const selection of order) {
+      let tree = harness.renderer.render();
+      const trigger = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolTrigger && node.props && node.props.label === selection.trigger)[0];
+      assert.ok(trigger, selection.trigger + " trigger must render");
+      trigger.props.onOpen({ currentTarget: {} });
+      tree = harness.renderer.render();
+      const popover = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolOptionPop && node.props && node.props.title === selection.title)[0];
+      assert.ok(popover, selection.title + " popover must render");
+      popover.props.onApply([selection.key]);
+      popover.props.onClose();
+    }
+    const tree = harness.renderer.render();
+    findVnodes(tree, (node) => node.props && node.props.children === "搜索")[0].props.onClick();
+    await new Promise(setImmediate);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].featureTags, ["医生", "海外生活"], "each popover must replace only its own option group");
+  }
+});
+
+test("one-click exclude cannot submit brand-gated exclusions without a cooperation brand", async () => {
+  const calls = [];
+  const harness = searchPageHarness((filterState) => {
+    calls.push(JSON.parse(JSON.stringify(filterState)));
+    return Promise.resolve(successResult());
+  });
+  let tree = harness.renderer.render();
+  const oneClick = findVnodes(tree, (node) => node.props && node.props.children === "一键剔除" && typeof node.props.onClick === "function")[0];
+  assert.ok(oneClick, "one-click exclude must render");
+  oneClick.props.onClick();
+  tree = harness.renderer.render();
+  findVnodes(tree, (node) => node.props && node.props.children === "搜索")[0].props.onClick();
+  await new Promise(setImmediate);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].excludeLowActive, true);
+  assert.equal(calls[0].fansNumUp, 1);
+  assert.equal(Object.hasOwn(calls[0], "excludedTradeReportBrand"), false, "brand-gated cooperation exclusion must stay absent");
+  assert.equal(Object.hasOwn(calls[0], "excludedTradeInviteReportBrand"), false, "brand-gated invitation exclusion must stay absent");
+});
+
+test("the real page can submit changed B while A is loading and leaves race control to the coordinator", async () => {
+  const pendingA = deferred();
+  const pendingB = deferred();
+  const calls = [];
+  const harness = searchPageHarness((filterState) => {
+    calls.push(JSON.parse(JSON.stringify(filterState)));
+    return filterState.keyword === "A" ? pendingA.promise : pendingB.promise;
+  });
+  let tree = harness.renderer.render();
+  let keywordInput = findVnodes(tree, (node) => node.props && typeof node.props.placeholder === "string" && node.props.placeholder.indexOf("找博主") >= 0)[0];
+  keywordInput.props.onChange({ target: { value: "A" } });
+  tree = harness.renderer.render();
+  findVnodes(tree, (node) => node.props && node.props.children === "搜索")[0].props.onClick();
+
+  tree = harness.renderer.render();
+  keywordInput = findVnodes(tree, (node) => node.props && typeof node.props.placeholder === "string" && node.props.placeholder.indexOf("找博主") >= 0)[0];
+  keywordInput.props.onChange({ target: { value: "B" } });
+  tree = harness.renderer.render();
+  const bottomDuringLoading = findVnodes(tree, (node) => node.props && node.props.sx && node.props.sx.minWidth === 112 && typeof node.props.onClick === "function")[0];
+  assert.ok(bottomDuringLoading, "bottom submit must remain mounted while A is loading");
+  assert.notEqual(bottomDuringLoading.props.disabled, true, "a changed B must remain explicitly submittable during A");
+  bottomDuringLoading.props.onClick();
+  assert.deepEqual(calls.map((call) => call.keyword), ["A", "B"], "the page must forward changed B instead of blocking it at loading state");
+
+  pendingB.resolve({ ok: true, data: { kols: [{ userId: "B-result" }] } });
+  await new Promise(setImmediate);
+  pendingA.resolve({ ok: true, data: { kols: [{ userId: "late-A" }] } });
+  await new Promise(setImmediate);
+  tree = harness.renderer.render();
+  assert.ok(findVnodes(tree, (node) => node.props && node.props.children === "当前筛选已确定").length > 0, "B must remain the applied page state after late A");
+});
+
+test("ten rendered filter edits and a real popover confirm remain draft-only", () => {
+  let searches = 0;
+  const bridge = {
+    getSchemaFields() { return Promise.resolve({ ok: true, data: [] }); },
+    getConfig() { return Promise.resolve({ ok: true, data: { nodes: [], options: [] } }); },
+    getColumns() { return Promise.resolve({ ok: true, data: [] }); },
+    previewPayload() { return Promise.resolve({ ok: true, data: {} }); },
+    batchList() { return Promise.resolve({ ok: true, data: [] }); },
+    onBatchEvent() { return () => {}; },
+    searchFirstPage() { searches += 1; return Promise.resolve(successResult()); },
+  };
+  const runtime = pageRuntime({
+    document: {
+      documentElement: { classList: { add() {}, remove() {} } },
+      createTreeWalker() { return { nextNode() { return null; } }; },
+      body: {},
+    },
+    window: {
+      innerWidth: 1280,
+      innerHeight: 631,
+      bridge: { pgyKol: bridge },
+      localStorage: { getItem(key) { return key === "magiorix-pgy-kol-enabled" ? "1" : null; }, setItem() {}, removeItem() {} },
+      setTimeout() { return 1; },
+      clearTimeout() {},
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  });
+  const renderer = statefulRenderer(runtime, runtime.PgyKolSearchPage, {}, { scrollIntoView() {} });
+  let tree = renderer.render();
+  const keywordInput = findVnodes(tree, (node) => node.props && typeof node.props.placeholder === "string" && node.props.placeholder.indexOf("找博主") >= 0)[0];
+  assert.ok(keywordInput);
+  keywordInput.props.onChange({ target: { value: "只改草稿" } });
+  const checks = findVnodes(tree, (node) => node.type === runtime.PgyKolCheck && node.props && typeof node.props.onToggle === "function");
+  assert.ok(checks.length >= 10, "fixture page must expose ten independent visible checkbox filters");
+  checks.slice(0, 10).forEach((node) => node.props.onToggle());
+  assert.equal(searches, 0, "ten actual page filter handlers must not query");
+
+  const familyTrigger = findVnodes(tree, (node) => node.type === runtime.PgyKolTrigger && node.props && node.props.label === "家庭身份")[0];
+  assert.ok(familyTrigger);
+  familyTrigger.props.onOpen({ currentTarget: { getBoundingClientRect() { return { left: 100, top: 100, right: 160, bottom: 128 }; } } });
+  tree = renderer.render();
+  const optionPopover = findVnodes(tree, (node) => node.type === runtime.PgyKolOptionPop && node.props && node.props.title === "家庭身份")[0];
+  assert.ok(optionPopover, "opening the trigger must render its real multi-select popover");
+  const popRenderer = statefulRenderer(runtime, runtime.PgyKolOptionPop, optionPopover.props, { scrollIntoView() {} });
+  let popTree = popRenderer.render();
+  const option = findVnodes(popTree, (node) => node.props && node.props.label && typeof node.props.onClick === "function")[0];
+  assert.ok(option);
+  option.props.onClick();
+  popTree = popRenderer.render();
+  const confirm = findVnodes(popTree, (node) => node.props && node.props.children === "确定" && typeof node.props.onClick === "function")[0];
+  assert.ok(confirm);
+  confirm.props.onClick();
+  assert.equal(searches, 0, "the actual popover's internal confirm must only update draft");
+});
+
+test("official data-performance popover primitives match the live 228/408/420px structures", () => {
+  const runtime = pageRuntime();
+  assert.equal(typeof runtime.PgyKolOfficialRangePop, "function");
+  assert.equal(typeof runtime.PgyKolOfficialGroupPop, "function");
+  assert.equal(typeof runtime.PgyKolOfficialMultiPop, "function");
+  assert.equal(typeof runtime.PgyKolOfficialBrandPop, "function");
+  assert.equal(typeof runtime.PgyKolOfficialSimpleMenu, "function");
+
+  const anchor = { getBoundingClientRect() { return { left: 100, right: 180, top: 100, bottom: 128 }; } };
+  const range = runtime.PgyKolOfficialRangePop({
+    open: true,
+    anchor,
+    options: runtime.pgyKolRangeDefs.imp50w,
+    value: null,
+    minPlaceholder: "0",
+    maxPlaceholder: "9,999,999",
+    onApply() {},
+    onClose() {},
+  });
+  assert.equal(range.type, runtime.PgyKolPop);
+  assert.equal(range.props.width, 228);
+  assert.equal(range.props.preferredHeight, 292, "official range height must include options, custom bounds and footer so viewport placement does not clip it");
+  const customNode = findVnodes(range, (node) => node.type === runtime.PgyKolOfficialCustomRange)[0];
+  const custom = runtime.PgyKolOfficialCustomRange(customNode.props);
+  assert.deepEqual(
+    findVnodes(custom, (node) => node.props && typeof node.props.placeholder === "string").map((node) => node.props.placeholder),
+    ["0", "9,999,999"],
+  );
+  for (const input of findVnodes(custom, (node) => node.props && typeof node.props.placeholder === "string")) {
+    assert.equal(input.props.sx.flexShrink, 0, "official bound inputs must not shrink and truncate their placeholders");
+    assert.equal(input.props.sx["& input"].fontSize, 12);
+  }
+  const listNode = findVnodes(range, (node) => node.type === runtime.PgyKolOfficialRangeList)[0];
+  const list = runtime.PgyKolOfficialRangeList(listNode.props);
+  const footerNode = findVnodes(range, (node) => node.type === runtime.PgyKolOfficialFooter)[0];
+  const footer = runtime.PgyKolOfficialFooter(footerNode.props);
+  for (const text of ["不限", "5万以上", "1万～5万", "重置", "确定"]) {
+    assert.ok(findVnodes([list, footer], (node) => node.props && node.props.children === text).length > 0, "range popover must render " + text);
+  }
+  assert.equal(findVnodes(range, (node) => node.type === runtime.PgyKolPopHeader).length, 0, "official compact popovers have no invented title bar");
+
+  const groups = runtime.PgyKolOfficialGroupPop({
+    open: true,
+    anchor,
+    groups: [
+      { key: "pic", label: "图文笔记", options: runtime.pgyKolRangeDefs.quote, value: null },
+      { key: "video", label: "视频笔记", options: runtime.pgyKolRangeDefs.quote, value: null },
+    ],
+    onApply() {},
+    onClose() {},
+  });
+  assert.equal(groups.type, runtime.PgyKolPop);
+  assert.equal(groups.props.width, 408);
+  assert.equal(findVnodes(groups, (node) => node.props && node.props.placeholder === "请选择").length, 2);
+  assert.ok(findVnodes(groups, (node) => node.props && node.props.children === "图文笔记").length > 0);
+  assert.ok(findVnodes(groups, (node) => node.props && node.props.children === "视频笔记").length > 0);
+
+  const upwardNested = runtime.PgyKolOfficialNestedRange({ openUp: true, options: runtime.pgyKolRangeDefs.quote, value: null, onSelect() {} });
+  assert.equal(upwardNested.props.sx.top, "auto");
+  assert.equal(upwardNested.props.sx.bottom, 64, "nested range menu must flip above its select near the viewport bottom");
+
+  const multi = runtime.PgyKolOfficialMultiPop({
+    open: true,
+    anchor,
+    options: runtime.pgyKolRangeDefs.liveGmv,
+    selectedKeys: [],
+    onApply() {},
+    onClose() {},
+  });
+  assert.equal(multi.type, runtime.PgyKolPop);
+  assert.equal(multi.props.width, 228);
+  assert.equal(findVnodes(multi, (node) => node.type === runtime.PgyKolCheck).length, 8, "live GMV must keep all eight official checkbox options");
+
+  const brand = runtime.PgyKolOfficialBrandPop({ open: true, anchor, current: [], excluded: false, onApply() {}, onClose() {} });
+  assert.equal(brand.type, runtime.PgyKolPop);
+  assert.equal(brand.props.width, 420);
+  assert.ok(findVnodes(brand, (node) => node.props && node.props.children === "请至少选择3个品牌").length > 0);
+  assert.ok(findVnodes(brand, (node) => node.props && node.props.placeholder === "请输入品牌名称").length > 0);
+  assert.ok(findVnodes(brand, (node) => node.type === runtime.PgyKolCheck && node.props.label === "剔除上述品牌已合作博主").length > 0);
+});
+
+test("all eighteen live data-performance entries use their official popover family without searching", () => {
+  let searches = 0;
+  const harness = searchPageHarness(() => { searches += 1; return Promise.resolve(successResult()); });
+  const families = {
+    PgyKolOfficialRangePop: ["曝光中位数", "阅读中位数", "互动中位数", "千赞笔记比例", "合作订单数", "外溢进店单价"],
+    PgyKolOfficialSimpleMenu: ["笔记类型", "近期合作行业"],
+    PgyKolOfficialGroupPop: ["合作报价", "合作信用度", "传播规模", "预估CPM", "预估阅读单价", "预估互动单价"],
+    PgyKolOfficialBrandPop: ["近期合作品牌"],
+    PgyKolOfficialMultiPop: ["近30天直播场次", "场均观播人数", "场均销售额"],
+  };
+  for (const [family, labels] of Object.entries(families)) {
+    for (const label of labels) {
+      let tree = harness.renderer.render();
+      const trigger = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolTrigger && node.props && node.props.label === label)[0];
+      assert.ok(trigger, label + " trigger must render");
+      trigger.props.onOpen({ currentTarget: { getBoundingClientRect() { return { left: 100, right: 180, top: 100, bottom: 128 }; } } });
+      tree = harness.renderer.render();
+      assert.ok(findVnodes(tree, (node) => node.type === harness.runtime[family]).length > 0, label + " must use " + family);
+      const opened = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolTrigger && node.props && node.props.label === label)[0];
+      assert.equal(opened.props.arrowUp, true, label + " must show the official upward arrow while open");
+      const popover = findVnodes(tree, (node) => node.type === harness.runtime[family])[0];
+      popover.props.onClose();
+    }
+  }
+  const tree = harness.renderer.render();
+  assert.equal(findVnodes(tree, (node) => node.type === harness.runtime.PgyKolTrigger && node.props && node.props.label === "合作表现").length, 0, "合作表现 is a grey subgroup label, not an invented filter trigger");
+  assert.equal(searches, 0, "opening and closing every official data-performance popover must remain draft-only");
+});
+
+test("official note type, cooperation-order range, and recent industry serialize with the live payload shapes", async () => {
+  const calls = [];
+  const coordinator = createCoordinator({
+    searchFirstPage(filterState) { calls.push(JSON.parse(JSON.stringify(filterState))); return Promise.resolve(successResult()); },
+  });
+  coordinator.editDraft({
+    noteType: 1,
+    progressOrderCnt: { label: "0～12", value: [0, 12] },
+    tradeType: "母婴",
+    coopImpMedin: { label: "1万～5万", value: [10000, 50000] },
+  });
+  await coordinator.applyAndSearch();
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].noteType, 1);
+  assert.deepEqual(calls[0].progressOrderCnt, [0, 12]);
+  assert.equal(calls[0].tradeType, "母婴");
+  assert.deepEqual(calls[0].accumCoopImpMedinNum30d, [10000, 50000]);
+});
+
+test("official data-performance internal confirmations update only page draft", () => {
+  let searches = 0;
+  const harness = searchPageHarness(() => { searches += 1; return Promise.resolve(successResult()); });
+  const anchor = { getBoundingClientRect() { return { left: 100, right: 180, top: 100, bottom: 128 }; } };
+  function open(label, family) {
+    let tree = harness.renderer.render();
+    const trigger = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolTrigger && node.props && node.props.label === label)[0];
+    trigger.props.onOpen({ currentTarget: anchor });
+    tree = harness.renderer.render();
+    const popover = findVnodes(tree, (node) => node.type === harness.runtime[family])[0];
+    assert.ok(popover, label + " popover must render");
+    return popover;
+  }
+  let popover = open("曝光中位数", "PgyKolOfficialRangePop");
+  popover.props.onApply({ label: "1万～5万", value: [10000, 50000] });
+  popover.props.onClose();
+
+  popover = open("笔记类型", "PgyKolOfficialSimpleMenu");
+  popover.props.onSelect(1);
+  popover.props.onClose();
+
+  popover = open("传播规模", "PgyKolOfficialGroupPop");
+  popover.props.onApply({ imp: { label: "1万～5万", value: [10000, 50000] }, read: null, inter: null, overflow: null });
+  popover.props.onClose();
+
+  popover = open("近期合作品牌", "PgyKolOfficialBrandPop");
+  popover.props.onApply(["brand-a", "brand-b", "brand-c"], true);
+  popover.props.onClose();
+
+  popover = open("近30天直播场次", "PgyKolOfficialMultiPop");
+  popover.props.onApply([harness.runtime.pgyKolNodeKey(harness.runtime.pgyKolRangeDefs.liveCount[1])]);
+  popover.props.onClose();
+
+  assert.equal(searches, 0, "every official internal confirm must remain draft-only");
+});
+
+test("wide route hides the complete 200px secondary navigation container and restores it on cleanup", () => {
+  function element(name, parent) {
+    const el = {
+      name,
+      parentElement: parent || null,
+      children: [],
+      style: {},
+      attrs: {},
+      contains(other) {
+        for (let cur = other; cur; cur = cur.parentElement) if (cur === this) return true;
+        return false;
+      },
+      setAttribute(key, value) { this.attrs[key] = value; },
+      removeAttribute(key) { delete this.attrs[key]; },
+    };
+    if (parent) parent.children.push(el);
+    return el;
+  }
+  const body = element("body");
+  const secondary = element("secondary-200px", body);
+  secondary.style.width = "200px";
+  const innerMenu = element("inner-menu", secondary);
+  const blogger = element("blogger-link", innerMenu);
+  const note = element("note-link", innerMenu);
+  const textNodes = [
+    { nodeValue: "蒲公英博主采集", parentElement: blogger },
+    { nodeValue: "蒲公英笔记采集", parentElement: note },
+  ];
+  let textIndex = 0;
+  const classes = new Set();
+  const document = {
+    body,
+    documentElement: { classList: { add(v) { classes.add(v); }, remove(v) { classes.delete(v); } } },
+    createTreeWalker() { return { nextNode() { return textNodes[textIndex++] || null; } }; },
+  };
+  const effects = [];
+  const runtime = pageRuntime({
+    document,
+    NodeFilter: { SHOW_TEXT: 4 },
+    window: {
+      innerWidth: 1280,
+      innerHeight: 631,
+      bridge: null,
+      localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+      setTimeout(fn) { textIndex = 0; fn(); return 1; },
+      clearTimeout() {},
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  });
+  runtime.m = {
+    useState(initial) { return [typeof initial === "function" ? initial() : initial, () => {}]; },
+    useEffect(fn) { effects.push(fn); },
+    useCallback(fn) { return fn; },
+    useRef(initial) { return { current: initial }; },
+  };
+  runtime.PgyKolSearchPage();
+  assert.ok(effects.length > 0);
+  const cleanup = effects[0]();
+  assert.equal(secondary.style.display, "none", "the width-owning secondary container, not its inner menu, must collapse");
+  assert.equal(innerMenu.style.display || "", "", "the inner menu is not the layout-width owner");
+  assert.equal(secondary.attrs["data-magiorix-pgy-kol-secondary-nav"], "hidden");
+  cleanup();
+  assert.equal(secondary.style.display, "", "leaving the route must restore the secondary container");
+  assert.equal(classes.has("magiorix-pgy-kol-wide"), false);
+});
+
+test("region popover constrains itself to 1280x631 and keeps a fixed footer over a scrollable middle", () => {
+  const runtime = pageRuntime({
+    window: {
+      innerWidth: 1280,
+      innerHeight: 631,
+      addEventListener() {},
+      removeEventListener() {},
+      localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+    },
+  });
+  const anchor = { getBoundingClientRect() { return { left: 320, right: 400, top: 357, bottom: 385, width: 80, height: 28 }; } };
+  const cascade = runtime.PgyKolCascadePop({
+    open: true,
+    anchor,
+    title: "地域",
+    cfg: { nodes: [{ label: "中国", children: [{ label: "上海", value: "310000", children: [{ label: "上海市", children: [{ label: "黄浦区" }] }] }] }] },
+    onSelect() {},
+    onClear() {},
+    onClose() {},
+  });
+  assert.equal(cascade.type, runtime.PgyKolPop);
+  const popTree = runtime.PgyKolPop(cascade.props);
+  const shell = Array.isArray(popTree.props.children) ? popTree.props.children[1] : null;
+  assert.ok(shell && shell.props && shell.props.sx, "popover shell must render");
+  const sx = shell.props.sx;
+  if (sx.bottom === "auto") {
+    assert.ok(Number(sx.top) + Number(sx.maxHeight) <= 631, "below placement max-height must fit the viewport");
+  } else {
+    assert.ok(Number(sx.bottom) >= 8, "above placement must retain the viewport margin");
+  }
+  const scrollBodies = findVnodes(cascade, (node) => node.props && node.props.sx && node.props.sx.overflowY === "auto");
+  assert.ok(scrollBodies.length >= 1, "the middle region list must own vertical scrolling");
+  const footers = findVnodes(cascade, (node) => {
+    const children = node.props && node.props.children;
+    if (!Array.isArray(children)) return false;
+    const labels = findVnodes(children, (child) => child.props && (child.props.children === "清空" || child.props.children === "确定"));
+    return labels.length === 2;
+  });
+  assert.ok(footers.some((node) => node.props.sx && (node.props.sx.flexShrink === 0 || node.props.sx.position === "sticky")), "region 清空/确定 footer must not scroll out of view");
+});
+
+test("the first three table headers and cells are truly sticky with cumulative left offsets", () => {
+  const runtime = pageRuntime();
+  const columns = ["kolInfo", "recentNotes", "actions", "fans"];
+  const tree = runtime.PgyKolResultTable({
+    result: { kols: [{ userId: "fixture", nickname: "Fixture", recentNotes: [] }] },
+    list: [{ id: "fans", label: "粉丝", responsePath: "fans", formatter: "number" }],
+    columns,
+  });
+  const headers = findVnodes(tree, (node) => node.props && node.props.component === "th");
+  const cells = findVnodes(tree, (node) => node.props && node.props.component === "td");
+  assert.ok(headers.length >= 4 && cells.length >= 4);
+  for (const group of [headers.slice(0, 3), cells.slice(0, 3)]) {
+    group.forEach((node) => {
+      assert.equal(node.props.sx.position, "sticky");
+      assert.equal(typeof node.props.sx.left, "number");
+      assert.ok(node.props.sx.zIndex >= 2);
+      assert.ok(node.props.sx.bgcolor, "sticky cells need an opaque background");
+    });
+    assert.ok(group[0].props.sx.left < group[1].props.sx.left && group[1].props.sx.left < group[2].props.sx.left, "left offsets must be cumulative and strictly increasing");
+  }
+  assert.notEqual(headers[3].props.sx.position, "sticky", "metric columns must continue to scroll horizontally");
+  assert.notEqual(cells[3].props.sx.position, "sticky", "metric cells must continue to scroll horizontally");
+});
+
+test("a paused history task loads, scrolls its detail into view, and exposes continue/cancel/export", async () => {
+  const paused = {
+    taskId: "fixture-paused-task",
+    status: "paused",
+    completeness: "cannot-prove",
+    counts: { raw: 12, unique: 10, dup: 2, missingUid: 0 },
+    leaves: [],
+  };
+  let batchGetCalls = 0;
+  let scrollCalls = 0;
+  const detailElement = { scrollIntoView(options) { scrollCalls += 1; assert.equal(options.block, "start"); } };
+  const bridge = {
+    getSchemaFields() { return Promise.resolve({ ok: true, data: [] }); },
+    getConfig() { return Promise.resolve({ ok: true, data: { nodes: [], options: [] } }); },
+    getColumns() { return Promise.resolve({ ok: true, data: [{ id: "nickname", responsePath: "nickname", defaultDisplay: true }] }); },
+    previewPayload() { return Promise.resolve({ ok: true, data: {} }); },
+    batchList() { return Promise.resolve({ ok: true, data: [paused] }); },
+    batchGet(payload) { batchGetCalls += 1; assert.equal(payload.taskId, paused.taskId); return Promise.resolve({ ok: true, data: paused }); },
+    onBatchEvent() { return () => {}; },
+  };
+  const runtime = pageRuntime({
+    document: {
+      documentElement: { classList: { add() {}, remove() {} } },
+      querySelector() { return detailElement; },
+      createTreeWalker() { return { nextNode() { return null; } }; },
+      body: {},
+    },
+    window: {
+      innerWidth: 1280,
+      innerHeight: 631,
+      bridge: { pgyKol: bridge },
+      localStorage: { getItem(key) { return key === "magiorix-pgy-kol-enabled" ? "1" : null; }, setItem() {}, removeItem() {} },
+      setTimeout() { return 1; },
+      clearTimeout() {},
+      requestAnimationFrame(fn) { fn(); return 1; },
+      cancelAnimationFrame() {},
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  });
+  const rootRenderer = statefulRenderer(runtime, runtime.PgyKolSearchPage, {}, detailElement);
+  rootRenderer.render();
+  await new Promise(setImmediate);
+  let tree = rootRenderer.render();
+  const history = findVnodes(tree, (node) => node.type === runtime.PgyKolTaskHistory)[0];
+  assert.ok(history, "task history must render after batchList resolves");
+  assert.equal(history.props.tasks.some((task) => task.taskId === paused.taskId), true);
+  history.props.onSelect(paused.taskId);
+  await new Promise(setImmediate);
+  tree = rootRenderer.render();
+  assert.equal(batchGetCalls, 1, "selecting a paused history row must load its details once");
+  const panel = findVnodes(tree, (node) => node.type === runtime.PgyKolBatchPanel)[0];
+  assert.ok(panel && panel.props.task && panel.props.task.status === "paused", "paused task detail must be selected");
+  assert.ok(scrollCalls >= 1, "selected paused detail must scroll into the viewport");
+
+  const panelRenderer = statefulRenderer(runtime, runtime.PgyKolBatchPanel, panel.props, detailElement);
+  const panelTree = panelRenderer.render();
+  const actionLabels = findVnodes(panelTree, (node) => node.props && ["继续", "取消", "导出"].includes(node.props.children)).map((node) => node.props.children);
+  assert.deepEqual(new Set(actionLabels), new Set(["继续", "取消", "导出"]));
+});
+
+test("page source file is injection-safe", () => {
+  // bundle 内容守卫要求注入块以 pgyKolDevEnabled 开头（锚点）。
+  assert.ok(pageSource.startsWith("function pgyKolDevEnabled"), "page source must start with pgyKolDevEnabled");
+  // 注入为普通脚本：禁止反引号、模板插值、import/export。
+  assert.ok(!pageSource.includes("`"), "page source must not contain backticks");
+  assert.ok(!pageSource.includes("${"), "page source must not contain template interpolation");
+  assert.ok(!pageSource.includes("\nimport ") && !pageSource.includes("\nexport "), "page source must stay a plain script");
+  // 补丁脚本通过 readFileSync 读取页面源码。
+  assert.ok(script.includes('const pgyKolSearchPageSource = fs.readFileSync('), "patch script must read the page source file");
+  assert.ok(script.includes('"scripts", "pgy-kol-phase52-page-source.js"'), "patch script must reference the phase52 page source file");
+});
+
+test("Phase 5.2 Electron acceptance uses geometric visibility and truthful screenshot metadata", () => {
+  assert.doesNotThrow(() => new Function(acceptanceDriver), "acceptance driver must parse as JavaScript");
+  const visibilitySource = acceptanceDriver.slice(acceptanceDriver.indexOf("async function visibleKeys"), acceptanceDriver.indexOf("async function matrixHorizontalScrollEvidence"));
+  assert.doesNotMatch(visibilitySource, /bodyText\(/, "visibility must not be inferred from document.body.innerText");
+  for (const needle of ["getBoundingClientRect", "getComputedStyle", "elementFromPoint", "viewportIntersects", "unobscured >= 3", "visible geometry check failed"]) {
+    assert.ok(visibilitySource.includes(needle), "geometric visibility check must include: " + needle);
+  }
+  assert.ok(acceptanceDriver.includes("matrix horizontal scroll invariant failed"), "driver must reject horizontal scrolling inside filter sections");
+  assert.ok(acceptanceDriver.includes("popover anchor invariant failed"), "driver must reject detached small popovers");
+  for (const needle of ["window.devicePixelRatio", "readUInt32BE(16)", "readUInt32BE(20)", "screenshot viewport/DPR mismatch", "duplicate screenshot hash across scenes", "keyNodeRects", "magiorix-ops-assistant", "[data-close]", "placeholder geometry check failed", "dialog:官网展示指标（41）", "empty-result scenario did not reach a real empty state", "shot-columns-extension", "Magiorix 扩展字段", "inspect-batch-readonly", "fallbackDeterministicTests", "shot-batch-existing-paused", "no existing paused task", "只改变当前页面详情选择"]) {
+    assert.ok(acceptanceDriver.includes(needle), "acceptance evidence must retain: " + needle);
+  }
+});
+
+test("page source top-level identifiers are unique and module-strict parseable", async () => {
+  // 注入块位于 ES module bundle 内：顶层 function/var 重复声明会直接
+  // SyntaxError 使整个 bundle 无法加载（2026-08-09 真实复现：pgyKolFeaturedLabel
+  // 被抽取两次导致应用白屏）。此处按顶层声明做唯一性校验。
+  const topLevel = pageSource.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const names = new Map();
+  const fnRe = /^function\s+([A-Za-z_$][\w$]*)\s*\(/gm;
+  const varRe = /^var\s+([A-Za-z_$][\w$]*)\s*=/gm;
+  for (const re of [fnRe, varRe]) {
+    let m;
+    while ((m = re.exec(topLevel)) !== null) {
+      names.set(m[1], (names.get(m[1]) || 0) + 1);
+    }
+  }
+  const dupes = [...names.entries()].filter(([, n]) => n > 1);
+  assert.deepEqual(dupes, [], "top-level identifiers must be declared exactly once");
+  // 模块作用域（strict）下页面源码必须可解析：顶层仅声明、无副作用，
+  // 动态 import 一个临时 .mjs 副本即可验证（SyntaxError 会在此抛出）。
+  const os = require("node:os");
+  const fsp = require("node:fs/promises");
+  const tmp = path.join(os.tmpdir(), "pgy52-esm-check-" + process.pid + "-" + Date.now() + ".mjs");
+  await fsp.writeFile(tmp, pageSource + "\n", "utf8");
+  try {
+    await import("file:///" + tmp.replace(/\\/g, "/"));
+  } finally {
+    await fsp.unlink(tmp).catch(() => {});
+  }
+});
+
+test("Phase 5.2 page source carries the required copy", () => {
   for (const needle of [
     "找博主",
     "magiorix-pgy-kol-enabled",
@@ -65,8 +1316,13 @@ test("Phase 5 page source carries the required copy", () => {
     "一键清空",
     "展开",
     "收起",
+    "收起筛选",
+    "展开筛选",
+    "搜索历史",
+    "清空历史",
+    "magiorix-pgy-kol-nick-history",
     "自定义列",
-    "可添加列",
+    "官网展示指标",
     "官网当前未返回",
     "增加预算并继续",
     "增加页数并继续",
@@ -74,25 +1330,80 @@ test("Phase 5 page source carries the required copy", () => {
     "功能未开启",
     "magiorix-pgy-kol-columns",
     "magiorix-pgy-kol-filters",
-    "已恢复上次筛选",
+    "已恢复筛选，请点击确定后查询",
+    "确定筛选",
+    "筛选条件已修改，当前结果仍基于上一次确定的条件。",
+    "这是待确认条件的本地 Payload 预览，不会请求蒲公英接口。",
     "请选择您的合作品牌",
     "合作品牌智能推荐",
+    "按博主粉丝推荐",
+    "未选择合作品牌时不可用",
+    "博主类目",
+    "博主人设",
+    "家庭身份",
+    "职业身份",
+    "特色背景",
+    "博主画像",
+    "性别",
+    "地域",
     "二十大人群",
     "行业特色画像",
     "预估消费行为",
+    "签约情况",
+    "擅长内容",
     "内容题材",
     "粉丝画像",
+    "粉丝量",
+    "粉丝年龄",
+    "粉丝性别",
+    "粉丝地域",
+    "婚恋状态",
+    "消费水平",
+    "母婴阶段",
+    "手机价格",
+    "手机品牌",
     "笔记类目",
+    "日常笔记",
+    "曝光中位数",
+    "阅读中位数",
+    "互动中位数",
+    "千赞笔记比例",
+    "笔记类型",
+    "合作笔记",
+    "合作表现",
+    "合作报价",
+    "合作信用度",
+    "合作订单数",
+    "近期合作行业",
+    "近期合作品牌",
+    "传播规模",
+    "预估CPM",
+    "预估阅读单价",
+    "预估互动单价",
+    "外溢进店单价",
+    "直播数据",
+    "近30天直播场次",
+    "场均观播人数",
+    "场均销售额",
     "精选博主",
+    "优质博主",
+    "新锐博主",
+    "笔记+直播均可合作",
+    "意向行业匹配",
+    "行业推荐博主",
     "热门活动",
+    "种收联动",
+    "一键剔除",
     "剔除低活博主",
     "剔除掉粉博主",
     "剔除已合作博主",
     "剔除已邀约博主",
+    "待实证",
+    "人群目标（按博主粉丝推荐）依赖合作品牌：当前账号未绑定品牌，官网禁用该筛选；无法实证前不参与查询与采集。",
     "选择展示指标",
     "开始采集",
     "任务历史",
-    "当前 Payload 预览",
+    "Payload 预览",
     "结果可能超过 5000",
     "未知字段",
     "没有匹配的博主",
@@ -107,65 +1418,138 @@ test("searchType/keyword contract", () => {
   // 搜索模式切换：搜笔记 searchType=1、搜昵称 searchType=0。
   assert.match(pageSource, /searchType===1/);
   assert.match(pageSource, /searchType===0/);
-  assert.ok(pageSource.includes('update({searchType:1})'), "搜笔记 mode must set searchType 1");
-  assert.ok(pageSource.includes('update({searchType:0})'), "搜昵称 mode must set searchType 0");
+  assert.ok(pageSource.includes("update({ searchType: 1 })"), "搜笔记 mode must set searchType 1");
+  assert.ok(pageSource.includes("update({ searchType: 0 })"), "搜昵称 mode must set searchType 0");
   // 关键词字段与两处精确 placeholder。
-  assert.ok(pageSource.includes("keyword"), "keyword field must exist");
-  assert.ok(pageSource.includes("value:filter.keyword"));
-  assert.ok(pageSource.includes("update({keyword:e.target.value})"));
+  assert.ok(pageSource.includes("value: filter.keyword"));
+  assert.ok(pageSource.includes("update({ keyword: e.target.value })"));
   assert.ok(
-    pageSource.includes('placeholder:filter.searchType===1?"按笔记关键词找博主，试试搜":"按博主昵称/小红书号找博主"'),
+    pageSource.includes('placeholder: filter.searchType === 1 ? "按笔记关键词找博主，试试搜" : "按博主昵称/小红书号找博主"'),
     "placeholder must switch by searchType",
   );
-  // 搜索按钮调用 searchFirstPage(filterState)，filterState 含 searchType/keyword。
-  assert.match(pageSource, /bridge\.searchFirstPage\(pgyKolToFilterState\(filter\)\)/);
-  assert.ok(pageSource.includes("if(f.searchType===0||f.searchType===1)out.searchType=f.searchType"));
-  assert.ok(pageSource.includes("if(f.keyword)out.keyword=f.keyword"));
+  // 正式查询前 trim；空关键词允许筛选查询，但必须从请求中省略。
+  const runtime = pageRuntime();
+  const normalized = runtime.pgyKolNormalizeFilter({ searchType: 0, keyword: "  nickname  " });
+  assert.equal(normalized.keyword, "nickname");
+  const withKeyword = JSON.parse(JSON.stringify(runtime.pgyKolToFilterState(normalized)));
+  assert.deepEqual(withKeyword, { searchType: 0, keyword: "nickname" });
+  const withoutKeyword = JSON.parse(JSON.stringify(runtime.pgyKolToFilterState(runtime.pgyKolNormalizeFilter({ searchType: 1, keyword: "   ", gender: "女" }))));
+  assert.deepEqual(withoutKeyword, { searchType: 1, gender: "女" });
 });
 
 test("five compact matrix sections exist", () => {
   for (const title of ["合作目标", "匹配度", "数据表现", "平台推荐", "常规剔除"]) {
-    assert.ok(
-      pageSource.includes("PgyKolMatrixSection,{title:\"" + title + "\""),
-      "matrix section must exist: " + title,
-    );
+    assert.ok(pageSource.includes('title: "' + title + '"'), "matrix section must exist: " + title);
   }
-  // 紧凑行高约 36px；页面居中 maxWidth 1180。
-  assert.ok(pageSource.includes("minHeight:36"), "matrix rows must be compact (~36px)");
-  assert.ok(pageSource.includes("maxWidth:1180,margin:\"0 auto\""), "page must be centered at 1180");
+  assert.equal((pageSource.match(/PgyKolMatrixSection, \{/g) || []).length, 5, "exactly five matrix sections");
+  // 紧凑触发器：高 28px、字号 14px、默认文字 rgba(0,0,0,.7)、选中浅红底。
+  assert.ok(pageSource.includes("height: 28,"), "triggers must be 28px tall");
+  assert.ok(pageSource.includes("fontSize: 14,"), "trigger font must be 14px");
+  assert.ok(pageSource.includes('var textColor = dis || dim ? "rgba(0,0,0,.25)" : sel ? "#ff2442" : "rgba(0,0,0,.7)"'), "trigger colors must follow the official palette");
+  assert.ok(pageSource.includes('bgcolor: sel ? "rgba(255,36,66,.08)" : "transparent"'), "selected triggers must use light red background");
+  const triggerSource = pageSource.slice(pageSource.indexOf("function PgyKolTrigger"), pageSource.indexOf("function PgyKolPop"));
+  assert.match(triggerSource, /border\s*:\s*0\b/, "ordinary filter triggers must be borderless text entries");
+  assert.doesNotMatch(triggerSource, /borderColor|border\s*:\s*["']1px solid/, "ordinary filter triggers must not regress to bordered chips");
+  // 找博主独占宽内容模式，避免重复二级导航将筛选矩阵挤回 825px。
+  assert.ok(pageSource.includes('maxWidth: "none", margin: "0 auto"'), "pgy-kol route must use the wide content mode");
+  assert.ok(pageSource.includes('bgcolor: "#f5f6f7"'), "page must use the light gray background");
+  assert.ok(pageSource.includes('bgcolor: "#fff"'), "content area must be white");
+  // 五个筛选分区必须自适应换行；不得再产生各自的 920px 横向滚动条。
+  const matrixSource = pageSource.slice(pageSource.indexOf("function PgyKolMatrixSection"), pageSource.indexOf("function PgyKolMatrixRow"));
+  assert.doesNotMatch(matrixSource, /overflowX\s*:\s*["']auto["']/i, "matrix section must not create a horizontal scroll container");
+  assert.doesNotMatch(matrixSource, /minWidth\s*:\s*920\b/, "matrix section must not force 920px inner content");
+  assert.match(matrixSource, /minWidth\s*:\s*0\b/, "matrix section must allow responsive content shrinking");
 });
 
 test("category expand/collapse keeps the common and full lists", () => {
   assert.ok(
-    pageSource.includes('pgyKolCategoryCommon=["全部","美妆","护肤","个人护理","母婴","时尚","美食","家居家装","影视综资讯","运动健身","宠物","文化艺术","兴趣爱好","生活记录","教育","职场"]'),
+    pageSource.includes('var pgyKolCategoryCommon=["全部","美妆","护肤","个人护理","母婴","时尚","美食","家居家装","影视综资讯","运动健身","宠物","文化艺术","兴趣爱好","生活记录","教育","职场"]'),
     "common category list must exist",
   );
   assert.ok(
-    pageSource.includes('pgyKolCategoryFull=["全部","美妆","护肤","个人护理","母婴","时尚","美食","家居家装","影视综资讯","运动健身","宠物","文化艺术","兴趣爱好","生活记录","教育","职场","情感","摄影","游戏","科技数码","出行旅游","音乐","搞笑","健康养生","汽车","婚嫁","商业财经","素材","其他"]'),
+    pageSource.includes('var pgyKolCategoryFull=["全部","美妆","护肤","个人护理","母婴","时尚","美食","家居家装","影视综资讯","运动健身","宠物","文化艺术","兴趣爱好","生活记录","教育","职场","情感","摄影","游戏","科技数码","出行旅游","音乐","搞笑","健康养生","汽车","婚嫁","商业财经","素材","其他"]'),
     "full category list must exist",
   );
-  assert.ok(pageSource.includes("children:showAllCategory?\"收起\":\"展开\""), "expand/collapse toggle must exist");
-  assert.ok(pageSource.includes("catOptions=showAllCategory?pgyKolCategoryFull:pgyKolCategoryCommon"));
-});test("complex trees default collapsed and audience20 keeps leaf-only logic", () => {
-  // 复杂树默认不展开：PgyKolTreeNode 初始 open 状态为 false。
-  assert.match(pageSource, /openState=m\.useState\(false\)/, "tree nodes must default to collapsed");
-  // leafOnly:true 全页面只出现一次（二十大人群）。
-  assert.equal((pageSource.match(/leafOnly:true/g) || []).length, 1, "leafOnly:true must appear exactly once");
-  // 二十大人群仍是叶子多选树，节点/展示/勾选契约保持。
+  assert.ok(pageSource.includes('label: showAllCategory ? "收起" : "展开"'), "expand/collapse toggle must exist");
+  assert.ok(pageSource.includes("catOptions = showAllCategory ? pgyKolCategoryFull : pgyKolCategoryCommon"), "default must be collapsed to the common list");
+  assert.ok(pageSource.includes("showAllCategory"), "expand state must be tracked");
+});
+
+test("complex filters are trigger + popover, not flat chips", () => {
+  // 博主画像行：全部为紧凑触发器。
+  for (const label of ["性别", "地域", "二十大人群", "行业特色画像", "预估消费行为", "签约情况", "擅长内容", "内容题材"]) {
+    assert.ok(pageSource.includes('label: "' + label + '"'), "trigger must exist: " + label);
+  }
+  // 粉丝画像行。
+  for (const label of ["粉丝量", "粉丝年龄", "粉丝性别", "粉丝地域", "婚恋状态", "消费水平", "母婴阶段", "手机价格", "手机品牌"]) {
+    assert.ok(pageSource.includes('label: "' + label + '"'), "trigger must exist: " + label);
+  }
+  // 日常/合作/直播数据行。
+  for (const label of ["曝光中位数", "阅读中位数", "互动中位数", "千赞笔记比例", "合作报价", "合作信用度", "合作订单数", "近期合作行业", "近期合作品牌", "传播规模", "预估CPM", "预估阅读单价", "预估互动单价", "外溢进店单价", "近30天直播场次", "场均观播人数", "场均销售额"]) {
+    assert.ok(pageSource.includes('label: "' + label + '"'), "trigger must exist: " + label);
+  }
+  // 弹层必须通过 Popover 呈现（PgyKolPop 固定定位、贴近触发器、点击外部关闭）。
+  assert.ok(pageSource.includes("function PgyKolPop(p)"), "anchored popover shell must exist");
+  assert.ok(pageSource.includes("position: \"fixed\""), "popover must be fixed-positioned");
+  assert.ok(pageSource.includes("zIndex: 1399"), "popover must have an outside-click overlay");
+  assert.match(pageSource, /getBoundingClientRect/, "popover must anchor to the trigger rect");
+});
+
+test("gender popover keeps official options", () => {
+  assert.ok(pageSource.includes('title: "性别"'), "gender popover must exist");
+  assert.ok(pageSource.includes("options: pgyKolGenderOptions"), "gender options must stay official");
+  assert.ok(pageSource.includes("toggleWithNone(\"gender\", n.value)"), "gender 不限 must clear");
+  assert.ok(pageSource.includes("closeOnSelect: true"), "gender must close on select");
+});
+
+test("region cascade keeps province/city/district levels", () => {
+  assert.ok(pageSource.includes("function PgyKolCascadePop(p)"), "cascade popover must exist");
+  assert.ok(pageSource.includes('col("省份"'), "province column must exist");
+  assert.ok(pageSource.includes('col("城市"'), "city column must exist");
+  assert.ok(pageSource.includes('col("区县"'), "district column must exist");
+  assert.ok(pageSource.includes('title: "地域"'), "location popover must be wired");
+  assert.ok(pageSource.includes('title: "粉丝地域"'), "fans location popover must be wired");
+  assert.ok(pageSource.includes("onSelect: applyLocation"), "location select must apply the node");
+});
+
+test("audience20 stays a leaf-only tree popover", () => {
+  assert.equal((pageSource.match(/leafOnly: true/g) || []).length, 1, "leafOnly:true must appear exactly once");
   assert.ok(
-    pageSource.includes(
-      "PgyKolTree,{leafOnly:true,nodes:audCfg.nodes||[],selected:filter.audience20.map(function(n){return pgyKolNodeKey(n)}),onToggle:function(n){toggleArr(\"audience20\",n)},display:function(n){return n.fullPath||n.label||String(n.value)}}",
-    ),
-    "audience20 must render as a leaf-only PgyKolTree with fullPath display",
+    pageSource.includes('title: "二十大人群"'),
+    "audience20 popover must exist",
   );
-  // 已选叶子 chips：label=fullPath，onDelete 走 toggleArr("audience20", n)。
-  assert.match(
-    pageSource,
-    /filter\.audience20\.map\(function\(n\)\{return o\.jsx\(f1,\{key:pgyKolNodeKey\(n\),size:"small",label:n\.fullPath\|\|n\.label,onDelete:function\(\)\{toggleArr\("audience20",n\)\}\}\)\}\)/,
-    "selected audience20 leaves must render as chips with fullPath label and onDelete toggle",
-  );
-  assert.match(pageSource, /已选 "\+filter\.audience20\.length\+" 项"/, "audience20 must keep the selected-count hint");
-  assert.doesNotMatch(pageSource, /PgyKolChips,\{options:audCfg\.nodes/, "audience20 must no longer render as PgyKolChips");
+  assert.ok(pageSource.includes("onApply: function (keys) { update({ audience20:"), "audience20 apply must map keys back to nodes");
+  assert.match(pageSource, /已选 " \+ draft\.length \+ " 项"/, "tree popover must show the selected count");
+  assert.ok(pageSource.includes('children: "清空"') && pageSource.includes('children: "确定"'), "tree popover must offer 清空/确定");
+});
+
+test("Phase 5.2 popovers retain an anchor gap and recalculate on viewport movement", () => {
+  const popSource = pageSource.slice(pageSource.indexOf("function PgyKolPop"), pageSource.indexOf("function PgyKolPopHeader"));
+  assert.match(popSource, /getBoundingClientRect/, "popover position must derive from the live trigger rect");
+  assert.match(popSource, /gap\s*=\s*[4-8]\b|\+\s*[4-8]\b/, "popover edge gap must stay within the official 4–8px target");
+  assert.match(popSource, /scroll/, "popover must recompute its anchor position on scroll");
+  assert.match(popSource, /resize/, "popover must recompute its anchor position on resize");
+  assert.match(popSource, /position\s*:\s*["']fixed["']/, "popover must use viewport-relative positioning");
+});
+
+test("tree popovers keep their header/footer visible while only the tree body scrolls", () => {
+  const treeSource = pageSource.slice(pageSource.indexOf("function PgyKolTreePop"), pageSource.indexOf("function PgyKolCascadePop"));
+  assert.match(treeSource, /overflowY\s*:\s*["']auto["']/, "tree content must own vertical scrolling");
+  assert.match(treeSource, /flexShrink\s*:\s*0|position\s*:\s*["']sticky["']/, "tree header/footer must not scroll away with content");
+  assert.ok(treeSource.includes('children: "清空"') && treeSource.includes('children: "确定"'), "tree footer actions must remain present");
+});
+
+test("official 41 metrics and Magiorix extensions stay explicitly separated", () => {
+  assert.match(pageSource, /41/, "the official metric count must remain explicit and auditable");
+  assert.ok(pageSource.includes("Magiorix 扩展字段"), "non-official fields must have a separate visible group");
+  assert.match(pageSource, /official|extension/i, "column metadata must distinguish official and extension fields");
+});
+
+test("payload preview is advanced information and initially collapsed", () => {
+  assert.ok(pageSource.includes("高级信息"), "payload preview must be placed under the advanced-information label");
+  assert.match(pageSource, /var adv = m\.useState\(false\), advancedOpen = adv\[0\], setAdvancedOpen = adv\[1\]/, "advanced information must default to collapsed");
+  assert.match(pageSource, /advancedOpen \? o\.jsxs\(x, \{ children: \[[\s\S]{0,900}children: preview \|\|/, "payload body must render only after advanced information is opened");
+  assert.ok(pageSource.includes("这是待确认条件的本地 Payload 预览，不会请求蒲公英接口。"), "preview must state its local non-network boundary");
 });
 
 test("PgyKolTreeNode honors leafOnly and PgyKolTree forwards it to every level", () => {
@@ -194,126 +1578,7 @@ test("PgyKolTreeNode honors leafOnly and PgyKolTree forwards it to every level",
   );
 });
 
-test("the other filter controls keep their renderers and payload keys", () => {
-  // 性别仍是 chips；粉丝数上下限输入框保持不变。
-  assert.match(pageSource, /PgyKolChips,\{options:pgyKolGenderOptions/, "gender must stay PgyKolChips");
-  assert.match(pageSource, /type:"number",label:"粉丝数下限"/, "fansNumberLower input must stay");
-  assert.match(pageSource, /type:"number",label:"粉丝数上限"/, "fansNumberUpper input must stay");
-  // 地域 / 行业特色画像 / 预估消费行为 / 内容题材仍是树（弹层内），不带 leafOnly。
-  assert.match(pageSource, /PgyKolTreePopup,\{label:"地域"/, "location must stay a tree popup");
-  assert.match(pageSource, /PgyKolTreePopup,\{label:"行业特色画像"/, "industrySpecificCrowdsMotorDom must stay a tree popup");
-  assert.match(pageSource, /PgyKolTreePopup,\{label:"预估消费行为"/, "consumeBehavior must stay a tree popup");
-  assert.match(pageSource, /PgyKolTreePopup,\{label:"内容题材"/, "contentTheme must stay a tree popup");
-  assert.match(pageSource, /PgyKolTree,{nodes:cfg\.nodes\|\|\[\],selected:p\.selectedKeys/, "tree popup must render PgyKolTree");
-  // 官网实证契约：location 单元素数组、contentTheme 传节点数组、粉丝数正整数校验。
-  assert.match(pageSource, /out\.location=\[f\.location\]/, "location must be wrapped in an array");
-  assert.match(pageSource, /out\.contentThemeLabel=f\.contentTheme/, "contentTheme must pass nodes, not IDs");
-  assert.match(pageSource, /Number\.isFinite\(lo\)&&Number\.isInteger\(lo\)&&lo>0/, "fansNumberLower must reject non-positive values");
-  assert.match(pageSource, /Number\.isFinite\(hi\)&&Number\.isInteger\(hi\)&&hi>0/, "fansNumberUpper must reject non-positive values");
-});
-
-test("column dialog contract: fixed columns, price mutual exclusion, search, order, persistence", () => {
-  // 分组列表与固定列。
-  assert.ok(
-    pageSource.includes('pgyKolColumnGroups(){return ["固定列","博主报价","账号数据","直播数据","日常笔记数据","合作笔记数据","其他指标"]}'),
-    "column groups must exist",
-  );
-  assert.ok(pageSource.includes('pgyKolFixedColumnIds(){return ["kolInfo","recentNotes","actions"]}'), "fixed column ids must exist");
-  assert.ok(pageSource.includes('if(id==="kolInfo")return "博主信息"'), "fixed kolInfo label must exist");
-  // 固定列 checked+disabled 不可删除。
-  assert.match(pageSource, /disabled:!!c\.fixed/, "fixed columns must be disabled in the dialog");
-  assert.ok(pageSource.includes('if(fixedIds.indexOf(id)>=0)return;'), "fixed columns must be unremovable");
-  // 报价三列互斥（radio 语义）。
-  assert.ok(
-    pageSource.includes('c!=="price"&&c!=="picturePrice"&&c!=="videoPrice"'),
-    "price/picturePrice/videoPrice must be mutually exclusive",
-  );
-  // 顶部搜索按 label 过滤。
-  assert.ok(pageSource.includes('search===""||(c.label||"").indexOf(search)>=0'), "dialog search must filter by label");
-  // 清空 = 取消所有非固定列；取消不应用；确定应用并持久化。
-  assert.ok(pageSource.includes("clearDraft=function(){setDraft(fixedIds.slice())}"), "clear must reset to fixed columns only");
-  assert.ok(pageSource.includes("setDraft(null);setSearch(\"\");p.onClose()"), "cancel must close without applying");
-  assert.ok(pageSource.includes("p.onApply(effective.slice())"), "confirm must apply the draft");
-  assert.ok(pageSource.includes('pgyKolWriteJson("magiorix-pgy-kol-columns",ids)'), "confirm must persist to localStorage");
-  // 上移/下移按钮等价实现（官网为拖拽，见页面注释）。
-  assert.match(pageSource, /children:"上移"/, "move-up button must exist");
-  assert.match(pageSource, /children:"下移"/, "move-down button must exist");
-  assert.ok(pageSource.includes("moveDraft(c.id,-1)") && pageSource.includes("moveDraft(c.id,1)"), "move buttons must call moveDraft");
-  assert.ok(pageSource.includes("官网为拖拽排序，这里用按钮等价实现"), "drag-to-button equivalence comment must exist");
-});
-
-test("column persistence: defaultDisplay fallback and invalid storage fallback", () => {
-  assert.match(
-    pageSource,
-    /list\.filter\(function\(c\)\{return c\.defaultDisplay===true\}\)\.map\(function\(c\)\{return c\.id\}\)/,
-    "defaultDisplay=true columns must be pre-selected",
-  );
-  assert.ok(pageSource.includes("list.slice(0,8).map(function(c){return c.id})"), "fallback must cap at 8 columns");
-  assert.ok(
-    pageSource.includes('v.every(function(id){return typeof id==="string"&&list.some(function(c){return c.id===id})})'),
-    "stored columns must be validated against the registry",
-  );
-  assert.ok(
-    pageSource.includes('pgyKolReadJson("magiorix-pgy-kol-columns")'),
-    "page must read the persisted columns key",
-  );
-});
-
-test("result table renders whitelisted info column and registry-driven data columns", () => {
-  // 固定「博主信息」列：头像/昵称/ID/地域/性别（whitelisted 字段）。
-  assert.match(pageSource, /k&&\(k\.avatar\|\|k\.avatarUrl\)\|\|""/, "avatar must come from whitelisted fields");
-  assert.ok(pageSource.includes("children:k&&k.nickname||\"-\""), "nickname must render with dash fallback");
-  assert.ok(pageSource.includes("children:k&&k.userId||\"-\""), "userId must render with dash fallback");
-  assert.ok(pageSource.includes("((k&&k.location)||\"-\")+\" · \"+((k&&k.gender)||\"-\")"), "location and gender must render");
-  // 数据列按 selectedColumns 顺序动态生成，列值走 responsePath。
-  assert.match(pageSource, /var result=p\.result,kols=result\.kols\|\|\[\]/, "table must read result.kols");
-  assert.ok(pageSource.includes("col.responsePath||col.id"), "cell value must resolve via responsePath");
-  assert.ok(pageSource.includes('String(path).split(".")'), "responsePath must support dotted paths");
-  assert.ok(pageSource.includes("cur=cur[parts[i]]"), "dotted path traversal must exist");
-  // formatter：number 千分位、percent 一位小数、money 加元、url 链接。
-  assert.ok(pageSource.includes('if(fmt==="number")return pgyKolThousand(v)'), "number formatter must exist");
-  assert.ok(pageSource.includes('(Math.abs(n)<=1?n*100:n).toFixed(1)+"%"'), "percent formatter must keep one decimal without double-scaling");
-  assert.ok(pageSource.includes('String(v)+"元"'), "money formatter must append yuan without rounding/space");
-  assert.ok(pageSource.includes('component:"a"') && pageSource.includes('target:"_blank"'), "url formatter must render a link");
-  // null/undefined 显示「-」，unavailable 列显示「官网当前未返回」。
-  assert.ok(pageSource.includes('v.value===undefined||v.value===null||v.value===""'), "null cells must be detected");
-  assert.ok(pageSource.includes('col.evidence==="unavailable"'), "unavailable columns must be detected via evidence");
-  assert.ok(pageSource.includes('children:"官网当前未返回"'), "unavailable cells must show official-missing copy");
-  // 只渲染首页结果，禁止全量行数据进 DOM。
-  assert.match(pageSource, /kols\.map\(function\(k,ki\)/, "table rows must map over first-page kols");
-  assert.doesNotMatch(pageSource, /\.rows\.map\(function|task\.leaves\.map\(function/);
-});
-
-test("Phase 5：单元格格式化规则——percent 不重复乘 100、money 无空格、price 复合列计算、unavailable 走 evidence", () => {
-  // 真实响应实证（2026-08-06 抓取）：fansActiveIn28dLv 返回 40.6（已是百分比），
-  // 若无条件乘 100 会显示 4060.0%。规则：|v|<=1 视为比率乘 100，否则原值。
-  assert.match(
-    pageSource,
-    /\(Math\.abs\(n\)<=1\?n\*100:n\)\.toFixed\(1\)\+"%"/,
-    "percent formatter must not double-scale values above 1",
-  );
-  assert.doesNotMatch(
-    pageSource,
-    /fmt==="percent"\)\{var n=Number\(v\);return Number\.isFinite\(n\)\?\(n\*100\)\.toFixed\(1\)\+"%"/,
-    "percent formatter must no longer multiply by 100 unconditionally",
-  );
-  // money 与导出口径一致：无空格（800元）。
-  assert.match(pageSource, /fmt==="money"\)return String\(v\)\+"元"/);
-  assert.doesNotMatch(pageSource, /fmt==="money"\)return pgyKolThousand\(v\)\+" 元"/);
-  // price（全部报价）复合列：由 picturePrice/videoPrice 计算展示。
-  assert.match(
-    pageSource,
-    /col\.id==="price"\)\{var pic=k&&k\.picturePrice,vid=k&&k\.videoPrice,ps=\[\]/,
-    "price column must compute from picturePrice/videoPrice",
-  );
-  assert.match(pageSource, /ps\.join\(" \/ "\)/);
-  // unavailable 列以 evidence 判定（注册表无 unavailable 布尔字段）。
-  assert.match(pageSource, /col\.evidence==="unavailable"/);
-  assert.doesNotMatch(pageSource, /col\.unavailable===true/);
-});
-
-test("Phase 5.1：实证字段进入 payload，未实证 audienceGroup 仍不发送", () => {
-  // 官网最小流量实证后已启用的字段：必须进入 pgyKolToFilterState。
+test("payload contract: proven fields are sent, unproven audienceGroup is not", () => {
   const proven = [
     "out.inviteReply48hNumRatio=f.coopCredit.value",
     "out.accumCoopImpMedinNum30d=f.coopImpMedin.value",
@@ -340,11 +1605,9 @@ test("Phase 5.1：实证字段进入 payload，未实证 audienceGroup 仍不发
     "out.secondIndustry=f.secondIndustry",
   ];
   for (const needle of proven) {
-    assert.ok(pageSource.includes(needle), `pgyKolToFilterState 必须发送实证字段: ${needle}`);
+    assert.ok(pageSource.includes(needle), "pgyKolToFilterState must send the proven field: " + needle);
   }
-  // audienceGroup 仍不可实证（官网当前账号不可用）：不得发送。
-  assert.ok(!pageSource.includes("out.audienceGroup="), "audienceGroup 不得进入 payload");
-  // 旧的未实证双份状态已删除：unproven 集合改为 Schema 单一来源（window.__pgyKolUnproven）。
+  assert.ok(!pageSource.includes("out.audienceGroup="), "audienceGroup must not enter the payload");
   assert.ok(
     pageSource.includes("function pgyKolUnprovenSet(){return window.__pgyKolUnproven||{}}"),
     "unproven set must read the schema-driven window.__pgyKolUnproven",
@@ -357,61 +1620,134 @@ test("Phase 5.1：实证字段进入 payload，未实证 audienceGroup 仍不发
     pageSource.includes('fd.payloadProven===false&&Array.isArray(fd.uiKeys)'),
     "unproven keys must come from payloadProven/uiKeys of the shared schema",
   );
-  // 未实证选择必须显示可见提示（audienceGroup 权限受限原因）。
+  // 摘要 chips 的待实证后缀仍由 Schema 集合驱动。
   assert.ok(
-    pageSource.includes("人群目标（按博主粉丝推荐）依赖合作品牌：当前账号未绑定品牌，官网禁用该筛选；无法实证前不参与查询与采集。"),
-    "audienceGroup unavailable reason must be visible",
-  );
-  // 摘要 chips 的待实证后缀仍由 Schema 集合驱动（旧硬编码副本已移除）。
-  assert.ok(
-    pageSource.includes('label:(pgyKolUnprovenSet()[s.key]?"【待实证】":"")+s.label'),
+    pageSource.includes('(pgyKolUnprovenSet()[s.key] ? "【待实证】" : "") + s.label'),
     "unproven summary chips must carry the 待实证 suffix from the schema set",
   );
-  // 旧精选博主 summary 循环（会导致重复 chips）必须移除。
-  assert.ok(!pageSource.includes('"risingStar"'), "legacy featured summary loop must be removed");
+  // 传播规模是官网 408px 四字段组合，并已由 Phase 5.1 实证映射到四个 payload 字段。
+  assert.ok(!pageSource.includes('label: "传播规模", badge: "待实证"'), "proven spread control must not retain the stale unproven badge");
+  assert.ok(pageSource.includes('label: "外溢进店中位数"'), "spread popover must retain all four official sub-fields");
+  assert.ok(!pageSource.includes("「数据表现-传播规模」对应字段尚未在官方流量中实证"), "stale unproven copy must be removed");
 });
 
 test("brand gating: audience group and exclude switches require a cooperation brand", () => {
-  assert.ok(pageSource.includes("hasBrands=filter.brands&&filter.brands.length>0"), "hasBrands must be derived from brands");
-  assert.equal((pageSource.match(/disabled:!hasBrands/g) || []).length, 3, "audienceGroup + two exclude switches must be gated");
-  assert.ok(pageSource.includes('children:"请选择您的合作品牌"'), "no-brand hint must exist");
-  assert.ok(pageSource.includes('provider:"brandSearch",keyword:kw0||""'), "brand popup must call brandSearch provider");
+  assert.ok(pageSource.includes("hasBrands = filter.brands && filter.brands.length > 0"), "hasBrands must be derived from brands");
+  assert.equal((pageSource.match(/disabled: !hasBrands/g) || []).length, 3, "audienceGroup + two exclude switches must be gated");
+  assert.ok(pageSource.includes('children: "请选择您的合作品牌"'), "no-brand hint must exist");
+  assert.ok(pageSource.includes('provider:"brandSearch"'), "brand popup must call brandSearch provider");
   assert.ok(pageSource.includes("out.activityCodes=f.activityCodes"), "activityCodes must be submitted");
+});
+
+test("nickname search history persists and clears", () => {
+  assert.ok(pageSource.includes('window.localStorage.getItem("magiorix-pgy-kol-nick-history")'), "history must be read from localStorage");
+  assert.ok(pageSource.includes('window.localStorage.setItem("magiorix-pgy-kol-nick-history"'), "history must be persisted");
+  assert.ok(pageSource.includes('window.localStorage.removeItem("magiorix-pgy-kol-nick-history")'), "history must be clearable");
+  assert.ok(pageSource.includes("function pgyKolNickHistoryAdd(kw)"), "history add helper must exist");
+  assert.ok(pageSource.includes("onHistory: function (keyword) { setHistory(pgyKolNickHistoryAdd(keyword)); }"), "only the successful coordinator callback may record nickname history");
+  assert.ok(pageSource.includes("function PgyKolHistoryPanel(p)"), "history panel must exist");
+  assert.ok(pageSource.includes('children: "清空历史"'), "clear-history action must exist");
 });
 
 test("restart restore and one-click clear persistence", () => {
   assert.ok(pageSource.includes('pgyKolReadJson("magiorix-pgy-kol-filters")'), "filters must be restored from localStorage");
   assert.ok(pageSource.includes("saved.selectedColumns"), "restore must carry selected columns");
   assert.ok(pageSource.includes("setRestoredNotice(true)"), "restore must show the restored notice");
-  assert.ok(pageSource.includes('children:"已恢复上次筛选（可用「一键清空」清除持久化）"'), "restored notice copy must exist");
+  assert.ok(pageSource.includes('children: "已恢复筛选，请点击确定后查询"'), "restored notice must explicitly require confirmation");
+  assert.ok(pageSource.includes("searchCoordinator.restore(next)"), "restored state must enter draft without searching");
   assert.ok(pageSource.includes('pgyKolClearJson("magiorix-pgy-kol-filters")'), "one-click clear must purge persisted filters");
   assert.ok(pageSource.includes("setFilter(pgyKolDefaultFilter())"), "one-click clear must reset the filter");
   assert.ok(
-    pageSource.includes('pgyKolWriteJson("magiorix-pgy-kol-filters",{searchType:filter.searchType,keyword:filter.keyword,filter:filter,selectedColumns:selectedColumns})'),
+    pageSource.includes('pgyKolWriteJson("magiorix-pgy-kol-filters", { searchType: filter.searchType, keyword: filter.keyword, filter: filter, selectedColumns: selectedColumns })'),
     "filter changes must persist searchType/keyword/filter/selectedColumns",
   );
 });
 
 test("icon beautification: menu, page header, and search button use mdi:account-search", () => {
-  // 菜单项 icon。
   assert.ok(
-    script.includes('{name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"mdi:account-search"}'),
+    pageSource.includes('{name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"mdi:account-search"}'),
     "menu item must carry mdi:account-search",
   );
   assert.ok(!script.includes("solar:magnifer-bold-duotone"), "old solar magnifer icon must be gone");
-  // 页面头部：渐变圆角方块 + 白色 mdi 图标。
   assert.ok(pageSource.includes("mdi:account-search"), "page header must use mdi:account-search");
   assert.ok(
-    pageSource.includes('background:"linear-gradient(135deg,#FF6C40,#FF3030)"'),
+    pageSource.includes('background: "linear-gradient(135deg,#FF6C40,#FF3030)"'),
     "page header must use the Magiorix orange-red gradient",
   );
-  assert.ok(pageSource.includes('color:"#fff"'), "header icon must be white on the gradient tile");
-  // 搜索按钮 startIcon。
+  assert.ok(pageSource.includes('color: "#fff"'), "header icon must be white on the gradient tile");
   assert.ok(
-    pageSource.includes('startIcon:status==="loading"?o.jsx(de,{size:18,color:"inherit"}):o.jsx(B,{icon:"mdi:account-search",width:18,height:18})'),
+    pageSource.includes('startIcon: status === "loading" ? o.jsx(de, { size: 18, color: "inherit" }) : o.jsx(B, { icon: "mdi:account-search", width: 18, height: 18 })'),
     "search button startIcon must use mdi:account-search",
   );
-});test("Phase 5 page source ships the batch UI copy and status texts", () => {
+});
+
+test("column dialog contract: fixed columns, price mutual exclusion, search, order, persistence", () => {
+  assert.ok(
+    pageSource.includes('function pgyKolColumnGroups(){return ["固定列","博主报价","账号数据","直播数据","日常笔记数据","合作笔记数据","其他指标"]}'),
+    "column groups must exist",
+  );
+  assert.ok(pageSource.includes('function pgyKolFixedColumnIds(){return ["kolInfo","recentNotes","actions"]}'), "fixed column ids must exist");
+  assert.ok(pageSource.includes('if (id === "kolInfo") return "博主信息";'), "fixed kolInfo label must exist");
+  // 官网两栏式：左侧仅计算官网 41 项，扩展字段单列展示；右侧为已添加项。
+  assert.ok(pageSource.includes("pgyKolOfficialMetricColumns(list)"), "left pane must derive the official metric set from metadata");
+  assert.ok(pageSource.includes("var officialCount = officialColumns.length"), "official metric count must be derived separately");
+  assert.ok(pageSource.includes('children: "官网展示指标（" + officialCount + "）"'), "left pane must show the official metric count only");
+  assert.ok(pageSource.includes('children: "Magiorix 扩展字段（" + extensionColumns.length + "）"'), "extensions must remain visible but outside the official count");
+  assert.ok(pageSource.includes('placeholder: "请输入筛选条件"'), "dialog search must use the official placeholder");
+  assert.ok(pageSource.includes('children: "已添加 " + effective.length + " 项"'), "right pane must show the added count");
+  assert.ok(pageSource.includes('children: "以上为横向固定列"'), "fixed-column divider copy must exist");
+  assert.ok(pageSource.includes('icon: "solar:lock-bold"'), "fixed columns must carry a lock icon");
+  assert.ok(pageSource.includes('icon: "mdi:drag-vertical"'), "reorderable columns must carry a drag handle");
+  assert.ok(pageSource.includes('if (fixedIds.indexOf(id) >= 0) return;'), "fixed columns must be unremovable");
+  assert.ok(
+    pageSource.includes('c !== "price" && c !== "picturePrice" && c !== "videoPrice"'),
+    "price/picturePrice/videoPrice must be mutually exclusive",
+  );
+  assert.ok(pageSource.includes('search === "" || (c.label || "").indexOf(search) >= 0'), "dialog search must filter by label");
+  assert.ok(pageSource.includes("setDraftState(fixedIds.slice())"), "clear must reset to fixed columns only");
+  assert.ok(pageSource.includes('setDraftState(null);\n    setSearch("");\n    p.onClose();'), "cancel must close without applying");
+  assert.ok(pageSource.includes("p.onApply(effective.slice())"), "confirm must apply the draft");
+  assert.ok(pageSource.includes('pgyKolWriteJson("magiorix-pgy-kol-columns", ids)'), "confirm must persist to localStorage");
+  assert.ok(pageSource.includes("moveDraft(id, -1)") && pageSource.includes("moveDraft(id, 1)"), "move buttons must call moveDraft");
+});
+
+test("column persistence: defaultDisplay fallback and invalid storage fallback", () => {
+  const runtime = pageRuntime();
+  const list = [
+    { id: "nickname", defaultDisplay: true },
+    { id: "fans", defaultDisplay: false },
+  ];
+  const fallback = Array.from(runtime.pgyKolResolveColumns(list, ["unknown-column"]));
+  assert.deepEqual(fallback, ["kolInfo", "recentNotes", "actions", "nickname"], "invalid stored ids must fall back to defaultDisplay columns");
+  const stored = Array.from(runtime.pgyKolResolveColumns(list, ["kolInfo", "recentNotes", "actions", "fans"]));
+  assert.deepEqual(stored, ["kolInfo", "recentNotes", "actions", "fans"], "fixed ids plus valid registry ids must restore in order");
+  assert.ok(
+    pageSource.includes('pgyKolReadJson("magiorix-pgy-kol-columns")'),
+    "page must read the persisted columns key",
+  );
+});
+
+test("result table renders whitelisted info column and registry-driven data columns", () => {
+  assert.match(pageSource, /k&&\(k\.avatar\|\|k\.avatarUrl\)\|\|""/, "avatar must come from whitelisted fields");
+  assert.ok(pageSource.includes("children:k&&k.nickname||\"-\""), "nickname must render with dash fallback");
+  assert.ok(pageSource.includes("children:k&&k.userId||\"-\""), "userId must render with dash fallback");
+  assert.ok(pageSource.includes("((k&&k.location)||\"-\")+\" · \"+((k&&k.gender)||\"-\")"), "location and gender must render");
+  assert.match(pageSource, /var result=p\.result,kols=result\.kols\|\|\[\]/, "table must read result.kols");
+  assert.ok(pageSource.includes("col.responsePath||col.id"), "cell value must resolve via responsePath");
+  assert.ok(pageSource.includes('String(path).split(".")'), "responsePath must support dotted paths");
+  assert.ok(pageSource.includes("cur=cur[parts[i]]"), "dotted path traversal must exist");
+  assert.ok(pageSource.includes('if(fmt==="number")return pgyKolThousand(v)'), "number formatter must exist");
+  assert.ok(pageSource.includes('(Math.abs(n)<=1?n*100:n).toFixed(1)+"%"'), "percent formatter must keep one decimal without double-scaling");
+  assert.ok(pageSource.includes('String(v)+"元"'), "money formatter must append yuan without rounding/space");
+  assert.ok(pageSource.includes('component:"a"') && pageSource.includes('target:"_blank"'), "url formatter must render a link");
+  assert.ok(pageSource.includes('v.value===undefined||v.value===null||v.value===""'), "null cells must be detected");
+  assert.ok(pageSource.includes('col.evidence==="unavailable"'), "unavailable columns must be detected via evidence");
+  assert.ok(pageSource.includes('children:"官网当前未返回"'), "unavailable cells must show official-missing copy");
+  assert.match(pageSource, /kols\.map\(function\(k,ki\)/, "table rows must map over first-page kols");
+  assert.doesNotMatch(pageSource, /\.rows\.map\(function|task\.leaves\.map\(function/);
+});
+
+test("Phase 5 page source ships the batch UI copy and status texts", () => {
   for (const needle of [
     "开始采集",
     "暂停",
@@ -466,7 +1802,6 @@ test("Phase 5 page source maps completeness and error copy", () => {
 test("Phase 5 page source calls the batch bridge methods with the right payloads", () => {
   for (const method of [
     "getColumns",
-    "batchStart",
     "batchGet",
     "batchList",
     "batchPause",
@@ -477,34 +1812,35 @@ test("Phase 5 page source calls the batch bridge methods with the right payloads
   ]) {
     assert.match(pageSource, new RegExp("bridge\\." + method + "\\("), "page source must call bridge." + method);
   }
+  assert.match(pageSource, /api\.batchStart\(\{filterState:pgyKolClone\(appliedRequestSnapshot\),columns:pgyKolClone\(columns\|\|\[\]\)\}\)/, "coordinator must submit only its frozen applied snapshot");
   assert.match(
     pageSource,
-    /batchStart\(\{filterState:pgyKolToFilterState\(filter\),columns:exportColumns\}\)/,
-    "batchStart must submit filterState and only exportable selected columns in order",
+    /searchCoordinator\.startBatch\(exportColumns\)/,
+    "page batch start must delegate its ordered exportable columns to the applied-snapshot coordinator",
   );
   assert.match(
     pageSource,
-    /pgyKolExportColumnIds\(columnList,selectedColumns\)/,
+    /pgyKolExportColumnIds\(columnList, selectedColumns\)/,
     "startBatch must filter fixed/computed/unavailable columns out of the export column list",
   );
-  assert.match(pageSource, /batchGet\(\{taskId:tid\}\)/);
-  assert.match(pageSource, /batchPause\(\{taskId:tid\}\)/);
+  assert.match(pageSource, /batchGet\(\{ taskId: tid \}\)/);
+  assert.match(pageSource, /batchPause\(\{ taskId: tid \}\)/);
   assert.match(
     pageSource,
-    /bridge\.batchResume\(budgets\?\{taskId:tid,budgets:budgets\}:\{taskId:tid\}\)/,
+    /bridge\.batchResume\(budgets \? \{ taskId: tid, budgets: budgets \} : \{ taskId: tid \}\)/,
     "batchResume must forward budgets when provided",
   );
-  assert.match(pageSource, /batchCancel\(\{taskId:tid\}\)/);
-  assert.match(pageSource, /batchExport\(\{taskId:tid\}\)/);
-  assert.match(pageSource, /disabled:batchBusy\|\|batchRunning/, "start button must be disabled while busy or running");
+  assert.match(pageSource, /batchCancel\(\{ taskId: tid \}\)/);
+  assert.match(pageSource, /batchExport\(\{ taskId: tid \}\)/);
+  assert.match(pageSource, /disabled: batchBusy \|\| batchRunning/, "start button must be disabled while busy or running");
 });
 
 test("Phase 5 page source subscribes to batch events and disposes on unmount", () => {
-  assert.match(pageSource, /bridge\.onBatchEvent\(function\(ev\)\{/);
-  assert.match(pageSource, /if\(currentTaskId\)loadTask\(currentTaskId\)/, "batch events must refresh the current task detail");
+  assert.match(pageSource, /bridge\.onBatchEvent\(function \(ev\) \{/);
+  assert.match(pageSource, /if \(currentTaskId\) loadTask\(currentTaskId\)/, "batch events must refresh the current task detail");
   assert.match(
     pageSource,
-    /return function\(\)\{if\(dispose&&typeof dispose==="function"\)dispose\(\)\}/,
+    /return function \(\) \{ if \(dispose && typeof dispose === "function"\) dispose\(\); \};/,
     "onBatchEvent subscription must return a dispose cleanup",
   );
   assert.match(pageSource, /\[currentTaskId\]/, "event effect must re-subscribe when the current task changes");
@@ -513,10 +1849,10 @@ test("Phase 5 page source subscribes to batch events and disposes on unmount", (
 test("Phase 5 preview boundary keeps a limited DOM and shows persisted counts", () => {
   assert.match(
     pageSource,
-    /预览 "\+\(result\.kols\?result\.kols\.length:0\)\+" 条 \/ 已持久化 "\+pgyKolCount\(currentTask,"raw"\)\+" 条（完整数据以导出为准）"/,
+    /预览 " \+ \(result\.kols \? result\.kols\.length : 0\) \+ " 条 \/ 已持久化 " \+ pgyKolCount\(currentTask, "raw"\) \+ " 条（完整数据以导出为准）"/,
     "preview caption must state preview count vs persisted count",
   );
-  assert.match(pageSource, /result\.capSignal&&result\.capSignal\.capped/, "cap signal chips must be kept");
+  assert.match(pageSource, /result\.capSignal && result\.capSignal\.capped/, "cap signal chips must be kept");
   assert.match(pageSource, /quarantinedFields/, "unknown-field isolation chips must be kept");
 });
 
@@ -628,7 +1964,7 @@ test("patch script wires route, menu merge, and dev switch with idempotent guard
   assert.ok(script.includes('const crypto = require("crypto")'), "patch script must require crypto for the content guard");
   assert.ok(
     script.includes("normalizeSource(pgyKolSearchPageSource51)"),
-    "content guard must hash the Phase 5.1 final embedded page source",
+    "content guard must hash the final embedded page source",
   );
   assert.ok(script.includes("existingSha1 !== sourceSha1"), "content guard must compare existing block hash with source hash");
   assert.ok(
@@ -659,11 +1995,14 @@ test("patch script wires route, menu merge, and dev switch with idempotent guard
   );
 });
 
-test("page must load config, preview payload, and search through the existing bridge", () => {
-  assert.ok(script.includes("bridge.getConfig("), "page must load filter config via bridge.pgyKol.getConfig");
-  assert.ok(script.includes("bridge.previewPayload("), "page must preview payload via bridge.pgyKol.previewPayload");
-  assert.ok(script.includes("bridge.searchFirstPage("), "page must search via bridge.pgyKol.searchFirstPage");
-  assert.ok(pageSource.includes('provider:"activities"'), "hot activities must load via getConfig activities provider");
+test("page must load config, schema fields, preview payload, and search through the existing bridge", () => {
+  assert.ok(pageSource.includes("bridge.getConfig("), "page must load filter config via bridge.pgyKol.getConfig");
+  assert.ok(pageSource.includes("bridge.previewPayload("), "page must preview payload via bridge.pgyKol.previewPayload");
+  assert.ok(pageSource.includes("api.searchFirstPage(pgyKolClone(request))"), "the coordinator must make the single formal search call");
+  assert.ok(pageSource.includes("return searchCoordinator.applyAndSearch()"), "the page must delegate all formal searches to the coordinator");
+  assert.ok(pageSource.includes('provider: "activities"'), "hot activities must load via getConfig activities provider");
+  assert.ok(pageSource.includes("bridge.getSchemaFields"), "page must load schema fields for the unproven set");
+  assert.ok(pageSource.includes("pgyKolSchemaUnproven(res.data)"), "schema fields must populate the unproven set");
 });
 
 test("page source must not carry legacy brand residue or banned names", () => {
@@ -675,14 +2014,14 @@ test("page source must not carry legacy brand residue or banned names", () => {
 });
 
 test("no handler may be embedded inside an MUI sx object", () => {
-  const onClickRe = /onClick:function/g;
+  const onClickRe = /onClick:\s*function/g;
   let m;
   while ((m = onClickRe.exec(pageSource)) !== null) {
     const before = pageSource.slice(0, m.index);
-    const sxAt = before.lastIndexOf("sx:{");
+    const sxAt = before.lastIndexOf("sx: {");
     if (sxAt < 0) continue;
     let depth = 1;
-    let i = sxAt + 4;
+    let i = sxAt + 5;
     let inside = true;
     while (i < m.index) {
       const ch = pageSource[i];
@@ -706,12 +2045,5 @@ test("no handler may be embedded inside an MUI sx object", () => {
       i += 1;
     }
     assert.ok(!inside, "onClick handler at offset " + m.index + " must not live inside an sx object");
-  }
-  const sxRe = /sx:\{/g;
-  while ((m = sxRe.exec(pageSource)) !== null) {
-    const bodyEnd = pageSource.indexOf("}", m.index + 4);
-    assert.ok(bodyEnd >= 0, "sx object at offset " + m.index + " must close");
-    const body = pageSource.slice(m.index + 4, bodyEnd);
-    assert.ok(!body.includes("onClick:"), "sx object at offset " + m.index + " must not contain a click handler");
   }
 });

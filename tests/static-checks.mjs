@@ -7,6 +7,7 @@ const javascriptFiles = [
   "red-magic-api/lib/release-manifest.js",
   "scripts/apply-magiorix-frontend-patches.js",
   "scripts/apply-magiorix-runtime-patches.js",
+  "scripts/pgy-kol-phase52-page-source.js",
   "app-source/dist-electron/index.js",
   "app-source/pgy-kol/pgy-kol-ipc.mjs",
   "app-source/pgy-kol/pgy-kol-service.mjs",
