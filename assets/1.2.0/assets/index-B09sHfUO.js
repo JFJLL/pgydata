@@ -245,6 +245,10 @@ var pgyKolFeatureTree={nodes:[{label:"生活背景",children:pgyKolStaticOptions
 var pgyKolSceneTree={nodes:[{label:"形式",children:pgyKolStaticOptions(["vlog","探店","测评","ootd","合集","plog","开箱","教程","成分解析","彩妆试色","仿妆","沉浸式"])},{label:"风格",children:pgyKolStaticOptions(["韩系","日系","欧美风","氛围感","纯欲","甜酷","复古","高级感","校园风","中性风"])},{label:"生活方式",children:pgyKolStaticOptions(["职场生活","自律生活","露营徒步","极简主义","低脂低卡"])},{label:"肤质肤色",children:pgyKolStaticOptions(["油皮","干皮","混合肌","敏感肌","痘痘肌","瑕疵皮","白皮","黄皮"])},{label:"皮肤养护",children:pgyKolStaticOptions(["保湿补水","美白","淡斑","祛黄","抗氧化","抗老","祛皱","抗炎","修复","祛痘祛闭口","隔离防晒","控油","眼部护理"])}]};
 /* 2026-08-11 官网实测：博主地域/粉丝地域为国家平铺单选。 */
 var pgyKolCountryOptions=pgyKolStaticOptions(["全部","中国","美国","日本","澳大利亚","英国","加拿大","韩国","法国","德国","新加坡","其他"]);
+/* 中国省/市/区 fallback（2026-08-11 官网实测 34 省级；areas 接口不可用时保证「中国」可逐级展开）。
+ * 结构：省（直辖市到区县）→ 地级市；节点 path 为「中国 广东 广州」式空格路径，与接口 deriveSpacePaths 契约一致。 */
+var pgyKolChinaAreaMap={"北京":["东城区","西城区","朝阳区","丰台区","石景山区","海淀区","门头沟区","房山区","通州区","顺义区","昌平区","大兴区","怀柔区","平谷区","密云区","延庆区"],"天津":["和平区","河东区","河西区","南开区","河北区","红桥区","东丽区","西青区","津南区","北辰区","武清区","宝坻区","滨海新区","宁河区","静海区","蓟州区"],"上海":["黄浦区","徐汇区","长宁区","静安区","普陀区","虹口区","杨浦区","闵行区","宝山区","嘉定区","浦东新区","金山区","松江区","青浦区","奉贤区","崇明区"],"重庆":["渝中区","大渡口区","江北区","沙坪坝区","九龙坡区","南岸区","北碚区","渝北区","巴南区","涪陵区","长寿区","江津区","合川区","永川区","南川区","綦江区","大足区","璧山区","铜梁区","潼南区","荣昌区","开州区","梁平区","武隆区","万州区","黔江区","城口县","丰都县","垫江县","忠县","云阳县","奉节县","巫山县","巫溪县","石柱土家族自治县","秀山土家族苗族自治县","酉阳土家族苗族自治县","彭水苗族土家族自治县"],"河北":["石家庄市","唐山市","秦皇岛市","邯郸市","邢台市","保定市","张家口市","承德市","沧州市","廊坊市","衡水市"],"山西":["太原市","大同市","阳泉市","长治市","晋城市","朔州市","晋中市","运城市","忻州市","临汾市","吕梁市"],"内蒙古":["呼和浩特市","包头市","乌海市","赤峰市","通辽市","鄂尔多斯市","呼伦贝尔市","巴彦淖尔市","乌兰察布市","兴安盟","锡林郭勒盟","阿拉善盟"],"辽宁":["沈阳市","大连市","鞍山市","抚顺市","本溪市","丹东市","锦州市","营口市","阜新市","辽阳市","盘锦市","铁岭市","朝阳市","葫芦岛市"],"吉林":["长春市","吉林市","四平市","辽源市","通化市","白山市","松原市","白城市","延边朝鲜族自治州"],"黑龙江":["哈尔滨市","齐齐哈尔市","鸡西市","鹤岗市","双鸭山市","大庆市","伊春市","佳木斯市","七台河市","牡丹江市","黑河市","绥化市","大兴安岭地区"],"江苏":["南京市","无锡市","徐州市","常州市","苏州市","南通市","连云港市","淮安市","盐城市","扬州市","镇江市","泰州市","宿迁市"],"浙江":["杭州市","宁波市","温州市","嘉兴市","湖州市","绍兴市","金华市","衢州市","舟山市","台州市","丽水市"],"安徽":["合肥市","芜湖市","蚌埠市","淮南市","马鞍山市","淮北市","铜陵市","安庆市","黄山市","滁州市","阜阳市","宿州市","六安市","亳州市","池州市","宣城市"],"福建":["福州市","厦门市","莆田市","三明市","泉州市","漳州市","南平市","龙岩市","宁德市"],"江西":["南昌市","景德镇市","萍乡市","九江市","新余市","鹰潭市","赣州市","吉安市","宜春市","抚州市","上饶市"],"山东":["济南市","青岛市","淄博市","枣庄市","东营市","烟台市","潍坊市","济宁市","泰安市","威海市","日照市","临沂市","德州市","聊城市","滨州市","菏泽市"],"河南":["郑州市","开封市","洛阳市","平顶山市","安阳市","鹤壁市","新乡市","焦作市","濮阳市","许昌市","漯河市","三门峡市","南阳市","商丘市","信阳市","周口市","驻马店市","济源市"],"湖北":["武汉市","黄石市","十堰市","宜昌市","襄阳市","鄂州市","荆门市","孝感市","荆州市","黄冈市","咸宁市","随州市","恩施土家族苗族自治州","仙桃市","潜江市","天门市","神农架林区"],"湖南":["长沙市","株洲市","湘潭市","衡阳市","邵阳市","岳阳市","常德市","张家界市","益阳市","郴州市","永州市","怀化市","娄底市","湘西土家族苗族自治州"],"广东":["广州市","韶关市","深圳市","珠海市","汕头市","佛山市","江门市","湛江市","茂名市","肇庆市","惠州市","梅州市","汕尾市","河源市","阳江市","清远市","东莞市","中山市","潮州市","揭阳市","云浮市"],"广西":["南宁市","柳州市","桂林市","梧州市","北海市","防城港市","钦州市","贵港市","玉林市","百色市","贺州市","河池市","来宾市","崇左市"],"海南":["海口市","三亚市","三沙市","儋州市"],"四川":["成都市","自贡市","攀枝花市","泸州市","德阳市","绵阳市","广元市","遂宁市","内江市","乐山市","南充市","眉山市","宜宾市","广安市","达州市","雅安市","巴中市","资阳市","阿坝藏族羌族自治州","甘孜藏族自治州","凉山彝族自治州"],"贵州":["贵阳市","六盘水市","遵义市","安顺市","毕节市","铜仁市","黔西南布依族苗族自治州","黔东南苗族侗族自治州","黔南布依族苗族自治州"],"云南":["昆明市","曲靖市","玉溪市","保山市","昭通市","丽江市","普洱市","临沧市","楚雄彝族自治州","红河哈尼族彝族自治州","文山壮族苗族自治州","西双版纳傣族自治州","大理白族自治州","德宏傣族景颇族自治州","怒江傈僳族自治州","迪庆藏族自治州"],"西藏":["拉萨市","日喀则市","昌都市","林芝市","山南市","那曲市","阿里地区"],"陕西":["西安市","铜川市","宝鸡市","咸阳市","渭南市","延安市","汉中市","榆林市","安康市","商洛市"],"甘肃":["兰州市","嘉峪关市","金昌市","白银市","天水市","武威市","张掖市","平凉市","酒泉市","庆阳市","定西市","陇南市","临夏回族自治州","甘南藏族自治州"],"青海":["西宁市","海东市","海北藏族自治州","黄南藏族自治州","海南藏族自治州","果洛藏族自治州","玉树藏族自治州","海西蒙古族藏族自治州"],"宁夏":["银川市","石嘴山市","吴忠市","固原市","中卫市"],"新疆":["乌鲁木齐市","克拉玛依市","吐鲁番市","哈密市","昌吉回族自治州","博尔塔拉蒙古自治州","巴音郭楞蒙古自治州","阿克苏地区","克孜勒苏柯尔克孜自治州","喀什地区","和田地区","伊犁哈萨克自治州","塔城地区","阿勒泰地区"],"香港":["香港岛","九龙","新界"],"澳门":["澳门半岛","氹仔","路环"],"台湾":["台北市","新北市","桃园市","台中市","台南市","高雄市","基隆市","新竹市","嘉义市"]};
+function pgyKolChinaAreasFallback(){function build(list,path){return list.map(function(name){var p=path.concat([name]);return {value:name,label:name,path:p.join(" "),fullPath:p.join(" "),children:[]}})}var provinces=[];for(var prov in pgyKolChinaAreaMap){if(Object.prototype.hasOwnProperty.call(pgyKolChinaAreaMap,prov)){provinces.push({value:prov,label:prov,path:"中国 "+prov,fullPath:"中国 "+prov,children:build(pgyKolChinaAreaMap[prov],["中国",prov])})}}return [{value:"中国",label:"中国",path:"中国",fullPath:"中国",children:provinces}]}
 var pgyKolCreditOptions=pgyKolStaticOptions(["高","中","低"]); /* Phase5 预留键 coopCredit */
 var pgyKolPropagationOptions=pgyKolStaticOptions(["小","中","大","超大"]); /* Phase5 预留键 propagationScale */
  /* Phase5 待实证 */
@@ -1347,6 +1351,85 @@ function PgyKolField(p) {
 }
 
 /* ============ Phase 5.2：展示指标弹窗（官网两栏式：可添加列 / 已添加） ============ */
+function PgyKolCollectDialog(p) {
+  var list = p.columns || [], fixedIds = pgyKolFixedColumnIds();
+  var exportable = list.filter(function (c) {
+    if (fixedIds.indexOf(c.id) >= 0) return false;
+    if (c.evidence === "unavailable") return false;
+    if (c.responsePath && String(c.responsePath).indexOf("computed:") === 0) return false;
+    return true;
+  });
+  var groupNames = pgyKolColumnGroups().filter(function (g) {
+    return exportable.some(function (c) { return pgyKolColumnGroupOf(c) === g; });
+  }).concat(exportable.some(pgyKolIsExtensionColumn) ? ["博主信息"] : []);
+  var ds = m.useState(null), draftState = ds[0], setDraftState = ds[1];
+  var effective = draftState !== null ? draftState : (p.selected || []);
+  m.useEffect(function () { if (p.open) setDraftState(null); }, [p.open]);
+  function toggle(id) {
+    setDraftState(function (prev) {
+      var cur = (prev !== null ? prev : (p.selected || [])).slice(), i = cur.indexOf(id);
+      if (i >= 0) return cur.slice(0, i).concat(cur.slice(i + 1));
+      return cur.concat([id]);
+    });
+  }
+  function groupAll(g) {
+    var ids = exportable.filter(function (c) { return pgyKolColumnGroupOf(c) === g; }).map(function (c) { return c.id; });
+    return ids.length > 0 && ids.every(function (id) { return effective.indexOf(id) >= 0; });
+  }
+  function toggleGroup(g) {
+    var ids = exportable.filter(function (c) { return pgyKolColumnGroupOf(c) === g; }).map(function (c) { return c.id; });
+    setDraftState(function (prev) {
+      var cur = (prev !== null ? prev : (p.selected || [])).slice(), all = ids.every(function (id) { return cur.indexOf(id) >= 0; });
+      var next = all ? cur.filter(function (id) { return ids.indexOf(id) < 0; }) : cur.slice();
+      if (!all) {
+        ids.forEach(function (id) { if (next.indexOf(id) < 0) next.push(id); });
+      }
+      return next;
+    });
+  }
+  function check(id, label) {
+    var sel = effective.indexOf(id) >= 0;
+    return o.jsxs(x, {
+      key: id, onClick: function () { toggle(id); },
+      sx: { display: "flex", alignItems: "center", gap: 0.5, minHeight: 26, cursor: "pointer", px: 0.25 },
+      children: [
+        o.jsx(x, { sx: { width: 14, height: 14, borderRadius: 2, border: "1px solid", borderColor: sel ? "#ff2442" : "#c9cdd4", bgcolor: sel ? "#ff2442" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", flexShrink: 0 }, children: sel ? "✓" : null }),
+        o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.7)" }, children: label }),
+      ],
+    });
+  }
+  var closeBtn = o.jsx(te, { size: "small", sx: { ml: "auto", p: 0.25 }, onClick: p.onClose, children: o.jsx(B, { icon: "mdi:close", width: 18, height: 18 }) });
+  return o.jsxs(ue, {
+    open: p.open, onClose: p.onClose, maxWidth: "sm", fullWidth: true,
+    children: [
+      o.jsx(be, { children: o.jsxs(x, { sx: { display: "flex", alignItems: "center", gap: 1 }, children: [o.jsx(w, { variant: "subtitle1", fontWeight: 600, children: "选择采集字段" }), closeBtn] }) }),
+      o.jsxs(pe, {
+        children: [
+          o.jsx(oe, { severity: "info", sx: { mb: 1 }, children: "勾选字段过多会增加采集时间，可能触发平台风控，建议按需勾选。" }),
+          o.jsx(x, { sx: { maxHeight: 440, overflowY: "auto" }, children: groupNames.map(function (g) {
+            var cols = exportable.filter(function (c) { return pgyKolColumnGroupOf(c) === g; });
+            return o.jsxs(x, { key: g, sx: { mb: 1 }, children: [
+              o.jsxs(x, { onClick: function () { toggleGroup(g); }, sx: { display: "flex", alignItems: "center", gap: 0.5, cursor: "pointer", mb: 0.25 }, children: [
+                o.jsx(x, { sx: { width: 14, height: 14, borderRadius: 2, border: "1px solid", borderColor: groupAll(g) ? "#ff2442" : "#c9cdd4", bgcolor: groupAll(g) ? "#ff2442" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", flexShrink: 0 }, children: groupAll(g) ? "✓" : null }),
+                o.jsx(w, { sx: { fontSize: 13, fontWeight: 600, color: "rgba(0,0,0,.85)" }, children: g }),
+                o.jsx(w, { sx: { fontSize: 12, color: "rgba(0,0,0,.35)" }, children: "全选" }),
+              ] }),
+              o.jsxs(x, { sx: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.25 }, children: cols.map(function (c) { return check(c.id, c.label || c.id); }) }),
+            ] });
+          }) }),
+o.jsx(w, { sx: { fontSize: 12, color: "rgba(0,0,0,.45)", display: "block", mt: 1 }, children: "已选 " + effective.length + " 项" }),
+        ],
+      }),
+      o.jsxs(_e, {
+        children: [
+          o.jsx($, { onClick: p.onClose, children: "取消" }),
+          o.jsx($, { variant: "contained", disabled: effective.length === 0, onClick: function () { p.onApply(effective.slice()); p.onClose(); }, children: "提交" }),
+        ],
+      }),
+    ],
+  });
+}
+
 function PgyKolColumnDialog(p) {
   var fixedIds = pgyKolFixedColumnIds(), list = p.columns || [], hideFixed = !!p.hideFixed, title = p.title || "自定义列";
   var officialColumns = pgyKolOfficialMetricColumns(list);
@@ -2118,7 +2201,9 @@ function PgyKolSearchPage() {
   }
 
   var bridgeOk = !!(window.bridge && window.bridge.pgyKol);
-  var areasCfg = configs.areas || null;
+  var areasCfg = configs.areas && configs.areas.nodes && configs.areas.nodes.length
+    ? configs.areas
+    : { source: "china-fallback", warning: configs.areas && configs.areas.error ? "地域接口不可用，已使用内置省市数据" : null, nodes: pgyKolChinaAreasFallback() };
   var autoCfg = configs.automotive || null;
   var audCfg = configs.audience20 || null;
   var themeCfg = configs.contentTheme || null;
@@ -2600,7 +2685,7 @@ function PgyKolSearchPage() {
 
         /* 弹窗 */
         o.jsx(PgyKolColumnDialog, { open: columnOpen, onClose: function () { setColumnOpen(false); }, columns: columnList, error: columnError, selected: selectedColumns, onApply: function (ids) { setSelectedColumns(ids); pgyKolWriteJson("magiorix-pgy-kol-columns", ids); } }),
-        o.jsx(PgyKolColumnDialog, { open: collectOpen, onClose: function () { setCollectOpen(false); }, columns: exportableColumns, selected: collectColumns, hideFixed: true, title: "选择采集字段", onApply: function (ids) { setCollectOpen(false); startBatchWithColumns(ids); } }),
+        o.jsx(PgyKolCollectDialog, { open: collectOpen, onClose: function () { setCollectOpen(false); }, columns: exportableColumns, selected: collectColumns, onApply: function (ids) { setCollectOpen(false); startBatchWithColumns(ids); } }),
         o.jsx(PgyKolBrandPopup, { open: brandPopupMode != null, onClose: function () { setBrandPopupMode(null); }, mode: brandPopupMode, current: brandPopupMode === "recent" ? filter.tradeReportBrandIdSet : filter.brands, onApply: applyBrands }),
         o.jsx(PgyKolNoteCategoryPopup, { open: categoryOpen, anchor: noteAnchor, onClose: function () { setCategoryOpen(false); }, nodes: noteCats, industry: catIndustry, onSelectIndustry: setCatIndustry, selected: filter.noteCategory, onToggle: function (next) { update({ noteCategory: next }); } }),
         o.jsx(PgyKolIndustryPopup, { open: industryPopupOpen, onClose: function () { setIndustryPopupOpen(false); }, cfg: configs.industry, first: filter.firstIndustry, second: filter.secondIndustry, onFirst: function (v) { update({ firstIndustry: v }); }, onSecond: function (v) { update({ secondIndustry: v }); } }),

@@ -1242,6 +1242,70 @@ test("region cascade keeps foreign countries as direct leaves and 中国 expands
   assert.equal(picked[1].label, "天河区");
 });
 
+test("china fallback covers all 34 provincial regions so 中国 always expands even without the areas API", () => {
+  const runtime = pageRuntime();
+  const fallback = runtime.pgyKolChinaAreasFallback();
+  assert.equal(fallback.length, 1, "fallback must be a single 中国 tree");
+  assert.equal(fallback[0].label, "中国");
+  const provinces = fallback[0].children.map((node) => node.label);
+  assert.equal(provinces.length, 34, "fallback must cover all 34 provincial regions");
+  for (const required of ["北京", "上海", "广东", "浙江", "河北", "新疆", "西藏", "香港", "澳门", "台湾"]) {
+    assert.ok(provinces.includes(required), "fallback must include " + required);
+  }
+  const beijing = fallback[0].children.find((node) => node.label === "北京");
+  assert.ok(beijing.children.length >= 16, "北京 must include its districts");
+  const guangdong = fallback[0].children.find((node) => node.label === "广东");
+  assert.ok(guangdong.children.some((city) => city.label === "广州市"), "广东 must include 广州市");
+  assert.equal(beijing.path, "中国 北京");
+  assert.equal(guangdong.children.find((city) => city.label === "广州市").path, "中国 广东 广州市");
+  // 接口失败时 areasCfg 降级到 fallback（页面接线）。
+  assert.match(
+    pageSource,
+    /areasCfg = configs\.areas && configs\.areas\.nodes && configs\.areas\.nodes\.length[\s\S]*?pgyKolChinaAreasFallback\(\)/,
+    "areasCfg must fall back to the built-in tree when the API returns nothing",
+  );
+});
+
+test("collect dialog renders grouped checkboxes and submits the chosen ids", () => {
+  const runtime = pageRuntime();
+  const anchor = { getBoundingClientRect() { return { left: 0, top: 0 }; } };
+  const columns = [
+    { id: "nickname", label: "昵称", group: "博主信息" },
+    { id: "fansNum", label: "粉丝数", group: "账号数据" },
+    { id: "videoPrice", label: "视频报价", group: "博主报价" },
+    { id: "readMidNor30", label: "阅读中位数（日常）", group: "日常笔记数据" },
+  ];
+  const applied = [];
+  const renderer = statefulRenderer(runtime, runtime.PgyKolCollectDialog, {
+    open: true,
+    columns,
+    selected: ["nickname"],
+    onClose() {},
+    onApply(ids) { applied.push(ids.slice()); },
+  }, { scrollIntoView() {} });
+  let tree = renderer.render();
+  const labels = findVnodes(tree, (node) => node.props && node.props.children && typeof node.props.children === "string").map((node) => node.props.children);
+  assert.ok(labels.includes("选择采集字段"), "dialog must render its title");
+  assert.ok(labels.includes("账号数据"), "dialog must render the 账号数据 group");
+  assert.ok(labels.includes("日常笔记数据"), "dialog must render the 日常笔记数据 group");
+  assert.ok(labels.includes("视频报价"), "dialog must render field labels");
+  assert.ok(labels.includes("全选"), "groups must offer 全选");
+  // 点击字段切换（昵称 反选，粉丝数 选中）。
+  const toggleFields = findVnodes(tree, (node) => typeof node.props.onClick === "function" && node.props.children && node.props.children.length === 2 && node.props.children[1] && node.props.children[1].props && node.props.children[1].props.children === "昵称");
+  assert.ok(toggleFields.length >= 1, "field row must be clickable");
+  toggleFields[0].props.onClick();
+  tree = renderer.render();
+  const fansRow = findVnodes(tree, (node) => typeof node.props.onClick === "function" && node.props.children && node.props.children.length === 2 && node.props.children[1] && node.props.children[1].props && node.props.children[1].props.children === "粉丝数");
+  assert.ok(fansRow.length >= 1);
+  fansRow[0].props.onClick();
+  tree = renderer.render();
+  const submit = findVnodes(tree, (node) => node.props && node.props.children === "提交" && typeof node.props.onClick === "function")[0];
+  assert.ok(submit, "dialog must render 提交");
+  submit.props.onClick();
+  assert.equal(applied.length, 1);
+  assert.deepEqual(applied[0].sort(), ["fansNum"], "submit must apply the toggled selection");
+});
+
 test("a paused history task loads, scrolls its detail into view, and exposes continue/cancel/export", async () => {
   const paused = {
     taskId: "fixture-paused-task",
@@ -1755,7 +1819,11 @@ test("collect flow opens the field-selection dialog before batch start; export u
   });
   // 字段选择在"开始采集"时弹出（采集前决定采集字段），导出直接用任务快照列。
   assert.match(pageSource, /setCollectOpen\(true\)/, "start batch must open the field-selection dialog");
-  assert.match(pageSource, /title: "选择采集字段"/, "collect dialog title must be 选择采集字段");
+  assert.ok(pageSource.includes('children: "选择采集字段"'), "collect dialog title must be 选择采集字段");
+  assert.ok(pageSource.includes("function PgyKolCollectDialog(p)"), "collect dialog must be the grouped checkbox component");
+  assert.ok(pageSource.includes('children: "勾选字段过多会增加采集时间，可能触发平台风控，建议按需勾选。"'), "collect dialog must carry the risk hint");
+  assert.ok(pageSource.includes('children: "提交"'), "collect dialog must submit with 提交");
+  assert.ok(pageSource.includes('children: "全选"'), "collect dialog groups must offer 全选");
   assert.match(pageSource, /startBatchWithColumns\(ids\)/, "dialog confirm must start the batch with the chosen columns");
   assert.match(pageSource, /searchCoordinator\.startBatch\(ids\)/, "batch start must delegate the chosen columns to the coordinator");
   assert.match(pageSource, /bridge\.batchExport\(\{ taskId: tid \}\)/, "export must use the task snapshot columns without a second dialog");
@@ -2096,8 +2164,7 @@ test("Phase 5 page source calls the batch bridge methods with the right payloads
   assert.match(pageSource, /batchCancel\(\{ taskId: tid \}\)/);
   assert.match(pageSource, /bridge\.batchExport\(\{ taskId: tid \}\)/, "export must use the task snapshot columns");
   assert.match(pageSource, /setCollectOpen\(true\)/, "collect action must open the field-selection dialog");
-  assert.match(pageSource, /title: "选择采集字段"/, "collect dialog must carry the collect column title");
-  assert.match(pageSource, /hideFixed: true/, "collect dialog must hide the fixed column pane");
+  assert.ok(pageSource.includes('children: "选择采集字段"'), "collect dialog must carry the collect column title");
   assert.match(pageSource, /disabled: batchBusy \|\| batchRunning/, "start button must be disabled while busy or running");
 });
 
