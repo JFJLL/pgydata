@@ -209,7 +209,7 @@ function PgyKolBrandPopup(p){var kw=m.useState(""),keyword=kw[0],setKeyword=kw[1
 
 function PgyKolNoteCatNode(p){var node=p.node,level=p.level||0,prefix=p.prefix||[],sel=p.selected||[],onToggle=p.onToggle,has=node.children&&node.children.length>0,os=m.useState(false),open=os[0],setOpen=os[1],here=prefix.concat([String(node.label||node.value||"")]);function pathOf(n,acc){var h2=acc.concat([String(n.label||n.value||"")]);if(n.children&&n.children.length>0){var out=[];for(var i=0;i<n.children.length;i++)out=out.concat(pathOf(n.children[i],h2));return out}return [h2.join(" ")]}var paths=has?[]:pathOf(node,prefix),isSel=!has&&paths.length===1&&sel.indexOf(paths[0])>=0;return o.jsxs(x,{sx:{pl:level*1.5},children:[o.jsxs(x,{sx:{display:"flex",alignItems:"center",minHeight:30,gap:.25},children:[has?o.jsx(te,{size:"small",sx:{p:.25},onClick:function(e){e.stopPropagation();setOpen(!open)},children:o.jsx(B,{icon:open?"solar:alt-arrow-up-bold-duotone":"solar:alt-arrow-down-bold-duotone",width:14,height:14})}):o.jsx(x,{sx:{width:24}}),o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:.75,flex:1,cursor:has?"default":"pointer",py:.5},onClick:function(){if(!has&&paths.length===1)onToggle(paths[0])},children:[o.jsx(x,{sx:{width:16,height:16,borderRadius:2,border:"1px solid",borderColor:isSel?"primary.main":"divider",bgcolor:isSel?"primary.main":"transparent",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,flexShrink:0},children:isSel?"✓":null}),o.jsx(w,{variant:"body2",sx:{wordBreak:"break-all"},children:String(node.label||node.value||"")})]})]}),open&&has&&node.children.map(function(c){return o.jsx(PgyKolNoteCatNode,{key:String(c.label||c.value||"")+"|"+level,node:c,level:level+1,prefix:here,selected:sel,onToggle:onToggle})})]})}
 
-function PgyKolNoteCategoryPopup(p){var inds=p.nodes&&p.nodes.length?p.nodes:pgyKolNoteCatFallback();var ind=inds.find(function(n){return String(n.label||n.value)===p.industry})||inds[0]||null;var nodes=ind&&ind.children?ind.children:[];var sel=p.selected||[];function toggleLeaf(path){var i=sel.indexOf(path),next=i>=0?sel.slice(0,i).concat(sel.slice(i+1)):sel.concat([path]);p.onToggle(next)}var indRow=o.jsxs(x,{sx:{display:"flex",gap:.5,mb:1,flexWrap:"wrap"},children:inds.map(function(n){var lab=String(n.label||n.value||"");return o.jsx(f1,{key:pgyKolNodeKey(n),size:"small",label:lab,color:p.industry===lab?"primary":"default",variant:p.industry===lab?"filled":"outlined",onClick:function(){p.onSelectIndustry(lab)}})})});var tree=nodes.length>0?o.jsxs(x,{sx:{maxHeight:300,overflowY:"auto",border:"1px solid",borderColor:"divider",borderRadius:1,p:.5},children:nodes.map(function(n){return o.jsx(PgyKolNoteCatNode,{key:String(n.label||n.value||""),node:n,level:0,prefix:[String(ind&&(ind.label||ind.value||""))].filter(Boolean),selected:sel,onToggle:toggleLeaf})})}):o.jsx(w,{variant:"body2",color:"text.secondary",children:"该行业暂无子类目"});var countLine=o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",mt:1},children:"已选 "+sel.length+" 项"});return o.jsx(PgyKolPop,{open:p.open,anchor:p.anchor,onClose:p.onClose,width:360,preferredHeight:420,children:o.jsxs(x,{sx:{display:"flex",flexDirection:"column",minHeight:0,flex:1},children:[o.jsx(PgyKolPopHeader,{title:"笔记类目",onClose:p.onClose}),o.jsxs(x,{sx:{p:1,display:"flex",flexDirection:"column",minHeight:0,flexGrow:1},children:[indRow,tree,countLine]})]})})}
+function PgyKolNoteCategoryPopup(p){var inds=p.nodes&&p.nodes.length?p.nodes:pgyKolNoteCatFallback();var ind=inds.find(function(n){return String(n.label||n.value)===p.industry})||inds[0]||null;var nodes=ind&&ind.children?ind.children:[];var sel=p.selected||[];function toggleLeaf(path){var i=sel.indexOf(path),next=i>=0?sel.slice(0,i).concat(sel.slice(i+1)):sel.concat([path]);p.onToggle(next)}var tree=nodes.length>0?o.jsxs(x,{sx:{maxHeight:360,overflowY:"auto",border:"1px solid",borderColor:"divider",borderRadius:1,p:.5},children:nodes.map(function(n){return o.jsx(PgyKolNoteCatNode,{key:String(n.label||n.value||""),node:n,level:0,prefix:[String(ind&&(ind.label||ind.value||""))].filter(Boolean),selected:sel,onToggle:toggleLeaf})})}):o.jsx(w,{variant:"body2",color:"text.secondary",children:"该行业暂无子类目"});var countLine=o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",mt:1},children:"已选 "+sel.length+" 项"});return o.jsx(PgyKolPop,{open:p.open,anchor:p.anchor,onClose:p.onClose,width:340,preferredHeight:440,children:o.jsxs(x,{sx:{display:"flex",flexDirection:"column",minHeight:0,flex:1},children:[o.jsx(PgyKolPopHeader,{title:String(ind&&(ind.label||ind.value||""))||"笔记类目",onClose:p.onClose}),o.jsxs(x,{sx:{p:1,display:"flex",flexDirection:"column",minHeight:0,flexGrow:1},children:[tree,countLine]})]})})}
 
 function PgyKolIndustryPopup(p){var firsts=p.cfg&&p.cfg.nodes&&p.cfg.nodes.length?p.cfg.nodes:[];var firstSel=firsts.find(function(n){return String(n.label||n.value)===p.first})||null;var seconds=firstSel&&firstSel.children?firstSel.children:[];var closeBtn=o.jsx(te,{size:"small",sx:{ml:"auto"},onClick:p.onClose,children:o.jsx(B,{icon:"mdi:close",width:18,height:18})});var header=o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:"行业推荐博主"}),closeBtn]})});var tip=o.jsx(w,{variant:"caption",color:"text.secondary",children:"选择行业后，平台优先展示该行业下内容更匹配、数据更优质的博主"});var emptyTip=firsts.length===0?o.jsx(w,{variant:"body2",color:"text.secondary",children:"行业列表加载中…"}):null;var firstRow=firsts.length>0?o.jsxs(x,{children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"一级行业"}),o.jsx(PgyKolChips,{options:firsts,keyOf:function(n){return pgyKolNodeKey(n)},selected:p.first?[firsts.find(function(n){return String(n.label||n.value)===p.first})].filter(Boolean):[],onToggle:function(n){p.onFirst(String(n.label||n.value));p.onSecond("")}})]}):null;var secondRow=seconds.length>0?o.jsxs(x,{children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"二级行业"}),o.jsx(PgyKolChips,{options:seconds,keyOf:function(n){return pgyKolNodeKey(n)},selected:p.second?[seconds.find(function(n){return String(n.label||n.value)===p.second})].filter(Boolean):[],onToggle:function(n){p.onSecond(String(n.label||n.value))}})]}):null;return o.jsxs(ue,{open:p.open,onClose:p.onClose,maxWidth:"sm",fullWidth:true,children:[header,o.jsxs(pe,{children:[tip,emptyTip,firstRow,secondRow]})]})}
 
@@ -901,33 +901,57 @@ function PgyKolTreePop(p) {
 /* ============ Phase 5.2：地域三级级联 Popover（省/市/区县） ============ */
 function PgyKolCascadePop(p) {
   var rawNodes = p.cfg && p.cfg.nodes ? p.cfg.nodes : [];
-  // 官网地域为省/市/区县三级：若数据根层包含「中国」国家节点，
-  // 展示时跳过国家层，直接用其子节点作为省份列（选中节点仍携带完整
-  // fullPath 含 中国，序列化契约不变）。
-  var country = null;
+  // 官网地域为「国家→省→市→区县」多级：国家列同时包含中国（可继续展开）
+  // 与外国（无子级，直接选中）；中国节点来自 areas 配置，其余国家按官方列表补充。
+  var chinaNode = null;
   for (var ci = 0; ci < rawNodes.length; ci++) {
     if (rawNodes[ci].children && rawNodes[ci].children.length &&
       (String(rawNodes[ci].label || "") === "中国" || String(rawNodes[ci].value || "") === "中国")) {
-      country = rawNodes[ci];
+      chinaNode = rawNodes[ci];
       break;
     }
   }
-  var nodes = country ? country.children : rawNodes;
+  var countryNodes = [{ value: "全部", label: "全部" }];
+  if (chinaNode) {
+    countryNodes.push(chinaNode);
+  } else {
+    countryNodes.push({ value: "中国", label: "中国" });
+  }
+  (pgyKolCountryOptions || []).forEach(function (c) {
+    if (c.value !== "全部" && c.value !== "中国") {
+      countryNodes.push({ value: c.value, label: c.label });
+    }
+  });
+  var st0 = m.useState(null), country0 = st0[0], setCountry0 = st0[1];
   var st1 = m.useState(null), level1 = st1[0], setLevel1 = st1[1];
   var st2 = m.useState(null), level2 = st2[0], setLevel2 = st2[1];
   var st3 = m.useState(null), level3 = st3[0], setLevel3 = st3[1];
   m.useEffect(function () {
     if (p.open) {
+      setCountry0(null);
       setLevel1(null);
       setLevel2(null);
       setLevel3(null);
     }
   }, [p.open]);
-  var l1Children = level1 && level1.children ? level1.children : [];
-  var l2Children = level2 && level2.children ? level2.children : [];
+  var l1Children = country0 && country0.children && country0.children.length ? country0.children : [];
+  var l2Children = level1 && level1.children ? level1.children : [];
+  var l3Children = level2 && level2.children ? level2.children : [];
   function finish(n) {
     p.onSelect(n);
     p.onClose();
+  }
+  function pick0(n) {
+    setCountry0(n);
+    setLevel1(null);
+    setLevel2(null);
+    setLevel3(null);
+    if (String(n.value || n.label || "") === "全部") {
+      p.onClear();
+      p.onClose();
+      return;
+    }
+    if (!n.children || !n.children.length) finish(n);
   }
   function pick1(n) {
     setLevel1(n);
@@ -985,14 +1009,15 @@ function PgyKolCascadePop(p) {
       sx: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" },
       children: [
         o.jsx(PgyKolPopHeader, { title: p.title, onClose: p.onClose }),
-        nodes.length === 0
+        countryNodes.length === 0
           ? o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)", py: 1 }, children: "地域数据加载中…" })
           : o.jsxs(x, {
               sx: { display: "flex", gap: 1, flexGrow: 1, minHeight: 0, overflow: "hidden" },
               children: [
-                col("省份", nodes, level1 ? pgyKolNodeKey(level1) : null, pick1),
-                l1Children.length > 0 ? col("城市", l1Children, level2 ? pgyKolNodeKey(level2) : null, pick2) : null,
-                l2Children.length > 0 ? col("区县", l2Children, level3 ? pgyKolNodeKey(level3) : null, pick3) : null,
+                col("国家/地区", countryNodes, country0 ? pgyKolNodeKey(country0) : null, pick0),
+                l1Children.length > 0 ? col("省份", l1Children, level1 ? pgyKolNodeKey(level1) : null, pick1) : null,
+                l2Children.length > 0 ? col("城市", l2Children, level2 ? pgyKolNodeKey(level2) : null, pick2) : null,
+                l3Children.length > 0 ? col("区县", l3Children, level3 ? pgyKolNodeKey(level3) : null, pick3) : null,
               ],
             }),
         o.jsxs(x, {
@@ -1000,10 +1025,10 @@ function PgyKolCascadePop(p) {
           children: [
             o.jsx(w, {
               sx: { fontSize: 12, color: "rgba(0,0,0,.45)", mr: "auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-              children: "已选：" + ((level3 || level2 || level1) ? pgyKolOptLabel(level3 || level2 || level1) : "未选择"),
+              children: "已选：" + ((level3 || level2 || level1 || country0) ? pgyKolOptLabel(level3 || level2 || level1 || country0) : "未选择"),
             }),
             o.jsx($, { size: "small", variant: "outlined", onClick: function () { p.onClear(); p.onClose(); }, children: "清空" }),
-            o.jsx($, { size: "small", variant: "contained", disabled: !level1, onClick: function () { finish(level3 || level2 || level1); }, children: "确定" }),
+            o.jsx($, { size: "small", variant: "contained", disabled: !level1 && !country0, onClick: function () { finish(level3 || level2 || level1 || country0); }, children: "确定" }),
           ],
         }),
       ],
@@ -1550,9 +1575,8 @@ function PgyKolSearchPage() {
   var catOpen = m.useState(false), categoryOpen = catOpen[0], setCategoryOpen = catOpen[1];
   var catInd = m.useState("汽车"), catIndustry = catInd[0], setCatIndustry = catInd[1];
   var catAnchorState = m.useState(null), noteAnchor = catAnchorState[0], setNoteAnchor = catAnchorState[1];
-  var exOpen = m.useState(false), exportOpen = exOpen[0], setExportOpen = exOpen[1];
-  var exTid = m.useState(null), exportTaskId = exTid[0], setExportTaskId = exTid[1];
-  var exCols = m.useState([]), exportColumns = exCols[0], setExportColumns = exCols[1];
+  var coOpen = m.useState(false), collectOpen = coOpen[0], setCollectOpen = coOpen[1];
+  var coCols = m.useState([]), collectColumns = coCols[0], setCollectColumns = coCols[1];
   var brandPopup = m.useState(null), brandPopupMode = brandPopup[0], setBrandPopupMode = brandPopup[1];
   var showAllCat = m.useState(true), showAllCategory = showAllCat[0], setShowAllCategory = showAllCat[1];
   var restored = m.useState(false), restoredNotice = restored[0], setRestoredNotice = restored[1];
@@ -1935,9 +1959,14 @@ function PgyKolSearchPage() {
       setBatchError({ code: "filter-not-applied", message: "请先确定筛选并查询" });
       return;
     }
+    setCollectColumns(exportColumns);
+    setCollectOpen(true);
+  };
+  var startBatchWithColumns = function (ids) {
+    if (batchBusy || !ids || !ids.length) return;
     setBatchBusy(true);
     setBatchError(null);
-    searchCoordinator.startBatch(exportColumns).then(function (res) {
+    searchCoordinator.startBatch(ids).then(function (res) {
       setBatchBusy(false);
       if (res && res.ok) {
         var tid = res.data && res.data.taskId;
@@ -2011,20 +2040,13 @@ function PgyKolSearchPage() {
   var exportTask = function (tid) {
     var bridge = window.bridge && window.bridge.pgyKol;
     if (!bridge || !bridge.batchExport || !tid) return;
-    setExportTaskId(tid);
-    setExportColumns(pgyKolExportColumnIds(columnList, selectedColumns));
-    setExportOpen(true);
-  };
-  var doExport = function (ids) {
-    var bridge = window.bridge && window.bridge.pgyKol;
-    if (!bridge || !bridge.batchExport || !exportTaskId) return;
     setBatchBusy(true);
     setBatchError(null);
     setBatchNotice(null);
-    bridge.batchExport({ taskId: exportTaskId, columns: ids && ids.length ? ids : undefined }).then(function (res) {
+    bridge.batchExport({ taskId: tid }).then(function (res) {
       setBatchBusy(false);
       if (res && res.ok) {
-        setBatchNotice("导出已提交：" + exportTaskId + "（完整数据以导出文件为准）");
+        setBatchNotice("导出已提交：" + tid + "（完整数据以导出文件为准）");
       } else {
         setBatchError(res && res.error || { code: "unknown", message: "导出失败" });
       }
@@ -2578,7 +2600,7 @@ function PgyKolSearchPage() {
 
         /* 弹窗 */
         o.jsx(PgyKolColumnDialog, { open: columnOpen, onClose: function () { setColumnOpen(false); }, columns: columnList, error: columnError, selected: selectedColumns, onApply: function (ids) { setSelectedColumns(ids); pgyKolWriteJson("magiorix-pgy-kol-columns", ids); } }),
-        o.jsx(PgyKolColumnDialog, { open: exportOpen, onClose: function () { setExportOpen(false); }, columns: exportableColumns, selected: exportColumns, hideFixed: true, title: "选择导出字段", onApply: function (ids) { setExportOpen(false); doExport(ids); } }),
+        o.jsx(PgyKolColumnDialog, { open: collectOpen, onClose: function () { setCollectOpen(false); }, columns: exportableColumns, selected: collectColumns, hideFixed: true, title: "选择采集字段", onApply: function (ids) { setCollectOpen(false); startBatchWithColumns(ids); } }),
         o.jsx(PgyKolBrandPopup, { open: brandPopupMode != null, onClose: function () { setBrandPopupMode(null); }, mode: brandPopupMode, current: brandPopupMode === "recent" ? filter.tradeReportBrandIdSet : filter.brands, onApply: applyBrands }),
         o.jsx(PgyKolNoteCategoryPopup, { open: categoryOpen, anchor: noteAnchor, onClose: function () { setCategoryOpen(false); }, nodes: noteCats, industry: catIndustry, onSelectIndustry: setCatIndustry, selected: filter.noteCategory, onToggle: function (next) { update({ noteCategory: next }); } }),
         o.jsx(PgyKolIndustryPopup, { open: industryPopupOpen, onClose: function () { setIndustryPopupOpen(false); }, cfg: configs.industry, first: filter.firstIndustry, second: filter.secondIndustry, onFirst: function (v) { update({ firstIndustry: v }); }, onSecond: function (v) { update({ secondIndustry: v }); } }),

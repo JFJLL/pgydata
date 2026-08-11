@@ -1194,6 +1194,54 @@ test("the first three table headers and cells are truly sticky with cumulative l
   assert.notEqual(cells[3].props.sx.position, "sticky", "metric cells must continue to scroll horizontally");
 });
 
+test("region cascade keeps foreign countries as direct leaves and 中国 expands to provinces/cities", () => {
+  const runtime = pageRuntime();
+  const picked = [];
+  const anchor = { getBoundingClientRect() { return { left: 0, top: 0, right: 80, bottom: 28 }; } };
+  const props = {
+    open: true,
+    anchor,
+    title: "地域",
+    cfg: { nodes: [{ label: "中国", children: [{ label: "广东", children: [{ label: "广州", children: [{ label: "天河区" }] }] }] }] },
+    onSelect(n) { picked.push(JSON.parse(JSON.stringify({ value: n && n.value, label: n && n.label, path: n && n.path }))); },
+    onClear() {},
+    onClose() {},
+  };
+  const renderer = statefulRenderer(runtime, runtime.PgyKolCascadePop, props, { scrollIntoView() {} });
+  let tree = renderer.render();
+  const countryLabels = findVnodes(tree, (node) => node.props && node.props.onClick && typeof node.props.onClick === "function" && node.props.children && typeof node.props.children === "string")
+    .map((node) => node.props.children);
+  assert.ok(countryLabels.includes("中国"), "country column must include 中国");
+  assert.ok(countryLabels.includes("美国"), "country column must include foreign countries");
+  assert.ok(countryLabels.includes("全部"), "country column must include 全部");
+  // 点击外国国家：直接选中并关闭，不再展开省市。
+  const us = findVnodes(tree, (node) => node.props && node.props.children === "美国" && typeof node.props.onClick === "function")[0];
+  us.props.onClick();
+  tree = renderer.render();
+  assert.equal(picked.length, 1, "foreign country must be selectable directly");
+  assert.equal(picked[0].label, "美国");
+  // 点击中国：展开省份列。
+  const china = findVnodes(tree, (node) => node.props && node.props.children === "中国" && typeof node.props.onClick === "function")[0];
+  china.props.onClick();
+  tree = renderer.render();
+  const provinceLabels = findVnodes(tree, (node) => node.props && node.props.onClick && typeof node.props.onClick === "function" && node.props.children && typeof node.props.children === "string" && node.props.children === "广东");
+  assert.ok(provinceLabels.length >= 1, "selecting 中国 must reveal the province column");
+  // 点省份 → 城市列。
+  const gd = findVnodes(tree, (node) => node.props && node.props.children === "广东" && typeof node.props.onClick === "function")[0];
+  gd.props.onClick();
+  tree = renderer.render();
+  const city = findVnodes(tree, (node) => node.props && node.props.children === "广州" && typeof node.props.onClick === "function");
+  assert.ok(city.length >= 1, "selecting a province must reveal the city column");
+  // 点城市 → 区县并完成选择。
+  city[0].props.onClick();
+  tree = renderer.render();
+  const district = findVnodes(tree, (node) => node.props && node.props.children === "天河区" && typeof node.props.onClick === "function")[0];
+  assert.ok(district, "selecting a city must reveal the district column");
+  district.props.onClick();
+  assert.equal(picked.length, 2, "district selection must finish with the full-path node");
+  assert.equal(picked[1].label, "天河区");
+});
+
 test("a paused history task loads, scrolls its detail into view, and exposes continue/cancel/export", async () => {
   const paused = {
     taskId: "fixture-paused-task",
@@ -1698,20 +1746,19 @@ test("note category leaf paths keep the industry prefix so cross-industry leaves
   );
 });
 
-test("export flow opens a column-selection dialog and forwards the chosen columns", async () => {
+test("collect flow opens the field-selection dialog before batch start; export uses the task snapshot", async () => {
   const calls = [];
   const harness = searchPageHarness((filterState) => Promise.resolve(successResult()), {
     extraBridge: {
       batchExport(args) { calls.push(JSON.parse(JSON.stringify(args))); return Promise.resolve({ ok: true }); },
     },
   });
-  // 直接调用 exportTask（任务面板"导出"按钮的同一回调），应打开导出弹窗而非直接导出。
-  let tree = harness.renderer.render();
-  // 从组件闭包外无法拿到 exportTask，改为通过渲染出的任务面板按钮触发；这里直接验证源码契约：
-  assert.match(pageSource, /var exportTask = function \(tid\) \{[\s\S]*?setExportOpen\(true\)/, "exportTask must open the export dialog");
-  assert.match(pageSource, /bridge\.batchExport\(\{ taskId: exportTaskId, columns: ids && ids\.length \? ids : undefined \}\)/, "doExport must forward the selected columns");
-  assert.match(pageSource, /hideFixed: true/, "export dialog must hide fixed columns");
-  assert.match(pageSource, /title: "选择导出字段"/, "export dialog title must be 选择导出字段");
+  // 字段选择在"开始采集"时弹出（采集前决定采集字段），导出直接用任务快照列。
+  assert.match(pageSource, /setCollectOpen\(true\)/, "start batch must open the field-selection dialog");
+  assert.match(pageSource, /title: "选择采集字段"/, "collect dialog title must be 选择采集字段");
+  assert.match(pageSource, /startBatchWithColumns\(ids\)/, "dialog confirm must start the batch with the chosen columns");
+  assert.match(pageSource, /searchCoordinator\.startBatch\(ids\)/, "batch start must delegate the chosen columns to the coordinator");
+  assert.match(pageSource, /bridge\.batchExport\(\{ taskId: tid \}\)/, "export must use the task snapshot columns without a second dialog");
   assert.match(pageSource, /var exportableColumns = columnList \? columnList\.filter/, "exportable columns must be derived from the registry");
 });
 
@@ -1726,8 +1773,12 @@ test("note category popover anchors to the trigger and renders a popover instead
     "note category popup must render through PgyKolPop",
   );
   assert.ok(
-    pageSource.includes("o.jsx(PgyKolPopHeader,{title:\"笔记类目\",onClose:p.onClose})"),
-    "note category popup must use the popover header",
+    pageSource.includes('o.jsx(PgyKolPopHeader,{title:String(ind&&(ind.label||ind.value||""))||"笔记类目",onClose:p.onClose})'),
+    "note category popup must use the popover header with the triggered industry name",
+  );
+  assert.ok(
+    !pageSource.slice(pageSource.indexOf("function PgyKolNoteCategoryPopup"), pageSource.indexOf("function PgyKolNoteCatNode")).includes("onSelectIndustry"),
+    "note category popup must not render an industry-switch row (each industry is an independent entry)",
   );
   assert.ok(
     !pageSource.slice(pageSource.indexOf("function PgyKolNoteCategoryPopup"), pageSource.indexOf("function PgyKolNoteCatNode")).includes("maxWidth"),
@@ -2027,8 +2078,8 @@ test("Phase 5 page source calls the batch bridge methods with the right payloads
   assert.match(pageSource, /api\.batchStart\(\{filterState:pgyKolClone\(appliedRequestSnapshot\),columns:pgyKolClone\(columns\|\|\[\]\)\}\)/, "coordinator must submit only its frozen applied snapshot");
   assert.match(
     pageSource,
-    /searchCoordinator\.startBatch\(exportColumns\)/,
-    "page batch start must delegate its ordered exportable columns to the applied-snapshot coordinator",
+    /searchCoordinator\.startBatch\(ids\)/,
+    "page batch start must delegate the dialog-chosen columns to the applied-snapshot coordinator",
   );
   assert.match(
     pageSource,
@@ -2043,10 +2094,10 @@ test("Phase 5 page source calls the batch bridge methods with the right payloads
     "batchResume must forward budgets when provided",
   );
   assert.match(pageSource, /batchCancel\(\{ taskId: tid \}\)/);
-  assert.match(pageSource, /bridge\.batchExport\(\{ taskId: exportTaskId, columns: ids && ids\.length \? ids : undefined \}\)/, "export must forward the chosen columns");
-  assert.match(pageSource, /setExportOpen\(true\)/, "export action must open the column-selection dialog");
-  assert.match(pageSource, /title: "选择导出字段"/, "export dialog must carry the export column title");
-  assert.match(pageSource, /hideFixed: true/, "export dialog must hide the fixed column pane");
+  assert.match(pageSource, /bridge\.batchExport\(\{ taskId: tid \}\)/, "export must use the task snapshot columns");
+  assert.match(pageSource, /setCollectOpen\(true\)/, "collect action must open the field-selection dialog");
+  assert.match(pageSource, /title: "选择采集字段"/, "collect dialog must carry the collect column title");
+  assert.match(pageSource, /hideFixed: true/, "collect dialog must hide the fixed column pane");
   assert.match(pageSource, /disabled: batchBusy \|\| batchRunning/, "start button must be disabled while busy or running");
 });
 
