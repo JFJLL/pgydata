@@ -146,6 +146,12 @@ function PgyKolIndustryPopup(p){var firsts=p.cfg&&p.cfg.nodes&&p.cfg.nodes.lengt
 
 var pgyKolCategoryCommon=["全部","美妆","护肤","个人护理","母婴","时尚","美食","家居家装","影视综资讯","运动健身","宠物","文化艺术","兴趣爱好","生活记录","教育","职场"];
 var pgyKolCategoryFull=["全部","美妆","护肤","个人护理","母婴","时尚","美食","家居家装","影视综资讯","运动健身","宠物","文化艺术","兴趣爱好","生活记录","教育","职场","情感","摄影","游戏","科技数码","出行旅游","音乐","搞笑","健康养生","汽车","婚嫁","商业财经","素材","其他"];
+/* 博主类目二级树回退：官网 distributors-tags content_category 实测（2026-08-10）。
+ * 运行时优先使用 contentTagTree 配置（含 LKG），此表仅作两者都不可用时的兜底；
+ * 无二级类目的一级项（音乐/搞笑/健康养生/汽车/商业财经/素材/其他/职场）返回空数组。 */
+var pgyKolCategoryTreeFallback=[["美妆",["整体妆容","唇妆","眼妆","美甲","底妆","美妆合集","香水","美妆其他"]],["护肤",["面部保养","面部清洁","护肤合集","护肤其他"]],["个人护理",["头发产品","身体护理","口腔护理","护理其他"]],["母婴",["母婴日常","早教","婴童用品","婴童洗护","婴童食品","婴童时尚","孕期穿搭","孕产经验","产后恢复","育儿经验","宝宝才艺","宝宝写真","母婴其他"]],["时尚",["穿搭","配饰","发型","箱包","鞋靴","时尚其他"]],["美食",["美食教程","美食探店","美食展示","美食测评","吃播","美食其他"]],["家居家装",["装修","家居用品","家居装饰","家具","家电","室内设计","居家经验","家居家装其他"]],["影视综资讯",["动漫","电影","电视","娱乐资讯","影视","民生资讯","综艺","影视综其他"]],["运动健身",["健身减肥","健身塑形","滑雪","滑板","水上活动","运动其他","足球","篮球","跑步","游泳"]],["宠物",["猫","狗","动物其他"]],["文化艺术",["社科","文化","艺术","文化艺术其他"]],["兴趣爱好",["绘画","手工","阅读","文具手账","舞蹈","益智玩具","潮流玩具","兴趣爱好其他"]],["生活记录",["接地气生活","日常片段","中外生活","品质生活","校园生活"]],["教育",["大学教育","k12教育","家庭教育","学习日常","职场教育","教育其他"]],["情感",["情感知识","情感日常","情感其他"]],["摄影",["人文风光摄影","摄影技巧","胶片摄影","人像摄影","摄影其他"]],["游戏",["手机游戏","主机游戏","游戏其他","线下游戏"]],["科技数码",["数码","玩机攻略","数码科技其他"]],["出行旅游",["城市出行","户外","旅行"]],["婚嫁",["婚礼造型","婚礼记录","婚礼经验","婚礼用品"]]];
+function pgyKolCategoryTreeNodes(cfg){var live=cfg&&cfg.nodes&&cfg.nodes.length?cfg.nodes:null;if(!live)return pgyKolCategoryTreeFallback.map(function(pair){return{value:pair[0],label:pair[0],children:pair[1].map(function(s){return{value:s,label:s,children:[]}})}});var fb={};for(var i=0;i<pgyKolCategoryTreeFallback.length;i++)fb[pgyKolCategoryTreeFallback[i][0]]=pgyKolCategoryTreeFallback[i][1];return live.map(function(n){var kids=n&&Array.isArray(n.children)&&n.children.length?n.children:null;if(!kids){var fk=fb[n.value]||fb[n.label]||[];kids=fk.map(function(s){return{value:s,label:s,children:[]}})}return{value:n.value,label:n.label||n.value,children:kids||[]}})}
+function pgyKolCategoryNodeKids(nodes,value){if(!Array.isArray(nodes))return[];for(var i=0;i<nodes.length;i++)if(nodes[i]&&nodes[i].value===value)return nodes[i].children||[];return[]}
 var pgyKolMarketOptions=pgyKolStaticOptions(["曝光","种草","转化"]);
 var pgyKolGenderOptions=pgyKolStaticOptions(["不限","男","女"]);
 var pgyKolSignedOptions=pgyKolStaticOptions(["不限","个人博主","机构博主"]);
@@ -253,6 +259,8 @@ function PgyKolTrigger(p) {
     onClick: function (e) {
       if (!dis && !dim) p.onOpen(e);
     },
+    onMouseEnter: p.onMouseEnter,
+    onMouseLeave: p.onMouseLeave,
     sx: {
       display: "inline-flex",
       alignItems: "center",
@@ -319,16 +327,22 @@ function PgyKolPop(p) {
   var left = rect ? rect.left : 0;
   var below = rect ? window.innerHeight - rect.bottom : 0;
   var above = rect ? rect.top : 0;
-  var placeBelow = !rect || below >= preferredH + gap || below >= above;
-  var top = rect && placeBelow ? rect.bottom + gap : 8;
+  /* 官网行为（2026-08-10 实测）：弹层优先在触发项正下方打开，按可用空间收短并内部滚动；
+   * 仅当下方空间不足以显示最少内容时翻转到上方，且弹层底部与触发项顶部对齐，
+   * 绝不把弹层钉在视口顶端（修复「近期合作行业筛选项飞到页面顶部」）。 */
+  var minVisible = Math.min(96, preferredH);
+  var placeBelow = !rect || below >= minVisible;
+  var top = rect && placeBelow ? rect.bottom + gap : "auto";
   var bottom = rect && !placeBelow ? Math.max(8, window.innerHeight - rect.top + gap) : "auto";
   if (rect && left + w > window.innerWidth - 8) left = Math.max(8, window.innerWidth - w - 8);
   var availableH = rect ? (placeBelow ? below - gap - 8 : above - gap - 8) : window.innerHeight - 16;
   var maxH = Math.max(0, Math.min(p.maxHeight || 360, window.innerHeight - 16, availableH));
   return o.jsxs(x, {
     children: [
-      o.jsx(x, { sx: { position: "fixed", left: 0, top: 0, right: 0, bottom: 0, zIndex: 1399 }, onClick: p.onClose }),
+      p.noBackdrop ? null : o.jsx(x, { sx: { position: "fixed", left: 0, top: 0, right: 0, bottom: 0, zIndex: 1399 }, onClick: p.onClose }),
       o.jsxs(x, {
+        onMouseEnter: p.onMouseEnter,
+        onMouseLeave: p.onMouseLeave,
         sx: {
           position: "fixed",
           left: left,
@@ -595,7 +609,10 @@ function PgyKolOfficialSimpleMenu(p) {
     anchor: p.anchor,
     onClose: p.onClose,
     width: 228,
-    preferredHeight: Math.min(360, 12 + (p.options || []).length * 36),
+    /* 官网规格（2026-08-10 实测）：最高 261px，内容超出时内部滚动。 */
+    preferredHeight: 261,
+    maxHeight: 261,
+    overflow: "auto",
     children: o.jsx(x, {
       sx: { display: "flex", flexDirection: "column" },
       children: (p.options || []).map(function (n) {
@@ -1070,6 +1087,96 @@ function PgyKolInlineOptions(p) {
   });
 }
 
+/* ============ Phase 5.2：博主类目两级悬停选择（官网 2026-08-10 实测） ============ */
+function PgyKolCategoryChips(p) {
+  var hs = m.useState(null), hover = hs[0], setHover = hs[1];
+  var leaveTimer = m.useRef(null);
+  function cancelLeave() {
+    if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
+  }
+  function scheduleLeave() {
+    cancelLeave();
+    leaveTimer.current = window.setTimeout(function () { setHover(null); }, 180);
+  }
+  function enter(node, e) {
+    cancelLeave();
+    setHover({ node: node, anchor: e && e.currentTarget ? e.currentTarget : null });
+  }
+  var selected = p.selected || [];
+  return o.jsxs(x, {
+    sx: { display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" },
+    children: [
+      p.options.map(function (n) {
+        var isAll = n.value === "全部";
+        var active = isAll ? selected.indexOf("全部") >= 0 : p.isActive(n);
+        return o.jsx(PgyKolTrigger, {
+          key: n.value,
+          label: n.label,
+          arrow: false,
+          selected: active,
+          onOpen: function () { if (isAll) p.onToggleAll(); else p.onToggleWhole(n); },
+          onMouseEnter: function (e) { if (!isAll) enter(n, e); },
+          onMouseLeave: scheduleLeave,
+        });
+      }),
+      hover && hover.node && hover.node.children && hover.node.children.length
+        ? o.jsx(PgyKolCategoryPop, {
+            open: true,
+            anchor: hover.anchor,
+            node: hover.node,
+            selected: selected,
+            onToggleLeaf: function (leaf) { p.onToggleLeaf(hover.node, leaf); },
+            onClose: function () { setHover(null); },
+            onMouseEnter: cancelLeave,
+            onMouseLeave: scheduleLeave,
+          })
+        : null,
+    ],
+  });
+}
+
+function PgyKolCategoryPop(p) {
+  var leaves = p.node && p.node.children ? p.node.children : [];
+  var per = 6;
+  var cols = [];
+  for (var i = 0; i < leaves.length; i += per) cols.push(leaves.slice(i, i + per));
+  var selected = p.selected || [];
+  var whole = selected.indexOf(p.node.value) >= 0;
+  return o.jsx(PgyKolPop, {
+    open: p.open,
+    anchor: p.anchor,
+    onClose: p.onClose,
+    noBackdrop: true,
+    width: 280,
+    preferredHeight: 232,
+    maxHeight: 232,
+    overflow: "auto",
+    onMouseEnter: p.onMouseEnter,
+    onMouseLeave: p.onMouseLeave,
+    children: cols.length === 0
+      ? o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)", py: 1 }, children: "暂无二级类目" })
+      : o.jsx(x, {
+          sx: { display: "flex", gap: 0.75 },
+          children: cols.map(function (col, ci) {
+            return o.jsx(x, {
+              key: ci,
+              sx: { display: "flex", flexDirection: "column", gap: 0.25, flex: 1, minWidth: 0 },
+              children: col.map(function (c) {
+                var sel = whole || selected.indexOf(c.value) >= 0;
+                return o.jsx(PgyKolTrigger, {
+                  key: c.value,
+                  label: c.label,
+                  arrow: false,
+                  selected: sel,
+                  onOpen: function () { p.onToggleLeaf(c); },
+                });
+              }),
+            });
+          }),
+        }),
+  });
+}
+
 /* ============ Phase 5.2：搜索历史面板（搜昵称） ============ */
 function PgyKolHistoryPanel(p) {
   var list = p.history || [];
@@ -1369,7 +1476,7 @@ function PgyKolSearchPage() {
   var catOpen = m.useState(false), categoryOpen = catOpen[0], setCategoryOpen = catOpen[1];
   var catInd = m.useState("汽车"), catIndustry = catInd[0], setCatIndustry = catInd[1];
   var brandPopup = m.useState(null), brandPopupMode = brandPopup[0], setBrandPopupMode = brandPopup[1];
-  var showAllCat = m.useState(false), showAllCategory = showAllCat[0], setShowAllCategory = showAllCat[1];
+  var showAllCat = m.useState(true), showAllCategory = showAllCat[0], setShowAllCategory = showAllCat[1];
   var restored = m.useState(false), restoredNotice = restored[0], setRestoredNotice = restored[1];
   var hist = m.useState(pgyKolNickHistory()), history = hist[0], setHistory = hist[1];
   var mopen = m.useState(true), matrixOpen = mopen[0], setMatrixOpen = mopen[1];
@@ -1486,6 +1593,7 @@ function PgyKolSearchPage() {
       ["consumeBehavior", { provider: "consumeBehavior" }],
       ["noteCategory", { provider: "specialIndustryData" }],
       ["industry", { provider: "kolTagsV2", section: "industryTags" }],
+      ["contentTag", { provider: "contentTagTree" }],
       ["activities", { provider: "activities" }],
     ];
     var schemaP = bridge.getSchemaFields ? bridge.getSchemaFields() : Promise.resolve({ ok: false, error: { code: "unknown", message: "schema 不可用" } });
@@ -1638,21 +1746,55 @@ function PgyKolSearchPage() {
       return Object.assign({}, prev, patch);
     });
   }, []);
-  var toggleCategory = m.useCallback(function (value) {
+  /* 博主类目官网语义（2026-08-10 实测）：
+   * - 悬停一级 chip 弹出二级面板；点二级只选该项，contentTag 存二级名；
+   * - 点一级整类全选，contentTag 存一级名；整类时点二级无效；
+   * - 再点一级清除整类；「全部」清空全部类目。
+   * contentTag 数组同时承载一级名（整类）与二级名（单项）。 */
+  var categoryNodes = pgyKolCategoryTreeNodes(configs.contentTag);
+  function categoryIsWhole(node) { return filter.contentTag.indexOf(node.value) >= 0; }
+  function categoryHasLeaf(node) {
+    var kids = node.children || [];
+    for (var i = 0; i < kids.length; i++) if (filter.contentTag.indexOf(kids[i].value) >= 0) return true;
+    return false;
+  }
+  function categoryIsActive(node) { return categoryIsWhole(node) || categoryHasLeaf(node); }
+  var toggleCategoryWhole = m.useCallback(function (node) {
     setFilter(function (prev) {
-      var cur = prev.contentTag || [], next;
-      if (value === "全部") {
-        next = cur.indexOf("全部") >= 0 ? [] : ["全部"];
+      var cur = (prev.contentTag || []).slice();
+      var wi = cur.indexOf("全部");
+      if (wi >= 0) cur = cur.slice(0, wi).concat(cur.slice(wi + 1));
+      var i = cur.indexOf(node.value);
+      if (i >= 0) {
+        cur = cur.slice(0, i).concat(cur.slice(i + 1));
       } else {
-        next = cur.slice();
-        var i = next.indexOf("全部");
-        if (i >= 0) next = next.slice(0, i).concat(next.slice(i + 1));
-        var j = next.indexOf(value);
-        if (j >= 0) next = next.slice(0, j).concat(next.slice(j + 1));
-        else next.push(value);
+        var kidVals = (node.children || []).map(function (c) { return c.value; });
+        cur = cur.filter(function (v) { return kidVals.indexOf(v) < 0; });
+        cur.push(node.value);
       }
       var patch = {};
-      patch.contentTag = next;
+      patch.contentTag = cur;
+      return Object.assign({}, prev, patch);
+    });
+  }, []);
+  var toggleCategoryLeaf = m.useCallback(function (node, leaf) {
+    setFilter(function (prev) {
+      var cur = (prev.contentTag || []).slice();
+      if (cur.indexOf(node.value) >= 0) return prev;
+      var leafValue = typeof leaf === "string" ? leaf : (leaf && leaf.value);
+      if (leafValue === undefined || leafValue === null) return prev;
+      var wi = cur.indexOf("全部");
+      if (wi >= 0) cur = cur.slice(0, wi).concat(cur.slice(wi + 1));
+      var j = cur.indexOf(leafValue);
+      var patch = {};
+      patch.contentTag = j >= 0 ? cur.slice(0, j).concat(cur.slice(j + 1)) : cur.concat([leafValue]);
+      return Object.assign({}, prev, patch);
+    });
+  }, []);
+  var toggleCategoryAll = m.useCallback(function () {
+    setFilter(function (prev) {
+      var patch = {};
+      patch.contentTag = (prev.contentTag || []).indexOf("全部") >= 0 ? [] : ["全部"];
       return Object.assign({}, prev, patch);
     });
   }, []);
@@ -2104,11 +2246,13 @@ function PgyKolSearchPage() {
                   o.jsx(PgyKolMatrixRow, {
                     label: "博主类目",
                     children: [
-                      o.jsx(PgyKolInlineOptions, {
-                        options: catOptions.map(function (v) { return { value: v, label: v }; }),
-                        keyOf: function (n) { return n.value; },
+                      o.jsx(PgyKolCategoryChips, {
+                        options: catOptions.map(function (v) { return { value: v, label: v, children: pgyKolCategoryNodeKids(categoryNodes, v) }; }),
                         selected: filter.contentTag.slice(),
-                        onToggle: function (n) { toggleCategory(n.value); },
+                        isActive: function (n) { return categoryIsActive(n); },
+                        onToggleWhole: function (n) { toggleCategoryWhole(n); },
+                        onToggleLeaf: function (n, leaf) { toggleCategoryLeaf(n, leaf); },
+                        onToggleAll: toggleCategoryAll,
                       }),
                       o.jsx(PgyKolTrigger, { label: showAllCategory ? "收起" : "展开", arrowUp: showAllCategory, onOpen: function () { setShowAllCategory(!showAllCategory); } }),
                     ],

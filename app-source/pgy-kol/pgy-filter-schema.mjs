@@ -1184,7 +1184,10 @@ export class PgyFilterSchema {
       }
       case "contentTagTree":
         // 博主类目标签树（官网 /api/solar/cooperator/content/tag_tree）。
-        // Phase 5.1 已实证：payload contentTag 发送一级类目中文标签。
+        // Phase 5.1 已实证：payload contentTag 发送一级类目中文标签；
+        // 2026-08-10 LKG rawVersion 实证：原始形状为 taxonomy1Tag +
+        // taxonomy2Tags 字符串数组（与 kolTagsV2.industryTags 一致），
+        // 必须先把 taxonomy2Tags 映射成 children，否则二级类目会全部丢失。
         return this._loadWithFallback({
           provider,
           lkgKey: "contentTagTree",
@@ -1194,13 +1197,19 @@ export class PgyFilterSchema {
           validate: (raw) => this.validateConfigStructure(raw, "contentTagTree"),
           normalize: (raw) => {
             const list = Array.isArray(raw.data) ? raw.data : Array.isArray(raw.data?.list) ? raw.data.list : [];
+            const shaped = list
+              .filter((n) => n !== null && typeof n === "object" && !Array.isArray(n))
+              .map((n) => ({
+                value: n.taxonomy1Tag,
+                label: n.taxonomy1Tag,
+                children: (Array.isArray(n.taxonomy2Tags) ? n.taxonomy2Tags : [])
+                  .filter((s) => typeof s === "string" && s.trim() !== "")
+                  .map((s) => ({ value: s, label: s })),
+              }));
             return this.normalizeOptionTree({
-              rawNodes: list,
+              rawNodes: shaped,
               payloadField: "contentTag",
               provider: "contentTagTree",
-              valueKey: "taxonomy1Tag",
-              labelKey: "taxonomy1Tag",
-              childrenKey: "children",
             });
           },
         });

@@ -54,6 +54,35 @@ assert.deepEqual(
 );
 assert.match(readFileSync("tools/rcedit-x64.exe.sha256", "utf8"), /^[0-9a-f]{64}\s+rcedit-x64\.exe\s*$/i, "rcedit checksum must be present");
 
+// 找博主界面预览文件（docs/pgy-kol-ui-preview.html）必须与页面权威源码保持同步：
+// 矩阵行/触发器标签与关键交互标记缺一不可，避免预览与实际界面漂移。
+const uiPreview = readFileSync("docs/pgy-kol-ui-preview.html", "utf8");
+const pageSourceText = readFileSync("scripts/pgy-kol-phase52-page-source.js", "utf8");
+const matrixLabels = [
+  "合作目标", "营销目标", "人群目标", "匹配度", "博主类目", "博主人设", "家庭身份", "职业身份", "特色背景",
+  "博主画像", "性别", "地域", "二十大人群", "行业特色画像", "预估消费行为", "签约情况", "擅长内容", "内容题材",
+  "粉丝画像", "粉丝量", "粉丝年龄", "粉丝性别", "粉丝地域", "婚恋状态", "消费水平", "母婴阶段", "手机价格", "手机品牌",
+  "笔记类目", "数据表现", "日常笔记", "曝光中位数", "阅读中位数", "互动中位数", "千赞笔记比例", "笔记类型",
+  "合作笔记", "合作表现", "合作报价", "合作信用度", "合作订单数", "近期合作行业", "近期合作品牌",
+  "传播规模", "预估CPM", "预估阅读单价", "预估互动单价", "外溢进店单价",
+  "直播数据", "近30天直播场次", "场均观播人数", "场均销售额",
+  "平台推荐", "精选博主", "热门活动", "常规剔除", "一键剔除", "剔除低活博主", "剔除掉粉博主", "剔除已合作博主", "剔除已邀约博主",
+];
+for (const label of matrixLabels) {
+  assert.ok(pageSourceText.includes(label), `page source must keep matrix label: ${label}`);
+  assert.ok(uiPreview.includes(label), `UI preview must mirror matrix label: ${label}`);
+}
+// 预览必须体现本轮官网对齐的关键交互与规格。
+for (const marker of [
+  "孕期穿搭", "母婴日常", "近期合作行业", "Math.min(261", "width:280px", "width:228px", "width:408", "width:420",
+  "hover", "draft", "applied", "搜索", "确定筛选", "批量", "弹层", "确定", "重置", "不限",
+]) {
+  assert.ok(uiPreview.includes(marker), `UI preview must carry behavior marker: ${marker}`);
+}
+for (const industry of ["美妆个护", "食品饮料", "3c及电器", "日用百货", "服装配饰", "互联网", "生活服务", "家居建材", "汽车"]) {
+  assert.ok(uiPreview.includes(industry), `UI preview must carry official industry option: ${industry}`);
+}
+
 const buildScript = readFileSync("scripts/build-magiorix-windows-installer.ps1", "utf8");
 assert.match(buildScript, /app-source\\package\.json/, "build must derive versions from package.json");
 assert.doesNotMatch(buildScript, /Sync-AssetsToAppData/, "build must not modify the current user's AppData");

@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Magiorix 找博主界面预览（与官网对照用）</title>
+<style>
+:root { --red:#ff2442; --line:#ebedf0; --text:rgba(0,0,0,.85); --sub:rgba(0,0,0,.45); }
+* { box-sizing:border-box; }
+body { margin:0; font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif; color:var(--text); background:#f5f6f8; font-size:14px; }
+header { background:#fff; border-bottom:1px solid var(--line); padding:10px 16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; position:sticky; top:0; z-index:50; }
+header h1 { font-size:16px; margin:0; }
+header .meta { color:var(--sub); font-size:12px; }
+header a { color:var(--red); font-size:12px; }
+.legend-toggle { margin-left:auto; font-size:12px; color:#666; cursor:pointer; border:1px solid #d9d9d9; border-radius:4px; padding:4px 8px; background:#fff; }
+#logic-panel { display:none; background:#fffbe6; border:1px solid #ffe58f; border-radius:6px; margin:12px 16px; padding:10px 14px; font-size:12px; line-height:1.8; }
+#logic-panel.open { display:block; }
+#logic-panel b { color:#ad6800; }
+main { max-width:1500px; margin:0 auto; padding:12px 16px 40px; }
+.toolbar { background:#fff; border:1px solid var(--line); border-radius:8px; padding:10px 12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.toolbar input { width:280px; height:30px; border:1px solid #d9d9d9; border-radius:4px; padding:0 8px; font-size:13px; }
+.toolbar .hint { font-size:12px; color:var(--sub); }
+.btn { height:30px; padding:0 12px; border-radius:4px; border:1px solid #d9d9d9; background:#fff; font-size:13px; cursor:pointer; }
+.btn.primary { background:var(--red); border-color:var(--red); color:#fff; min-width:112px; }
+.btn.primary:disabled { opacity:.45; cursor:not-allowed; }
+.summary { flex-basis:100%; display:flex; flex-wrap:wrap; gap:6px; align-items:center; min-height:24px; }
+.chip { display:inline-flex; align-items:center; height:28px; padding:0 10px; border-radius:4px; border:0; background:transparent; font-size:14px; color:rgba(0,0,0,.7); cursor:pointer; white-space:nowrap; }
+.chip.sel { color:var(--red); background:rgba(255,36,66,.08); }
+.chip.dim { color:rgba(0,0,0,.25); cursor:not-allowed; }
+.tag { display:inline-flex; align-items:center; height:28px; padding:0 10px; border-radius:4px; font-size:14px; color:rgba(0,0,0,.7); cursor:pointer; white-space:nowrap; }
+.tag.sel { color:var(--red); background:rgba(255,36,66,.08); }
+.tag .arrow { margin-left:4px; font-size:10px; color:rgba(0,0,0,.45); }
+.tag.sel .arrow { color:var(--red); }
+.tag .badge { margin-left:5px; font-size:10px; color:#fff; background:var(--red); border-radius:3px; padding:0 4px; line-height:14px; }
+.tag .cnt { margin-left:4px; font-size:12px; color:rgba(0,0,0,.45); }
+.tag.sel .cnt { color:var(--red); }
+.check { display:inline-flex; align-items:center; gap:5px; height:28px; cursor:pointer; font-size:13px; color:rgba(0,0,0,.7); }
+.check .box { width:14px; height:14px; border:1px solid #c9cdd4; border-radius:3px; display:inline-flex; align-items:center; justify-content:center; font-size:10px; color:#fff; background:#fff; }
+.check.on .box { background:var(--red); border-color:var(--red); }
+#matrix { background:#fff; border:1px solid var(--line); border-radius:8px; margin-top:12px; overflow:hidden; }
+.section { border-bottom:1px solid var(--line); display:flex; }
+.section:last-child { border-bottom:0; }
+.section-title { width:96px; flex-shrink:0; padding-top:12px; font-size:14px; font-weight:600; }
+.section-body { flex:1; min-width:0; padding:8px 0; }
+.row { display:flex; align-items:center; min-height:36px; gap:8px; padding:2px 0; }
+.row-label { width:88px; flex-shrink:0; font-size:13px; color:rgba(0,0,0,.45); text-align:right; line-height:28px; }
+.row-body { flex:1; min-width:0; display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.row-body .grouplabel { width:80px; flex-shrink:0; font-size:13px; color:rgba(0,0,0,.35); text-align:right; margin-right:4px; }
+.footerbar { background:#fff; border:1px solid var(--line); border-radius:8px; margin-top:12px; padding:12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.footerbar .status { margin-right:auto; font-size:13px; color:var(--sub); }
+.footerbar .status.dirty { color:var(--red); }
+.counts { margin-top:12px; display:flex; gap:24px; font-size:12px; color:var(--sub); flex-wrap:wrap; }
+.counts b { color:var(--red); font-size:14px; }
+#popup-layer { position:fixed; inset:0; pointer-events:none; z-index:100; }
+#popup-layer .backdrop { position:fixed; inset:0; pointer-events:auto; }
+.pop { position:fixed; pointer-events:auto; background:#fff; border:1px solid #e5e6eb; border-radius:5px; box-shadow:0 4px 16px rgba(0,0,0,.12); display:flex; flex-direction:column; overflow:hidden; padding:6px; }
+.pop .scroll { overflow-y:auto; flex:1; min-height:0; }
+.pop .opt { display:flex; align-items:center; min-height:36px; padding:0 8px; cursor:pointer; font-size:14px; color:rgba(0,0,0,.78); }
+.pop .opt.sel { background:#f5f5f5; }
+.pop .opt .mark { width:18px; flex-shrink:0; color:var(--red); font-size:13px; }
+.pop .foot { display:flex; align-items:center; gap:8px; margin-top:6px; padding-top:6px; border-top:1px solid #f0f1f3; flex-shrink:0; }
+.pop .foot .spacer { flex:1; }
+.pop .mini { height:28px; padding:0 10px; border-radius:4px; border:1px solid #d9d9d9; background:#fff; font-size:12px; cursor:pointer; }
+.pop .mini.confirm { background:var(--red); border-color:var(--red); color:#fff; }
+.pop .mini:disabled { opacity:.45; cursor:not-allowed; }
+.pop .range-inputs { display:flex; align-items:center; gap:6px; padding:6px; background:#fafafa; margin-top:6px; flex-shrink:0; }
+.pop .range-inputs input { width:78px; height:30px; border:1px solid #d9d9d9; border-radius:4px; padding:0 6px; font-size:12px; }
+.pop .colgroup { display:grid; gap:10px; padding:2px; }
+.pop .group-col { min-width:0; position:relative; }
+.pop .group-label { font-size:13px; color:rgba(0,0,0,.72); margin-bottom:4px; }
+.pop .select { width:100%; height:32px; border:1px solid #d9d9d9; border-radius:4px; background:#fafafa; padding:0 8px; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:space-between; }
+.nested { position:absolute; top:64px; left:0; z-index:3; width:228px; background:#fff; border:1px solid #e5e6eb; border-radius:5px; box-shadow:0 4px 16px rgba(0,0,0,.14); padding:6px; }
+.nested.up { top:auto; bottom:64px; }
+.category-panel { width:280px; max-height:232px; }
+.category-panel .cols { display:flex; gap:8px; padding:2px; }
+.category-panel .col { display:flex; flex-direction:column; gap:2px; flex:1; min-width:0; }
+.category-panel .tag { font-size:13px; }
+.cat-row .chip { position:relative; }
+.hintline { font-size:12px; color:rgba(0,0,0,.45); }
+#toast { position:fixed; top:64px; left:50%; transform:translateX(-50%); background:#fff; border:1px solid #ffd6dd; color:var(--red); border-radius:6px; padding:8px 16px; font-size:13px; box-shadow:0 4px 16px rgba(0,0,0,.12); z-index:200; display:none; }
+@media (max-width:900px) { .section { flex-direction:column; } .section-title { width:auto; padding:10px 12px 0; } .row-label { text-align:left; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Magiorix 找博主 · 界面与使用逻辑预览</h1>
+  <span class="meta">v1.2.0 · 与官网 2026-08-10 实测对齐 · 本文件为静态演示，不发任何网络请求</span>
+  <a href="https://pgy.xiaohongshu.com/solar/pre-trade/note/kol" target="_blank" rel="noreferrer">打开官网对照 ↗</a>
+  <button class="legend-toggle" id="legendBtn">使用逻辑说明</button>
+</header>
+<div id="logic-panel">
+  <b>查询确认语义（与页面权威源码一致）：</b>
+  ① 关键词输入、筛选点击、弹层内部「确定」只修改 <b>draft</b>，绝不请求蒲公英搜索；
+  ② 顶部「搜索」、搜索框 Enter、底部「确定筛选」是唯一正式提交入口，三者在提交瞬间读取完整 draft，生成<b>完全相同</b>的 payload；
+  ③ 相同成功条件重复确认零请求（提示「筛选未变化」），失败条件可显式重试；
+  ④ 请求 A 未返回时提交 B，A 的迟到响应不会覆盖 B；
+  ⑤ 查询成功冻结 <b>applied</b> 快照；继续编辑只改 draft，旧结果保留并提示基于上一次条件，此时<b>批量采集被阻止</b>；
+  ⑥ 批量采集只能使用最近一次成功查询的 applied 快照。
+  本演示页底部有请求计数器与最近 payload 展示，可自行验证以上行为。
+</div>
+<main>
+  <div class="toolbar">
+    <input id="keyword" placeholder="按博主昵称/小红书号找博主（输入只改草稿，不查询）" value="">
+    <button class="btn primary" id="topSearch">搜索</button>
+    <span class="hint">Enter 与「搜索」等价</span>
+    <button class="btn" id="collapseBtn">收起筛选</button>
+    <button class="btn" id="clearBtn">一键清空</button>
+    <div class="summary" id="summary"></div>
+  </div>
+  <div id="matrix"></div>
+  <div class="footerbar">
+    <span class="status" id="statusText">请点击确定筛选后查询</span>
+    <button class="btn" id="batchBtn">开始批量采集（演示）</button>
+    <button class="btn primary" id="bottomConfirm">确定筛选</button>
+  </div>
+  <div class="counts">
+    <span>正式查询次数：<b id="reqCount">0</b></span>
+    <span>最近一次提交 payload：<code id="lastPayload">（无）</code></span>
+    <span>当前状态：<b id="stateTag">draft 为空</b></span>
+  </div>
+  <div id="popup-layer"></div>
+  <div id="toast"></div>
+</main>
+<script>
+"use strict";
+/* ============ 数据（与页面权威源码 / 官网 2026-08-10 实测一致） ============ */
+var CATEGORY_TREE = [
+  ["美妆",["整体妆容","唇妆","眼妆","美甲","底妆","美妆合集","香水","美妆其他"]],
+  ["护肤",["面部保养","面部清洁","护肤合集","护肤其他"]],
+  ["个人护理",["头发产品","身体护理","口腔护理","护理其他"]],
+  ["母婴",["母婴日常","早教","婴童用品","婴童洗护","婴童食品","婴童时尚","孕期穿搭","孕产经验","产后恢复","育儿经验","宝宝才艺","宝宝写真","母婴其他"]],
+  ["时尚",["穿搭","配饰","发型","箱包","鞋靴","时尚其他"]],
+  ["美食",["美食教程","美食探店","美食展示","美食测评","吃播","美食其他"]],
+  ["家居家装",["装修","家居用品","家居装饰","家具","家电","室内设计","居家经验","家居家装其他"]],
+  ["影视综资讯",["动漫","电影","电视","娱乐资讯","影视","民生资讯","综艺","影视综其他"]],
+  ["运动健身",["健身减肥","健身塑形","滑雪","滑板","水上活动","运动其他","足球","篮球","跑步","游泳"]],
+  ["宠物",["猫","狗","动物其他"]],
+  ["文化艺术",["社科","文化","艺术","文化艺术其他"]],
+  ["兴趣爱好",["绘画","手工","阅读","文具手账","舞蹈","益智玩具","潮流玩具","兴趣爱好其他"]],
+  ["生活记录",["接地气生活","日常片段","中外生活","品质生活","校园生活"]],
+  ["教育",["大学教育","k12教育","家庭教育","学习日常","职场教育","教育其他"]],
+  ["职场",[]],
+  ["情感",["情感知识","情感日常","情感其他"]],
+  ["摄影",["人文风光摄影","摄影技巧","胶片摄影","人像摄影","摄影其他"]],
+  ["游戏",["手机游戏","主机游戏","游戏其他","线下游戏"]],
+  ["科技数码",["数码","玩机攻略","数码科技其他"]],
+  ["出行旅游",["城市出行","户外","旅行"]],
+  ["音乐",[]],["搞笑",[]],["健康养生",[]],["汽车",[]],["婚嫁",["婚礼造型","婚礼记录","婚礼经验","婚礼用品"]],
+  ["商业财经",[]],["素材",[]],["其他",[]]
+];
+var INDUSTRY_OPTIONS = ["不限","美妆个护","食品饮料","母婴","3c及电器","日用百货","服装配饰","互联网","生活服务","家居建材","汽车"];
+var RANGES = {
+  imp50w:["5万以上","1万～5万","0.5万～1万","0.1万～0.5万"],
+  inter2000:["2000以上","1000～2000","500～1000","200～500","100～200"],
+  percent40:["40%以上","30%～40%","20%～30%","10%～20%","10%以下"],
+  quote:["10万以上","5万～10万","1万～5万","0.5万～1万","0.5万以下"],
+  inviteReply:["95%以上","90%～95%","80%～90%","70%～80%","80%以下"],
+  overflow:["10000以上","5000～10000","2000～5000","1000～2000","500～1000"],
+  cpuv:["0.5以下","0.5～1.0","1.0～1.5","1.5～2.5","2.5～4.0"],
+  picRead:["0.5以下","0.5～1.0","1.0～1.5","1.5～2.0","2.0以上"],
+  videoRead:["1.5以下","1.5～2.0","2.0～2.5","2.5～3.0","3.0以上"],
+  picEngage:["0.5以下","0.5～1.0","1.0～2.0","2.0～3.0","3.0以上"],
+  videoEngage:["1.0以下","1.0～2.0","2.0～3.0","3.0～4.0","4.0以上"],
+  cpmPic:["10以下","10～20","20～30","30～50","50以上"],
+  cpmVideo:["10以下","10～30","30～50","50～70","70以上"],
+  liveCount:["0次","1～5次","6～10次","10次以上"],
+  liveViewer:["0~5k","5k~1w","1w~10w","10w~50w","50w以上"],
+  liveGmv:["5千以下","5千～1万","1万～10万","10万～50万","50万～100万","100万～200万","200万～500万","500万以上"]
+};
+var NOTE_TYPES = ["不限","图文笔记为主","视频笔记为主"];
+var GENDER = ["不限","男","女"];
+var SIGNED = ["不限","个人博主","机构博主"];
+var FAMILY = ["妈妈","萌娃","情侣","夫妻","家庭","爸爸","闺蜜","兄弟","奶奶"];
+var CAREER = ["模特","时尚编辑","美甲师","造型师","教练","服装设计师","化妆师","潮鞋玩家","健身博主","珠宝设计师","专业运动员"];
+var FEATURE = ["户外爱好者","数码爱好者","铲屎官","孕妈","独居人群"];
+var AUDIENCE20 = ["家庭主妇","都市打工人","未来之星","女大学生","城镇青年","中年男士","年轻精英","银发一族","资深中产女性","其他"];
+var THEME = ["vlog","探店","测评","ootd","合集","plog","开箱","教程","成分解析","彩妆试色","仿妆","沉浸式"];
+var FANS_AGE = ["18岁以下","18-24","25-34","35-44","45岁以上"];
+var FANS_GENDER = ["不限","男","女"];
+var MARITAL = ["不限","未婚","已婚","恋爱中"];
+var CONSUMPTION = ["不限","低","中","高","极高"];
+var CHILD_AGE = ["备孕","孕期","0-6个月","6-12个月","1-3岁","3-6岁","6岁以上"];
+var DEVICE_PRICE = ["2000元以下","2000-4000元","4000-6000元","6000元以上"];
+var DEVICE_BRAND = ["苹果","华为","小米","OPPO","vivo","荣耀","三星","其他"];
+var NOTE_CATEGORY_TABS = ["汽车","游戏","母婴","美妆"];
+/* ============ 弹层配置（kind: menu | range | group | brand | multi | category） ============ */
+var POPS = {
+  family: { kind:"menu", title:"家庭身份", width:228, options:FAMILY, multi:true },
+  career: { kind:"menu", title:"职业身份", width:228, options:CAREER, multi:true },
+  feature: { kind:"menu", title:"特色背景", width:228, options:FEATURE, multi:true },
+  gender: { kind:"menu", title:"性别", width:228, options:GENDER },
+  signed: { kind:"menu", title:"签约情况", width:228, options:SIGNED },
+  scene: { kind:"menu", title:"擅长内容", width:228, options:THEME, multi:true },
+  theme: { kind:"menu", title:"内容题材", width:228, options:THEME, multi:true },
+  fansAge: { kind:"menu", title:"粉丝年龄", width:228, options:FANS_AGE },
+  fansGender: { kind:"menu", title:"粉丝性别", width:228, options:FANS_GENDER },
+  marital: { kind:"menu", title:"婚恋状态", width:228, options:MARITAL },
+  consumption: { kind:"menu", title:"消费水平", width:228, options:CONSUMPTION },
+  childAge: { kind:"menu", title:"母婴阶段", width:228, options:CHILD_AGE, multi:true },
+  devicePrice: { kind:"menu", title:"手机价格", width:228, options:DEVICE_PRICE, multi:true },
+  deviceBrand: { kind:"menu", title:"手机品牌", width:228, options:DEVICE_BRAND, multi:true },
+  audience20: { kind:"menu", title:"二十大人群", width:228, options:AUDIENCE20, multi:true },
+  noteType: { kind:"menu", title:"笔记类型", width:228, options:NOTE_TYPES },
+  recentIndustry: { kind:"menu", title:"近期合作行业", width:228, options:INDUSTRY_OPTIONS, industry:true },
+  impMed: { kind:"range", title:"曝光中位数", width:228, range:RANGES.imp50w, min:"0", max:"9,999,999" },
+  readMid: { kind:"range", title:"阅读中位数", width:228, range:RANGES.imp50w, min:"0", max:"9,999,999" },
+  interMid: { kind:"range", title:"互动中位数", width:228, range:RANGES.inter2000, min:"0", max:"9,999,999" },
+  thousand: { kind:"range", title:"千赞笔记比例", width:228, range:RANGES.percent40, min:"0", max:"100", suffix:"%" },
+  coopOrder: { kind:"range", title:"合作订单数", width:228, range:[], min:"0", max:"99999" },
+  overflow: { kind:"range", title:"外溢进店单价", width:228, range:RANGES.overflow, min:"0", max:"9,999,999" },
+  coopQuote: { kind:"group", title:"合作报价", width:408, groups:[["pic","图文笔记",RANGES.quote],["video","视频笔记",RANGES.quote]] },
+  coopCredit: { kind:"group", title:"合作信用度", width:408, groups:[["invite","邀约48h回复率",RANGES.inviteReply]] },
+  spread: { kind:"group", title:"传播规模", width:408, groups:[["imp","曝光中位数",RANGES.imp50w],["read","阅读中位数",RANGES.imp50w],["inter","互动中位数",RANGES.inter2000],["overflow","外溢进店中位数",RANGES.overflow]] },
+  cpm: { kind:"group", title:"预估CPM", width:408, groups:[["pic","预估图文CPM",RANGES.cpmPic],["video","预估视频CPM",RANGES.cpmVideo]] },
+  readPrice: { kind:"group", title:"预估阅读单价", width:408, groups:[["pic","图文笔记阅读单价",RANGES.picRead],["video","视频笔记阅读单价",RANGES.videoRead]] },
+  engagePrice: { kind:"group", title:"预估互动单价", width:408, groups:[["pic","预估图文互动单价",RANGES.picEngage],["video","预估视频互动单价",RANGES.videoEngage]] },
+  liveCount: { kind:"multi", title:"近30天直播场次", width:228, options:RANGES.liveCount },
+  liveViewer: { kind:"multi", title:"场均观播人数", width:228, options:RANGES.liveViewer },
+  liveGmv: { kind:"multi", title:"场均销售额", width:228, options:RANGES.liveGmv },
+  recentBrand: { kind:"brand", title:"近期合作品牌", width:420 }
+};
+/* ============ 状态：draft 与 applied（与页面权威源码同语义） ============ */
+var draft = { keyword:"", contentTag:[], industry:"不限", gender:"", signed:"", family:[], career:[], feature:[], theme:[], scene:[], audience20:[], childAge:[], devicePrice:[], deviceBrand:[], fansAge:"", fansGender:"", marital:"", consumption:"", noteType:"", liveCount:[], liveViewer:[], liveGmv:[], rangeValues:{}, groupValues:{}, brandIds:[], brandExcluded:false, checks:{} };
+var applied = null;
+var requests = 0;
+var lastPayload = null;
+var collapsed = false;
+var hoverCat = null;
+var openPopId = null;
+var popAnchorRect = null;
+var popDraft = null;
+function clone(v) { return JSON.parse(JSON.stringify(v)); }
+function filterState() {
+  var f = clone(draft);
+  var out = { searchType: 0, keyword: f.keyword };
+  if (f.contentTag.length) out.contentTag = f.contentTag.slice();
+  if (f.industry && f.industry !== "不限") out.tradeType = f.industry;
+  if (f.gender) out.gender = f.gender;
+  if (f.signed) out.signed = f.signed;
+  if (f.family.length) out.personalTags = f.family.slice();
+  var ft = f.career.concat(f.feature, f.scene);
+  if (ft.length) out.featureTags = ft;
+  if (f.theme.length) out.contentThemeLabel = f.theme.slice();
+  if (f.audience20.length) out.top20CrowdsLabel = f.audience20.slice();
+  for (var k in f.rangeValues) if (f.rangeValues[k]) out[k] = f.rangeValues[k];
+  for (var g in f.groupValues) for (var k2 in f.groupValues[g]) if (f.groupValues[g][k2]) out[g + "." + k2] = f.groupValues[g][k2];
+  if (f.liveCount.length) out["filterList.kliveCnt30d"] = f.liveCount.slice();
+  if (f.liveViewer.length) out["filterList.avgLiveViewerNum"] = f.liveViewer.slice();
+  if (f.liveGmv.length) out["filterList.avgAgmv90d"] = f.liveGmv.slice();
+  if (f.brandIds.length) out.tradeReportBrandIdSet = f.brandIds.slice();
+  return out;
+}
+function stableKey(f) { return JSON.stringify(f); }
+function isDirty() {
+  if (!applied) return Object.keys(filterState()).length > 1;
+  return stableKey(filterState()) !== stableKey(applied);
+}
+/* ============ 渲染矩阵 ============ */
+var CATEGORY_NAMES = ["全部"].concat(CATEGORY_TREE.map(function (p) { return p[0]; }));
+function catKids(name) {
+  for (var i = 0; i < CATEGORY_TREE.length; i++) if (CATEGORY_TREE[i][0] === name) return CATEGORY_TREE[i][1];
+  return [];
+}
+function catSelected(name) {
+  if (draft.contentTag.indexOf(name) >= 0) return true;
+  return catKids(name).some(function (k) { return draft.contentTag.indexOf(k) >= 0; });
+}
+function row(label, body) {
+  return '<div class="row"><div class="row-label">' + label + '</div><div class="row-body">' + body + '</div></div>';
+}
+function section(title, rows) { return '<div class="section"><div class="section-title">' + title + '</div><div class="section-body">' + rows + '</div></div>'; }
+function tag(label, cls, extra) { return '<button type="button" class="tag' + (cls || "") + '"' + (extra || "") + '>' + label + '</button>'; }
+function chip(label, cls, extra) { return '<button type="button" class="chip' + (cls || "") + '"' + (extra || "") + '>' + label + '</button>'; }
+function trigger(label, popId, count, help) {
+  return '<button type="button" class="tag" data-pop="' + popId + '">' + label + '<span class="arrow">▾</span>' + (count ? '<span class="cnt">（' + count + '）</span>' : "") + '</button>';
+}
+function checkbox(label, key, dis) {
+  return '<label class="check' + (draft.checks[key] ? " on" : "") + (dis ? " dim" : "") + '" data-check="' + key + '">' +
+    '<span class="box">' + (draft.checks[key] ? "✓" : "") + '</span>' + label + '</label>';
+}
+function buildMatrix() {
+  var html = "";
+  html += section("合作目标",
+    row("营销目标", ["曝光","种草","转化"].map(function (o) { return chip(o, draft.checks["market-" + o] ? " sel" : "", ' data-market="' + o + '"'); }).join("")) +
+    row("人群目标", tag("按博主粉丝推荐", draft.checks.audGroup ? " sel" : "", ' data-audgroup="1"') + '<span class="hintline">未选择合作品牌时不可用</span>'));
+  html += section("匹配度",
+    row("博主类目", '<span class="cat-row" id="catRow">' +
+      CATEGORY_NAMES.map(function (n) { return chip(n, catSelected(n) ? " sel" : "", ' data-cat="' + n + '"'); }).join("") +
+      '</span><button type="button" class="tag" id="catMore">' + (collapsed ? "展开" : "收起") + '</button>') +
+    row("博主人设", trigger("家庭身份","family",draft.family.length) + trigger("职业身份","career",draft.career.length) + trigger("特色背景","feature",draft.feature.length)) +
+    row("博主画像", trigger("性别","gender",draft.gender?1:0) + trigger("地域","location") + trigger("二十大人群","audience20",draft.audience20.length) +
+      trigger("行业特色画像","automotive") + trigger("预估消费行为","consume") + trigger("签约情况","signed",draft.signed?1:0) +
+      trigger("擅长内容","scene",draft.scene.length) + trigger("内容题材","theme",draft.theme.length)) +
+    row("粉丝画像", trigger("粉丝量","fansNum") + trigger("粉丝年龄","fansAge",draft.fansAge?1:0) + trigger("粉丝性别","fansGender",draft.fansGender?1:0) +
+      trigger("粉丝地域","fansLocation") + trigger("婚恋状态","marital",draft.marital?1:0) + trigger("消费水平","consumption",draft.consumption?1:0) +
+      trigger("母婴阶段","childAge",draft.childAge.length) + trigger("手机价格","devicePrice",draft.devicePrice.length) + trigger("手机品牌","deviceBrand",draft.deviceBrand.length)) +
+    row("笔记类目", NOTE_CATEGORY_TABS.map(function (n) { return tag(n + '<span class="badge">新</span>', "dim"); }).join("") + '<span class="hintline">已选 0 项</span>'));
+  html += section("数据表现",
+    row("日常笔记", trigger("曝光中位数","impMed",draft.rangeValues.impMed?1:0,true) + trigger("阅读中位数","readMid",draft.rangeValues.readMid?1:0,true) +
+      trigger("互动中位数","interMid",draft.rangeValues.interMid?1:0,true) + trigger("千赞笔记比例","thousand",draft.rangeValues.thousand?1:0,true) +
+      trigger("笔记类型","noteType",draft.noteType?1:0)) +
+    row("合作笔记", '<span class="grouplabel">合作表现</span>' + trigger("合作报价","coopQuote",0) + trigger("合作信用度","coopCredit",0) +
+      trigger("合作订单数","coopOrder",draft.rangeValues.coopOrder?1:0,true) + trigger("近期合作行业","recentIndustry",draft.industry && draft.industry !== "不限" ? 1 : 0) +
+      trigger("近期合作品牌","recentBrand",draft.brandIds.length,true)) +
+    row("数据表现", trigger("传播规模","spread",0) + trigger("预估CPM","cpm",0) + trigger("预估阅读单价","readPrice",0) +
+      trigger("预估互动单价","engagePrice",0) + trigger("外溢进店单价","overflow",draft.rangeValues.overflow?1:0,true)) +
+    row("直播数据", trigger("近30天直播场次","liveCount",draft.liveCount.length) + trigger("场均观播人数","liveViewer",draft.liveViewer.length) +
+      trigger("场均销售额","liveGmv",draft.liveGmv.length)));
+  html += section("平台推荐",
+    row("精选博主", checkbox("明星","inStar") + checkbox("优质博主","highQuality") + checkbox("新锐博主","newQuality") +
+      checkbox("笔记+直播均可合作","bothLive") + checkbox("意向行业匹配","intention") + tag("行业推荐博主", "dim")) +
+    row("热门活动", checkbox("母婴新面孔博主团","act1") + checkbox("母婴黑马博主团","act2") + checkbox("种收联动 美食&文玩博主团","act3") + checkbox("种收联动 家居&亲子博主团","act4")));
+  html += section("常规剔除",
+    '<button type="button" class="btn" id="oneClickExclude" style="height:28px;color:#ff4d4f;border-color:#ffa39e;">一键剔除</button>' +
+    checkbox("剔除低活博主","excludeLowActive") + checkbox("剔除掉粉博主","fansNumUp") + checkbox("剔除已合作博主","excludeCoop",!draft.brandIds.length) + checkbox("剔除已邀约博主","excludeInvite",!draft.brandIds.length));
+  document.getElementById("matrix").innerHTML = html;
+}
+/* ============ 弹层渲染 ============ */
+function placePopup(width, height, anchorRect, maxH) {
+  var gap = 6;
+  var below = window.innerHeight - anchorRect.bottom;
+  var above = anchorRect.top;
+  var minVisible = Math.min(96, height);
+  var placeBelow = below >= minVisible;
+  var left = anchorRect.left;
+  if (left + width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - width - 8);
+  var top = placeBelow ? anchorRect.bottom + gap : "auto";
+  var bottom = !placeBelow ? Math.max(8, window.innerHeight - anchorRect.top + gap) : "auto";
+  var available = placeBelow ? below - gap - 8 : above - gap - 8;
+  var h = Math.max(0, Math.min(maxH || 360, window.innerHeight - 16, available));
+  return { left: left, top: top, bottom: bottom, height: h };
+}
+function menuOptionsHtml(opts, sel, handler) {
+  return opts.map(function (o) {
+    var isSel = o === sel;
+    return '<div class="opt' + (isSel ? " sel" : "") + '" data-opt="' + o + '"><span class="mark">' + (isSel ? "✓" : "") + '</span>' + o + '</div>';
+  }).join("");
+}
+function renderPop() {
+  var layer = document.getElementById("popup-layer");
+  if (!openPopId || !popAnchorRect) { layer.innerHTML = ""; return; }
+  var cfg = POPS[openPopId];
+  var content = "";
+  var width = cfg.width;
+  var height = 200;
+  if (cfg.kind === "menu") {
+    var sel = openPopId === "recentIndustry" ? draft.industry : (openPopId === "gender" ? draft.gender : (openPopId === "signed" ? draft.signed : (openPopId === "noteType" ? draft.noteType : "")));
+    var multi = !!cfg.multi;
+    var chosen = multi ? (draft[openPopId] || []) : [];
+    height = Math.min(261, 12 + cfg.options.length * 36);
+    content = '<div class="scroll">' + cfg.options.map(function (o) {
+      var isSel = multi ? chosen.indexOf(o) >= 0 : o === sel;
+      return '<div class="opt' + (isSel ? " sel" : "") + '" data-opt="' + o + '"><span class="mark">' + (isSel ? "✓" : "") + '</span>' + o + '</div>';
+    }).join("") + '</div>' +
+    (multi ? '<div class="foot"><span style="font-size:12px;color:rgba(0,0,0,.45)">已选 ' + chosen.length + ' 项</span><span class="spacer"></span><button class="mini" id="popReset">清空</button><button class="mini confirm" id="popConfirm">确定</button></div>' : "");
+  } else if (cfg.kind === "range") {
+    var cur = draft.rangeValues[openPopId] || "";
+    height = 12 + (cfg.range.length + 1) * 36 + 74;
+    content = '<div class="scroll">' + menuOptionsHtml(["不限"].concat(cfg.range), cur, "") + '</div>' +
+      '<div class="range-inputs"><input type="number" placeholder="' + cfg.min + '" id="rangeLo"><span>～</span><input type="number" placeholder="' + cfg.max + '" id="rangeHi">' + (cfg.suffix ? "<span>" + cfg.suffix + "</span>" : "") + '</div>' +
+      '<div class="foot"><button class="mini" id="popReset">重置</button><span class="spacer"></span><button class="mini confirm" id="popConfirm">确定</button></div>';
+  } else if (cfg.kind === "group") {
+    height = cfg.groups.length > 2 ? 210 : 150;
+    content = '<div class="colgroup" style="grid-template-columns:' + (cfg.groups.length === 1 ? "1fr" : "1fr 1fr") + '">' +
+      cfg.groups.map(function (g, i) {
+        var val = draft.groupValues[openPopId] && draft.groupValues[openPopId][g[0]] || "";
+        return '<div class="group-col"><div class="group-label">' + g[1] + '</div>' +
+          '<div class="select" data-group="' + g[0] + '" data-index="' + i + '"><span>' + (val || "请选择") + '</span><span class="arrow">▾</span></div></div>';
+      }).join("") + '</div>' +
+      '<div class="foot"><button class="mini" id="popReset">重置</button><span class="spacer"></span><button class="mini confirm" id="popConfirm">确定</button></div>';
+  } else if (cfg.kind === "multi") {
+    var c2 = draft[openPopId] || [];
+    height = Math.min(300, 64 + cfg.options.length * 36);
+    content = '<div class="scroll">' + cfg.options.map(function (o) {
+      var on = c2.indexOf(o) >= 0;
+      return '<label class="check' + (on ? " on" : "") + '" data-live="' + o + '" style="height:34px;padding:0 4px;"><span class="box">' + (on ? "✓" : "") + '</span>' + o + '</label>';
+    }).join("") + '</div>' +
+      '<div class="foot"><button class="mini" id="popReset">重置</button><span class="spacer"></span><button class="mini confirm" id="popConfirm">确定</button></div>';
+  } else if (cfg.kind === "brand") {
+    height = 240;
+    content = '<div style="font-size:12px;color:rgba(0,0,0,.45);padding:2px 4px;">请至少选择3个品牌</div>' +
+      '<input type="text" placeholder="请输入品牌名称" id="brandKeyword" style="width:100%;height:32px;border:1px solid #d9d9d9;border-radius:4px;padding:0 8px;font-size:13px;">' +
+      '<div class="scroll" id="brandOptions" style="margin-top:6px;max-height:120px;">' +
+      '<div style="font-size:12px;color:rgba(0,0,0,.45);padding:6px 4px;">（演示数据：输入关键词后下方展示可选品牌）</div></div>' +
+      '<label class="check' + (draft.brandExcluded ? " on" : "") + '" id="brandExclude" style="padding:4px 2px;"><span class="box">' + (draft.brandExcluded ? "✓" : "") + '</span>剔除上述品牌已合作博主</label>' +
+      '<div class="foot"><button class="mini" id="popReset">重置</button><span class="spacer"></span><button class="mini confirm" id="popConfirm"' + (draft.brandIds.length < 3 ? " disabled" : "") + '>确定</button></div>';
+  }
+  var pos = placePopup(width, height, popAnchorRect, cfg.kind === "menu" && cfg.industry ? 261 : (cfg.kind === "group" ? 260 : 360));
+  var style = "left:" + pos.left + "px;top:" + pos.top + "px;bottom:" + pos.bottom + "px;width:" + width + "px;max-height:" + pos.height + "px;";
+  layer.innerHTML = '<div class="backdrop" id="popBackdrop"></div><div class="pop" style="' + style + '">' + content + '</div>';
+}
+function openPop(id, el) {
+  openPopId = id;
+  popAnchorRect = el.getBoundingClientRect();
+  popDraft = null;
+  renderPop();
+}
+function closePop() { openPopId = null; popAnchorRect = null; renderPop(); }
+/* ============ 事件绑定 ============ */
+function summaryChips() {
+  var parts = [];
+  if (draft.keyword) parts.push("关键词：" + draft.keyword);
+  if (draft.contentTag.length) parts.push("博主类目：" + draft.contentTag.join("、"));
+  if (draft.industry && draft.industry !== "不限") parts.push("近期合作行业：" + draft.industry);
+  if (draft.gender) parts.push("性别：" + draft.gender);
+  if (draft.signed) parts.push("签约：" + draft.signed);
+  if (draft.family.length) parts.push("家庭身份 " + draft.family.length + " 项");
+  if (draft.career.length) parts.push("职业身份 " + draft.career.length + " 项");
+  if (draft.feature.length) parts.push("特色背景 " + draft.feature.length + " 项");
+  if (draft.audience20.length) parts.push("二十大人群 " + draft.audience20.length + " 项");
+  if (draft.theme.length) parts.push("内容题材 " + draft.theme.length + " 项");
+  var rangeCount = Object.keys(draft.rangeValues).length;
+  var liveCount = draft.liveCount.length + draft.liveViewer.length + draft.liveGmv.length;
+  if (rangeCount) parts.push("数据范围 " + rangeCount + " 项");
+  if (liveCount) parts.push("直播 " + liveCount + " 项");
+  if (draft.brandIds.length) parts.push("合作品牌 " + draft.brandIds.length + " 个");
+  var el = document.getElementById("summary");
+  el.innerHTML = parts.length === 0
+    ? '<span style="font-size:13px;color:rgba(0,0,0,.45)">已选条件：暂无筛选条件（全部为 draft，未请求）</span>'
+    : '<span style="font-size:13px;color:rgba(0,0,0,.45)">已选条件（draft）：</span>' + parts.map(function (p) {
+        return '<span class="tag" style="height:24px;font-size:12px;background:#fafafa;border:1px solid #e5e6eb;">' + p + '</span>';
+      }).join("");
+}
+function refresh() {
+  buildMatrix();
+  summaryChips();
+  document.getElementById("keyword").value = draft.keyword;
+  var dirty = isDirty();
+  var st = document.getElementById("statusText");
+  if (!applied) { st.textContent = "请点击确定筛选后查询"; st.className = "status"; }
+  else if (dirty) { st.textContent = "筛选已修改，点击确定后更新结果（旧结果仍基于上一次确定条件）"; st.className = "status dirty"; }
+  else { st.textContent = "当前筛选已确定（applied）"; st.className = "status"; }
+  document.getElementById("stateTag").textContent = !applied ? "尚未提交" : (dirty ? "draft ≠ applied（批量被阻止）" : "draft = applied");
+  document.getElementById("batchBtn").disabled = !applied || dirty;
+  document.getElementById("reqCount").textContent = String(requests);
+  document.getElementById("lastPayload").textContent = lastPayload ? stableKey(lastPayload) : "（无）";
+  renderPop();
+}
+function toast(msg) {
+  var t = document.getElementById("toast");
+  t.textContent = msg;
+  t.style.display = "block";
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function () { t.style.display = "none"; }, 2600);
+}
+function submit(kind) {
+  var fs = filterState();
+  var key = stableKey(fs);
+  if (applied && key === stableKey(applied)) {
+    toast("筛选未变化：相同条件重复确认不发起请求（成功去重）");
+    return;
+  }
+  requests += 1;
+  applied = clone(fs);
+  lastPayload = fs;
+  toast(kind + "已提交完整 payload（演示计数 +1，真实软件中此处调用 searchFirstPage/track/v2 各一次）");
+  refresh();
+}
+document.addEventListener("click", function (e) {
+  var cat = e.target.getAttribute && e.target.getAttribute("data-cat");
+  if (cat) {
+    if (cat === "全部") { draft.contentTag = draft.contentTag.indexOf("全部") >= 0 ? [] : ["全部"]; closePop(); }
+    else {
+      var kids = catKids(cat);
+      if (draft.contentTag.indexOf(cat) >= 0) {
+        draft.contentTag = draft.contentTag.filter(function (v) { return v !== cat; });
+      } else {
+        draft.contentTag = draft.contentTag.filter(function (v) { return kids.indexOf(v) < 0 && v !== "全部"; });
+        draft.contentTag.push(cat);
+      }
+    }
+    refresh();
+    return;
+  }
+  var market = e.target.getAttribute && e.target.getAttribute("data-market");
+  if (market) { draft.checks["market-" + market] = !draft.checks["market-" + market]; refresh(); return; }
+  if (e.target.hasAttribute && e.target.hasAttribute("data-audgroup")) { draft.checks.audGroup = !draft.checks.audGroup; refresh(); return; }
+  var check = e.target.getAttribute && e.target.getAttribute("data-check");
+  if (check) {
+    if ((check === "excludeCoop" || check === "excludeInvite") && !draft.brandIds.length) { toast("未选择合作品牌时不可用"); return; }
+    draft.checks[check] = !draft.checks[check];
+    refresh();
+    return;
+  }
+  var live = e.target.getAttribute && e.target.getAttribute("data-live");
+  if (live) {
+    var arr = draft[openPopId] || [];
+    var i = arr.indexOf(live);
+    if (i >= 0) arr.splice(i, 1); else arr.push(live);
+    draft[openPopId] = arr;
+    renderPop();
+    return;
+  }
+  var opt = e.target.getAttribute && e.target.getAttribute("data-opt");
+  if (opt && openPopId) {
+    if (POPS[openPopId].kind === "menu") {
+      var cfg = POPS[openPopId];
+      if (cfg.multi) {
+        var arr2 = draft[openPopId] || [];
+        var j = arr2.indexOf(opt);
+        if (j >= 0) arr2.splice(j, 1); else arr2.push(opt);
+        draft[openPopId] = arr2;
+        renderPop();
+      } else {
+        if (openPopId === "recentIndustry") draft.industry = opt;
+        else if (openPopId === "gender") draft.gender = opt === "不限" ? "" : opt;
+        else if (openPopId === "signed") draft.signed = opt === "不限" ? "" : opt;
+        else if (openPopId === "noteType") draft.noteType = opt === "不限" ? "" : opt;
+        else if (openPopId === "fansAge") draft.fansAge = opt === "不限" ? "" : opt;
+        else if (openPopId === "fansGender") draft.fansGender = opt === "不限" ? "" : opt;
+        else if (openPopId === "marital") draft.marital = opt === "不限" ? "" : opt;
+        else if (openPopId === "consumption") draft.consumption = opt === "不限" ? "" : opt;
+        closePop();
+        refresh();
+      }
+    } else if (POPS[openPopId].kind === "range") {
+      if (opt === "不限") delete draft.rangeValues[openPopId]; else draft.rangeValues[openPopId] = opt;
+      renderPop();
+    }
+    return;
+  }
+  var groupSel = e.target.getAttribute && e.target.getAttribute("data-group");
+  if (groupSel && openPopId) {
+    var gv = draft.groupValues[openPopId] || (draft.groupValues[openPopId] = {});
+    var gcfg = POPS[openPopId].groups.filter(function (g) { return g[0] === groupSel; })[0];
+    var cur = gv[groupSel];
+    var next = gcfg[2][(gcfg[2].indexOf(cur) + 1) % gcfg[2].length];
+    gv[groupSel] = cur ? "" : next;
+    renderPop();
+    return;
+  }
+  if (e.target.id === "popReset") {
+    if (POPS[openPopId].kind === "menu" && POPS[openPopId].multi) draft[openPopId] = [];
+    else if (POPS[openPopId].kind === "range") delete draft.rangeValues[openPopId];
+    else if (POPS[openPopId].kind === "group") delete draft.groupValues[openPopId];
+    else if (POPS[openPopId].kind === "multi") draft[openPopId] = [];
+    else if (POPS[openPopId].kind === "brand") { draft.brandIds = []; draft.brandExcluded = false; }
+    renderPop();
+    return;
+  }
+  if (e.target.id === "popConfirm") {
+    if (POPS[openPopId].kind === "brand" && draft.brandIds.length < 3) { toast("请至少选择3个品牌"); return; }
+    toast("弹层「确定」只写入 draft，不发起搜索");
+    closePop();
+    refresh();
+    return;
+  }
+  if (e.target.id === "popBackdrop") { closePop(); return; }
+  if (e.target.id === "catMore") { collapsed = !collapsed; buildMatrix(); return; }
+  if (e.target.id === "clearBtn") { draft = { keyword:"", contentTag:[], industry:"不限", gender:"", signed:"", family:[], career:[], feature:[], theme:[], scene:[], audience20:[], childAge:[], devicePrice:[], deviceBrand:[], fansAge:"", fansGender:"", marital:"", consumption:"", noteType:"", liveCount:[], liveViewer:[], liveGmv:[], rangeValues:{}, groupValues:{}, brandIds:[], brandExcluded:false, checks:{} }; refresh(); return; }
+  if (e.target.id === "collapseBtn") { collapsed = !collapsed; buildMatrix(); return; }
+  if (e.target.id === "topSearch" || e.target.id === "bottomConfirm") { submit(e.target.id === "topSearch" ? "顶部搜索" : "底部确定筛选"); return; }
+  if (e.target.id === "batchBtn") {
+    if (!applied || isDirty()) { toast("批量采集被阻止：请先确定筛选（只能使用最近成功查询的 applied 快照）"); return; }
+    toast("批量采集已使用冻结的 applied 快照开始（演示）");
+    return;
+  }
+  if (e.target.id === "oneClickExclude") {
+    if (!draft.brandIds.length) { toast("一键剔除需要先选择合作品牌（品牌门控）"); return; }
+    draft.checks.excludeCoop = true; draft.checks.excludeInvite = true;
+    refresh();
+    return;
+  }
+  var pop = e.target.getAttribute && e.target.getAttribute("data-pop");
+  if (pop) { openPop(pop, e.target); return; }
+});
+document.addEventListener("input", function (e) {
+  if (e.target.id === "keyword") { draft.keyword = e.target.value; refresh(); }
+  if (e.target.id === "brandKeyword") {
+    var demo = ["A品牌","B品牌","C品牌","D品牌","E品牌"].filter(function (b) { return b.indexOf(e.target.value) >= 0; });
+    var box = document.getElementById("brandOptions");
+    if (box) box.innerHTML = demo.map(function (b) {
+      var on = draft.brandIds.indexOf(b) >= 0;
+      return '<label class="check' + (on ? " on" : "") + '" data-brand="' + b + '" style="height:30px;padding:0 4px;"><span class="box">' + (on ? "✓" : "") + '</span>' + b + '</label>';
+    }).join("") || '<div style="font-size:12px;color:rgba(0,0,0,.45);padding:6px 4px;">无匹配品牌（演示）</div>';
+  }
+});
+document.addEventListener("change", function (e) {
+  if (e.target.id === "rangeLo" || e.target.id === "rangeHi") {
+    var lo = document.getElementById("rangeLo").value, hi = document.getElementById("rangeHi").value;
+    if (lo !== "" || hi !== "") draft.rangeValues[openPopId] = (lo || "0") + "～" + (hi || "不限");
+  }
+});
+document.addEventListener("mouseover", function (e) {
+  var cat = e.target.getAttribute && e.target.getAttribute("data-cat");
+  if (cat && cat !== "全部" && !e.target.closest("#popup-layer")) {
+    if (hoverCat === cat) return;
+    hoverCat = cat;
+    var r = e.target.getBoundingClientRect();
+    var kids = catKids(cat);
+    var layer = document.getElementById("popup-layer");
+    if (!kids.length) { layer.innerHTML = ""; return; }
+    var height = Math.min(232, 8 + kids.length * 36 + 8);
+    var pos = placePopup(280, height, r, 232);
+    var whole = draft.contentTag.indexOf(cat) >= 0;
+    var cols = [];
+    for (var i = 0; i < kids.length; i += 6) cols.push(kids.slice(i, i + 6));
+    layer.innerHTML = '<div class="pop category-panel" style="left:' + pos.left + 'px;top:' + pos.top + 'px;bottom:' + pos.bottom + 'px;width:280px;max-height:' + pos.height + 'px;">' +
+      '<div class="cols">' + cols.map(function (col) {
+        return '<div class="col">' + col.map(function (k) {
+          var on = whole || draft.contentTag.indexOf(k) >= 0;
+          return '<button type="button" class="tag' + (on ? " sel" : "") + '" data-catleaf="' + k + '">' + k + '</button>';
+        }).join("") + '</div>';
+      }).join("") + '</div></div>';
+    return;
+  }
+  var leaf = e.target.getAttribute && e.target.getAttribute("data-catleaf");
+  if (leaf) {
+    if (draft.contentTag.indexOf(hoverCat) >= 0) return;
+    var j2 = draft.contentTag.indexOf(leaf);
+    if (j2 >= 0) draft.contentTag.splice(j2, 1); else draft.contentTag.push(leaf);
+    refresh();
+    return;
+  }
+});
+document.addEventListener("mouseout", function (e) {
+  var cat = e.target.getAttribute && e.target.getAttribute("data-cat");
+  if (cat) {
+    var related = e.relatedTarget;
+    if (!related || (related.closest && !related.closest("#popup-layer"))) {
+      setTimeout(function () {
+        if (!document.querySelector("#popup-layer .category-panel")) { hoverCat = null; document.getElementById("popup-layer").innerHTML = ""; }
+      }, 160);
+    }
+  }
+});
+document.getElementById("legendBtn").addEventListener("click", function () {
+  document.getElementById("logic-panel").classList.toggle("open");
+});
+document.getElementById("keyword").addEventListener("keydown", function (e) {
+  if (e.key === "Enter") submit("Enter（与顶部搜索同入口）");
+});
+refresh();
+</script>
+</body>
+</html>

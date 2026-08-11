@@ -667,7 +667,7 @@ test("loadOptions：activities/brandSearch 元素缺标识键 → fail-closed（
   );
 });
 
-test("loadOptions：contentTagTree 规范化博主类目标签（取值语义未实证，仅 UI 选项）", async () => {
+test("loadOptions：contentTagTree 用 taxonomy2Tags 规范化为两级博主类目树（2026-08-10 LKG rawVersion 实证）", async () => {
   const fixture = await loadFixture("content-tag-tree.json");
   const schema = makeSchema(makeRequest(() => fixture));
   const result = await schema.loadOptions({ provider: "contentTagTree" });
@@ -676,6 +676,14 @@ test("loadOptions：contentTagTree 规范化博主类目标签（取值语义未
   assert.equal(result.nodes[0].payloadField, "contentTag");
   assert.equal(result.nodes[0].value, "美妆");
   assert.equal(result.nodes[0].label, "美妆");
+  // taxonomy2Tags 字符串数组必须映射为 children，否则二级类目丢失。
+  assert.equal(result.nodes[2].value, "母婴");
+  assert.deepEqual(
+    result.nodes[2].children.map((n) => n.value),
+    ["母婴日常", "早教", "婴童用品", "婴童洗护", "婴童食品", "婴童时尚", "孕期穿搭", "孕产经验", "产后恢复", "育儿经验", "宝宝才艺", "宝宝写真", "母婴其他"],
+  );
+  assert.equal(result.nodes[2].children[0].fullPath, "母婴 > 母婴日常");
+  assert.equal(result.nodes[0].children.length, 8);
 });
 
 test("createJsonLkgStore：save→load 往返、缺失/损坏返回 null、remove、目录自动创建", async (t) => {

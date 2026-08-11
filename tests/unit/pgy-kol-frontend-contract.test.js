@@ -2047,3 +2047,205 @@ test("no handler may be embedded inside an MUI sx object", () => {
     assert.ok(!inside, "onClick handler at offset " + m.index + " must not live inside an sx object");
   }
 });
+
+// ============ Phase 5.2 UI 对齐（2026-08-10 官网实测）：博主类目两级悬停 + 弹层定位 ============
+
+test("blogger category row shows all official primary chips by default with hover popups", () => {
+  const harness = searchPageHarness(() => Promise.resolve(successResult()));
+  const runtime = harness.runtime;
+  const tree = harness.renderer.render();
+  const chips = findVnodes(tree, (node) => node.type === runtime.PgyKolCategoryChips)[0];
+  assert.ok(chips, "博主类目 row must use the official two-level chip component");
+  const options = chips.props.options;
+  const labels = options.map((node) => node.label);
+  for (const label of ["全部", "美妆", "母婴", "职场", "其他"]) {
+    assert.ok(labels.includes(label), "default row must include official primary chip " + label);
+  }
+  assert.equal(labels.length, 29, "all 29 official primary chips (including 全部) must be visible by default");
+  const babyNode = options.find((node) => node.value === "母婴");
+  assert.equal(babyNode.children.length, 13, "母婴 must carry all 13 official secondary categories");
+  assert.equal(typeof chips.props.onToggleWhole, "function");
+  assert.equal(typeof chips.props.onToggleLeaf, "function");
+  assert.equal(typeof chips.props.onToggleAll, "function");
+  assert.ok(findVnodes(tree, (node) => node.type === runtime.PgyKolTrigger && node.props.label === "收起").length > 0, "expand/collapse must default to the expanded state");
+});
+
+test("blogger category tree merges official fallback children when the live tree is flat", () => {
+  const runtime = pageRuntime();
+  const flat = {
+    nodes: [
+      { value: "美妆", label: "美妆", children: [] },
+      { value: "母婴", label: "母婴", children: [] },
+    ],
+  };
+  const merged = runtime.pgyKolCategoryTreeNodes(flat);
+  const baby = merged.find((node) => node.value === "母婴");
+  assert.ok(baby, "母婴 must survive the merge");
+  assert.equal(baby.children.length, 13, "flat live tree must be completed with the official fallback children");
+  assert.equal(baby.children[0].value, "母婴日常");
+  const live = runtime.pgyKolCategoryTreeNodes({
+    nodes: [{ value: "母婴", label: "母婴", children: [{ value: "live-leaf", label: "live-leaf", children: [] }] }],
+  });
+  assert.equal(live[0].children.length, 1, "live children must win over the fallback");
+  assert.equal(live[0].children[0].value, "live-leaf");
+});
+
+test("blogger category hover opens the official secondary panel; leaf clicks stay draft-only", () => {
+  const runtime = pageRuntime();
+  const anchor = { getBoundingClientRect() { return { left: 100, right: 180, top: 200, bottom: 228 }; } };
+  const fallback = runtime.pgyKolCategoryTreeNodes({});
+  const options = fallback.map((node) => ({ value: node.value, label: node.label, children: node.children }));
+  options.unshift({ value: "全部", label: "全部", children: [] });
+  const props = {
+    options,
+    selected: [],
+    isActive(node) { return props.selected.indexOf(node.value) >= 0 || (node.children || []).some((c) => props.selected.indexOf(c.value) >= 0); },
+    onToggleWhole() {},
+    onToggleLeaf() {},
+    onToggleAll() {},
+  };
+  const renderer = statefulRenderer(runtime, runtime.PgyKolCategoryChips, props, {});
+  let tree = renderer.render();
+  const chip = findVnodes(tree, (node) => node.type === runtime.PgyKolTrigger && node.props.label === "母婴")[0];
+  assert.ok(chip, "母婴 primary chip must render");
+  assert.equal(chip.props.selected, false);
+  chip.props.onMouseEnter({ currentTarget: anchor });
+  tree = renderer.render();
+  const pop = findVnodes(tree, (node) => node.type === runtime.PgyKolCategoryPop)[0];
+  assert.ok(pop, "hovering the primary chip must open the official secondary panel");
+  const inner = runtime.PgyKolCategoryPop(pop.props);
+  assert.equal(inner.props.width, 280, "secondary panel keeps the official 280px width");
+  assert.equal(inner.props.preferredHeight, 232);
+  assert.equal(inner.props.maxHeight, 232);
+  assert.equal(inner.props.noBackdrop, true, "category hover panel must not block clicks on the primary chip");
+  const leafLabels = findVnodes(inner, (node) => node.type === runtime.PgyKolTrigger).map((node) => node.props.label);
+  for (const label of ["母婴日常", "孕期穿搭", "宝宝写真", "母婴其他"]) {
+    assert.ok(leafLabels.includes(label), "panel must list official secondary " + label);
+  }
+  assert.equal(leafLabels.length, 13, "母婴 must keep all 13 official secondaries");
+
+  let leafClick = null;
+  props.onToggleLeaf = (node, leaf) => { leafClick = { node: node.value, leaf: leaf.value }; };
+  tree = renderer.render();
+  const pop2 = findVnodes(tree, (node) => node.type === runtime.PgyKolCategoryPop)[0];
+  const leaf = findVnodes(runtime.PgyKolCategoryPop(pop2.props), (node) => node.type === runtime.PgyKolTrigger && node.props.label === "孕期穿搭")[0];
+  leaf.props.onOpen();
+  assert.deepEqual(leafClick, { node: "母婴", leaf: "孕期穿搭" }, "leaf click must toggle exactly that secondary");
+
+  props.selected = ["孕期穿搭"];
+  tree = renderer.render();
+  const pop3 = findVnodes(tree, (node) => node.type === runtime.PgyKolCategoryPop)[0];
+  const chip3 = findVnodes(tree, (node) => node.type === runtime.PgyKolTrigger && node.props.label === "母婴" && typeof node.props.onMouseEnter === "function")[0];
+  assert.equal(chip3.props.selected, true, "primary chip must show active when one secondary is selected");
+  const pop3Inner = runtime.PgyKolCategoryPop(pop3.props);
+  const selectedLeaf = findVnodes(pop3Inner, (node) => node.type === runtime.PgyKolTrigger && node.props.label === "孕期穿搭")[0];
+  const unselectedLeaf = findVnodes(pop3Inner, (node) => node.type === runtime.PgyKolTrigger && node.props.label === "早教")[0];
+  assert.equal(selectedLeaf.props.selected, true);
+  assert.equal(unselectedLeaf.props.selected, false);
+
+  props.selected = ["母婴"];
+  tree = renderer.render();
+  const pop4 = findVnodes(tree, (node) => node.type === runtime.PgyKolCategoryPop)[0];
+  const wholeSelected = findVnodes(runtime.PgyKolCategoryPop(pop4.props), (node) => node.type === runtime.PgyKolTrigger).every((node) => node.props.selected === true);
+  assert.equal(wholeSelected, true, "whole category must show every secondary as selected in the panel");
+});
+
+test("blogger category whole-selection semantics match the official page", () => {
+  let searches = 0;
+  const harness = searchPageHarness(() => { searches += 1; return Promise.resolve(successResult()); });
+  const runtime = harness.runtime;
+  let tree = harness.renderer.render();
+  function chipsNode() {
+    return findVnodes(tree, (node) => node.type === runtime.PgyKolCategoryChips)[0];
+  }
+  function selectedValues() {
+    return JSON.parse(JSON.stringify(chipsNode().props.selected));
+  }
+  const babyNode = chipsNode().props.options.find((node) => node.value === "母婴");
+  const leafNode = babyNode.children.find((node) => node.value === "孕期穿搭");
+
+  chipsNode().props.onToggleWhole(babyNode);
+  tree = harness.renderer.render();
+  assert.deepEqual(selectedValues(), ["母婴"], "clicking the primary chip must select the whole category as the primary label");
+
+  chipsNode().props.onToggleLeaf(babyNode, leafNode);
+  tree = harness.renderer.render();
+  assert.deepEqual(selectedValues(), ["母婴"], "clicking a secondary while the category is whole must be a no-op (official behavior)");
+
+  chipsNode().props.onToggleWhole(babyNode);
+  tree = harness.renderer.render();
+  assert.deepEqual(selectedValues(), [], "clicking the whole-selected primary again must clear the category");
+
+  chipsNode().props.onToggleLeaf(babyNode, leafNode);
+  tree = harness.renderer.render();
+  assert.deepEqual(selectedValues(), ["孕期穿搭"], "a single secondary must store the secondary label");
+
+  chipsNode().props.onToggleWhole(babyNode);
+  tree = harness.renderer.render();
+  assert.deepEqual(selectedValues(), ["母婴"], "clicking the primary over a partial selection must upgrade to the whole category");
+
+  chipsNode().props.onToggleAll();
+  tree = harness.renderer.render();
+  assert.deepEqual(selectedValues(), ["全部"], "全部 must be the clear-all marker");
+  chipsNode().props.onToggleAll();
+  tree = harness.renderer.render();
+  assert.deepEqual(selectedValues(), [], "clicking 全部 again must restore no category");
+  assert.equal(searches, 0, "all category interactions must remain draft-only");
+});
+
+test("blogger category payload sends the primary for whole and the secondary for single (official)", async () => {
+  const calls = [];
+  const coordinator = createCoordinator({
+    searchFirstPage(filterState) { calls.push(JSON.parse(JSON.stringify(filterState))); return Promise.resolve(successResult()); },
+  });
+  coordinator.editDraft({ contentTag: ["母婴"] });
+  await coordinator.applyAndSearch();
+  coordinator.editDraft({ contentTag: ["孕期穿搭"] });
+  await coordinator.applyAndSearch();
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0].contentTag, ["母婴"], "whole category must send the primary label");
+  assert.deepEqual(calls[1].contentTag, ["孕期穿搭"], "single secondary must send the secondary label");
+});
+
+test("official simple menu caps at the 261px official height with internal scroll and opens below", () => {
+  const runtime = pageRuntime();
+  const anchor = { getBoundingClientRect() { return { left: 100, right: 180, top: 200, bottom: 228 }; } };
+  const menu = runtime.PgyKolOfficialSimpleMenu({
+    open: true,
+    anchor,
+    options: runtime.pgyKolRecentIndustryOptions,
+    value: "不限",
+    onSelect() {},
+    onClose() {},
+  });
+  assert.equal(menu.type, runtime.PgyKolPop);
+  assert.equal(menu.props.width, 228, "official simple menu keeps the 228px width");
+  assert.equal(menu.props.preferredHeight, 261, "official simple menu caps at 261px");
+  assert.equal(menu.props.overflow, "auto", "official simple menu scrolls internally");
+});
+
+test("popover placement prefers below with clamped height and bottom-anchors flips (official)", () => {
+  const runtime = pageRuntime();
+  function popupSx(anchor, props) {
+    const node = runtime.PgyKolPop(Object.assign({ open: true, anchor, onClose() {} }, props || {}));
+    const box = findVnodes(node, (vnode) => vnode.props && vnode.props.sx && vnode.props.sx.position === "fixed" && vnode.props.sx.zIndex === 1400)[0];
+    assert.ok(box, "popup container must render");
+    return box.props.sx;
+  }
+  const mid = { getBoundingClientRect() { return { left: 100, right: 180, top: 200, bottom: 228 }; } };
+  let sx = popupSx(mid, { width: 228, preferredHeight: 261, maxHeight: 261 });
+  assert.equal(sx.top, 234, "plenty of room below: popup must anchor under the trigger");
+  assert.equal(sx.bottom, "auto");
+  assert.equal(sx.maxHeight, 631 - 6 - 8 < 261 ? 631 - 6 - 8 : 261, "height must be clamped to the space below");
+
+  const low = { getBoundingClientRect() { return { left: 100, right: 180, top: 580, bottom: 608 }; } };
+  sx = popupSx(low, { width: 228, preferredHeight: 261, maxHeight: 261 });
+  assert.equal(sx.top, "auto", "near the viewport bottom the popup must flip above");
+  assert.equal(sx.bottom, 631 - 580 + 6, "flipped popup must bottom-anchor to the trigger, never pin to the viewport top");
+
+  const tight = { getBoundingClientRect() { return { left: 100, right: 180, top: 420, bottom: 448 }; } };
+  sx = popupSx(tight, { width: 228, preferredHeight: 261, maxHeight: 261 });
+  assert.equal(sx.top, 454, "some room below: popup must stay below the trigger");
+  assert.equal(sx.bottom, "auto");
+  assert.equal(sx.maxHeight, 631 - 448 - 6 - 8, "height must be clamped to the available space below");
+});
