@@ -753,8 +753,8 @@ test("top search, Enter, and bottom confirm independently submit byte-equivalent
 
 test("career and feature popover confirms preserve each other's featureTags in both orders", async () => {
   for (const order of [
-    [{ trigger: "职业身份", title: "职业身份", key: "医生:医生" }, { trigger: "特色背景", title: "特色背景", key: "海外生活:海外生活" }],
-    [{ trigger: "特色背景", title: "特色背景", key: "海外生活:海外生活" }, { trigger: "职业身份", title: "职业身份", key: "医生:医生" }],
+    [{ trigger: "职业身份", title: "职业身份", key: "医生:医生" }, { trigger: "特色背景", title: "特色背景", key: "留学背景:留学背景" }],
+    [{ trigger: "特色背景", title: "特色背景", key: "留学背景:留学背景" }, { trigger: "职业身份", title: "职业身份", key: "医生:医生" }],
   ]) {
     const calls = [];
     const harness = searchPageHarness((filterState) => {
@@ -764,19 +764,19 @@ test("career and feature popover confirms preserve each other's featureTags in b
     for (const selection of order) {
       let tree = harness.renderer.render();
       const trigger = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolTrigger && node.props && node.props.label === selection.trigger)[0];
-      assert.ok(trigger, selection.trigger + " trigger must render");
-      trigger.props.onOpen({ currentTarget: {} });
-      tree = harness.renderer.render();
-      const popover = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolOptionPop && node.props && node.props.title === selection.title)[0];
-      assert.ok(popover, selection.title + " popover must render");
-      popover.props.onApply([selection.key]);
-      popover.props.onClose();
+    assert.ok(trigger, selection.trigger + " trigger must render");
+    trigger.props.onOpen({ currentTarget: {} });
+    tree = harness.renderer.render();
+    const popover = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolTreePop && node.props && node.props.title === selection.title)[0];
+    assert.ok(popover, selection.title + " popover must render");
+    popover.props.onApply([selection.key]);
+    popover.props.onClose();
     }
     const tree = harness.renderer.render();
     findVnodes(tree, (node) => node.props && node.props.children === "搜索")[0].props.onClick();
     await new Promise(setImmediate);
     assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0].featureTags, ["医生", "海外生活"], "each popover must replace only its own option group");
+    assert.deepEqual(calls[0].featureTags, ["医生", "留学背景"], "each popover must replace only its own option group");
   }
 });
 
@@ -874,17 +874,26 @@ test("ten rendered filter edits and a real popover confirm remain draft-only", (
   assert.ok(familyTrigger);
   familyTrigger.props.onOpen({ currentTarget: { getBoundingClientRect() { return { left: 100, top: 100, right: 160, bottom: 128 }; } } });
   tree = renderer.render();
-  const optionPopover = findVnodes(tree, (node) => node.type === runtime.PgyKolOptionPop && node.props && node.props.title === "家庭身份")[0];
-  assert.ok(optionPopover, "opening the trigger must render its real multi-select popover");
-  const popRenderer = statefulRenderer(runtime, runtime.PgyKolOptionPop, optionPopover.props, { scrollIntoView() {} });
+  const optionPopover = findVnodes(tree, (node) => node.type === runtime.PgyKolTreePop && node.props && node.props.title === "家庭身份")[0];
+  assert.ok(optionPopover, "opening the trigger must render its real tree popover");
+  const popRenderer = statefulRenderer(runtime, runtime.PgyKolTreePop, optionPopover.props, { scrollIntoView() {} });
   let popTree = popRenderer.render();
-  const option = findVnodes(popTree, (node) => node.props && node.props.label && typeof node.props.onClick === "function")[0];
-  assert.ok(option);
-  option.props.onClick();
-  popTree = popRenderer.render();
-  const confirm = findVnodes(popTree, (node) => node.props && node.props.children === "确定" && typeof node.props.onClick === "function")[0];
-  assert.ok(confirm);
-  confirm.props.onClick();
+  const treeVnode = findVnodes(popTree, (node) => node.type === runtime.PgyKolTree)[0];
+  assert.ok(treeVnode, "tree popover must render its tree");
+  const treeTree = runtime.PgyKolTree(treeVnode.props);
+  const groupNode = findVnodes([treeTree], (node) => node.type === runtime.PgyKolTreeNode && node.props && node.props.node && node.props.node.children && node.props.node.children.length)[0];
+  assert.ok(groupNode, "family tree must render its official group nodes");
+  const groupRenderer = statefulRenderer(runtime, runtime.PgyKolTreeNode, groupNode.props, { scrollIntoView() {} });
+  let groupTree = groupRenderer.render();
+  const expander = findVnodes(groupTree, (node) => typeof node.props.onClick === "function" && [].concat(node.props.children || []).some((child) => child && child.props && child.props.icon))[0];
+  assert.ok(expander, "group node must render an expander");
+  expander.props.onClick({ stopPropagation() {} });
+  groupTree = groupRenderer.render();
+  const leaf = findVnodes(groupTree, (node) => node.type === runtime.PgyKolTreeNode && node.props && node.props.node && !(node.props.node.children && node.props.node.children.length))[0];
+  assert.ok(leaf, "expanded group must render official leaf nodes");
+  assert.equal(leaf.props.node.label, "妈妈", "first official family leaf must be 妈妈");
+  // 真实 apply（确认按钮同一闭包）只更新草稿，不触发搜索。
+  optionPopover.props.onApply(["妈妈:妈妈"]);
   assert.equal(searches, 0, "the actual popover's internal confirm must only update draft");
 });
 
@@ -1502,18 +1511,29 @@ test("gender popover keeps official options", () => {
   assert.ok(pageSource.includes("closeOnSelect: true"), "gender must close on select");
 });
 
-test("region cascade keeps province/city/district levels", () => {
-  assert.ok(pageSource.includes("function PgyKolCascadePop(p)"), "cascade popover must exist");
-  assert.ok(pageSource.includes('col("省份"'), "province column must exist");
-  assert.ok(pageSource.includes('col("城市"'), "city column must exist");
-  assert.ok(pageSource.includes('col("区县"'), "district column must exist");
+test("region and fans region use the official country list", () => {
+  const countryCount = (pageSource.match(/pgyKolCountryOptions/g) || []).length;
+  assert.ok(countryCount >= 2, "country list must feed both location and fans location popovers");
+  assert.ok(
+    pageSource.includes('var pgyKolCountryOptions=pgyKolStaticOptions(["全部","中国","美国","日本","澳大利亚","英国","加拿大","韩国","法国","德国","新加坡","其他"])'),
+    "country list must match the official 12 options",
+  );
   assert.ok(pageSource.includes('title: "地域"'), "location popover must be wired");
   assert.ok(pageSource.includes('title: "粉丝地域"'), "fans location popover must be wired");
-  assert.ok(pageSource.includes("onSelect: applyLocation"), "location select must apply the node");
+  assert.ok(pageSource.includes('toggleSingle("location", n.value)'), "location select must toggle the country value");
+  assert.ok(pageSource.includes('toggleSingle("fansLocation", n.value)'), "fans location select must toggle the country value");
+  assert.ok(
+    pageSource.includes('if (n.value === "全部") { clearLocation(); }'),
+    "location 全部 must clear the draft",
+  );
+  assert.ok(
+    pageSource.includes('if (n.value === "全部") { clearFansLocation(); }'),
+    "fans location 全部 must clear the draft",
+  );
 });
 
 test("audience20 stays a leaf-only tree popover", () => {
-  assert.equal((pageSource.match(/leafOnly: true/g) || []).length, 1, "leafOnly:true must appear exactly once");
+  assert.equal((pageSource.match(/leafOnly: true/g) || []).length, 5, "leafOnly:true must appear on the five official grouped filters (family/career/feature/scene/audience20)");
   assert.ok(
     pageSource.includes('title: "二十大人群"'),
     "audience20 popover must exist",
@@ -1521,6 +1541,165 @@ test("audience20 stays a leaf-only tree popover", () => {
   assert.ok(pageSource.includes("onApply: function (keys) { update({ audience20:"), "audience20 apply must map keys back to nodes");
   assert.match(pageSource, /已选 " \+ draft\.length \+ " 项"/, "tree popover must show the selected count");
   assert.ok(pageSource.includes('children: "清空"') && pageSource.includes('children: "确定"'), "tree popover must offer 清空/确定");
+});
+
+test("official grouped filters carry the audited 2026-08-11 option sets", () => {
+  const trees = {
+    pgyKolFamilyTree: {
+      "家庭角色": ["妈妈", "萌娃", "爸爸", "奶奶"],
+      "出镜人关系": ["情侣", "夫妻", "家庭", "闺蜜", "兄弟"],
+      "母婴阶段": ["备孕中", "孕期中", "0-6个月", "6-12个月", "1-3岁", "3-6岁", "6-12岁", "12岁以上"],
+    },
+    pgyKolCareerTree: {
+      "传统行业": ["工程师", "销售", "HR"],
+      "互联网": ["主播", "运营", "产品经理", "程序员"],
+      "教育科研": ["学生"],
+      "金融法律": ["金融从业者"],
+      "企业创业": ["创业者", "品牌创始人", "公益人"],
+      "时尚美妆": ["模特", "化妆师", "造型师", "服装设计师", "珠宝设计师", "发型设计师"],
+      "食品饮料": ["甜点师", "厨师", "咖啡师", "调酒师"],
+      "文化传媒": ["编辑", "记者", "翻译", "作家", "娱评人", "影评人", "乐评人"],
+      "医疗健康": ["营养师", "医生", "康复师"],
+      "艺术设计": ["摄影师", "插画师", "室内设计师", "画家", "平面设计师", "建筑设计师", "非遗传承人", "涂鸦艺术家", "数字艺术家"],
+      "影视娱乐": ["主持人", "导演", "制片人", "编剧", "经纪人", "真人秀嘉宾", "虚拟偶像", "rapper"],
+      "运动健身": ["教练", "运动员", "舞蹈老师"],
+      "专业服务": ["空乘", "花艺师", "整理师", "民宿主", "育婴师"],
+    },
+    pgyKolFeatureTree: {
+      "生活背景": ["留学背景", "海外华人", "铲屎官", "孕妈", "独居人群", "外国人", "混血儿"],
+      "备考经验": ["考公过来人", "考研过来人", "法考过来人", "注会过来人"],
+      "兴趣爱好": ["户外爱好者", "数码爱好者", "手账爱好者", "二次元人群", "汉服爱好者", "手办爱好者", "模型爱好者", "街舞爱好者", "骑行爱好者", "飞盘爱好者", "书法爱好者"],
+    },
+    pgyKolSceneTree: {
+      "形式": ["vlog", "探店", "测评", "ootd", "合集", "plog", "开箱", "教程", "成分解析", "彩妆试色", "仿妆", "沉浸式"],
+      "风格": ["韩系", "日系", "欧美风", "氛围感", "纯欲", "甜酷", "复古", "高级感", "校园风", "中性风"],
+      "生活方式": ["职场生活", "自律生活", "露营徒步", "极简主义", "低脂低卡"],
+      "肤质肤色": ["油皮", "干皮", "混合肌", "敏感肌", "痘痘肌", "瑕疵皮", "白皮", "黄皮"],
+      "皮肤养护": ["保湿补水", "美白", "淡斑", "祛黄", "抗氧化", "抗老", "祛皱", "抗炎", "修复", "祛痘祛闭口", "隔离防晒", "控油", "眼部护理"],
+    },
+  };
+  const runtime = pageRuntime();
+  for (const [treeName, groups] of Object.entries(trees)) {
+    const tree = runtime[treeName];
+    assert.ok(tree && Array.isArray(tree.nodes), treeName + " must be a tree");
+    const groupNames = tree.nodes.map((node) => node.label);
+    assert.deepEqual(JSON.parse(JSON.stringify(groupNames)), Object.keys(groups), treeName + " group names must match the official audit");
+    for (const node of tree.nodes) {
+      const labels = node.children.map((child) => child.label);
+      assert.deepEqual(JSON.parse(JSON.stringify(labels)), groups[node.label], treeName + " " + node.label + " leaves must match the official audit");
+    }
+  }
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(runtime.pgyKolChildAgeOptions.map((option) => option.value))),
+    ["备孕", "0-6月", "7-12月", "1-3岁", "4-6岁", "7-12岁", "孕早期", "孕晚期"],
+    "child age options must match the official audit",
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(runtime.pgyKolDeviceBrandOptions.map((option) => option.value))),
+    ["苹果", "华为", "OPPO", "VIVO", "荣耀", "小米", "一加", "魅族", "中兴", "联想"],
+    "device brand options must match the official audit",
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(runtime.pgyKolCountryOptions.map((option) => option.value))),
+    ["全部", "中国", "美国", "日本", "澳大利亚", "英国", "加拿大", "韩国", "法国", "德国", "新加坡", "其他"],
+    "country options must match the official audit",
+  );
+});
+
+test("note category popover renders the full official three-level trees", () => {
+  const runtime = pageRuntime();
+  const fallback = runtime.pgyKolNoteCatFallback();
+  const byName = {};
+  fallback.forEach((node) => { byName[node.label] = node; });
+  assert.ok(byName["汽车"] && byName["汽车"].children.length === 8, "car tree must keep all 8 top groups");
+  assert.ok(byName["游戏"] && byName["游戏"].children.length === 2, "game tree must keep 游戏品类/游戏类型");
+  assert.ok(byName["母婴"] && byName["母婴"].children.length === 10, "baby tree must keep all 10 top groups");
+  const car = byName["汽车"];
+  const rational = car.children.find((node) => node.label === "理性决策");
+  assert.ok(rational && rational.children.length === 4, "理性决策 must keep 选车攻略/新车测评/探店试驾/车主心得");
+  const guide = rational.children.find((node) => node.label === "选车攻略");
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(guide.children.map((leaf) => leaf.label))),
+    ["政策", "购车顾虑", "配置", "能源类型优势对比", "攻略"],
+    "选车攻略 third level must match the official audit",
+  );
+  const game = byName["游戏"];
+  const types = game.children.find((node) => node.label === "游戏类型");
+  assert.equal(types.children.length, 21, "game types must keep all 21 official categories");
+  const action = types.children.find((node) => node.label === "动作格斗游戏");
+  assert.deepEqual(JSON.parse(JSON.stringify(action.children.map((leaf) => leaf.label))), ["永劫无间"]);
+  const baby = byName["母婴"];
+  const wash = baby.children.find((node) => node.label === "婴童洗护");
+  assert.equal(wash.children.length, 15, "婴童洗护 must keep all 15 official leaves");
+  const food = baby.children.find((node) => node.label === "婴童辅食");
+  assert.equal(food.children.length, 21, "婴童辅食 must keep all 21 official leaves");
+});
+
+test("career/feature popovers keep their selection after reopening and confirm without clearing", async () => {
+  const calls = [];
+  const harness = searchPageHarness((filterState) => {
+    calls.push(JSON.parse(JSON.stringify(filterState)));
+    return Promise.resolve(successResult());
+  });
+  let tree = harness.renderer.render();
+  // 1) 打开职业身份，选中 医生/工程师 并确定。
+  const careerTrigger = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolTrigger && node.props && node.props.label === "职业身份")[0];
+  assert.ok(careerTrigger);
+  careerTrigger.props.onOpen({ currentTarget: {} });
+  tree = harness.renderer.render();
+  const careerPop = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolTreePop && node.props && node.props.title === "职业身份")[0];
+  assert.ok(careerPop);
+  careerPop.props.onApply(["医生:医生", "工程师:工程师"]);
+  careerPop.props.onClose();
+  tree = harness.renderer.render();
+  // 2) 触发器徽标计数必须反映叶子选中数（P2 回归：组级 key 导致恒 0）。
+  const careerTrigger2 = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolTrigger && node.props && node.props.label === "职业身份")[0];
+  assert.equal(careerTrigger2.props.count, 2, "career trigger count must reflect selected leaves");
+  // 3) 重新打开职业身份：selectedKeys 必须包含已选叶子（回显），确定后不得清空。
+  careerTrigger2.props.onOpen({ currentTarget: {} });
+  tree = harness.renderer.render();
+  const careerPop2 = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolTreePop && node.props && node.props.title === "职业身份")[0];
+  assert.ok(careerPop2);
+  assert.deepEqual(JSON.parse(JSON.stringify(careerPop2.props.selectedKeys)), ["工程师:工程师", "医生:医生"], "reopened career popover must echo the selected leaves in official group order");
+  careerPop2.props.onApply(careerPop2.props.selectedKeys);
+  careerPop2.props.onClose();
+  tree = harness.renderer.render();
+  // 4) 特色背景同样回显；提交后两组并存且顺序稳定。
+  const featureTrigger = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolTrigger && node.props && node.props.label === "特色背景")[0];
+  featureTrigger.props.onOpen({ currentTarget: {} });
+  tree = harness.renderer.render();
+  const featurePop = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolTreePop && node.props && node.props.title === "特色背景")[0];
+  featurePop.props.onApply(["留学背景:留学背景"]);
+  featurePop.props.onClose();
+  tree = harness.renderer.render();
+  const featureTrigger2 = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolTrigger && node.props && node.props.label === "特色背景")[0];
+  assert.equal(featureTrigger2.props.count, 1, "feature trigger count must reflect selected leaves");
+  featureTrigger2.props.onOpen({ currentTarget: {} });
+  tree = harness.renderer.render();
+  const featurePop2 = findVnodes(tree, (node) => node.type === harness.runtime.PgyKolTreePop && node.props && node.props.title === "特色背景")[0];
+  assert.deepEqual(JSON.parse(JSON.stringify(featurePop2.props.selectedKeys)), ["留学背景:留学背景"], "reopened feature popover must echo the selected leaves");
+  featurePop2.props.onApply(featurePop2.props.selectedKeys);
+  featurePop2.props.onClose();
+  tree = harness.renderer.render();
+  findVnodes(tree, (node) => node.props && node.props.children === "搜索")[0].props.onClick();
+  await new Promise(setImmediate);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].featureTags, ["工程师", "医生", "留学背景"], "reopen+confirm must never clear the group and must keep official group order");
+});
+
+test("note category leaf paths keep the industry prefix so cross-industry leaves cannot collide", () => {
+  const runtime = pageRuntime();
+  const fallback = runtime.pgyKolNoteCatFallback();
+  const car = fallback.find((node) => node.label === "汽车");
+  const rational = car.children.find((node) => node.label === "理性决策");
+  const guide = rational.children.find((node) => node.label === "选车攻略");
+  const leafPath = runtime.pgyKolCollectLeafPaths(guide, ["汽车", "理性决策"])[0];
+  assert.equal(leafPath, "汽车 理性决策 选车攻略 政策", "note category leaf path must start with the industry prefix");
+  // 弹层渲染必须用行业前缀作为树根前缀。
+  assert.ok(
+    pageSource.includes('prefix:[String(ind&&(ind.label||ind.value||""))].filter(Boolean)'),
+    "note category tree must seed its prefix with the selected industry",
+  );
 });
 
 test("Phase 5.2 popovers retain an anchor gap and recalculate on viewport movement", () => {
@@ -2088,6 +2267,23 @@ test("blogger category tree merges official fallback children when the live tree
   });
   assert.equal(live[0].children.length, 1, "live children must win over the fallback");
   assert.equal(live[0].children[0].value, "live-leaf");
+});
+
+test("blogger category fallback covers 职场 and 汽车 secondaries (official 2026-08-11)", () => {
+  const runtime = pageRuntime();
+  const nodes = runtime.pgyKolCategoryTreeNodes({});
+  const career = nodes.find((node) => node.value === "职场");
+  const auto = nodes.find((node) => node.value === "汽车");
+  assert.ok(career, "职场 must be in the fallback tree");
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(career.children.map((node) => node.value))),
+    ["职场干货", "职场行业", "职业考试", "职场其他"],
+  );
+  assert.ok(auto, "汽车 must be in the fallback tree");
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(auto.children.map((node) => node.value))),
+    ["用车攻略", "汽车评测", "汽车其他"],
+  );
 });
 
 test("blogger category hover opens the official secondary panel; leaf clicks stay draft-only", () => {

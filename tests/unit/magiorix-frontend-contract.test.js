@@ -34,11 +34,11 @@ test("1.2.0 auth bundle uses verified registration and password recovery flows",
   for (const endpoint of ["/api/auth/sms/send", "/api/auth/register", "/api/auth/password/reset"]) {
     assert.match(source, new RegExp(endpoint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing ${endpoint}`);
   }
-  assert.match(source, /purpose:"register"/);
+  // 注册默认使用密码，不再请求短信验证码；只有找回密码才用短信验证。
   assert.match(source, /purpose:"reset_password"/);
   assert.match(source, /\\d\{4\}/);
-  assert.match(source, /验证码有效期 5 分钟/);
-  assert.match(source, /C>0/);
+  assert.doesNotMatch(source, /purpose:"register"/);
+  assert.doesNotMatch(source, /验证码有效期 5 分钟/);
   assert.match(source, /loginType:"password"/);
   assert.doesNotMatch(source, /不支持在线找回密码/);
 
@@ -46,8 +46,15 @@ test("1.2.0 auth bundle uses verified registration and password recovery flows",
   const flowEnd = source.indexOf("function kr(e){", flowStart);
   assert.ok(flowStart >= 0 && flowEnd > flowStart, "auth flow patch is present");
   const registrationFlow = source.slice(flowStart, flowEnd);
+  const registerOnlyEnd = source.indexOf("function b5({", flowStart);
+  const registerOnly = source.slice(flowStart, registerOnlyEnd);
   assert.doesNotMatch(registrationFlow, /auth\/sms\/login|Jl\(/);
-  assert.match(registrationFlow, /pgyRegister\(\{phone:q,code:T,password:c\}\)/);
+  assert.match(registerOnly, /pgyRegister\(\{phone:v,password:l\}\)/);
+  assert.doesNotMatch(registerOnly, /获取验证码|purpose:"register"|验证码已发送/);
+  assert.match(registerOnly, /placeholder:"确认密码"/);
+  // 找回密码（b5）仍保留短信验证码。
+  assert.match(registrationFlow, /purpose:"reset_password"/);
+  assert.match(registrationFlow, /获取验证码/);
   assert.match(registrationFlow, /Zt\.getState\(\)\.setToken\(R\.token\)/);
   assert.match(registrationFlow, /Se\.getState\(\)\.setUserInfo\(R\.userInfo\)/);
   assert.doesNotMatch(registrationFlow, /pgyRegister\(\{phone:q,code:T,password:c\}\),await r\(\{loginType:"password"/);

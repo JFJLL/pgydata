@@ -28,7 +28,7 @@ async function register(context, phone, password = "password123") {
   return result.body.data;
 }
 
-test("SMS registration and reset stay unavailable until the SMS switch is enabled", async () => {
+test("registration stays available without SMS while reset keeps requiring it", async () => {
   await withServer({}, { SMS_TEST_MODE: "0" }, async (context) => {
     const send = await requestJson(context.baseUrl, "/api/auth/sms/send", {
       method: "POST",
@@ -36,27 +36,49 @@ test("SMS registration and reset stay unavailable until the SMS switch is enable
     });
     assert.equal(send.response.status, 503);
     assert.equal(send.body.code, 503);
+    // 注册默认使用密码：短信关闭时仍可直接注册。
     const registerResult = await requestJson(context.baseUrl, "/api/auth/register", {
       method: "POST",
-      body: { phone: "13800000000", code: "0000", password: "password123" },
+      body: { phone: "13800000000", password: "password123" },
     });
-    assert.equal(registerResult.response.status, 503);
-    assert.equal(registerResult.body.code, 503);
+    assert.equal(registerResult.body.code, 200, JSON.stringify(registerResult.body));
+    assert.ok(registerResult.body.data?.token);
+    // 手机号格式校验对无验证码注册同样生效。
+    const badPhone = await requestJson(context.baseUrl, "/api/auth/register", {
+      method: "POST",
+      body: { phone: "not-a-phone", password: "password123" },
+    });
+    assert.equal(badPhone.body.code, 400, JSON.stringify(badPhone.body));
+    const reset = await requestJson(context.baseUrl, "/api/auth/password/reset", {
+      method: "POST",
+      body: { phone: "13800000000", code: "0000", newPassword: "password456" },
+    });
+    assert.equal(reset.response.status, 503);
+    assert.equal(reset.body.code, 503);
   });
 });
 
-test("registration requires a provider-backed four-digit code and grants exactly 100 points", async () => {
-  await withServer({}, { DEFAULT_GIFT_BALANCE: "999" }, async (context) => {
+test("password registration and code-verified registration both keep the 100-point gift", async () => {
+  await withServer({}, {}, async (context) => {
+    // 无验证码注册（默认密码方式）成功，并照常发放注册奖励（内部使用，不做防刷门控）。
     const missing = await requestJson(context.baseUrl, "/api/auth/register", {
       method: "POST",
       body: { phone: "13800000001", password: "password123" },
     });
-    assert.equal(missing.body.code, 400);
+    assert.equal(missing.body.code, 200, JSON.stringify(missing.body));
+    assert.equal(missing.body.data.userInfo.balance, 100, "password-only registration must keep the 100-point gift");
+    // 带短信验证码注册仍可用，同样发放 100 积分奖励。
+    const codePhone = "13800000005";
+    const code = await sendCode(context.baseUrl, codePhone);
+    const withCode = await requestJson(context.baseUrl, "/api/auth/register", {
+      method: "POST",
+      body: { phone: codePhone, code, password: "password123" },
+    });
+    assert.equal(withCode.body.code, 200, JSON.stringify(withCode.body));
+    assert.equal(withCode.body.data.userInfo.balance, 100);
 
-    const data = await register(context, "13800000001");
-    assert.equal(data.userInfo.balance, 100);
     const balance = await requestJson(context.baseUrl, "/api/shumiao/balance", {
-      headers: authHeaders(data.token),
+      headers: authHeaders(missing.body.data.token),
     });
     assert.equal(balance.body.data.balance, 100);
   });

@@ -802,25 +802,26 @@ app.post("/api/auth/sms/send", asyncHandler(async (req, res) => {
 }));
 
 app.post("/api/auth/register", asyncHandler(async (req, res) => {
-  if (!smsEnabled) return failHttp(res, 503, 503, "短信服务暂未开启，请稍后再试");
   const phone = normalizePhone(req.body.phone);
   const code = String(req.body.code || "").trim();
   const password = req.body.password;
   if (!phone) return fail(res, 400, "手机号格式不正确");
+  if (!/^1[3-9]\d{9}$/.test(phone)) return fail(res, 400, "手机号格式不正确");
   if (typeof password !== "string" || password.length < 8 || password.length > 64) {
     return fail(res, 400, "密码长度必须在 8 到 64 个字符之间");
   }
-  if (!/^\d{4}$/.test(code)) return fail(res, 400, "验证码错误或已失效");
+  // 注册默认使用密码，不再强制短信验证码；仅当调用方显式携带验证码时才校验。
+  if (code && !/^\d{4}$/.test(code)) return fail(res, 400, "验证码错误或已失效");
   if (await dbGet("SELECT id FROM users WHERE phone = ?", [phone])) return fail(res, 400, REGISTRATION_FAILURE_MESSAGE);
 
   try {
-    await smsService.checkCode({ phone, purpose: "register", code });
+    if (code) await smsService.checkCode({ phone, purpose: "register", code });
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await withTransaction(async (tx) => {
       if (await tx.get("SELECT id FROM users WHERE phone = ?", [phone])) {
         throw new SmsServiceError("already_registered", REGISTRATION_FAILURE_MESSAGE);
       }
-      await smsService.consumeCodeInTransaction(tx, { phone, purpose: "register", code });
+      if (code) await smsService.consumeCodeInTransaction(tx, { phone, purpose: "register", code });
       const createdAt = nowIso();
       const result = await tx.run(
         `INSERT INTO users (phone, password_hash, nickname, created_at, updated_at)

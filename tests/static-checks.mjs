@@ -82,6 +82,47 @@ for (const marker of [
 for (const industry of ["美妆个护", "食品饮料", "3c及电器", "日用百货", "服装配饰", "互联网", "生活服务", "家居建材", "汽车"]) {
   assert.ok(uiPreview.includes(industry), `UI preview must carry official industry option: ${industry}`);
 }
+// 2026-08-11 官网实测字段契约：分组筛选树/国家地域/母婴阶段/手机品牌必须进入产物，
+// 旧的平铺候选（宝妈/公务员/三星）不得残留（防产物级漂移）。
+const kolBundle = readFileSync("assets/1.2.0/assets/index-B09sHfUO.js", "utf8");
+for (const marker of ['"家庭角色"', '"出镜人关系"', '"备考经验"', '"皮肤养护"', '"生活方式"', '"传统行业"', '"专业服务"', '"新加坡"', '"7-12月"', '"魅族"', '"中兴"']) {
+  assert.ok(kolBundle.includes(marker), `bundle must carry official grouped-filter marker: ${marker}`);
+}
+for (const stale of ['"二胎妈妈"', '"公务员"', '"三星"', '"自由职业"']) {
+  assert.ok(!kolBundle.includes(stale), `bundle must not keep the legacy flat candidate: ${stale}`);
+}
+
+// 登录页补丁契约（2026-08-11）：登录/注册默认密码、只有找回密码用短信、无二维码。
+const signInBundle = readFileSync("assets/1.2.0/assets/index-B09sHfUO.js", "utf8");
+const signInCss = readFileSync("assets/1.2.0/assets/index-kuUVLowI.css", "utf8");
+assert.ok(signInBundle.includes('className:"sign-in__card"'), "sign-in page must still render (positive guard against whole-page removal)");
+assert.ok(signInCss.includes(".sign-in__card{"), "sign-in card styles must still exist");
+assert.ok(!signInBundle.includes('className:"sign-in__left"'), "sign-in qr panel must be removed from the bundle");
+assert.ok(!signInBundle.includes('className:"sign-in__divider"'), "sign-in divider must be removed from the bundle");
+assert.ok(
+  signInBundle.includes('return r==="sms"||r==="password"?r:"password"'),
+  "sign-in must default to the password login tab",
+);
+assert.ok(signInBundle.includes('children:"注册"'), "register tab label must exist");
+assert.ok(signInBundle.includes('children:"登录"'), "login tab label must exist");
+assert.ok(signInBundle.includes('await pgyRegister({phone:v,password:l})'), "register must send password without an SMS code");
+assert.ok(signInBundle.includes('placeholder:"确认密码"'), "register form must confirm the password");
+// 注册表单手机号正则必须保留反斜杠：\d 在 JS 字符串字面量中会被吞成 d，
+// 产物一旦漂移为 d{9} 则任何手机号都无法通过注册（reviewer 实测阻断缺陷回归保护）。
+assert.ok(signInBundle.includes("1[3-9]\\d{9}"), "register phone regex must keep its backslash in the bundle");
+assert.ok(!signInBundle.includes("1[3-9]d{9}"), "register phone regex must not lose its backslash (d{9} would never match)");
+assert.ok(signInBundle.includes('purpose:"reset_password"'), "reset-password flow must keep the SMS code");
+assert.ok(signInBundle.includes('children:"忘记密码？"'), "forgot-password entry must stay on the login form");
+assert.ok(signInCss.includes(".sign-in__card{width:420px;height:auto;"), "sign-in card must be narrowed without the qr panel");
+assert.ok(
+  signInCss.includes(".sign-in__right{width:100%;display:flex;flex-direction:column;align-items:center;padding:0}"),
+  "sign-in right column must fill the narrowed card",
+);
+// 注册表单不再带短信验证码输入（仅找回密码保留）。
+assert.ok(
+  signInBundle.includes('className:"password-login"'),
+  "register form must reuse the password-login styling",
+);
 
 const buildScript = readFileSync("scripts/build-magiorix-windows-installer.ps1", "utf8");
 assert.match(buildScript, /app-source\\package\.json/, "build must derive versions from package.json");

@@ -90,7 +90,7 @@ function pgyKolCollectLeafPaths(node,prefix){prefix=prefix||[];if(!node)return[]
 
 function pgyKolSchemaUnproven(fields){var m={};if(Array.isArray(fields)){fields.forEach(function(fd){if(fd&&fd.payloadProven===false&&Array.isArray(fd.uiKeys)){fd.uiKeys.forEach(function(k){m[k]=1})}})}window.__pgyKolUnproven=m;return m}
 
-function pgyKolNoteCatFallback(){return Object.keys(pgyKolNoteCategoryTree).map(function(k){return {label:k,value:k,children:pgyKolNoteCategoryTree[k]&&pgyKolNoteCategoryTree[k].nodes?pgyKolNoteCategoryTree[k].nodes.map(function(n){return {label:n.label,value:n.label,children:[]}}):[]}})}
+function pgyKolNoteCatFallback(){return Object.keys(pgyKolNoteCategoryTree).map(function(k){return {label:k,value:k,children:pgyKolNoteCategoryTree[k]&&pgyKolNoteCategoryTree[k].nodes?pgyKolNoteCategoryTree[k].nodes:[]}})}
 
 function pgyKolFixedColumnIds(){return ["kolInfo","recentNotes","actions"]}
 
@@ -140,16 +140,20 @@ function PgyKolTaskHistory(p){return o.jsxs(xe,{variant:"outlined",sx:{mt:2},chi
 
 function PgyKolBrandPopup(p){var kw=m.useState(""),keyword=kw[0],setKeyword=kw[1],ops=m.useState([]),options=ops[0],setOptions=ops[1],ld=m.useState(false),loading=ld[0],setLoading=ld[1],bpe=m.useState(null),brandError=bpe[0],setBrandError=bpe[1],dr=m.useState([]),draft=dr[0],setDraft=dr[1],tr=m.useRef(null);function fetchBrands(kw0){var bridge=window.bridge&&window.bridge.pgyKol;if(!bridge||!bridge.getConfig)return;setLoading(true);bridge.getConfig({provider:"brandSearch",keyword:kw0||""}).then(function(res){setLoading(false);if(res&&res.ok){var data=res.data||{},list=data.options||data.nodes||(Array.isArray(res.data)?res.data:[]);setOptions(list);setBrandError(null)}else{setBrandError(res&&res.error||{code:"unknown",message:"品牌搜索失败"})}}).catch(function(e){setLoading(false);setBrandError({code:e&&e.code||"unknown",message:e&&e.message||String(e)})})}m.useEffect(function(){if(!p.open)return;setDraft(Array.isArray(p.current)?p.current.slice():[]);setKeyword("");setOptions([]);setBrandError(null)},[p.open]);var onKeyword=function(e){var v=e.target.value;setKeyword(v);if(tr.current)window.clearTimeout(tr.current);tr.current=window.setTimeout(function(){fetchBrands(v)},300)},toggleBrand=function(n){var v=pgyKolOptValue(n);setDraft(function(prev){var i=prev.indexOf(v);return i>=0?prev.slice(0,i).concat(prev.slice(i+1)):prev.concat([v])})};return o.jsxs(ue,{open:p.open,onClose:p.onClose,maxWidth:"sm",fullWidth:true,children:[o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:p.mode==="recent"?"近期合作品牌":"合作品牌智能推荐"}),o.jsx(te,{size:"small",sx:{ml:"auto"},onClick:p.onClose,children:o.jsx(B,{icon:"mdi:close",width:18,height:18})})]})}),o.jsxs(pe,{children:[o.jsx(ae,{size:"small",fullWidth:true,placeholder:"搜索品牌关键词",value:keyword,onChange:onKeyword,sx:{mb:1}}),brandError&&o.jsx(oe,{severity:"error",sx:{mb:1},children:"品牌搜索失败（错误码 "+(brandError.code||"unknown")+"）："+(brandError.message||"未知错误")}),loading&&o.jsx(Q1,{sx:{mb:1}}),options.length>0?o.jsxs(x,{sx:{display:"flex",flexWrap:"wrap",gap:.5,maxHeight:260,overflowY:"auto"},children:[options.map(function(n){var v=pgyKolOptValue(n),sel=draft.indexOf(v)>=0;return o.jsx(f1,{key:String(v),size:"small",label:pgyKolOptLabel(n),color:sel?"primary":"default",variant:sel?"filled":"outlined",onClick:function(){toggleBrand(n)}})}),o.jsx(w,{variant:"caption",color:"text.secondary",sx:{width:"100%"},children:"已选 "+draft.length+" 个品牌"})]}):!loading&&o.jsx(w,{variant:"body2",color:"text.secondary",children:"输入关键词搜索品牌"})]}),o.jsxs(_e,{children:[o.jsx($,{onClick:p.onClose,children:"取消"}),draft.length===0&&o.jsx(w,{variant:"caption",color:"text.secondary",children:"请选择您的合作品牌"}),o.jsx($,{variant:"contained",disabled:draft.length===0,onClick:function(){p.onApply(draft.slice());p.onClose()},children:"确定"})]})]})}
 
-function PgyKolNoteCategoryPopup(p){var inds=p.nodes&&p.nodes.length?p.nodes:pgyKolNoteCatFallback();var ind=inds.find(function(n){return String(n.label||n.value)===p.industry})||inds[0]||null;var children=ind&&ind.children?ind.children:[];var leafPaths={};children.forEach(function(c){leafPaths[pgyKolNodeKey(c)]=pgyKolCollectLeafPaths(c,[String(ind.label||ind.value)])});function isAll(c){var paths=leafPaths[pgyKolNodeKey(c)]||[];return paths.length>0&&paths.every(function(pp){return p.selected.indexOf(pp)>=0})}function toggle(c){var paths=leafPaths[pgyKolNodeKey(c)]||[];var all=isAll(c);var next=p.selected.slice();paths.forEach(function(pp){var ix=next.indexOf(pp);if(all&&ix>=0)next=next.slice(0,ix).concat(next.slice(ix+1));else if(!all&&ix<0)next.push(pp)});p.onToggle(next)}var closeBtn=o.jsx(te,{size:"small",sx:{ml:"auto"},onClick:p.onClose,children:o.jsx(B,{icon:"mdi:close",width:18,height:18})});var header=o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:"笔记类目"}),closeBtn]})});var indRow=o.jsxs(x,{sx:{display:"flex",gap:.5,mb:1,flexWrap:"wrap"},children:inds.map(function(n){var lab=String(n.label||n.value||"");return o.jsx(f1,{key:pgyKolNodeKey(n),size:"small",label:lab,color:p.industry===lab?"primary":"default",variant:p.industry===lab?"filled":"outlined",onClick:function(){p.onSelectIndustry(lab)}})})});var leafRow=children.length>0?o.jsxs(x,{sx:{display:"flex",flexWrap:"wrap",gap:.5},children:children.map(function(c){var lab=String(c.label||c.value||"");return o.jsx(f1,{key:pgyKolNodeKey(c),size:"small",label:lab,color:isAll(c)?"primary":"default",variant:isAll(c)?"filled":"outlined",onClick:function(){toggle(c)}})})}):o.jsx(w,{variant:"body2",color:"text.secondary",children:"该行业暂无子类目"});var countLine=o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",mt:1},children:"已选 "+p.selected.length+" 项"});return o.jsxs(ue,{open:p.open,onClose:p.onClose,maxWidth:"md",fullWidth:true,children:[header,o.jsxs(pe,{children:[indRow,leafRow,countLine]})]})}
+function PgyKolNoteCatNode(p){var node=p.node,level=p.level||0,prefix=p.prefix||[],sel=p.selected||[],onToggle=p.onToggle,has=node.children&&node.children.length>0,os=m.useState(false),open=os[0],setOpen=os[1],here=prefix.concat([String(node.label||node.value||"")]);function pathOf(n,acc){var h2=acc.concat([String(n.label||n.value||"")]);if(n.children&&n.children.length>0){var out=[];for(var i=0;i<n.children.length;i++)out=out.concat(pathOf(n.children[i],h2));return out}return [h2.join(" ")]}var paths=has?[]:pathOf(node,prefix),isSel=!has&&paths.length===1&&sel.indexOf(paths[0])>=0;return o.jsxs(x,{sx:{pl:level*1.5},children:[o.jsxs(x,{sx:{display:"flex",alignItems:"center",minHeight:30,gap:.25},children:[has?o.jsx(te,{size:"small",sx:{p:.25},onClick:function(e){e.stopPropagation();setOpen(!open)},children:o.jsx(B,{icon:open?"solar:alt-arrow-up-bold-duotone":"solar:alt-arrow-down-bold-duotone",width:14,height:14})}):o.jsx(x,{sx:{width:24}}),o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:.75,flex:1,cursor:has?"default":"pointer",py:.5},onClick:function(){if(!has&&paths.length===1)onToggle(paths[0])},children:[o.jsx(x,{sx:{width:16,height:16,borderRadius:2,border:"1px solid",borderColor:isSel?"primary.main":"divider",bgcolor:isSel?"primary.main":"transparent",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,flexShrink:0},children:isSel?"✓":null}),o.jsx(w,{variant:"body2",sx:{wordBreak:"break-all"},children:String(node.label||node.value||"")})]})]}),open&&has&&node.children.map(function(c){return o.jsx(PgyKolNoteCatNode,{key:String(c.label||c.value||"")+"|"+level,node:c,level:level+1,prefix:here,selected:sel,onToggle:onToggle})})]})}
+
+function PgyKolNoteCategoryPopup(p){var inds=p.nodes&&p.nodes.length?p.nodes:pgyKolNoteCatFallback();var ind=inds.find(function(n){return String(n.label||n.value)===p.industry})||inds[0]||null;var nodes=ind&&ind.children?ind.children:[];var sel=p.selected||[];function toggleLeaf(path){var i=sel.indexOf(path),next=i>=0?sel.slice(0,i).concat(sel.slice(i+1)):sel.concat([path]);p.onToggle(next)}var closeBtn=o.jsx(te,{size:"small",sx:{ml:"auto"},onClick:p.onClose,children:o.jsx(B,{icon:"mdi:close",width:18,height:18})});var header=o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:"笔记类目"}),closeBtn]})});var indRow=o.jsxs(x,{sx:{display:"flex",gap:.5,mb:1,flexWrap:"wrap"},children:inds.map(function(n){var lab=String(n.label||n.value||"");return o.jsx(f1,{key:pgyKolNodeKey(n),size:"small",label:lab,color:p.industry===lab?"primary":"default",variant:p.industry===lab?"filled":"outlined",onClick:function(){p.onSelectIndustry(lab)}})})});var tree=nodes.length>0?o.jsxs(x,{sx:{maxHeight:360,overflowY:"auto",border:"1px solid",borderColor:"divider",borderRadius:1,p:.5},children:nodes.map(function(n){return o.jsx(PgyKolNoteCatNode,{key:String(n.label||n.value||""),node:n,level:0,prefix:[String(ind&&(ind.label||ind.value||""))].filter(Boolean),selected:sel,onToggle:toggleLeaf})})}):o.jsx(w,{variant:"body2",color:"text.secondary",children:"该行业暂无子类目"});var countLine=o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",mt:1},children:"已选 "+sel.length+" 项"});return o.jsxs(ue,{open:p.open,onClose:p.onClose,maxWidth:"md",fullWidth:true,children:[header,o.jsxs(pe,{children:[indRow,tree,countLine]})]})}
 
 function PgyKolIndustryPopup(p){var firsts=p.cfg&&p.cfg.nodes&&p.cfg.nodes.length?p.cfg.nodes:[];var firstSel=firsts.find(function(n){return String(n.label||n.value)===p.first})||null;var seconds=firstSel&&firstSel.children?firstSel.children:[];var closeBtn=o.jsx(te,{size:"small",sx:{ml:"auto"},onClick:p.onClose,children:o.jsx(B,{icon:"mdi:close",width:18,height:18})});var header=o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:"行业推荐博主"}),closeBtn]})});var tip=o.jsx(w,{variant:"caption",color:"text.secondary",children:"选择行业后，平台优先展示该行业下内容更匹配、数据更优质的博主"});var emptyTip=firsts.length===0?o.jsx(w,{variant:"body2",color:"text.secondary",children:"行业列表加载中…"}):null;var firstRow=firsts.length>0?o.jsxs(x,{children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"一级行业"}),o.jsx(PgyKolChips,{options:firsts,keyOf:function(n){return pgyKolNodeKey(n)},selected:p.first?[firsts.find(function(n){return String(n.label||n.value)===p.first})].filter(Boolean):[],onToggle:function(n){p.onFirst(String(n.label||n.value));p.onSecond("")}})]}):null;var secondRow=seconds.length>0?o.jsxs(x,{children:[o.jsx(w,{variant:"caption",color:"text.secondary",children:"二级行业"}),o.jsx(PgyKolChips,{options:seconds,keyOf:function(n){return pgyKolNodeKey(n)},selected:p.second?[seconds.find(function(n){return String(n.label||n.value)===p.second})].filter(Boolean):[],onToggle:function(n){p.onSecond(String(n.label||n.value))}})]}):null;return o.jsxs(ue,{open:p.open,onClose:p.onClose,maxWidth:"sm",fullWidth:true,children:[header,o.jsxs(pe,{children:[tip,emptyTip,firstRow,secondRow]})]})}
 
 var pgyKolCategoryCommon=["全部","美妆","护肤","个人护理","母婴","时尚","美食","家居家装","影视综资讯","运动健身","宠物","文化艺术","兴趣爱好","生活记录","教育","职场"];
 var pgyKolCategoryFull=["全部","美妆","护肤","个人护理","母婴","时尚","美食","家居家装","影视综资讯","运动健身","宠物","文化艺术","兴趣爱好","生活记录","教育","职场","情感","摄影","游戏","科技数码","出行旅游","音乐","搞笑","健康养生","汽车","婚嫁","商业财经","素材","其他"];
-/* 博主类目二级树回退：官网 distributors-tags content_category 实测（2026-08-10）。
+/* 博主类目二级树回退：官网 distributors-tags content_category 实测（2026-08-10），
+ * 职场/汽车二级按官网 hover 面板实测补充（2026-08-11：职场干货/职场行业/职业考试/职场其他；
+ * 用车攻略/汽车评测/汽车其他）。
  * 运行时优先使用 contentTagTree 配置（含 LKG），此表仅作两者都不可用时的兜底；
- * 无二级类目的一级项（音乐/搞笑/健康养生/汽车/商业财经/素材/其他/职场）返回空数组。 */
-var pgyKolCategoryTreeFallback=[["美妆",["整体妆容","唇妆","眼妆","美甲","底妆","美妆合集","香水","美妆其他"]],["护肤",["面部保养","面部清洁","护肤合集","护肤其他"]],["个人护理",["头发产品","身体护理","口腔护理","护理其他"]],["母婴",["母婴日常","早教","婴童用品","婴童洗护","婴童食品","婴童时尚","孕期穿搭","孕产经验","产后恢复","育儿经验","宝宝才艺","宝宝写真","母婴其他"]],["时尚",["穿搭","配饰","发型","箱包","鞋靴","时尚其他"]],["美食",["美食教程","美食探店","美食展示","美食测评","吃播","美食其他"]],["家居家装",["装修","家居用品","家居装饰","家具","家电","室内设计","居家经验","家居家装其他"]],["影视综资讯",["动漫","电影","电视","娱乐资讯","影视","民生资讯","综艺","影视综其他"]],["运动健身",["健身减肥","健身塑形","滑雪","滑板","水上活动","运动其他","足球","篮球","跑步","游泳"]],["宠物",["猫","狗","动物其他"]],["文化艺术",["社科","文化","艺术","文化艺术其他"]],["兴趣爱好",["绘画","手工","阅读","文具手账","舞蹈","益智玩具","潮流玩具","兴趣爱好其他"]],["生活记录",["接地气生活","日常片段","中外生活","品质生活","校园生活"]],["教育",["大学教育","k12教育","家庭教育","学习日常","职场教育","教育其他"]],["情感",["情感知识","情感日常","情感其他"]],["摄影",["人文风光摄影","摄影技巧","胶片摄影","人像摄影","摄影其他"]],["游戏",["手机游戏","主机游戏","游戏其他","线下游戏"]],["科技数码",["数码","玩机攻略","数码科技其他"]],["出行旅游",["城市出行","户外","旅行"]],["婚嫁",["婚礼造型","婚礼记录","婚礼经验","婚礼用品"]]];
+ * 无二级类目的一级项（音乐/搞笑/健康养生/商业财经/素材/其他）返回空数组。 */
+var pgyKolCategoryTreeFallback=[["美妆",["整体妆容","唇妆","眼妆","美甲","底妆","美妆合集","香水","美妆其他"]],["护肤",["面部保养","面部清洁","护肤合集","护肤其他"]],["个人护理",["头发产品","身体护理","口腔护理","护理其他"]],["母婴",["母婴日常","早教","婴童用品","婴童洗护","婴童食品","婴童时尚","孕期穿搭","孕产经验","产后恢复","育儿经验","宝宝才艺","宝宝写真","母婴其他"]],["时尚",["穿搭","配饰","发型","箱包","鞋靴","时尚其他"]],["美食",["美食教程","美食探店","美食展示","美食测评","吃播","美食其他"]],["家居家装",["装修","家居用品","家居装饰","家具","家电","室内设计","居家经验","家居家装其他"]],["影视综资讯",["动漫","电影","电视","娱乐资讯","影视","民生资讯","综艺","影视综其他"]],["运动健身",["健身减肥","健身塑形","滑雪","滑板","水上活动","运动其他","足球","篮球","跑步","游泳"]],["宠物",["猫","狗","动物其他"]],["文化艺术",["社科","文化","艺术","文化艺术其他"]],["兴趣爱好",["绘画","手工","阅读","文具手账","舞蹈","益智玩具","潮流玩具","兴趣爱好其他"]],["生活记录",["接地气生活","日常片段","中外生活","品质生活","校园生活"]],["教育",["大学教育","k12教育","家庭教育","学习日常","职场教育","教育其他"]],["职场",["职场干货","职场行业","职业考试","职场其他"]],["情感",["情感知识","情感日常","情感其他"]],["摄影",["人文风光摄影","摄影技巧","胶片摄影","人像摄影","摄影其他"]],["游戏",["手机游戏","主机游戏","游戏其他","线下游戏"]],["科技数码",["数码","玩机攻略","数码科技其他"]],["出行旅游",["城市出行","户外","旅行"]],["汽车",["用车攻略","汽车评测","汽车其他"]],["婚嫁",["婚礼造型","婚礼记录","婚礼经验","婚礼用品"]]];
 function pgyKolCategoryTreeNodes(cfg){var live=cfg&&cfg.nodes&&cfg.nodes.length?cfg.nodes:null;if(!live)return pgyKolCategoryTreeFallback.map(function(pair){return{value:pair[0],label:pair[0],children:pair[1].map(function(s){return{value:s,label:s,children:[]}})}});var fb={};for(var i=0;i<pgyKolCategoryTreeFallback.length;i++)fb[pgyKolCategoryTreeFallback[i][0]]=pgyKolCategoryTreeFallback[i][1];return live.map(function(n){var kids=n&&Array.isArray(n.children)&&n.children.length?n.children:null;if(!kids){var fk=fb[n.value]||fb[n.label]||[];kids=fk.map(function(s){return{value:s,label:s,children:[]}})}return{value:n.value,label:n.label||n.value,children:kids||[]}})}
 function pgyKolCategoryNodeKids(nodes,value){if(!Array.isArray(nodes))return[];for(var i=0;i<nodes.length;i++)if(nodes[i]&&nodes[i].value===value)return nodes[i].children||[];return[]}
 var pgyKolMarketOptions=pgyKolStaticOptions(["曝光","种草","转化"]);
@@ -161,16 +165,19 @@ var pgyKolFansAgeOptions=pgyKolStaticOptions(["18岁以下","18-24","25-34","35-
 var pgyKolFansGenderOptions=pgyKolStaticOptions(["不限","男","女"]);
 var pgyKolMaritalOptions=pgyKolStaticOptions(["不限","未婚","已婚","恋爱中"]);
 var pgyKolConsumptionOptions=pgyKolStaticOptions(["不限","低","中","高","极高"]);
-var pgyKolChildAgeOptions=pgyKolStaticOptions(["备孕","孕期","0-6个月","6-12个月","1-3岁","3-6岁","6岁以上"]);
+var pgyKolChildAgeOptions=pgyKolStaticOptions(["备孕","0-6月","7-12月","1-3岁","4-6岁","7-12岁","孕早期","孕晚期"]);
 var pgyKolDevicePriceOptions=pgyKolStaticOptions(["2000元以下","2000-4000元","4000-6000元","6000元以上"]);
-var pgyKolDeviceBrandOptions=pgyKolStaticOptions(["苹果","华为","小米","OPPO","vivo","荣耀","三星","其他"]);
+var pgyKolDeviceBrandOptions=pgyKolStaticOptions(["苹果","华为","OPPO","VIVO","荣耀","小米","一加","魅族","中兴","联想"]);
 var pgyKolRangeOptions50w=[{label:"5万以上",value:[50000,-1]},{label:"1万～5万",value:[10000,50000]},{label:"0.5万～1万",value:[5000,10000]},{label:"0.1万～0.5万",value:[1000,5000]}];
 var pgyKolRangeOptions2000=[{label:"2000以上",value:[2000,-1]},{label:"1000～2000",value:[1000,2000]},{label:"500～1000",value:[500,1000]},{label:"200～500",value:[200,500]},{label:"100～200",value:[100,200]}];
 var pgyKolRangeOptionsPercent=[{label:"40%以上",value:[40,null]},{label:"30%～40%",value:[30,40]},{label:"20%～30%",value:[20,30]},{label:"10%～20%",value:[10,20]},{label:"10%以下",value:[null,10]}];
-var pgyKolFamilyOptions=pgyKolStaticOptions(["宝妈","宝爸","奶爸","辣妈","新手妈妈","全职妈妈","职场妈妈","二胎妈妈","夫妻档"]); /* Phase5 候选：家庭身份 */
-var pgyKolCareerOptions=pgyKolStaticOptions(["医生","教师","律师","程序员","设计师","健身教练","厨师","公务员","创业者","自由职业","学生"]); /* Phase5 候选：职业身份 */
-var pgyKolFeatureOptions=pgyKolStaticOptions(["海外生活","少数民族","多语言","高学历","公益","军旅","运动员","素人"]); /* Phase5 候选：特色背景 */
-var pgyKolSceneOptions=pgyKolStaticOptions(["开箱测评","好物分享","Vlog","知识科普","剧情演绎","美食探店","穿搭教程","美妆教程","亲子记录","旅行攻略","健身教程","家居改造"]);
+/* 2026-08-11 官网实测：家庭身份/职业身份/特色背景/擅长内容均为「组→子项」级联结构。 */
+var pgyKolFamilyTree={nodes:[{label:"家庭角色",children:pgyKolStaticOptions(["妈妈","萌娃","爸爸","奶奶"])},{label:"出镜人关系",children:pgyKolStaticOptions(["情侣","夫妻","家庭","闺蜜","兄弟"])},{label:"母婴阶段",children:pgyKolStaticOptions(["备孕中","孕期中","0-6个月","6-12个月","1-3岁","3-6岁","6-12岁","12岁以上"])}]};
+var pgyKolCareerTree={nodes:[{label:"传统行业",children:pgyKolStaticOptions(["工程师","销售","HR"])},{label:"互联网",children:pgyKolStaticOptions(["主播","运营","产品经理","程序员"])},{label:"教育科研",children:pgyKolStaticOptions(["学生"])},{label:"金融法律",children:pgyKolStaticOptions(["金融从业者"])},{label:"企业创业",children:pgyKolStaticOptions(["创业者","品牌创始人","公益人"])},{label:"时尚美妆",children:pgyKolStaticOptions(["模特","化妆师","造型师","服装设计师","珠宝设计师","发型设计师"])},{label:"食品饮料",children:pgyKolStaticOptions(["甜点师","厨师","咖啡师","调酒师"])},{label:"文化传媒",children:pgyKolStaticOptions(["编辑","记者","翻译","作家","娱评人","影评人","乐评人"])},{label:"医疗健康",children:pgyKolStaticOptions(["营养师","医生","康复师"])},{label:"艺术设计",children:pgyKolStaticOptions(["摄影师","插画师","室内设计师","画家","平面设计师","建筑设计师","非遗传承人","涂鸦艺术家","数字艺术家"])},{label:"影视娱乐",children:pgyKolStaticOptions(["主持人","导演","制片人","编剧","经纪人","真人秀嘉宾","虚拟偶像","rapper"])},{label:"运动健身",children:pgyKolStaticOptions(["教练","运动员","舞蹈老师"])},{label:"专业服务",children:pgyKolStaticOptions(["空乘","花艺师","整理师","民宿主","育婴师"])}]};
+var pgyKolFeatureTree={nodes:[{label:"生活背景",children:pgyKolStaticOptions(["留学背景","海外华人","铲屎官","孕妈","独居人群","外国人","混血儿"])},{label:"备考经验",children:pgyKolStaticOptions(["考公过来人","考研过来人","法考过来人","注会过来人"])},{label:"兴趣爱好",children:pgyKolStaticOptions(["户外爱好者","数码爱好者","手账爱好者","二次元人群","汉服爱好者","手办爱好者","模型爱好者","街舞爱好者","骑行爱好者","飞盘爱好者","书法爱好者"])}]};
+var pgyKolSceneTree={nodes:[{label:"形式",children:pgyKolStaticOptions(["vlog","探店","测评","ootd","合集","plog","开箱","教程","成分解析","彩妆试色","仿妆","沉浸式"])},{label:"风格",children:pgyKolStaticOptions(["韩系","日系","欧美风","氛围感","纯欲","甜酷","复古","高级感","校园风","中性风"])},{label:"生活方式",children:pgyKolStaticOptions(["职场生活","自律生活","露营徒步","极简主义","低脂低卡"])},{label:"肤质肤色",children:pgyKolStaticOptions(["油皮","干皮","混合肌","敏感肌","痘痘肌","瑕疵皮","白皮","黄皮"])},{label:"皮肤养护",children:pgyKolStaticOptions(["保湿补水","美白","淡斑","祛黄","抗氧化","抗老","祛皱","抗炎","修复","祛痘祛闭口","隔离防晒","控油","眼部护理"])}]};
+/* 2026-08-11 官网实测：博主地域/粉丝地域为国家平铺单选。 */
+var pgyKolCountryOptions=pgyKolStaticOptions(["全部","中国","美国","日本","澳大利亚","英国","加拿大","韩国","法国","德国","新加坡","其他"]);
 var pgyKolCreditOptions=pgyKolStaticOptions(["高","中","低"]); /* Phase5 预留键 coopCredit */
 var pgyKolPropagationOptions=pgyKolStaticOptions(["小","中","大","超大"]); /* Phase5 预留键 propagationScale */
  /* Phase5 待实证 */
@@ -2100,20 +2107,29 @@ function PgyKolSearchPage() {
   var industryCount = filter.firstIndustry ? (filter.secondIndustry ? 2 : 1) : 0;
   var noteCats = configs.noteCategory && configs.noteCategory.nodes && configs.noteCategory.nodes.length ? configs.noteCategory.nodes : pgyKolNoteCatFallback();
   var actList = actCfg && actCfg.nodes && actCfg.nodes.length ? actCfg.nodes : actCfg && actCfg.options && actCfg.options.length ? actCfg.options : [];
+  var leavesOf = function (nodes) {
+    var out = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (n.children && n.children.length) out = out.concat(leavesOf(n.children));
+      else out.push(n);
+    }
+    return out;
+  };
   var keysToNodes = function (list, keys) {
     return keys.map(function (k) { return pgyKolFindNode(list, k); }).filter(Boolean);
   };
   var selectedOptionKeys = function (list, nodes) {
     var allowed = {};
-    list.forEach(function (node) { allowed[pgyKolNodeKey(node)] = true; });
+    leavesOf(list).forEach(function (node) { allowed[pgyKolNodeKey(node)] = true; });
     return (nodes || []).map(function (node) { return pgyKolNodeKey(node); }).filter(function (key) { return allowed[key]; });
   };
   var replaceOptionGroup = function (current, list, keys) {
     var own = {};
-    list.forEach(function (node) { own[pgyKolNodeKey(node)] = true; });
+    leavesOf(list).forEach(function (node) { own[pgyKolNodeKey(node)] = true; });
     var merged = (current || []).filter(function (node) { return !own[pgyKolNodeKey(node)]; }).concat(keysToNodes(list, keys));
     var order = {};
-    pgyKolCareerOptions.concat(pgyKolFeatureOptions).forEach(function (node, index) { order[pgyKolNodeKey(node)] = index; });
+    leavesOf(pgyKolCareerTree.nodes).concat(leavesOf(pgyKolFeatureTree.nodes)).forEach(function (node, index) { order[pgyKolNodeKey(node)] = index; });
     return merged.map(function (node, index) { return { node: node, index: index }; }).sort(function (a, b) {
       var ak = pgyKolNodeKey(a.node), bk = pgyKolNodeKey(b.node), ai = Object.prototype.hasOwnProperty.call(order, ak) ? order[ak] : 10000 + a.index, bi = Object.prototype.hasOwnProperty.call(order, bk) ? order[bk] : 10000 + b.index;
       return ai - bi;
@@ -2261,8 +2277,8 @@ function PgyKolSearchPage() {
                     label: "博主人设",
                     children: [
                       o.jsx(PgyKolTrigger, { label: "家庭身份", count: filter.personalTags.length, onOpen: function (e) { openPop("family", e); } }),
-                      o.jsx(PgyKolTrigger, { label: "职业身份", count: selectedOptionKeys(pgyKolCareerOptions, filter.featureTags).length, onOpen: function (e) { openPop("career", e); } }),
-                      o.jsx(PgyKolTrigger, { label: "特色背景", count: selectedOptionKeys(pgyKolFeatureOptions, filter.featureTags).length, onOpen: function (e) { openPop("feature", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "职业身份", count: selectedOptionKeys(pgyKolCareerTree.nodes, filter.featureTags).length, onOpen: function (e) { openPop("career", e); } }),
+                      o.jsx(PgyKolTrigger, { label: "特色背景", count: selectedOptionKeys(pgyKolFeatureTree.nodes, filter.featureTags).length, onOpen: function (e) { openPop("feature", e); } }),
                     ],
                   }),
                   o.jsx(PgyKolMatrixRow, {
@@ -2493,21 +2509,21 @@ function PgyKolSearchPage() {
           closeOnSelect: true,
           onToggle: function (n) { toggleSingle("audienceGroup", pgyKolOptValue(n)); },
         }) : null,
-        /* Popover：博主人设 */
-        pop.id === "family" ? o.jsx(PgyKolOptionPop, {
-          open: true, anchor: pop.anchor, onClose: closePop, title: "家庭身份", multi: true,
-          options: pgyKolFamilyOptions, selectedKeys: filter.personalTags.map(function (n) { return pgyKolNodeKey(n); }),
-          onApply: function (keys) { update({ personalTags: keysToNodes(pgyKolFamilyOptions, keys) }); },
+        /* Popover：博主人设（官网为「组→子项」级联，leafOnly 选叶子） */
+        pop.id === "family" ? o.jsx(PgyKolTreePop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "家庭身份", leafOnly: true,
+          cfg: pgyKolFamilyTree, selectedKeys: filter.personalTags.map(function (n) { return pgyKolNodeKey(n); }),
+          onApply: function (keys) { update({ personalTags: keysToNodes(pgyKolFamilyTree.nodes, keys) }); },
         }) : null,
-        pop.id === "career" ? o.jsx(PgyKolOptionPop, {
-          open: true, anchor: pop.anchor, onClose: closePop, title: "职业身份", multi: true,
-          options: pgyKolCareerOptions, selectedKeys: selectedOptionKeys(pgyKolCareerOptions, filter.featureTags),
-          onApply: function (keys) { update({ featureTags: replaceOptionGroup(filter.featureTags, pgyKolCareerOptions, keys) }); },
+        pop.id === "career" ? o.jsx(PgyKolTreePop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "职业身份", leafOnly: true,
+          cfg: pgyKolCareerTree, selectedKeys: selectedOptionKeys(pgyKolCareerTree.nodes, filter.featureTags),
+          onApply: function (keys) { update({ featureTags: replaceOptionGroup(filter.featureTags, pgyKolCareerTree.nodes, keys) }); },
         }) : null,
-        pop.id === "feature" ? o.jsx(PgyKolOptionPop, {
-          open: true, anchor: pop.anchor, onClose: closePop, title: "特色背景", multi: true,
-          options: pgyKolFeatureOptions, selectedKeys: selectedOptionKeys(pgyKolFeatureOptions, filter.featureTags),
-          onApply: function (keys) { update({ featureTags: replaceOptionGroup(filter.featureTags, pgyKolFeatureOptions, keys) }); },
+        pop.id === "feature" ? o.jsx(PgyKolTreePop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "特色背景", leafOnly: true,
+          cfg: pgyKolFeatureTree, selectedKeys: selectedOptionKeys(pgyKolFeatureTree.nodes, filter.featureTags),
+          onApply: function (keys) { update({ featureTags: replaceOptionGroup(filter.featureTags, pgyKolFeatureTree.nodes, keys) }); },
         }) : null,
         /* Popover：博主画像 */
         pop.id === "gender" ? o.jsx(PgyKolOptionPop, {
@@ -2515,9 +2531,10 @@ function PgyKolSearchPage() {
           options: pgyKolGenderOptions, keyOf: function (n) { return n.value; }, selectedKeys: filter.gender ? [filter.gender] : [], closeOnSelect: true,
           onToggle: function (n) { toggleWithNone("gender", n.value); },
         }) : null,
-        pop.id === "location" ? o.jsx(PgyKolCascadePop, {
-          open: true, anchor: pop.anchor, onClose: closePop, title: "地域", cfg: areasCfg,
-          onSelect: applyLocation, onClear: clearLocation,
+        pop.id === "location" ? o.jsx(PgyKolOptionPop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "地域",
+          options: pgyKolCountryOptions, keyOf: function (n) { return n.value; }, selectedKeys: filter.location ? [filter.location] : [], closeOnSelect: true,
+          onToggle: function (n) { if (n.value === "全部") { clearLocation(); } else { toggleSingle("location", n.value); } },
         }) : null,
         pop.id === "audience20" ? o.jsx(PgyKolTreePop, {
           open: true, anchor: pop.anchor, onClose: closePop, title: "二十大人群", cfg: audCfg, leafOnly: true,
@@ -2541,10 +2558,10 @@ function PgyKolSearchPage() {
           options: pgyKolSignedOptions, keyOf: function (n) { return n.value; }, selectedKeys: filter.signed ? [filter.signed] : [], closeOnSelect: true,
           onToggle: function (n) { toggleWithNone("signed", n.value); },
         }) : null,
-        pop.id === "scene" ? o.jsx(PgyKolOptionPop, {
-          open: true, anchor: pop.anchor, onClose: closePop, title: "擅长内容", multi: true,
-          options: pgyKolSceneOptions, selectedKeys: filter.contentSceneLabel.map(function (n) { return pgyKolNodeKey(n); }),
-          onApply: function (keys) { update({ contentSceneLabel: keysToNodes(pgyKolSceneOptions, keys) }); },
+        pop.id === "scene" ? o.jsx(PgyKolTreePop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "擅长内容", leafOnly: true,
+          cfg: pgyKolSceneTree, selectedKeys: filter.contentSceneLabel.map(function (n) { return pgyKolNodeKey(n); }),
+          onApply: function (keys) { update({ contentSceneLabel: keysToNodes(pgyKolSceneTree.nodes, keys) }); },
         }) : null,
         pop.id === "theme" ? o.jsx(PgyKolTreePop, {
           open: true, anchor: pop.anchor, onClose: closePop, title: "内容题材", cfg: themeCfg,
@@ -2569,9 +2586,10 @@ function PgyKolSearchPage() {
           options: pgyKolFansGenderOptions, keyOf: function (n) { return n.value; }, selectedKeys: filter.fansGender ? [filter.fansGender] : [], closeOnSelect: true,
           onToggle: function (n) { toggleWithNone("fansGender", n.value); },
         }) : null,
-        pop.id === "fansLocation" ? o.jsx(PgyKolCascadePop, {
-          open: true, anchor: pop.anchor, onClose: closePop, title: "粉丝地域", cfg: areasCfg,
-          onSelect: applyFansLocation, onClear: clearFansLocation,
+        pop.id === "fansLocation" ? o.jsx(PgyKolOptionPop, {
+          open: true, anchor: pop.anchor, onClose: closePop, title: "粉丝地域",
+          options: pgyKolCountryOptions, keyOf: function (n) { return n.value; }, selectedKeys: filter.fansLocation ? [filter.fansLocation] : [], closeOnSelect: true,
+          onToggle: function (n) { if (n.value === "全部") { clearFansLocation(); } else { toggleSingle("fansLocation", n.value); } },
         }) : null,
         pop.id === "marital" ? o.jsx(PgyKolOptionPop, {
           open: true, anchor: pop.anchor, onClose: closePop, title: "婚恋状态",
