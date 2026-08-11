@@ -1479,7 +1479,7 @@ test("category expand/collapse keeps the common and full lists", () => {
     pageSource.includes('var pgyKolCategoryFull=["全部","美妆","护肤","个人护理","母婴","时尚","美食","家居家装","影视综资讯","运动健身","宠物","文化艺术","兴趣爱好","生活记录","教育","职场","情感","摄影","游戏","科技数码","出行旅游","音乐","搞笑","健康养生","汽车","婚嫁","商业财经","素材","其他"]'),
     "full category list must exist",
   );
-  assert.ok(pageSource.includes('label: showAllCategory ? "收起" : "展开"'), "expand/collapse toggle must exist");
+  assert.ok(pageSource.includes('children: showAllCategory ? "收起" : "展开"'), "expand/collapse toggle must exist as plain text");
   assert.ok(pageSource.includes("catOptions = showAllCategory ? pgyKolCategoryFull : pgyKolCategoryCommon"), "default must be collapsed to the common list");
   assert.ok(pageSource.includes("showAllCategory"), "expand state must be tracked");
 });
@@ -1511,25 +1511,21 @@ test("gender popover keeps official options", () => {
   assert.ok(pageSource.includes("closeOnSelect: true"), "gender must close on select");
 });
 
-test("region and fans region use the official country list", () => {
-  const countryCount = (pageSource.match(/pgyKolCountryOptions/g) || []).length;
-  assert.ok(countryCount >= 2, "country list must feed both location and fans location popovers");
+test("region and fans region use the official province/city cascade under 中国", () => {
+  const cascadeCount = (pageSource.match(/PgyKolCascadePop/g) || []).length;
+  assert.ok(cascadeCount >= 3, "cascade popover must be defined and feed both location and fans location popovers");
   assert.ok(
     pageSource.includes('var pgyKolCountryOptions=pgyKolStaticOptions(["全部","中国","美国","日本","澳大利亚","英国","加拿大","韩国","法国","德国","新加坡","其他"])'),
-    "country list must match the official 12 options",
+    "country list must keep the official 12 options at the root level",
   );
   assert.ok(pageSource.includes('title: "地域"'), "location popover must be wired");
   assert.ok(pageSource.includes('title: "粉丝地域"'), "fans location popover must be wired");
-  assert.ok(pageSource.includes('toggleSingle("location", n.value)'), "location select must toggle the country value");
-  assert.ok(pageSource.includes('toggleSingle("fansLocation", n.value)'), "fans location select must toggle the country value");
-  assert.ok(
-    pageSource.includes('if (n.value === "全部") { clearLocation(); }'),
-    "location 全部 must clear the draft",
-  );
-  assert.ok(
-    pageSource.includes('if (n.value === "全部") { clearFansLocation(); }'),
-    "fans location 全部 must clear the draft",
-  );
+  assert.ok(pageSource.includes('cfg: areasCfg'), "location popover must use the areas config (中国→省→市→区)");
+  assert.ok(pageSource.includes('onSelect: applyLocation'), "location select must apply the cascade node");
+  assert.ok(pageSource.includes('onSelect: applyFansLocation'), "fans location select must apply the cascade node");
+  assert.ok(pageSource.includes('onClear: clearLocation'), "location clear must reset the draft");
+  assert.ok(pageSource.includes('onClear: clearFansLocation'), "fans location clear must reset the draft");
+  assert.ok(pageSource.includes('areasCfg = configs.areas'), "areas config must be loaded for the cascade");
 });
 
 test("audience20 stays a leaf-only tree popover", () => {
@@ -1702,6 +1698,43 @@ test("note category leaf paths keep the industry prefix so cross-industry leaves
   );
 });
 
+test("export flow opens a column-selection dialog and forwards the chosen columns", async () => {
+  const calls = [];
+  const harness = searchPageHarness((filterState) => Promise.resolve(successResult()), {
+    extraBridge: {
+      batchExport(args) { calls.push(JSON.parse(JSON.stringify(args))); return Promise.resolve({ ok: true }); },
+    },
+  });
+  // 直接调用 exportTask（任务面板"导出"按钮的同一回调），应打开导出弹窗而非直接导出。
+  let tree = harness.renderer.render();
+  // 从组件闭包外无法拿到 exportTask，改为通过渲染出的任务面板按钮触发；这里直接验证源码契约：
+  assert.match(pageSource, /var exportTask = function \(tid\) \{[\s\S]*?setExportOpen\(true\)/, "exportTask must open the export dialog");
+  assert.match(pageSource, /bridge\.batchExport\(\{ taskId: exportTaskId, columns: ids && ids\.length \? ids : undefined \}\)/, "doExport must forward the selected columns");
+  assert.match(pageSource, /hideFixed: true/, "export dialog must hide fixed columns");
+  assert.match(pageSource, /title: "选择导出字段"/, "export dialog title must be 选择导出字段");
+  assert.match(pageSource, /var exportableColumns = columnList \? columnList\.filter/, "exportable columns must be derived from the registry");
+});
+
+test("note category popover anchors to the trigger and renders a popover instead of a modal dialog", () => {
+  assert.ok(
+    pageSource.includes("setNoteAnchor(e && e.currentTarget ? e.currentTarget : null)"),
+    "opening the note category must record the trigger anchor",
+  );
+  assert.ok(pageSource.includes("anchor: noteAnchor"), "note category popup must receive the anchor");
+  assert.ok(
+    pageSource.includes("return o.jsx(PgyKolPop,{open:p.open,anchor:p.anchor"),
+    "note category popup must render through PgyKolPop",
+  );
+  assert.ok(
+    pageSource.includes("o.jsx(PgyKolPopHeader,{title:\"笔记类目\",onClose:p.onClose})"),
+    "note category popup must use the popover header",
+  );
+  assert.ok(
+    !pageSource.slice(pageSource.indexOf("function PgyKolNoteCategoryPopup"), pageSource.indexOf("function PgyKolNoteCatNode")).includes("maxWidth"),
+    "note category popup must not use the modal dialog sizing",
+  );
+});
+
 test("Phase 5.2 popovers retain an anchor gap and recalculate on viewport movement", () => {
   const popSource = pageSource.slice(pageSource.indexOf("function PgyKolPop"), pageSource.indexOf("function PgyKolPopHeader"));
   assert.match(popSource, /getBoundingClientRect/, "popover position must derive from the live trigger rect");
@@ -1842,21 +1875,21 @@ test("restart restore and one-click clear persistence", () => {
   );
 });
 
-test("icon beautification: menu, page header, and search button use mdi:account-search", () => {
+test("icon beautification: menu, page header, and search button use the registered solar magnifier", () => {
   assert.ok(
-    pageSource.includes('{name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"mdi:account-search"}'),
-    "menu item must carry mdi:account-search",
+    pageSource.includes('{name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"solar:magnifer-bold-duotone"}'),
+    "menu item must carry the registered solar magnifier icon",
   );
-  assert.ok(!script.includes("solar:magnifer-bold-duotone"), "old solar magnifer icon must be gone");
-  assert.ok(pageSource.includes("mdi:account-search"), "page header must use mdi:account-search");
+  assert.ok(!pageSource.includes('icon: "mdi:account-search"'), "unregistered mdi icon must be gone from the menu");
+  assert.ok(pageSource.includes("solar:magnifer-bold-duotone"), "page header must use the solar magnifier");
   assert.ok(
     pageSource.includes('background: "linear-gradient(135deg,#FF6C40,#FF3030)"'),
     "page header must use the Magiorix orange-red gradient",
   );
   assert.ok(pageSource.includes('color: "#fff"'), "header icon must be white on the gradient tile");
   assert.ok(
-    pageSource.includes('startIcon: status === "loading" ? o.jsx(de, { size: 18, color: "inherit" }) : o.jsx(B, { icon: "mdi:account-search", width: 18, height: 18 })'),
-    "search button startIcon must use mdi:account-search",
+    pageSource.includes('startIcon: status === "loading" ? o.jsx(de, { size: 18, color: "inherit" }) : o.jsx(B, { icon: "solar:magnifer-bold-duotone", width: 18, height: 18 })'),
+    "search button startIcon must use the solar magnifier",
   );
 });
 
@@ -1883,7 +1916,7 @@ test("column dialog contract: fixed columns, price mutual exclusion, search, ord
     "price/picturePrice/videoPrice must be mutually exclusive",
   );
   assert.ok(pageSource.includes('search === "" || (c.label || "").indexOf(search) >= 0'), "dialog search must filter by label");
-  assert.ok(pageSource.includes("setDraftState(fixedIds.slice())"), "clear must reset to fixed columns only");
+  assert.ok(pageSource.includes("setDraftState(hideFixed ? [] : fixedIds.slice())"), "clear must reset to fixed columns (or empty in export mode)");
   assert.ok(pageSource.includes('setDraftState(null);\n    setSearch("");\n    p.onClose();'), "cancel must close without applying");
   assert.ok(pageSource.includes("p.onApply(effective.slice())"), "confirm must apply the draft");
   assert.ok(pageSource.includes('pgyKolWriteJson("magiorix-pgy-kol-columns", ids)'), "confirm must persist to localStorage");
@@ -2010,7 +2043,10 @@ test("Phase 5 page source calls the batch bridge methods with the right payloads
     "batchResume must forward budgets when provided",
   );
   assert.match(pageSource, /batchCancel\(\{ taskId: tid \}\)/);
-  assert.match(pageSource, /batchExport\(\{ taskId: tid \}\)/);
+  assert.match(pageSource, /bridge\.batchExport\(\{ taskId: exportTaskId, columns: ids && ids\.length \? ids : undefined \}\)/, "export must forward the chosen columns");
+  assert.match(pageSource, /setExportOpen\(true\)/, "export action must open the column-selection dialog");
+  assert.match(pageSource, /title: "选择导出字段"/, "export dialog must carry the export column title");
+  assert.match(pageSource, /hideFixed: true/, "export dialog must hide the fixed column pane");
   assert.match(pageSource, /disabled: batchBusy \|\| batchRunning/, "start button must be disabled while busy or running");
 });
 
@@ -2246,7 +2282,7 @@ test("blogger category row shows all official primary chips by default with hove
   assert.equal(typeof chips.props.onToggleWhole, "function");
   assert.equal(typeof chips.props.onToggleLeaf, "function");
   assert.equal(typeof chips.props.onToggleAll, "function");
-  assert.ok(findVnodes(tree, (node) => node.type === runtime.PgyKolTrigger && node.props.label === "收起").length > 0, "expand/collapse must default to the expanded state");
+  assert.ok(findVnodes(tree, (node) => node.props && node.props.children === "收起" && typeof node.props.onClick === "function").length > 0, "expand/collapse must default to the expanded state");
 });
 
 test("blogger category tree merges official fallback children when the live tree is flat", () => {

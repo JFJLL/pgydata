@@ -551,7 +551,7 @@ export function createPgyKolService({
    * 从持久化全量行导出 Excel：绝不从 UI 预览数组导出。
    * exporter 未注入时返回导出 Payload（测试/只读场景）。
    */
-  async function batchExport({ taskId } = {}) {
+  async function batchExport({ taskId, columns } = {}) {
     await ensureTaskStore();
     const task = await taskStore.getTask(taskId);
     if (!task) {
@@ -561,7 +561,11 @@ export function createPgyKolService({
     if (rows.length === 0) {
       throw new Error("该任务暂无可导出的内容");
     }
-    const payload = buildPgyKolBatchExportPayload(task, rows);
+    // 导出时允许显式指定字段（页面导出弹窗选择）；缺省沿用任务启动时快照列。
+    const exportTask = Array.isArray(columns) && columns.length > 0
+      ? Object.assign({}, task, { columns })
+      : task;
+    const payload = buildPgyKolBatchExportPayload(exportTask, rows);
     if (typeof exporter === "function") {
       return exporter(payload);
     }

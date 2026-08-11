@@ -394,3 +394,36 @@ test("searchWithTrack：track 抛错时原样向上抛，绝不静默跳过", as
   );
   assert.equal(calls.length, 1, "track 失败后不得继续请求 v2");
 });
+
+test("真实响应键归一化：name→nickname、headPhoto→avatar、clickMidNum→readMidNor30、interMidNum→interMidNor30", async () => {
+  const { client } = makeClient(() => ({
+    httpStatusCode: 200,
+    code: 0,
+    data: {
+      total: 1,
+      kols: [
+        {
+          userId: "u1",
+          name: "真实昵称",
+          headPhoto: "https://example.com/avatar.jpg",
+          clickMidNum: 12345,
+          interMidNum: 678,
+          accumCommonImpMedinNum30d: 99999,
+          fansNum: 10000,
+        },
+      ],
+    },
+  }));
+  const result = await client.searchPage({ payload: { pageNum: 1, pageSize: 20 } });
+  const kol = result.kols[0];
+  assert.equal(kol.nickname, "真实昵称", "name must normalize to nickname");
+  assert.equal(kol.avatar, "https://example.com/avatar.jpg", "headPhoto must normalize to avatar");
+  assert.equal(kol.readMidNor30, 12345, "clickMidNum must normalize to readMidNor30");
+  assert.equal(kol.interMidNor30, 678, "interMidNum must normalize to interMidNor30");
+  assert.equal(kol.accumCommonImpMedinNum30d, 99999, "exposure median must stay on its canonical key");
+  assert.equal(kol.fansNum, 10000);
+  assert.deepEqual(result.quarantinedFields, [], "normalized real keys must not be quarantined");
+  for (const key of Object.keys(kol)) {
+    assert.ok(KNOWN_KOL_FIELDS.includes(key), `规范化后仍为未知字段: ${key}`);
+  }
+});

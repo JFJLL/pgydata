@@ -14,6 +14,7 @@ import {
   validateConfigRequest,
   validateFilterState,
   validateTaskIdRequest,
+  validateExportRequest,
 } from "./pgy-ipc-guard.mjs";
 
 export const PGY_KOL_IPC_CHANNELS = Object.freeze({
@@ -175,7 +176,6 @@ export function registerPgyKolIpc({ ipcMain, service, broadcast }) {
   for (const [channel, method] of [
     [PGY_KOL_IPC_CHANNELS.batchPause, "batchPause"],
     [PGY_KOL_IPC_CHANNELS.batchCancel, "batchCancel"],
-    [PGY_KOL_IPC_CHANNELS.batchExport, "batchExport"],
   ]) {
     ipcMain.handle(channel, async (_event, input) => {
       try {
@@ -190,6 +190,19 @@ export function registerPgyKolIpc({ ipcMain, service, broadcast }) {
       }
     });
   }
+
+  ipcMain.handle(PGY_KOL_IPC_CHANNELS.batchExport, async (_event, input) => {
+    try {
+      const check = validateExportRequest(input);
+      if (!check.ok) {
+        return { ok: false, error: check.error };
+      }
+      const data = await service.batchExport(check.value);
+      return { ok: true, data };
+    } catch (err) {
+      return { ok: false, error: toErrorPayload(err) };
+    }
+  });
 
   ipcMain.handle(PGY_KOL_IPC_CHANNELS.columns, async () => {
     try {

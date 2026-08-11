@@ -92,9 +92,21 @@ export const KNOWN_KOL_FIELDS = Object.freeze([
   "fansMale",
   "fansProvinceChart",
   "fansCityChart",
+  // 真实响应键（2026-08-11 抓包证据：昵称=name、头像=headPhoto、阅读中位数=clickMidNum、互动中位数=interMidNum）
+  "headPhoto",
+  "clickMidNum",
+  "interMidNum",
 ]);
 
 const KNOWN_KOL_FIELD_SET = new Set(KNOWN_KOL_FIELDS);
+
+// 真实响应键 → 规范键归一化：页面与导出统一读规范键（nickname/avatar/readMidNor30/interMidNor30）。
+export const KOL_FIELD_ALIASES = Object.freeze({
+  name: "nickname",
+  headPhoto: "avatar",
+  clickMidNum: "readMidNor30",
+  interMidNum: "interMidNor30",
+});
 
 // PGY_ORIGIN 回退值（pgy-session-request.mjs 未就绪时使用，与 referer 同源）。
 // pgy-session-request.mjs 就绪后，优先使用其导出的 PGY_ORIGIN。
@@ -184,8 +196,9 @@ function sanitizeKols(kols) {
     }
     const out = {};
     for (const key of Object.keys(kol)) {
-      if (KNOWN_KOL_FIELD_SET.has(key)) {
-        out[key] = kol[key];
+      const target = KOL_FIELD_ALIASES[key] || key;
+      if (KNOWN_KOL_FIELD_SET.has(target)) {
+        out[target] = kol[key];
       } else {
         quarantined.add(key);
       }

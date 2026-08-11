@@ -855,6 +855,17 @@ test("batch-start/list/get/export：两页任务完成、完整性与全量导�
     assert.equal(exported.data.mode, "two-row");
     assert.deepEqual(exported.data.headers.map((header) => header.key), ["userId", "nickname", "fansNum"]);
     assert.equal(exported.data.data.length, 35, "导出必须覆盖持久化全量行");
+
+    const exportedWithColumns = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchExport)({}, {
+      taskId: start.data.taskId,
+      columns: ["userId", "fansNum"],
+    });
+    assert.equal(exportedWithColumns.ok, true);
+    assert.deepEqual(
+      exportedWithColumns.data.headers.map((header) => header.key),
+      ["userId", "fansNum"],
+      "导出时必须按调用方传入的 columns 生成表头",
+    );
   } finally {
     disposeIpc();
   }
@@ -896,6 +907,20 @@ test("batch IPC 入参校验：未知列、非法 taskId、超预算全部拒绝
       columns: ["userId"],
     });
     assert.equal(badFilter.ok, false);
+
+    const unknownExportColumn = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchExport)({}, {
+      taskId: "audit-export-20260811",
+      columns: ["userId", "cookie"],
+    });
+    assert.equal(unknownExportColumn.ok, false);
+    assert.equal(unknownExportColumn.error.code, "unknown-column");
+
+    const emptyExportColumns = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchExport)({}, {
+      taskId: "audit-export-20260811",
+      columns: [],
+    });
+    assert.equal(emptyExportColumns.ok, false);
+    assert.equal(emptyExportColumns.error.code, "invalid-columns");
   } finally {
     disposeIpc();
   }

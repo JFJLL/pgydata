@@ -150,6 +150,48 @@ export function validateTaskIdRequest(input) {
 }
 
 /**
+ * 校验批量导出请求 { taskId, columns? }：columns 可选，提供时必须
+ * 命中列注册表 confirmed 白名单（与 batchStart 同口径）。
+ *
+ * @returns {{ ok: true, value: { taskId: string, columns?: string[] } } | { ok: false, error: object }}
+ */
+export function validateExportRequest(input) {
+  if (!isRecord(input)) {
+    return invalid("invalid-input", "导出请求必须是普通对象");
+  }
+  const taskCheck = validateTaskIdRequest(input);
+  if (!taskCheck.ok) {
+    return taskCheck;
+  }
+  const columns = input.columns;
+  if (columns === undefined || columns === null) {
+    return { ok: true, value: { taskId: taskCheck.taskId } };
+  }
+  if (!Array.isArray(columns) || columns.length === 0 || columns.length > PGY_KOL_BATCH_MAX_COLUMNS) {
+    return invalid("invalid-columns", `columns 必须是 1-${PGY_KOL_BATCH_MAX_COLUMNS} 项的数组`);
+  }
+  const confirmedIds = new Set(listPgyKolConfirmedColumns().map((column) => column.id));
+  const seen = new Set();
+  for (const column of columns) {
+    if (
+      typeof column !== "string" ||
+      column.length === 0 ||
+      column.length > PGY_KOL_BATCH_MAX_COLUMN_LENGTH
+    ) {
+      return invalid("invalid-columns", "列名必须是 1-64 字符的字符串");
+    }
+    if (seen.has(column)) {
+      return invalid("invalid-columns", "列名重复");
+    }
+    seen.add(column);
+    if (!confirmedIds.has(column)) {
+      return invalid("unknown-column", `未知或未确认列: ${column}`);
+    }
+  }
+  return { ok: true, value: { taskId: taskCheck.taskId, columns } };
+}
+
+/**
  * 校验批量采集启动请求 { filterState, columns, pageSize?, budgets? }。
  *
  * - filterState 复用现有筛选状态边界校验；
