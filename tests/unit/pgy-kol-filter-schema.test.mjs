@@ -835,7 +835,7 @@ test("FIELD_REGISTRY：包含全部必需字段且语义正确", () => {
     assert.equal(field.controlType, "range", name);
     assert.equal(field.multiSelect, "single", name);
     assert.equal(field.exclusive, false, name);
-    assert.equal(field.serializer, "passthrough", name);
+    assert.equal(field.serializer, "range-bound", name);
     assert.equal(field.defaultValue, -1, name);
     assert.equal(field.reason, "lossy", name);
   }

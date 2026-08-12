@@ -49,8 +49,8 @@
     },
     {
       "path": "assets/index-B09sHfUO.js",
-      "size": 713429,
-      "sha256": "557c950a82740d65b5f3591e23df006b9fdf9df893e181aecd0838dbd89cd80c"
+      "size": 684281,
+      "sha256": "32b2835bd8a08a6167a2b4fd79ffa9c58ca217ea976aab3a4ab9edf99ef347fa"
     },
     {
       "path": "assets/index-b5Geql4X.js",
@@ -299,8 +299,8 @@
     },
     {
       "path": "magiorix-ops-assistant.js",
-      "size": 38647,
-      "sha256": "17b15aefad3339f14adc76da40b77d7c3fb9f26fbfb6b135fb7173c4e18b1235"
+      "size": 43012,
+      "sha256": "0e959351769863dfeaf802592d9cfc560db46a8c638938012b52e0f515059eab"
     }
   ]
 }

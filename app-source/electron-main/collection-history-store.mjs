@@ -39,6 +39,27 @@ export function sanitizeExcelValue(value) {
   return value;
 }
 
+/**
+ * 导出完成门闸：search-batch 来源（找博主筛选）的任务只有在 status=completed
+ * 且计数收口（successCount + failedCount === total，无 pending charge，total>0）
+ * 时才允许导出。其他来源（手动输入/xlsx/legacy）保持原有行为（允许导出已采集内容）。
+ *
+ * @param {object} task getTask 返回的任务记录
+ * @returns {boolean}
+ */
+export function isCollectionTaskExportReady(task) {
+  if (!task || typeof task !== "object") return false;
+  if (String(task.inputType || "") !== "search-batch") return true;
+  const total = Number(task.total) || 0;
+  if (total <= 0) return false;
+  if (task.status !== "completed") return false;
+  const success = Number(task.successCount) || 0;
+  const failed = Number(task.failedCount) || 0;
+  const pending = Number(task.pendingChargeCount) || 0;
+  return success + failed === total && pending === 0;
+}
+
+
 async function readJson(filePath, fallback = null) {
   try {
     return JSON.parse(await fs.readFile(filePath, "utf8"));
@@ -48,11 +69,31 @@ async function readJson(filePath, fallback = null) {
   }
 }
 
+// Windows 上 fs.rename 覆盖已存在目标时，若目标正被并发读取（getTask 等），
+// 会瞬时抛 EPERM/EACCES/EBUSY。这是瞬时竞争而非持久错误：小退避重试。
+async function renameWithRetry(fromPath, toPath, attempts = 5) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await fs.rename(fromPath, toPath);
+      return;
+    } catch (error) {
+      const transient =
+        error &&
+        (error.code === "EPERM" || error.code === "EACCES" || error.code === "EBUSY") &&
+        attempt < attempts - 1;
+      if (!transient) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20 * (attempt + 1)));
+    }
+  }
+}
+
 async function atomicWriteJson(filePath, value) {
   const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   await fs.writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
   try {
-    await fs.rename(tempPath, filePath);
+    await renameWithRetry(tempPath, filePath);
   } catch (error) {
     await fs.rm(tempPath, { force: true }).catch(() => {});
     throw error;
@@ -336,6 +377,39 @@ export class CollectionHistoryStore {
       value.finishedAt = status === "running" ? null : value.updatedAt;
       await atomicWriteJson(metadata, value);
       return clone(value);
+    });
+  }
+
+  /**
+   * 延迟填充 search-batch 详情任务的目标列表（发现阶段完成后调用）：
+   * 原子更新 input.json 的 urls/totalRows 与 metadata 的 total。
+   * 任务必须在 running（preparing）状态，已填充过则拒绝重复填充。
+   */
+  async updateTaskUrls(taskId, urls) {
+    const safeId = assertSafeTaskId(taskId);
+    return this.withLock(safeId, async () => {
+      const taskPaths = this.paths(safeId);
+      const metadata = await readJson(taskPaths.metadata, null);
+      const input = await readJson(taskPaths.input, null);
+      if (!metadata || !input) throw new Error("任务不存在");
+      if (input.inputType !== "search-batch") {
+        throw new Error("只有 search-batch 任务允许延迟填充目标列表");
+      }
+      if (metadata.status !== "running") {
+        throw new Error(`任务状态 ${metadata.status} 不允许填充目标列表`);
+      }
+      if (Array.isArray(input.urls) && input.urls.length > 0) {
+        throw new Error("目标列表已填充，禁止重复填充");
+      }
+      const nextUrls = (Array.isArray(urls) ? urls : []).map((url) => String(url ?? ""));
+      input.urls = nextUrls;
+      input.totalRows = nextUrls.length;
+      metadata.total = nextUrls.length;
+      metadata.updatedAt = iso(this.now());
+      await atomicWriteJson(taskPaths.input, input);
+      await atomicWriteJson(taskPaths.metadata, metadata);
+      this.eventCache.delete(safeId);
+      return clone({ ...metadata, ...input });
     });
   }
 

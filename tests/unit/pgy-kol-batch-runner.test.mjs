@@ -1075,3 +1075,67 @@ test("模块源码扫描：纯 ESM、不 import electron、不发起网络", asy
   assert.ok(!source.includes("require("), "必须为纯 ESM");
   assert.ok(!source.includes("fetch("), "不得直接发起网络请求");
 });
+
+test("resume 竞态：暂停落盘后旧循环仍在 finalize 时 resume 必须开新循环（不得绑定将死循环）", async () => {
+  const store = new FakeStore();
+  await createStoreTask(store, "t-dying");
+  // 把 finalize 卡在 setCompleteness：暂停落盘后旧循环仍停留在注册表中，
+  // 正是“resume 绑定将死循环”的竞态窗口。
+  let releaseFinalize;
+  const finalizeGate = new Promise((resolve) => {
+    releaseFinalize = resolve;
+  });
+  const originalSetCompleteness = store.setCompleteness.bind(store);
+  store.setCompleteness = async (...args) => {
+    await finalizeGate;
+    return originalSetCompleteness(...args);
+  };
+  let page = 0;
+  const runner = makeRunner({
+    store,
+    searchImpl: async ({ payload }) => {
+      page += 1;
+      if (page === 2) {
+        runner.pause("t-dying");
+      }
+      return okPage({ total: 100, kols: makeKols(page * 100, 20), pageNum: payload.pageNum });
+    },
+  });
+
+  // finalize 被门挡住，start 的 promise 会等到放行后才完成——这里只等“暂停已落盘”。
+  const startPromise = runner.start("t-dying");
+  const pausedDeadline = Date.now() + 8000;
+  for (;;) {
+    const task = await store.getTask("t-dying");
+    if (task.status === "paused") break;
+    if (Date.now() > pausedDeadline) {
+      assert.fail(`任务未进入暂停态: ${(await store.getTask("t-dying")).status}`);
+    }
+    await sleep(15);
+  }
+  assert.equal(store.calls.appendPageRows.length, 2, "第 1、2 页已提交");
+
+  // 旧循环仍被 finalizeGate 挡住（finalize 未完成、注册表未移除）。
+  const resumePromise = runner.resume("t-dying");
+  await sleep(30);
+  assert.equal((await store.getTask("t-dying")).status, "paused", "resume 期间任务仍处于暂停态（等旧循环收尾）");
+  releaseFinalize();
+  await Promise.all([startPromise, resumePromise]);
+
+  // 新循环从已提交页继续，不得重抓页 1/2，最终正常收口。
+  const deadline = Date.now() + 8000;
+  for (;;) {
+    const task = await store.getTask("t-dying");
+    if (task.status === "completed" || task.status === "incomplete") break;
+    if (Date.now() > deadline) {
+      assert.fail(`任务未在超时前收口: ${(await store.getTask("t-dying")).status}`);
+    }
+    await sleep(15);
+  }
+  assert.equal((await store.getTask("t-dying")).status, "completed", "resume 后新循环完成");
+  assert.deepEqual(
+    store.calls.appendPageRows.map((call) => call.pageNum),
+    [1, 2, 3, 4, 5],
+    "新循环从第 3 页继续，已提交页不得重抓",
+  );
+});

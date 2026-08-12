@@ -8,6 +8,7 @@
  */
 
 import { listPgyKolConfirmedColumns } from "./pgy-kol-column-registry.mjs";
+import { resolveCollectionExportHeaders } from "../electron-main/collection-export-headers.mjs";
 
 // 深度只累计非 children 容器：filterState(1) + 字段数组(1) + 树节点层级。
 // 官网行业画像树最深约 4 层节点（depth 3-6），预留余量取 8。
@@ -20,7 +21,17 @@ export const PGY_KOL_IPC_MAX_TOTAL_NODES = 5000;
 // Phase 4 批量采集通道的输入边界。
 export const PGY_KOL_BATCH_MAX_COLUMNS = 64;
 export const PGY_KOL_BATCH_MAX_COLUMN_LENGTH = 64;
+// 两阶段采集：详情阶段字段集合来自完整共享 schema（当前 91 键），
+// 必须容纳全选场景；字段名仍受长度与去重边界约束。
+export const PGY_KOL_BATCH_MAX_FIELDS = 128;
+export const PGY_KOL_BATCH_MAX_FIELD_LENGTH = 64;
 export const PGY_KOL_BATCH_PAGE_SIZE_LIMIT = 100;
+
+// 完整蒲公英 blogger schema 键集合（与导出规范表头同源，非裁剪白名单）。
+// 共享字段弹窗只会产出这些键；未知键拒绝（防止空行扣费/垃圾字段进入详情任务）。
+const PGY_BLOGGER_SCHEMA_KEYS = new Set(
+  (resolveCollectionExportHeaders("pgy", "blogger") || []).map((header) => header.key),
+);
 
 // 预算硬上限（渲染进程不可突破；runner 恢复校验复用同一口径）。
 export const PGY_KOL_BUDGET_LIMITS = Object.freeze({
@@ -192,11 +203,14 @@ export function validateExportRequest(input) {
 }
 
 /**
- * 校验批量采集启动请求 { filterState, columns, pageSize?, budgets? }。
+ * 校验批量采集启动请求 { filterState, fields, pageSize?, budgets? }。
  *
  * - filterState 复用现有筛选状态边界校验；
- * - columns 必须是 1-64 项字符串数组、无重复、每项 1-64 字符，
- *   且每一项都必须命中列注册表的 confirmed 白名单（未证实字段继续隔离）；
+ * - fields 是共享字段弹窗提交的完整 schema 键集合：1-128 项字符串、
+ *   无重复、每项 1-64 字符，且每一项都必须是完整蒲公英 blogger schema
+ *   的键（91 键全选可通过，绝不在本层裁剪）。两阶段编排会把该集合原样
+ *   交给现有 pgy/blogger 详情采集器；本层只做形状/边界/键集合校验，
+ *   防止未知键进入持久化造成空行扣费或垃圾字段。
  * - pageSize 缺省 20，必须是 1-100 的整数（与 builder 上限一致）；
  * - budgets 可选：maxLeaves/maxDepth/maxPagesPerLeaf/queryBudget 必须是
  *   正整数且不超过硬上限（防渲染进程放大查询预算）。
@@ -212,33 +226,32 @@ export function validateBatchStartRequest(input) {
     return filterCheck;
   }
 
-  const columns = input.columns;
-  if (!Array.isArray(columns) || columns.length === 0 || columns.length > PGY_KOL_BATCH_MAX_COLUMNS) {
+  const fields = input.fields;
+  if (!Array.isArray(fields) || fields.length === 0 || fields.length > PGY_KOL_BATCH_MAX_FIELDS) {
     return invalid(
       "invalid-columns",
-      `columns 必须是 1-${PGY_KOL_BATCH_MAX_COLUMNS} 项的数组`,
+      `fields 必须是 1-${PGY_KOL_BATCH_MAX_FIELDS} 项的数组`,
     );
   }
-  const confirmedIds = new Set(listPgyKolConfirmedColumns().map((column) => column.id));
   const seen = new Set();
-  for (const column of columns) {
+  for (const field of fields) {
     if (
-      typeof column !== "string" ||
-      column.length === 0 ||
-      column.length > PGY_KOL_BATCH_MAX_COLUMN_LENGTH
+      typeof field !== "string" ||
+      field.length === 0 ||
+      field.length > PGY_KOL_BATCH_MAX_FIELD_LENGTH
     ) {
-      return invalid("invalid-columns", "列名必须是 1-64 字符的字符串");
+      return invalid("invalid-columns", `字段名必须是 1-${PGY_KOL_BATCH_MAX_FIELD_LENGTH} 字符的字符串`);
     }
-    if (seen.has(column)) {
-      return invalid("invalid-columns", "列名重复");
+    if (seen.has(field)) {
+      return invalid("invalid-columns", "字段名重复");
     }
-    seen.add(column);
-    if (!confirmedIds.has(column)) {
-      return invalid("unknown-column", `未知或未确认列: ${column}`);
+    seen.add(field);
+    if (!PGY_BLOGGER_SCHEMA_KEYS.has(field)) {
+      return invalid("unknown-field", `未知字段: ${field}`);
     }
   }
 
-  const value = { filterState: filterCheck.value, columns };
+  const value = { filterState: filterCheck.value, fields };
   const pageSize = input.pageSize === undefined || input.pageSize === null ? 20 : input.pageSize;
   if (
     typeof pageSize !== "number" ||

@@ -116,7 +116,7 @@ test("budget-exhausted → incomplete/cannot-prove（非 completed），数据�
   const service = await makeService({ transport: pageTransport(pageNums), taskBaseDir });
   const { taskId } = await service.batchStart({
     filterState: {},
-    columns: ["userId", "nickname"],
+    fields: ["nickname", "fansCount"],
     budgets: { queryBudget: 2 },
   });
   const task = await waitForStatus(service, taskId, ["incomplete"]);
@@ -125,11 +125,41 @@ test("budget-exhausted → incomplete/cannot-prove（非 completed），数据�
   assert.deepEqual(pageNums, [1, 2], "预算 2 → 只抓 2 页");
   assert.equal(task.counts.raw, 40);
 
-  // 已采集数据始终可导出（incomplete 不阻断导出）。
-  const payload = await service.batchExport({ taskId });
-  assert.equal(payload.mode, "two-row");
-  assert.equal(payload.data.length, 40);
-  assert.deepEqual(payload.headers.map((header) => header.key), ["userId", "nickname"]);
+  // 两阶段任务（fields）：阶段一 incomplete 时导出被明确拒绝——最终导出
+  // 走详情阶段结果，绝不回退到搜索列表行。
+  await assert.rejects(
+    () => service.batchExport({ taskId }),
+    (err) => err.kind === "details-not-ready",
+    "fields 任务在详情采集开始前不得导出搜索列表行",
+  );
+
+  // legacy 任务（无 fields）：incomplete 不阻断搜索列表导出（旧契约保留）。
+  const legacyTaskId = "pgykol-legacy-incomplete-export";
+  await service.taskStore.createTask({
+    taskId: legacyTaskId,
+    filterState: {},
+    columns: ["userId", "nickname"],
+    pageSize: 20,
+    budgets: {},
+  });
+  await service.taskStore.addLeaf(legacyTaskId, { leafId: "L0" });
+  await service.taskStore.appendPageRows(legacyTaskId, {
+    leafId: "L0",
+    pageNum: 1,
+    rows: [
+      { uid: "u1", fields: { userId: "u1", nickname: "甲" } },
+      { uid: "u2", fields: { userId: "u2", nickname: "乙" } },
+    ],
+  });
+  await service.taskStore.commitPage(legacyTaskId, {
+    leafId: "L0",
+    pageNum: 1,
+    summary: { rawCount: 2, uniqueCount: 2, dupCount: 0, missingUidCount: 0 },
+  });
+  const legacyPayload = await service.batchExport({ taskId: legacyTaskId });
+  assert.equal(legacyPayload.mode, "two-row");
+  assert.equal(legacyPayload.data.length, 2);
+  assert.deepEqual(legacyPayload.headers.map((header) => header.key), ["userId", "nickname"]);
 });
 
 test("未增加/减少/非法预算全部拒绝且不发请求", async () => {
@@ -137,7 +167,7 @@ test("未增加/减少/非法预算全部拒绝且不发请求", async () => {
   const service = await makeService({ transport: pageTransport(pageNums), taskBaseDir: tmpDir("be-reject") });
   const { taskId } = await service.batchStart({
     filterState: {},
-    columns: ["userId"],
+    fields: ["nickname"],
     budgets: { queryBudget: 2 },
   });
   await waitForStatus(service, taskId, ["incomplete"]);
@@ -170,7 +200,7 @@ test("增加 queryBudget 后从原检查点继续：不重抓已提交页、计�
   const service = await makeService({ transport: pageTransport(pageNums), taskBaseDir: tmpDir("be-continue") });
   const { taskId } = await service.batchStart({
     filterState: { gender: "女" },
-    columns: ["userId", "nickname"],
+    fields: ["nickname", "fansCount"],
     budgets: { queryBudget: 2 },
   });
   let task = await waitForStatus(service, taskId, ["incomplete"]);
@@ -203,7 +233,7 @@ test("再次耗尽重新进入 incomplete，新预算与累计计数持久化", 
   const service = await makeService({ transport: pageTransport(pageNums), taskBaseDir: tmpDir("be-reexhaust") });
   const { taskId } = await service.batchStart({
     filterState: {},
-    columns: ["userId"],
+    fields: ["nickname"],
     budgets: { queryBudget: 2 },
   });
   await waitForStatus(service, taskId, ["incomplete"]);
@@ -232,7 +262,7 @@ test("应用重启后（新 service/store 实例）仍可增加预算继续", as
   const serviceA = await makeService({ transport: pageTransport(pageNums), taskBaseDir });
   const { taskId } = await serviceA.batchStart({
     filterState: {},
-    columns: ["userId"],
+    fields: ["nickname"],
     budgets: { queryBudget: 2 },
   });
   let task = await waitForStatus(serviceA, taskId, ["incomplete"]);
@@ -255,7 +285,7 @@ test("maxPages 单调增加可继续；等于/减少/超 250 拒绝；已到 250
   const service = await makeService({ transport: shortPageTransport(pageNums), taskBaseDir: tmpDir("maxpages") });
   const { taskId } = await service.batchStart({
     filterState: {},
-    columns: ["userId"],
+    fields: ["nickname"],
     budgets: { maxPagesPerLeaf: 3, queryBudget: 100 },
   });
   let task = await waitForStatus(service, taskId, ["incomplete"]);
@@ -294,7 +324,7 @@ test("maxPages 单调增加可继续；等于/减少/超 250 拒绝；已到 250
   await store.createTask({
     taskId: "pgykol-250-1",
     filterState: {},
-    columns: ["userId"],
+    fields: ["nickname"],
     pageSize: 20,
     budgets: { maxLeaves: 16, maxDepth: 6, maxPagesPerLeaf: 250, queryBudget: 100 },
   });
@@ -323,7 +353,7 @@ test("repeat-page / capped-unprovable / checkpoint-desync 不可继续且不发�
     await store.createTask({
       taskId,
       filterState: {},
-      columns: ["userId"],
+      fields: ["nickname"],
       pageSize: 20,
       budgets: { maxLeaves: 16, maxDepth: 6, maxPagesPerLeaf: 250, queryBudget: 400 },
     });
@@ -345,7 +375,7 @@ test("complete 任务仍拒绝 resume（原规则不得退化）", async () => {
   const service = await makeService({ transport: pageTransport(pageNums, { total: 40 }), taskBaseDir: tmpDir("complete-reject") });
   const { taskId } = await service.batchStart({
     filterState: {},
-    columns: ["userId"],
+    fields: ["nickname"],
     budgets: { queryBudget: 100 },
   });
   const task = await waitForStatus(service, taskId, ["completed"]);
@@ -375,7 +405,7 @@ test("旧 Phase 4 任务元数据（缺新字段）兼容读取并可增加预�
     updatedAt: "2026-08-05T00:00:00.000Z",
     finishedAt: "2026-08-05T00:00:00.000Z",
     pageSize: 20,
-    columns: ["userId"],
+    fields: ["nickname"],
     filterState: {},
     budgets: { queryBudget: 400 },
     counts: { raw: 40, unique: 40, dup: 0, missingUid: 0 },
@@ -453,7 +483,7 @@ test("runner 直接恢复：incomplete + 严格增加预算后从检查点继续
   await store.createTask({
     taskId: "pgykol-direct-1",
     filterState: {},
-    columns: ["userId"],
+    fields: ["nickname"],
     pageSize: 20,
     budgets: { maxLeaves: 16, maxDepth: 6, maxPagesPerLeaf: 250, queryBudget: 2 },
   });

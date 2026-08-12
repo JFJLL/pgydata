@@ -13,35 +13,44 @@ const bloggerOverviewSvgSourcePath = path.join(projectRoot, "tools", "pgy_blogge
 const bloggerOverviewSvgSource = fs.readFileSync(bloggerOverviewSvgSourcePath, "utf8").trim();
 
 function replaceOnce(source, from, to, label) {
-  const fromCrLf = from.replace(/\n/g, "\r\n");
-  const toCrLf = to.replace(/\n/g, "\r\n");
-  if (!source.includes(from)) {
-    if (source.includes(fromCrLf)) return source.replace(fromCrLf, toCrLf);
-    if (source.includes(to)) return source;
-    if (source.includes(toCrLf)) return source;
+  // 行尾无关：源码与模板统一按 LF 比较，输出统一为 LF。
+  // 这样同一补丁在 LF 源码、CRLF 源码、混合行尾源码上都幂等。
+  const norm = (value) => value.replace(/\r\n/g, "\n");
+  const sourceNorm = norm(source);
+  const fromNorm = norm(from);
+  const toNorm = norm(to);
+  if (!sourceNorm.includes(fromNorm)) {
+    if (sourceNorm.includes(toNorm)) return source;
     throw new Error(`Missing patch target: ${label}`);
   }
-  return source.replace(from, to);
+  return sourceNorm.replace(fromNorm, toNorm);
 }
 
 function replaceSection(source, startMarker, endMarker, replacement, label) {
-  const start = source.indexOf(startMarker);
-  const end = start >= 0 ? source.indexOf(endMarker, start) : -1;
+  const norm = (value) => value.replace(/\r\n/g, "\n");
+  const sourceNorm = norm(source);
+  const start = sourceNorm.indexOf(norm(startMarker));
+  const end = start >= 0 ? sourceNorm.indexOf(norm(endMarker), start) : -1;
   if (start < 0 || end < 0) throw new Error(`Missing patch section: ${label}`);
-  const newline = source.includes("\r\n") ? "\r\n" : "\n";
-  const normalized = replacement.replace(/\r?\n/g, newline).trimEnd() + newline + newline;
-  return source.slice(0, start) + normalized + source.slice(end);
+  const normalized = norm(replacement).trimEnd() + "\n\n";
+  return sourceNorm.slice(0, start) + normalized + sourceNorm.slice(end);
 }
 
 function replaceAllIfExists(source, from, to) {
-  if (!source.includes(from)) return source;
-  return source.split(from).join(to);
+  const norm = (value) => value.replace(/\r\n/g, "\n");
+  const sourceNorm = norm(source);
+  const fromNorm = norm(from);
+  if (!sourceNorm.includes(fromNorm)) return sourceNorm;
+  return sourceNorm.split(fromNorm).join(norm(to));
 }
 
 function insertAfterOnce(source, marker, insert, already, label) {
-  if (source.includes(already)) return source;
-  if (!source.includes(marker)) throw new Error(`Missing patch marker: ${label}`);
-  return source.replace(marker, `${marker}\n${insert}`);
+  const norm = (value) => value.replace(/\r\n/g, "\n");
+  const sourceNorm = norm(source);
+  if (sourceNorm.includes(norm(already))) return source;
+  const markerNorm = norm(marker);
+  if (!sourceNorm.includes(markerNorm)) throw new Error(`Missing patch marker: ${label}`);
+  return sourceNorm.replace(markerNorm, `${markerNorm}\n${norm(insert)}`);
 }
 
 let main = fs.readFileSync(mainPath, "utf8");
@@ -88,14 +97,14 @@ main = replaceAllIfExists(
 main = insertAfterOnce(
   main,
   'import { ipcMain as F, BrowserWindow as Dt, app as ye, screen as Gi, shell as Ji, dialog as Ki, net as Jt, Notification as Et, session as Pn, nativeImage as PgyNativeImage } from "electron";',
-  'import { CollectionHistoryStore } from "../electron-main/collection-history-store.mjs";',
-  'import { CollectionHistoryStore }',
+  'import { CollectionHistoryStore, isCollectionTaskExportReady } from "../electron-main/collection-history-store.mjs";',
+  'import { CollectionHistoryStore',
   "collection history store import",
 );
 
 main = insertAfterOnce(
   main,
-  'import { CollectionHistoryStore } from "../electron-main/collection-history-store.mjs";',
+  'import { CollectionHistoryStore, isCollectionTaskExportReady } from "../electron-main/collection-history-store.mjs";',
   'import { buildCollectionHistoryExportPayload } from "../electron-main/collection-export-headers.mjs";',
   'import { buildCollectionHistoryExportPayload }',
   "collection export headers import",
@@ -2688,6 +2697,13 @@ if (!main.includes("W.history.list")) {
     const n = await pgyCollectionHistory.getTask(t.taskId), s = await pgyCollectionHistory.getExportRows(t.taskId);
     if (!n)
       throw new Error("历史任务不存在");
+    // 找博主筛选来源（search-batch）的任务：只有完成且计数收口才允许导出；
+    // 纵深防御，防止 running/preparing 时导出只有部分行的 Excel。
+    if (!isCollectionTaskExportReady(n)) {
+      const gateError = new Error("任务尚未完成全部博主采集，暂不可导出（完成后自动解锁）");
+      gateError.kind = "task-not-complete";
+      throw gateError;
+    }
     if (s.length === 0)
       throw new Error("该任务暂无可导出的成功内容");
     return ff({ taskId: t.taskId, fileName: n.fileName || \`\${t.taskId}.xlsx\`, data: s });
@@ -2795,7 +2811,32 @@ if (!main.includes("const pgyPending = pgyPendingCharges.get(pgyItemIndex)")) {
   );
   main = replaceOnce(
     main,
-    `      ue.info(\`[task=\${t}] 开始采集第 \${m + 1}/\${i.length} 条 plugin=\${n} taskType=\${s} url=\${String(f).slice(0, 180)}\`);
+    // 目标状态以“已烤进 release 的 reconcile 块”为基准（from），
+    // 输出在其 itemResult 中补充 inputType（to）；两态幂等。
+    `      ue.info(\`[task=\${t}] 开始采集原始第 \${pgyItemIndex + 1} 条，当前 \${m + 1}/\${i.length} plugin=\${n} taskType=\${s} url=\${String(f).slice(0, 180)}\`);
+      if (pgyPending) {
+        try {
+          const v = await Le.get().consumeShumiaoForItem(e, m, pgyItemIndex);
+          await pgyCollectionHistory.recordSuccess(t, pgyItemIndex, pgyPending.row, v, pgyPending.sourceUrl || f);
+          l.successCount++, this.sendToRenderer(W.task.itemResult, {
+            taskId: t,
+            index: pgyItemIndex,
+            status: "success",
+            data: pgyPending.row,
+            balanceAfter: v,
+            recoveredPendingCharge: !0
+          });
+          continue;
+        } catch (v) {
+          pgyInterrupted = !0, this.sendToRenderer(W.task.error, {
+            taskId: t,
+            message: v instanceof Error ? v.message : String(v),
+            errorCategory: "balance",
+            errorCategoryLabel: "扣费确认失败"
+          });
+          break;
+        }
+      }
       try {`,
     `      ue.info(\`[task=\${t}] 开始采集原始第 \${pgyItemIndex + 1} 条，当前 \${m + 1}/\${i.length} plugin=\${n} taskType=\${s} url=\${String(f).slice(0, 180)}\`);
       if (pgyPending) {
@@ -2804,6 +2845,7 @@ if (!main.includes("const pgyPending = pgyPendingCharges.get(pgyItemIndex)")) {
           await pgyCollectionHistory.recordSuccess(t, pgyItemIndex, pgyPending.row, v, pgyPending.sourceUrl || f);
           l.successCount++, this.sendToRenderer(W.task.itemResult, {
             taskId: t,
+            inputType: l.inputType,
             index: pgyItemIndex,
             status: "success",
             data: pgyPending.row,
@@ -3054,6 +3096,214 @@ if (!preload.includes('getSchemaFields:()=>r.ipcRenderer.invoke("pgy-kol:schema-
     "pgy-kol Phase 5.1 preload schema-fields bridge method",
   );
 }
+
+// ===== 找博主“一次完整采集”（search-batch 单任务收敛）=====
+// 以上补丁均为幂等：目标状态已存在时 replaceOnce 直接返回原文，重复执行无副作用。
+
+// 1) 导入 isCollectionTaskExportReady（导出完成门闸）。
+main = replaceOnce(
+  main,
+  'import { CollectionHistoryStore } from "../electron-main/collection-history-store.mjs";',
+  'import { CollectionHistoryStore, isCollectionTaskExportReady } from "../electron-main/collection-history-store.mjs";',
+  "collection history store import carries export gate",
+);
+
+// 2) ge.startTask 的任务记录携带 inputType（导出门闸按来源识别 search-batch）。
+main = replaceOnce(
+  main,
+  `      fields: r,
+      current: 0,`,
+  `      fields: r,
+      inputType: e.inputType || "",
+      current: 0,`,
+  "startTask record carries inputType",
+);
+
+// 3) 运行中任务事件携带 inputType（progress/itemResult/complete，共 5 处 +
+// reconcile 块 1 处已在上方 reconcile 补丁内处理）。
+main = replaceOnce(
+  main,
+  `      l.current = m + 1;
+      this.sendToRenderer(W.task.progress, {
+        taskId: t,
+        current: l.current,`,
+  `      l.current = m + 1;
+      this.sendToRenderer(W.task.progress, {
+        taskId: t,
+        inputType: l.inputType,
+        current: l.current,`,
+  "progress event carries inputType",
+);
+main = replaceOnce(
+  main,
+  `        y.status === "success" ? l.successCount++ : l.errorCount++, this.sendToRenderer(W.task.itemResult, {
+          taskId: t,
+          index: pgyItemIndex,
+          status: y.status,`,
+  `        y.status === "success" ? l.successCount++ : l.errorCount++, this.sendToRenderer(W.task.itemResult, {
+          taskId: t,
+          inputType: l.inputType,
+          index: pgyItemIndex,
+          status: y.status,`,
+  "itemResult event carries inputType",
+);
+main = replaceOnce(
+  main,
+  `        y && this.sendToRenderer(W.task.progress, {
+          taskId: t,
+          current: l.current,
+          total: l.total,
+          percent: g,`,
+  `        y && this.sendToRenderer(W.task.progress, {
+          taskId: t,
+          inputType: l.inputType,
+          current: l.current,
+          total: l.total,
+          percent: g,`,
+  "batch progress event carries inputType",
+);
+main = replaceOnce(
+  main,
+  `    l.cancelled ? this.sendToRenderer(W.task.complete, {
+      taskId: t,
+      successCount: l.successCount,`,
+  `    l.cancelled ? this.sendToRenderer(W.task.complete, {
+      taskId: t,
+      inputType: l.inputType,
+      successCount: l.successCount,`,
+  "complete event carries inputType",
+);
+main = replaceOnce(
+  main,
+  `    }) : (this.sendToRenderer(W.task.complete, {
+      taskId: t,
+      successCount: l.successCount,`,
+  `    }) : (this.sendToRenderer(W.task.complete, {
+      taskId: t,
+      inputType: l.inputType,
+      successCount: l.successCount,`,
+  "complete cancelled event carries inputType",
+);
+
+// 4) 采集助手按钮（scraper:task:pause/resume/cancel）转发到 pgy-kol 编排，
+// 让“准备博主列表”阶段也能响应暂停/继续/取消。
+main = replaceOnce(
+  main,
+  `  }), F.on(W.task.pause, (e, t) => {
+    ge.pauseTask(t.taskId);
+  }), F.on(W.task.resume, (e, t) => {
+    ge.resumeTask(t.taskId);
+  }), F.on(W.task.cancel, (e, t) => {
+    ge.cancelTask(t.taskId);
+  }), F.handle(W.export.toExcel`,
+  `  }), F.on(W.task.pause, (e, t) => {
+    ge.pauseTask(t.taskId);
+    pgyKolService && pgyKolService.forwardScraperTaskControl && pgyKolService.forwardScraperTaskControl(t.taskId, "pause").catch(() => {});
+  }), F.on(W.task.resume, (e, t) => {
+    ge.resumeTask(t.taskId);
+    pgyKolService && pgyKolService.forwardScraperTaskControl && pgyKolService.forwardScraperTaskControl(t.taskId, "resume").catch(() => {});
+  }), F.on(W.task.cancel, (e, t) => {
+    ge.cancelTask(t.taskId);
+    pgyKolService && pgyKolService.forwardScraperTaskControl && pgyKolService.forwardScraperTaskControl(t.taskId, "cancel").catch(() => {});
+  }), F.handle(W.export.toExcel`,
+  "scraper task controls forward to pgy-kol orchestration",
+);
+
+// 5) pgy-kol 编排服务提升为模块级（供事件转发引用）并接线详情采集依赖。
+main = replaceOnce(
+  main,
+  `let ge = null;
+let pgyKolIpcDispose = null;`,
+  `let ge = null;
+let pgyKolService = null;
+let pgyKolIpcDispose = null;`,
+  "module-level pgyKolService holder",
+);
+main = replaceOnce(
+  main,
+  "const pgyKolService = createPgyKolService({",
+  "pgyKolService = createPgyKolService({",
+  "pgyKolService uses module-level holder",
+);
+main = replaceOnce(
+  main,
+  `      exporter: (payload) => ff(payload),
+      logger: {`,
+  `      exporter: (payload) => ff(payload),
+      // 两阶段采集：详情阶段复用现有 pgy/blogger 详情采集器（同一 CollectionHistoryStore
+      // 与 ScraperOrchestrator），不复制其请求/字段解析/图表/导出逻辑。
+      detail: {
+        initialize: () => pgyCollectionHistory.initialize(),
+        create: (payload) => pgyCollectionHistory.createTask(payload),
+        updateUrls: (taskId, urls) => pgyCollectionHistory.updateTaskUrls(taskId, urls),
+        emit: (type, payload) => {
+          const channel = W.task[type];
+          if (channel) ge.sendToRenderer(channel, payload);
+        },
+        start: (payload) => pgyCollectionHistory.createTask(payload).then(() => ge.startTask(payload)),
+        pause: (taskId) => ge.pauseTask(taskId),
+        resume: (taskId) => ge.resumeTask(taskId),
+        cancel: (taskId) => ge.cancelTask(taskId),
+        getTask: (taskId) => pgyCollectionHistory.getTask(taskId),
+        getExportRows: (taskId) => pgyCollectionHistory.getExportRows(taskId),
+        getResumePlan: (taskId) => pgyCollectionHistory.getResumePlan(taskId),
+        setStatus: (taskId, status) => pgyCollectionHistory.setStatus(taskId, status),
+      },
+      logger: {`,
+  "pgy-kol detail collection dependency wiring",
+);
+main = replaceOnce(
+  main,
+  `      }
+    });
+    pgyKolIpcDispose = registerPgyKolIpc({`,
+  `      }
+    });
+    pgyKolService.initialize().catch((err) => {
+      Qe.error("[pgy-kol] 两阶段编排初始化失败:", err);
+    });
+    pgyKolIpcDispose = registerPgyKolIpc({`,
+  "pgy-kol orchestration initialize on app ready",
+);
+
+// 6) 历史导出 IPC 完成门闸（release bundle 自带 exportTask handler）。
+main = replaceOnce(
+  main,
+  `    const n = await pgyCollectionHistory.getTask(t.taskId), s = await pgyCollectionHistory.getExportRows(t.taskId);
+    if (!n)
+      throw new Error("历史任务不存在");
+    if (s.length === 0)`,
+  `    const n = await pgyCollectionHistory.getTask(t.taskId), s = await pgyCollectionHistory.getExportRows(t.taskId);
+    if (!n)
+      throw new Error("历史任务不存在");
+    if (!isCollectionTaskExportReady(n)) {
+      const gateError = new Error("任务尚未完成全部博主采集，暂不可导出（完成后自动解锁）");
+      gateError.kind = "task-not-complete";
+      throw gateError;
+    }
+    if (s.length === 0)`,
+  "history export task completion gate",
+);
+
+// 6) 导出对话框纵深门闸：search-batch 来源任务未完成时拒绝导出。
+main = replaceOnce(
+  main,
+  `async function ff(a) {
+  const pausedTask = typeof (a == null ? void 0 : a.taskId) == "string" ? ge == null ? void 0 : ge.runningTasks.get(a.taskId) : null;`,
+  `async function ff(a) {
+  // 找博主筛选来源（search-batch）的任务：只有完成且计数收口才允许导出；
+  // 纵深防御，防止 running/preparing 时导出只有部分行的 Excel。
+  if (typeof (a == null ? void 0 : a.taskId) === "string" && a.taskId.startsWith("pgykol-detail-")) {
+    const gateTask = await pgyCollectionHistory.getTask(a.taskId).catch(() => null);
+    if (gateTask && gateTask.inputType === "search-batch" && !isCollectionTaskExportReady(gateTask)) {
+      const gateError = new Error("任务尚未完成全部博主采集，暂不可导出（完成后自动解锁）");
+      gateError.kind = "task-not-complete";
+      throw gateError;
+    }
+  }
+  const pausedTask = typeof (a == null ? void 0 : a.taskId) == "string" ? ge == null ? void 0 : ge.runningTasks.get(a.taskId) : null;`,
+  "export dialog rejects incomplete search-batch tasks",
+);
 
 fs.writeFileSync(mainPath, main);
 fs.writeFileSync(preloadPath, preload);

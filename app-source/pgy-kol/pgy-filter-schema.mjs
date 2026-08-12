@@ -197,6 +197,47 @@ const OPTION_LIVE_GMV = Object.freeze([
   { label: "500万以上", value: [5000000, -1] },
 ]);
 
+// ===== 官网枚举编码（2026-08-12 实证，来自官网 bundle 模块 78538）=====
+// 粉丝年龄/性别/签约/婚恋/消费/母婴阶段：官网 payload 发送数字编码而非中文标签。
+// 前端 UI 保留中文标签展示，序列化时经 label-to-code 转换；未知标签显式报错，
+// 避免把非法值直发官网（10090102 参数格式校验错误）。
+const OFFICIAL_LABEL_CODES = Object.freeze({
+  fansAge: Object.freeze({
+    "18岁以下": 1,
+    "18-24": 2,
+    "25-34": 3,
+    "35-44": 4,
+    "45岁以上": 5,
+  }),
+  fansGender: Object.freeze({
+    男: 1,
+    女: 2,
+  }),
+  signed: Object.freeze({
+    个人博主: 0,
+    机构博主: 1,
+  }),
+  fansMaritalStatus: Object.freeze({
+    未婚: 0,
+    已婚: 1,
+  }),
+  fansConsumptionLevel: Object.freeze({
+    低: 0,
+    中: 1,
+    高: 2,
+  }),
+  fansChildAgeInfo: Object.freeze({
+    备孕: 0,
+    "0-6月": 2,
+    "7-12月": 3,
+    "1-3岁": 4,
+    "4-6岁": 5,
+    "7-12岁": 6,
+    孕早期: 7,
+    孕晚期: 8,
+  }),
+});
+
 /**
  * 筛选字段注册表（Phase 5.1：单一权威来源）。
  *
@@ -215,16 +256,16 @@ export const FIELD_REGISTRY = Object.freeze([
   freezeRegistryEntry({ payloadField: "personalTags", uiKeys: ["personalTags"], label: "个人标签", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [] }),
   freezeRegistryEntry({ payloadField: "gender", uiKeys: ["gender"], label: "性别", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: null }),
   freezeRegistryEntry({ payloadField: "location", uiKeys: ["location"], label: "博主地域", controlType: "tree-single", multiSelect: "single", exclusive: "candidate", serializer: "path-trim", defaultValue: null, optionProvider: { provider: "areas" } }),
-  freezeRegistryEntry({ payloadField: "signed", uiKeys: ["signed"], label: "签约状态", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: -1 }),
+  freezeRegistryEntry({ payloadField: "signed", uiKeys: ["signed"], label: "签约状态", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "label-to-code", defaultValue: -1 }),
   freezeRegistryEntry({ payloadField: "featureTags", uiKeys: ["featureTags"], label: "特色标签", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [] }),
-  freezeRegistryEntry({ payloadField: "fansNumberLower", uiKeys: ["fansNumberLower"], label: "粉丝数下限", controlType: "range-int", multiSelect: "single", exclusive: true, serializer: "passthrough", defaultValue: null }),
-  freezeRegistryEntry({ payloadField: "fansNumberUpper", uiKeys: ["fansNumberUpper"], label: "粉丝数上限", controlType: "range-int", multiSelect: "single", exclusive: true, serializer: "passthrough", defaultValue: null }),
-  freezeRegistryEntry({ payloadField: "fansAge", uiKeys: ["fansAge"], label: "粉丝年龄", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: 0 }),
-  freezeRegistryEntry({ payloadField: "fansGender", uiKeys: ["fansGender"], label: "粉丝性别", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: 0 }),
+  freezeRegistryEntry({ payloadField: "fansNumberLower", uiKeys: ["fansNumberLower"], label: "粉丝数下限", controlType: "range-int", multiSelect: "single", exclusive: true, serializer: "range-bound", defaultValue: null }),
+  freezeRegistryEntry({ payloadField: "fansNumberUpper", uiKeys: ["fansNumberUpper"], label: "粉丝数上限", controlType: "range-int", multiSelect: "single", exclusive: true, serializer: "range-bound", defaultValue: null }),
+  freezeRegistryEntry({ payloadField: "fansAge", uiKeys: ["fansAge"], label: "粉丝年龄", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "label-to-code", defaultValue: 0 }),
+  freezeRegistryEntry({ payloadField: "fansGender", uiKeys: ["fansGender"], label: "粉丝性别", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "label-to-code", defaultValue: 0 }),
   freezeRegistryEntry({ payloadField: "fansLocation", uiKeys: ["fansLocation"], label: "粉丝地域", controlType: "tree-single", multiSelect: "single", exclusive: "candidate", serializer: "path-trim", defaultValue: null, optionProvider: { provider: "areas" } }),
-  freezeRegistryEntry({ payloadField: "fansMaritalStatus", uiKeys: ["fansMaritalStatus"], label: "粉丝婚姻状况", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: -1 }),
-  freezeRegistryEntry({ payloadField: "fansConsumptionLevel", uiKeys: ["fansConsumptionLevel"], label: "粉丝消费水平", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: -1 }),
-  freezeRegistryEntry({ payloadField: "fansChildAgeInfo", uiKeys: ["fansChildAgeInfo"], label: "粉丝孩子年龄", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [] }),
+  freezeRegistryEntry({ payloadField: "fansMaritalStatus", uiKeys: ["fansMaritalStatus"], label: "粉丝婚姻状况", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "label-to-code", defaultValue: -1 }),
+  freezeRegistryEntry({ payloadField: "fansConsumptionLevel", uiKeys: ["fansConsumptionLevel"], label: "粉丝消费水平", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "label-to-code", defaultValue: -1 }),
+  freezeRegistryEntry({ payloadField: "fansChildAgeInfo", uiKeys: ["fansChildAgeInfo"], label: "粉丝孩子年龄", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "label-to-code", defaultValue: [] }),
   freezeRegistryEntry({ payloadField: "fansDevicePrice", uiKeys: ["fansDevicePrice"], label: "粉丝设备价格", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [] }),
   freezeRegistryEntry({ payloadField: "fansDeviceBrand", uiKeys: ["fansDeviceBrand"], label: "粉丝设备品牌", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [] }),
   freezeRegistryEntry({ payloadField: "accumCommonImpMedinNum30d", uiKeys: ["accumCommonImpMedinNum30d"], label: "近30天平均播放中位数", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "range-option", defaultValue: [], options: RANGE_OPTION_50W }),
@@ -232,10 +273,10 @@ export const FIELD_REGISTRY = Object.freeze([
   freezeRegistryEntry({ payloadField: "interMidNor30", uiKeys: ["interMidNor30"], label: "近30天互动中位数", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "range-option", defaultValue: [], options: RANGE_OPTION_2000 }),
   freezeRegistryEntry({ payloadField: "thousandLikePercent30", uiKeys: ["thousandLikePercent30"], label: "近30天千赞率", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "percent-range-option", defaultValue: [], options: RANGE_OPTION_PERCENT_40 }),
   freezeRegistryEntry({ payloadField: "noteType", uiKeys: ["noteType"], label: "笔记类型", controlType: "enum", multiSelect: "single", exclusive: "unproven", serializer: "passthrough", defaultValue: 0 }),
-  freezeRegistryEntry({ payloadField: "notePriceLower", uiKeys: ["notePriceLower"], label: "图文报价下限", controlType: "range", multiSelect: "single", exclusive: false, serializer: "passthrough", defaultValue: -1, reason: "lossy" }),
-  freezeRegistryEntry({ payloadField: "notePriceUpper", uiKeys: ["notePriceUpper"], label: "图文报价上限", controlType: "range", multiSelect: "single", exclusive: false, serializer: "passthrough", defaultValue: -1, reason: "lossy" }),
-  freezeRegistryEntry({ payloadField: "videoPriceLower", uiKeys: ["videoPriceLower"], label: "视频报价下限", controlType: "range", multiSelect: "single", exclusive: false, serializer: "passthrough", defaultValue: -1, reason: "lossy" }),
-  freezeRegistryEntry({ payloadField: "videoPriceUpper", uiKeys: ["videoPriceUpper"], label: "视频报价上限", controlType: "range", multiSelect: "single", exclusive: false, serializer: "passthrough", defaultValue: -1, reason: "lossy" }),
+  freezeRegistryEntry({ payloadField: "notePriceLower", uiKeys: ["notePriceLower"], label: "图文报价下限", controlType: "range", multiSelect: "single", exclusive: false, serializer: "range-bound", defaultValue: -1, reason: "lossy" }),
+  freezeRegistryEntry({ payloadField: "notePriceUpper", uiKeys: ["notePriceUpper"], label: "图文报价上限", controlType: "range", multiSelect: "single", exclusive: false, serializer: "range-bound", defaultValue: -1, reason: "lossy" }),
+  freezeRegistryEntry({ payloadField: "videoPriceLower", uiKeys: ["videoPriceLower"], label: "视频报价下限", controlType: "range", multiSelect: "single", exclusive: false, serializer: "range-bound", defaultValue: -1, reason: "lossy" }),
+  freezeRegistryEntry({ payloadField: "videoPriceUpper", uiKeys: ["videoPriceUpper"], label: "视频报价上限", controlType: "range", multiSelect: "single", exclusive: false, serializer: "range-bound", defaultValue: -1, reason: "lossy" }),
   freezeRegistryEntry({ payloadField: "progressOrderCnt", uiKeys: ["progressOrderCnt"], label: "历史合作数", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [] }),
   freezeRegistryEntry({ payloadField: "tradeReportBrandIdSet", uiKeys: ["tradeReportBrandIdSet"], label: "合作品牌", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [] }),
   freezeRegistryEntry({ payloadField: "activityCodes", uiKeys: ["activityCodes"], label: "合作活动", controlType: "option-multi", multiSelect: "multi", exclusive: false, serializer: "passthrough", defaultValue: [], evidence: "phase5.1-live" }),
@@ -908,6 +949,48 @@ export class PgyFilterSchema {
       case "path-or-label": {
         const transform = (node) => node?.path || node?.label || node;
         return Array.isArray(value) ? value.map(transform) : transform(value);
+      }
+      case "label-to-code": {
+        // 官网枚举（粉丝年龄/性别/签约/婚恋/消费/母婴阶段）：payload 发送数字
+        // 编码而非中文标签（官网 bundle 模块 78538 实证）。未知标签显式报错，
+        // 避免把非法值直发官网（10090102 参数格式校验错误）。
+        const map = OFFICIAL_LABEL_CODES[field.payloadField];
+        if (!map) {
+          throw new PgySchemaError(
+            `[pgy-filter-schema] ${field.payloadField} 缺少 label-to-code 编码表`,
+            { kind: "serializer" },
+          );
+        }
+        const toCode = (node) => {
+          const key =
+            typeof node === "string"
+              ? node.trim()
+              : String(node?.label ?? node?.name ?? node ?? "").trim();
+          if (!Object.prototype.hasOwnProperty.call(map, key)) {
+            throw new PgySchemaError(
+              `[pgy-filter-schema] ${field.payloadField} 未知选项标签: ${key}`,
+              { kind: "serializer" },
+            );
+          }
+          return map[key];
+        };
+        return Array.isArray(value) ? value.map(toCode) : toCode(value);
+      }
+      case "range-bound": {
+        // 上下限自由输入（粉丝量/图文报价/视频报价）：官网对“无上限”发送
+        // null（如 100万以上 → fansNumberUpper: null），下限为 0 时发送 0；
+        // 页面用 "UNBOUNDED" 哨兵表达无上限，这里转换为 null。
+        if (typeof value === "string" && value.trim() === "UNBOUNDED") {
+          return null;
+        }
+        const numeric = typeof value === "string" ? Number(value) : value;
+        if (!Number.isFinite(numeric)) {
+          throw new PgySchemaError(
+            `[pgy-filter-schema] ${payloadField} 需要有限数值（收到 ${String(value)}）`,
+            { kind: "serializer" },
+          );
+        }
+        return numeric;
       }
       case "path-trim": {
         const trim = (node) =>

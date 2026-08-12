@@ -602,7 +602,7 @@ test("batch-start：未实证字段被门控拒绝，不发 track/分页请求",
   try {
     const batch = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
       filterState: { audienceGroup: ["test-crowd"] },
-      columns: ["userId"],
+      fields: ["nickname"],
     });
     assert.equal(batch.ok, false);
     assert.equal(batch.error.code, "unproven-field");
@@ -632,7 +632,7 @@ test("batch-start：关键词搜索——track 先行、trackId 持久化、分�
   try {
     const start = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
       filterState: { searchType: 0, keyword: "  李佳琦  " },
-      columns: ["userId"],
+      fields: ["nickname"],
     });
     assert.equal(start.ok, true);
     await waitForTaskStatus(service, start.data.taskId, ["completed"]);
@@ -819,7 +819,7 @@ test("batch-start/list/get/export：两页任务完成、完整性与全量导�
   try {
     const start = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
       filterState: { gender: "女", fansNumberLower: 10000, fansNumberUpper: 50000 },
-      columns: ["userId", "nickname", "fansNum"],
+      fields: ["nickname", "fansCount"],
     });
     assert.equal(start.ok, true);
     assert.match(start.data.taskId, /^pgykol-[A-Za-z0-9_-]+$/);
@@ -850,21 +850,47 @@ test("batch-start/list/get/export：两页任务完成、完整性与全量导�
     assert.equal(list.ok, true);
     assert.ok(list.data.some((item) => item.taskId === start.data.taskId));
 
+    // 两阶段任务（fields）：详情采集开始前导出被明确拒绝——最终导出必须
+    // 走详情阶段结果，绝不回退到搜索列表行。
     const exported = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchExport)({}, { taskId: start.data.taskId });
-    assert.equal(exported.ok, true);
-    assert.equal(exported.data.mode, "two-row");
-    assert.deepEqual(exported.data.headers.map((header) => header.key), ["userId", "nickname", "fansNum"]);
-    assert.equal(exported.data.data.length, 35, "导出必须覆盖持久化全量行");
+    assert.equal(exported.ok, false);
+    assert.equal(exported.error.code, "details-not-ready");
+
+    // legacy 任务（无 fields）保持旧契约：按任务 columns 全量导出搜索列表行。
+    const legacyTaskId = "pgykol-legacy-export-1";
+    await service.taskStore.createTask({
+      taskId: legacyTaskId,
+      filterState: {},
+      columns: ["userId", "fansNum"],
+      pageSize: 20,
+      budgets: {},
+    });
+    await service.taskStore.addLeaf(legacyTaskId, { leafId: "L0" });
+    await service.taskStore.appendPageRows(legacyTaskId, {
+      leafId: "L0",
+      pageNum: 1,
+      rows: [{ uid: "u1", fields: { userId: "u1", nickname: "甲", fansNum: 10 } }],
+    });
+    await service.taskStore.commitPage(legacyTaskId, {
+      leafId: "L0",
+      pageNum: 1,
+      summary: { rawCount: 1, uniqueCount: 1, dupCount: 0, missingUidCount: 0 },
+    });
+    const legacyExported = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchExport)({}, { taskId: legacyTaskId });
+    assert.equal(legacyExported.ok, true);
+    assert.equal(legacyExported.data.mode, "two-row");
+    assert.deepEqual(legacyExported.data.headers.map((header) => header.key), ["userId", "fansNum"]);
+    assert.equal(legacyExported.data.data.length, 1, "legacy 导出必须覆盖持久化全量行");
 
     const exportedWithColumns = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchExport)({}, {
-      taskId: start.data.taskId,
-      columns: ["userId", "fansNum"],
+      taskId: legacyTaskId,
+      columns: ["fansNum"],
     });
     assert.equal(exportedWithColumns.ok, true);
     assert.deepEqual(
       exportedWithColumns.data.headers.map((header) => header.key),
-      ["userId", "fansNum"],
-      "导出时必须按调用方传入的 columns 生成表头",
+      ["fansNum"],
+      "legacy 导出时必须按调用方传入的 columns 生成表头",
     );
   } finally {
     disposeIpc();
@@ -876,21 +902,21 @@ test("batch IPC 入参校验：未知列、非法 taskId、超预算全部拒绝
   try {
     const unknownColumn = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
       filterState: {},
-      columns: ["userId", "cookie"],
+      fields: ["nickname", "cookie"],
     });
     assert.equal(unknownColumn.ok, false);
-    assert.equal(unknownColumn.error.code, "unknown-column");
+    assert.equal(unknownColumn.error.code, "unknown-field");
 
     const emptyColumns = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
       filterState: {},
-      columns: [],
+      fields: [],
     });
     assert.equal(emptyColumns.ok, false);
     assert.equal(emptyColumns.error.code, "invalid-columns");
 
     const badBudgets = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
       filterState: {},
-      columns: ["userId"],
+      fields: ["nickname"],
       budgets: { queryBudget: 999999 },
     });
     assert.equal(badBudgets.ok, false);
@@ -904,7 +930,7 @@ test("batch IPC 入参校验：未知列、非法 taskId、超预算全部拒绝
 
     const badFilter = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
       filterState: { notAField: "x" },
-      columns: ["userId"],
+      fields: ["nickname"],
     });
     assert.equal(badFilter.ok, false);
 
@@ -948,7 +974,7 @@ test("batchStart 快照规范化：Payload 形态值不二次序列化，节点�
         contentThemeLabel: ["通用 干货分享"],
         location: [{ path: " 中国 广东 广州 ", children: [] }],
       },
-      columns: ["userId", "nickname"],
+      fields: ["nickname", "fansCount"],
     });
     assert.equal(start.ok, true);
     await waitForTaskStatus(service, start.data.taskId, ["completed"]);
@@ -968,7 +994,7 @@ test("batchStart 快照规范化：Payload 形态值不二次序列化，节点�
     // 快照值清洗（fresh reviewer M2）：字符串值中的本地路径/敏感形态文本不得落盘。
     const start2 = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
       filterState: { gender: "女 token=abc C:\\Users\\x\\secret" },
-      columns: ["userId", "nickname"],
+      fields: ["nickname", "fansCount"],
     });
     assert.equal(start2.ok, true);
     const task2 = await service.batchGet({ taskId: start2.data.taskId });
@@ -1004,7 +1030,7 @@ test("Phase 5.1：批量任务快照与 v2 请求保留结构化 filterList/flag
         inviteReply48hNumRatio: [95, -1],
         thousandLikePercent30: [40, null],
       },
-      columns: ["userId"],
+      fields: ["nickname"],
     });
     assert.equal(start.ok, true);
     await waitForTaskStatus(service, start.data.taskId, ["completed"]);
@@ -1053,7 +1079,7 @@ test("IPC 错误详情不得泄漏本地绝对路径（fresh reviewer M1）", as
   try {
     const start = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
       filterState: {},
-      columns: ["userId"],
+      fields: ["nickname"],
     });
     assert.equal(start.ok, true);
     const taskId = start.data.taskId;
@@ -1102,7 +1128,9 @@ test("batch-pause/resume/cancel 通道存在且作用于任务（transport gate 
     }
     return gate;
   }
-  const DEADLOCK_TIMEOUT_MS = 10000;
+  // 全量 unit 并行执行时事件循环可能被争用，防死锁超时放宽到 30s
+  // （仅兜底死锁，正常时序由 gate 同步，不依赖该超时）。
+  const DEADLOCK_TIMEOUT_MS = 30000;
   const awaitGate = (gate, label) =>
     Promise.race([
       gate.entered,
@@ -1135,7 +1163,7 @@ test("batch-pause/resume/cancel 通道存在且作用于任务（transport gate 
   try {
     const start = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
       filterState: {},
-      columns: ["userId"],
+      fields: ["nickname"],
       budgets: { queryBudget: 1000 },
     });
     assert.equal(start.ok, true);
@@ -1192,7 +1220,7 @@ test("batch-resume 携带 budgets：拒绝未增加/非法预算且不发请求�
   try {
     const start = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
       filterState: {},
-      columns: ["userId"],
+      fields: ["nickname"],
       budgets: { queryBudget: 2 },
     });
     assert.equal(start.ok, true);

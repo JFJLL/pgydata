@@ -369,6 +369,7 @@
   function retryFailed(taskId) {
     const source = runtime.tasks.get(taskId || state.lastTaskId);
     if (!source || !source.payload || source.failed.length === 0) return;
+    if (source.inputType === "search-batch") return;
     const urls = Array.from(new Set(source.failed.map((item) => item.url).filter(Boolean)));
     if (urls.length === 0) return;
     const retryId = `${source.id}-retry-${Date.now().toString(36)}`;
@@ -407,6 +408,7 @@
 
     task.onProgress((event) => {
       const item = getTask(event.taskId);
+      if (event.inputType) item.inputType = event.inputType;
       item.current = event.current ?? item.current;
       item.total = event.total ?? item.total;
       if (event.batchResting) {
@@ -414,8 +416,14 @@
       }
       render();
     });
+    task.onPaused((event) => {
+      const item = getTask(event.taskId);
+      item.paused = !!event.paused;
+      render();
+    });
     task.onItemResult((event) => {
       const item = getTask(event.taskId);
+      if (event.inputType) item.inputType = event.inputType;
       const url = item.payload?.urls?.[event.index] || "";
       if (event.status === "success") {
         item.success += 1;
@@ -469,6 +477,7 @@
       state.history = (Array.isArray(records) ? records : []).map((record) => ({
         ...record,
         id: record.taskId,
+        inputType: record.inputType || "",
         total: Number(record.total || record.totalRows || 0),
         success: Number(record.successCount || 0),
         failed: Number(record.failedCount || 0),
@@ -761,28 +770,72 @@
     });
   }
 
+  async function downloadCurrentTask() {
+    const taskId = state.lastTaskId;
+    if (!taskId) return;
+    await refreshPersistentHistory();
+    const record = state.history.find((item) => item.id === taskId);
+    if (record && record.inputType === "search-batch" && record.status !== "completed") {
+      log("warn", "任务尚未完成全部博主采集，暂不可导出");
+      return;
+    }
+    try {
+      const result = await window.bridge.scraper.history.exportTask(taskId);
+      if (result?.success) log("success", `已导出采集结果：${record?.fileName || taskId}`, result.filePath || "");
+    } catch (error) {
+      log("error", "导出采集结果失败", errorMessage(error));
+    }
+  }
+
   function renderCurrent() {
     const task = runtime.tasks.get(state.lastTaskId);
     const failed = task?.failed?.length || 0;
     const failures = task?.failed?.slice(-10).reverse() || [];
+    const preparing = !!task && !task.completed && !task.total;
+    const percent = task && task.total ? Math.max(0, Math.min(100, Math.round(((task.current || 0) / task.total) * 100))) : 0;
+    const elapsed = task && task.startedAt ? Math.max(0, Math.floor((Date.now() - task.startedAt) / 1000)) : 0;
+    const elapsedText = elapsed < 60 ? `${elapsed}秒` : `${Math.floor(elapsed / 60)}分${elapsed % 60}秒`;
+    const isSearchBatch = !!task && task.inputType === "search-batch";
+    const canDownload = !!task && task.completed && (task.success || 0) > 0;
+    const showPause = !!task && !task.completed && !task.paused && typeof window.bridge?.scraper?.task?.pause === "function";
+    const showResume = !!task && !task.completed && task.paused;
+    const showCancel = !!task && !task.completed;
     runtime.currentBox.innerHTML = `
       <div class="moa-card soft">
         <div class="moa-title">当前任务</div>
+        ${task ? `<div class="moa-sub" style="margin-bottom:6px">${escapeHtml(task.payload?.fileName || "找博主筛选采集")}</div>` : ""}
         <div class="moa-row">
-          <span class="moa-pill ${task ? "red" : ""}">${task ? `${task.current}/${task.total}` : "暂无任务"}</span>
+          <span class="moa-pill ${task ? "red" : ""}">${task ? (preparing ? "正在准备采集" : `${task.current}/${task.total}`) : "暂无任务"}</span>
           <span class="moa-pill">成功 ${task?.success || 0}</span>
           <span class="moa-pill">失败 ${failed}</span>
+          ${task && !preparing ? `<span class="moa-pill">已用 ${elapsedText}</span>` : ""}
         </div>
-        <button class="moa-btn primary" data-retry ${failed ? "" : "disabled"}>重跑失败项</button>
+        ${task && !preparing ? `<div style="height:8px;border-radius:4px;background:#eee;margin:8px 0;overflow:hidden"><div style="height:100%;width:${percent}%;background:linear-gradient(90deg,#4fc3f7,#0288d1);transition:width .3s"></div></div>` : ""}
+        <div class="moa-row" style="margin-top:7px;margin-bottom:0">
+          ${showPause ? `<button class="moa-btn" data-pause-task>暂停</button>` : ""}
+          ${showResume ? `<button class="moa-btn primary" data-resume-task>继续</button>` : ""}
+          ${showCancel ? `<button class="moa-btn" data-cancel-task>取消</button>` : ""}
+          ${canDownload ? `<button class="moa-btn primary" data-download-task>下载采集结果</button>` : ""}
+          ${!isSearchBatch ? `<button class="moa-btn primary" data-retry ${failed ? "" : "disabled"}>重跑失败项</button>` : ""}
+        </div>
       </div>
       <div class="moa-card">
         <div class="moa-title">最近失败项</div>
         ${failures.length ? failures.map((item) => `<div class="moa-fail"><b>${escapeHtml(item.category.label)}</b><div class="moa-sub">${escapeHtml(item.message || item.url || "")}</div></div>`).join("") : '<div class="moa-sub">暂无失败项</div>'}
       </div>
     `;
-    runtime.currentBox.querySelector("[data-retry]").addEventListener("click", () => retryFailed(state.lastTaskId));
+    const retryBtn = runtime.currentBox.querySelector("[data-retry]");
+    if (retryBtn) retryBtn.addEventListener("click", () => retryFailed(state.lastTaskId));
+    const pauseBtn = runtime.currentBox.querySelector("[data-pause-task]");
+    if (pauseBtn) pauseBtn.addEventListener("click", () => window.bridge?.scraper?.task?.pause?.(state.lastTaskId));
+    const resumeBtn = runtime.currentBox.querySelector("[data-resume-task]");
+    if (resumeBtn) resumeBtn.addEventListener("click", () => window.bridge?.scraper?.task?.resume?.(state.lastTaskId));
+    const cancelBtn = runtime.currentBox.querySelector("[data-cancel-task]");
+    if (cancelBtn) cancelBtn.addEventListener("click", () => window.bridge?.scraper?.task?.cancel?.(state.lastTaskId));
+    const downloadBtn = runtime.currentBox.querySelector("[data-download-task]");
+    if (downloadBtn) downloadBtn.addEventListener("click", () => downloadCurrentTask());
+    if (task && !task.completed) setTimeout(() => render(), 1000);
   }
-
   function renderHistory() {
     runtime.historyBox.innerHTML = `
       <div class="moa-card soft">
@@ -793,7 +846,7 @@
             <div><b>${escapeHtml(item.fileName)}</b></div>
             <div class="moa-sub">${escapeHtml(pluginLabel(item.pluginId))} · ${escapeHtml(historyStatusLabel(item.status))} · ${escapeHtml(item.finishedAt)} · 成功 ${item.success} · 失败 ${item.failed}${item.pendingChargeCount ? ` · 待确认扣费 ${item.pendingChargeCount}` : ""}</div>
             <div class="moa-row" style="margin-top:7px;margin-bottom:0">
-              <button class="moa-btn" data-download-history="${escapeHtml(item.id)}" ${item.success ? "" : "disabled"}>导出已成功内容</button>
+              <button class="moa-btn" data-download-history="${escapeHtml(item.id)}" ${item.inputType === "search-batch" && item.status !== "completed" ? "disabled" : item.success ? "" : "disabled"}>导出已成功内容</button>
               ${["interrupted", "auth_expired"].includes(item.status) && item.success < item.total ? `<button class="moa-btn primary" data-resume-history="${escapeHtml(item.id)}">继续任务</button>` : ""}
               ${item.migratedFromLocalStorage && item.legacySummary?.exportTruncated ? '<span class="moa-sub">旧版备份当时已截断，仅能恢复其中现存内容</span>' : ""}
             </div>
@@ -838,6 +891,18 @@
   function init() {
     render();
     window.addEventListener("resize", updateAssistantPosition);
+    window.addEventListener("magiorix:ops-assistant:show-task", (event) => {
+      const taskId = event && event.detail && event.detail.taskId;
+      if (!taskId) return;
+      const task = getTask(taskId);
+      task.payload = task.payload || { taskId };
+      task.startedAt = task.startedAt || Date.now();
+      state.lastTaskId = taskId;
+      state.activeTab = "current";
+      state.open = true;
+      saveState();
+      render({ force: true });
+    });
     const bindTimer = setInterval(() => {
       if (bindBridge()) {
         clearInterval(bindTimer);

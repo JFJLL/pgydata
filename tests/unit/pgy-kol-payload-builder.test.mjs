@@ -464,3 +464,67 @@ test("Phase 5.1：连续构建不得跨请求累积 filterList/flagList（浅拷
     { flagType: "IS_HIGH_QUALITY", flagValue: "0" },
   ]);
 });
+
+test("官网枚举 label-to-code：粉丝年龄/性别/签约/婚恋/消费/母婴阶段发送数字编码", () => {
+  const builder = makeBuilder();
+  const payload = builder.build(
+    {
+      fansAge: "35-44",
+      fansGender: "女",
+      signed: "机构博主",
+      fansMaritalStatus: "已婚",
+      fansConsumptionLevel: "高",
+      fansChildAgeInfo: [{ label: "1-3岁", value: "1-3岁" }],
+    },
+    { trackId: "t" },
+  );
+  assert.equal(payload.fansAge, 4, "35-44 必须编码为 4（官网模块 78538）");
+  assert.equal(payload.fansGender, 2, "女 必须编码为 2");
+  assert.equal(payload.signed, 1, "机构博主 必须编码为 1");
+  assert.equal(payload.fansMaritalStatus, 1, "已婚 必须编码为 1");
+  assert.equal(payload.fansConsumptionLevel, 2, "高 必须编码为 2");
+  assert.deepEqual(payload.fansChildAgeInfo, [4], "1-3岁 必须编码为 4");
+});
+
+test("label-to-code 未知标签显式报错（不得把非法值直发官网）", () => {
+  const builder = makeBuilder();
+  assert.throws(
+    () => builder.build({ fansAge: "61岁以上" }, { trackId: "t" }),
+    (err) => err instanceof PgyPayloadError || err?.kind === "serializer" || /未知选项标签/.test(String(err?.message)),
+    "未知粉丝年龄标签必须拒绝",
+  );
+});
+
+test("粉丝量下限 0 必须发送（官网 0~5000 发送 fansNumberLower=0）", () => {
+  const builder = makeBuilder();
+  const payload = builder.build(
+    { fansNumberLower: 0, fansNumberUpper: 5000 },
+    { trackId: "t" },
+  );
+  assert.equal(payload.fansNumberLower, 0, "下限 0 不得被丢弃");
+  assert.equal(payload.fansNumberUpper, 5000);
+});
+
+test("上下限边界：X以上 发送 null 上限，X以下 补 0 下限（官网契约）", () => {
+  const builder = makeBuilder();
+  // “100万以上”：页面映射为 lower=1000000 + UNBOUNDED 哨兵 → 官网发 fansNumberUpper: null。
+  const above = builder.build(
+    { fansNumberLower: 1000000, fansNumberUpper: "UNBOUNDED" },
+    { trackId: "t" },
+  );
+  assert.equal(above.fansNumberLower, 1000000);
+  assert.equal(above.fansNumberUpper, null, "无上限必须显式发送 null（官网 [1e6, null]）");
+  // “1万以下”：页面映射为 lower=0 + upper=10000。
+  const below = builder.build({ fansNumberLower: 0, fansNumberUpper: 10000 }, { trackId: "t" });
+  assert.equal(below.fansNumberLower, 0);
+  assert.equal(below.fansNumberUpper, 10000);
+  // 图文/视频报价同规则：0 下限保留、无上限转 null。
+  const quote = builder.build(
+    { notePriceLower: 0, notePriceUpper: "UNBOUNDED", videoPriceLower: 200, videoPriceUpper: 800 },
+    { trackId: "t" },
+  );
+  assert.equal(quote.notePriceLower, 0);
+  assert.equal(quote.notePriceUpper, null);
+  assert.equal(quote.videoPriceLower, 200);
+  assert.equal(quote.videoPriceUpper, 800);
+});

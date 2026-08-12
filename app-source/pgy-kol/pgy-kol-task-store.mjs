@@ -375,8 +375,16 @@ export class PgyKolTaskStore {
         finishedAt: null,
         pageSize: Number.isSafeInteger(input?.pageSize) ? input.pageSize : 20,
         columns: Array.isArray(input?.columns) ? input.columns.map((column) => String(column)) : [],
+        // 两阶段采集：详情阶段字段集合（共享字段弹窗提交的完整 schema 键）。
+        // 存在 fields 时任务走“找 ID → 详情采集”编排；legacy 任务无 fields，
+        // 保持旧的搜索列表导出行为。
+        fields: Array.isArray(input?.fields) ? input.fields.map((field) => String(field)) : [],
         filterState: clone(input?.filterState ?? {}),
         budgets: clone(input?.budgets ?? {}),
+        detailTaskId: null,
+        detailUrls: [],
+        detailStatus: null,
+        detailCounts: { total: 0, current: 0, successCount: 0, failedCount: 0 },
         counts: { raw: 0, unique: 0, dup: 0, missingUid: 0 },
         leaves: [],
         summary: {
@@ -441,6 +449,12 @@ export class PgyKolTaskStore {
         finishedAt: metadata.finishedAt,
         pageSize: metadata.pageSize,
         columns: clone(metadata.columns ?? []),
+        fields: clone(metadata.fields ?? []),
+        detailTaskId: metadata.detailTaskId ?? null,
+        detailUrls: clone(metadata.detailUrls ?? []),
+        detailFileName: metadata.detailFileName ?? null,
+        detailStatus: metadata.detailStatus ?? null,
+        detailCounts: clone(metadata.detailCounts ?? { total: 0, current: 0, successCount: 0, failedCount: 0 }),
         counts: clone(metadata.counts ?? {}),
         summary: clone(metadata.summary ?? {}),
         leafCount: Array.isArray(metadata.leaves) ? metadata.leaves.length : 0,
@@ -661,6 +675,11 @@ export class PgyKolTaskStore {
         filterState: clone(task.filterState),
         budgets: clone(task.budgets),
         columns: clone(task.columns ?? []),
+        fields: clone(task.fields ?? []),
+        detailTaskId: task.detailTaskId ?? null,
+        detailFileName: task.detailFileName ?? null,
+        detailStatus: task.detailStatus ?? null,
+        detailCounts: clone(task.detailCounts ?? { total: 0, current: 0, successCount: 0, failedCount: 0 }),
       };
     });
   }
@@ -852,6 +871,49 @@ export class PgyKolTaskStore {
         metadata.updatedAt = iso(this.now());
         await atomicWriteJson(taskPaths.metadata, metadata);
       }
+      return clone(metadata);
+    });
+  }
+
+  /**
+   * 两阶段编排：原子持久化详情阶段子任务（taskId + 去重后的博主链接）。
+   * 先落盘再启动详情采集，崩溃/重启后能识别任务已进入详情阶段。
+   */
+  async setDetailPhase(taskId, { detailTaskId, detailUrls, detailFileName } = {}) {
+    if (typeof detailTaskId !== "string" || detailTaskId.length === 0) {
+      throw new Error("非法详情任务 ID");
+    }
+    return this.withLock(taskId, async () => {
+      const metadata = await this.loadMetadata(taskId);
+      metadata.detailTaskId = String(detailTaskId);
+      metadata.detailUrls = (Array.isArray(detailUrls) ? detailUrls : []).map((url) => String(url));
+      metadata.detailStatus = "pending";
+      metadata.detailCounts = { total: metadata.detailUrls.length, current: 0, successCount: 0, failedCount: 0 };
+      if (typeof detailFileName === "string" && detailFileName.length > 0) {
+        metadata.detailFileName = detailFileName;
+      }
+      metadata.updatedAt = iso(this.now());
+      await atomicWriteJson(this.paths(taskId).metadata, metadata);
+      return clone(metadata);
+    });
+  }
+
+  /**
+   * 两阶段编排：更新详情阶段子任务状态与计数（进度事件驱动，幂等）。
+   */
+  async setDetailStatus(taskId, detailStatus, extra = {}) {
+    return this.withLock(taskId, async () => {
+      const metadata = await this.loadMetadata(taskId);
+      metadata.detailStatus = String(detailStatus);
+      if (extra !== null && typeof extra === "object" && !Array.isArray(extra)) {
+        const counts = { ...(metadata.detailCounts ?? { total: 0, current: 0, successCount: 0, failedCount: 0 }) };
+        for (const key of ["total", "current", "successCount", "failedCount"]) {
+          if (Number.isFinite(extra[key])) counts[key] = Number(extra[key]);
+        }
+        metadata.detailCounts = counts;
+      }
+      metadata.updatedAt = iso(this.now());
+      await atomicWriteJson(this.paths(taskId).metadata, metadata);
       return clone(metadata);
     });
   }

@@ -39,6 +39,16 @@ function pageRuntime(extra) {
       useCallback(fn) { return fn; },
       useRef(initial) { return { current: initial }; },
     },
+    // 主 bundle 作用域符号：Vt 是蒲公英插件 id（"pgy"），n5 是任务面板同款
+    // 采集配置工厂（公开导出 r）。页面源码的共享选择器包装器通过它们拿到
+    // 与 PgyTaskPanel 完全相同的 platform/schema，绝不复制 schema。
+    Vt: "pgy",
+    n5(platform, taskType) {
+      if (platform === "pgy" && taskType === "blogger") {
+        return { platform: "pgy-blogger", schema: { platform: "pgy", groups: [] }, headers: {} };
+      }
+      return null;
+    },
     window: {
       innerWidth: 1280,
       innerHeight: 631,
@@ -153,7 +163,7 @@ function statefulRenderer(runtime, component, props, refElement) {
 
 function searchPageHarness(searchFirstPage, options) {
   options = options || {};
-  const bridge = {
+  const bridge = Object.assign({
     getSchemaFields() { return Promise.resolve({ ok: true, data: [] }); },
     getConfig() { return Promise.resolve({ ok: true, data: { nodes: [], options: [] } }); },
     getColumns() { return Promise.resolve({ ok: true, data: [{ id: "nickname", responsePath: "nickname", defaultDisplay: true }] }); },
@@ -161,8 +171,8 @@ function searchPageHarness(searchFirstPage, options) {
     batchList() { return Promise.resolve({ ok: true, data: [] }); },
     onBatchEvent() { return () => {}; },
     searchFirstPage,
-  };
-  const runtime = pageRuntime({
+  }, options.bridgeExtra || {});
+  const runtime = pageRuntime(Object.assign({
     document: {
       documentElement: { classList: { add() {}, remove() {} } },
       createTreeWalker() { return { nextNode() { return null; } }; },
@@ -186,7 +196,7 @@ function searchPageHarness(searchFirstPage, options) {
       addEventListener() {},
       removeEventListener() {},
     },
-  });
+  }, options.runtime || {}));
   const renderer = statefulRenderer(runtime, runtime.PgyKolSearchPage, {}, { scrollIntoView() {} });
   return { bridge, runtime, renderer };
 }
@@ -535,7 +545,7 @@ test("batch start requires a clean applied snapshot and never consumes dirty dra
   await coordinator.startBatch(["nickname"]);
   assert.equal(batchCalls.length, 1);
   assert.deepEqual(batchCalls[0].filterState, searchCalls[0], "batch must use the frozen applied request snapshot");
-  assert.deepEqual(batchCalls[0].columns, ["nickname"]);
+  assert.deepEqual(batchCalls[0].fields, ["nickname"]);
 });
 
 test("late responses cannot overwrite a newer applied request", async () => {
@@ -1266,105 +1276,88 @@ test("china fallback covers all 34 provincial regions so 中国 always expands e
   );
 });
 
-test("collect dialog renders grouped checkboxes and submits the chosen ids", () => {
-  const runtime = pageRuntime();
-  const anchor = { getBoundingClientRect() { return { left: 0, top: 0 }; } };
-  const columns = [
-    { id: "nickname", label: "昵称", group: "博主信息" },
-    { id: "fansNum", label: "粉丝数", group: "账号数据" },
-    { id: "videoPrice", label: "视频报价", group: "博主报价" },
-    { id: "readMidNor30", label: "阅读中位数（日常）", group: "日常笔记数据" },
-  ];
-  const applied = [];
-  const renderer = statefulRenderer(runtime, runtime.PgyKolCollectDialog, {
-    open: true,
-    columns,
-    selected: ["nickname"],
-    onClose() {},
-    onApply(ids) { applied.push(ids.slice()); },
-  }, { scrollIntoView() {} });
-  let tree = renderer.render();
-  const labels = findVnodes(tree, (node) => node.props && node.props.children && typeof node.props.children === "string").map((node) => node.props.children);
-  assert.ok(labels.includes("选择采集字段"), "dialog must render its title");
-  assert.ok(labels.includes("账号数据"), "dialog must render the 账号数据 group");
-  assert.ok(labels.includes("日常笔记数据"), "dialog must render the 日常笔记数据 group");
-  assert.ok(labels.includes("视频报价"), "dialog must render field labels");
-  assert.ok(labels.includes("全选"), "groups must offer 全选");
-  // 点击字段切换（昵称 反选，粉丝数 选中）。
-  const toggleFields = findVnodes(tree, (node) => typeof node.props.onClick === "function" && node.props.children && node.props.children.length === 2 && node.props.children[1] && node.props.children[1].props && node.props.children[1].props.children === "昵称");
-  assert.ok(toggleFields.length >= 1, "field row must be clickable");
-  toggleFields[0].props.onClick();
-  tree = renderer.render();
-  const fansRow = findVnodes(tree, (node) => typeof node.props.onClick === "function" && node.props.children && node.props.children.length === 2 && node.props.children[1] && node.props.children[1].props && node.props.children[1].props.children === "粉丝数");
-  assert.ok(fansRow.length >= 1);
-  fansRow[0].props.onClick();
-  tree = renderer.render();
-  const submit = findVnodes(tree, (node) => node.props && node.props.children === "提交" && typeof node.props.onClick === "function")[0];
-  assert.ok(submit, "dialog must render 提交");
-  submit.props.onClick();
-  assert.equal(applied.length, 1);
-  assert.deepEqual(applied[0].sort(), ["fansNum"], "submit must apply the toggled selection");
-});
-
-test("a paused history task loads, scrolls its detail into view, and exposes continue/cancel/export", async () => {
-  const paused = {
-    taskId: "fixture-paused-task",
-    status: "paused",
-    completeness: "cannot-prove",
-    counts: { raw: 12, unique: 10, dup: 2, missingUid: 0 },
-    leaves: [],
+test("shared field selector host renders the shared module with PgyTaskPanel-identical props", async () => {
+  const schema = {
+    platform: "pgy",
+    groups: [
+      { groupKey: "basic", groupLabel: "本地信息", required: true, fields: [{ key: "nickname", label: "昵称", required: true }] },
+      { groupKey: "quotes", groupLabel: "报价数据", fields: [{ key: "picturePrice", label: "图文报价" }, { key: "videoPrice", label: "视频报价" }] },
+    ],
   };
-  let batchGetCalls = 0;
-  let scrollCalls = 0;
-  const detailElement = { scrollIntoView(options) { scrollCalls += 1; assert.equal(options.block, "start"); } };
-  const bridge = {
-    getSchemaFields() { return Promise.resolve({ ok: true, data: [] }); },
-    getConfig() { return Promise.resolve({ ok: true, data: { nodes: [], options: [] } }); },
-    getColumns() { return Promise.resolve({ ok: true, data: [{ id: "nickname", responsePath: "nickname", defaultDisplay: true }] }); },
-    previewPayload() { return Promise.resolve({ ok: true, data: {} }); },
-    batchList() { return Promise.resolve({ ok: true, data: [paused] }); },
-    batchGet(payload) { batchGetCalls += 1; assert.equal(payload.taskId, paused.taskId); return Promise.resolve({ ok: true, data: paused }); },
-    onBatchEvent() { return () => {}; },
-  };
+  const selectorModule = { E: function FakeSelector(props) { return { type: "FakeSelector", props }; } };
   const runtime = pageRuntime({
-    document: {
-      documentElement: { classList: { add() {}, remove() {} } },
-      querySelector() { return detailElement; },
-      createTreeWalker() { return { nextNode() { return null; } }; },
-      body: {},
-    },
-    window: {
-      innerWidth: 1280,
-      innerHeight: 631,
-      bridge: { pgyKol: bridge },
-      localStorage: { getItem(key) { return key === "magiorix-pgy-kol-enabled" ? "1" : null; }, setItem() {}, removeItem() {} },
-      setTimeout() { return 1; },
-      clearTimeout() {},
-      requestAnimationFrame(fn) { fn(); return 1; },
-      cancelAnimationFrame() {},
-      addEventListener() {},
-      removeEventListener() {},
+    Vt: "pgy",
+    n5(platform, taskType) {
+      assert.equal(platform, "pgy", "host must ask the pgy plugin id for its collector config");
+      assert.equal(taskType, "blogger", "host must target blogger collection, never notebook");
+      return { platform: "pgy-blogger", schema, headers: {} };
     },
   });
-  const rootRenderer = statefulRenderer(runtime, runtime.PgyKolSearchPage, {}, detailElement);
-  rootRenderer.render();
+  // vm 环境无法执行真实动态 import（Node vm 会拦截 import() 走宿主加载器），
+  // 因此测试替换全局加载器桩，等价于“chunk 已加载完成”；import 调用形态与
+  // chunk 文件名替换由静态契约测试覆盖。
+  runtime.pgyKolLoadExportFieldSelector = () => {
+    runtime.pgyKolFieldSelectorModule = selectorModule.E;
+    runtime.pgyKolFieldSelectorLoadState = "ok";
+    return Promise.resolve(selectorModule.E);
+  };
+  const onClose = () => {};
+  const onSubmit = () => {};
+  const renderer = statefulRenderer(runtime, runtime.PgyKolSharedFieldSelector, {
+    open: true,
+    onClose,
+    onSubmit,
+  }, { scrollIntoView() {} });
+  assert.equal(renderer.render(), null, "host must stay unmounted while the shared module is loading");
   await new Promise(setImmediate);
-  let tree = rootRenderer.render();
-  const history = findVnodes(tree, (node) => node.type === runtime.PgyKolTaskHistory)[0];
-  assert.ok(history, "task history must render after batchList resolves");
-  assert.equal(history.props.tasks.some((task) => task.taskId === paused.taskId), true);
-  history.props.onSelect(paused.taskId);
-  await new Promise(setImmediate);
-  tree = rootRenderer.render();
-  assert.equal(batchGetCalls, 1, "selecting a paused history row must load its details once");
-  const panel = findVnodes(tree, (node) => node.type === runtime.PgyKolBatchPanel)[0];
-  assert.ok(panel && panel.props.task && panel.props.task.status === "paused", "paused task detail must be selected");
-  assert.ok(scrollCalls >= 1, "selected paused detail must scroll into the viewport");
+  const tree = renderer.render();
+  assert.equal(tree.type, selectorModule.E, "host must render the shared ExportFieldSelector module (E export)");
+  assert.equal(tree.props.open, true);
+  assert.equal(tree.props.platform, "pgy-blogger");
+  assert.equal(tree.props.schema, schema, "schema must be forwarded by reference");
+  assert.equal(tree.props.title, "选择采集字段");
+  assert.equal(tree.props.warningText, "勾选字段过多会显著增加采集时间，且可能触发平台风控。建议按需勾选。");
+  assert.equal(tree.props.onClose, onClose);
+  assert.equal(tree.props.onSubmit, onSubmit);
+  // 页面源码在 vm realm 执行，其对象字面量的原型与宿主 realm 不同，
+  // deepStrictEqual 无法跨 realm 比较对象本身；改为键集合 + 逐字段断言。
+  assert.deepEqual(
+    Object.keys(tree.props).sort(),
+    ["onClose", "onSubmit", "open", "platform", "schema", "title", "warningText"].sort(),
+    "host must forward exactly the PgyTaskPanel call parameter set",
+  );
+});
 
-  const panelRenderer = statefulRenderer(runtime, runtime.PgyKolBatchPanel, panel.props, detailElement);
-  const panelTree = panelRenderer.render();
-  const actionLabels = findVnodes(panelTree, (node) => node.props && ["继续", "取消", "导出"].includes(node.props.children)).map((node) => node.props.children);
-  assert.deepEqual(new Set(actionLabels), new Set(["继续", "取消", "导出"]));
+test("shared selector load failure shows an error dialog and retries after close/reopen", async () => {
+  let attempts = 0;
+  const runtime = pageRuntime({ Vt: "pgy" });
+  runtime.pgyKolLoadExportFieldSelector = () => {
+    attempts += 1;
+    runtime.pgyKolFieldSelectorModule = null;
+    runtime.pgyKolFieldSelectorLoadState = "failed";
+    return Promise.resolve(null);
+  };
+  const props = { open: true, onClose() {}, onSubmit() {} };
+  const renderer = statefulRenderer(runtime, runtime.PgyKolSharedFieldSelector, props, { scrollIntoView() {} });
+  renderer.render();
+  await new Promise(setImmediate);
+  let tree = renderer.render();
+  assert.ok(
+    findVnodes(tree, (node) => node.props && node.props.children === "字段选择器加载失败，请关闭后重试。").length > 0,
+    "failed chunk load must surface a visible error dialog",
+  );
+  assert.equal(attempts, 1);
+  props.open = false;
+  renderer.render();
+  props.open = true;
+  renderer.render();
+  await new Promise(setImmediate);
+  tree = renderer.render();
+  assert.equal(attempts, 2, "reopening after a failure must retry the dynamic import");
+  assert.ok(
+    findVnodes(tree, (node) => node.props && node.props.children === "字段选择器加载失败，请关闭后重试。").length > 0,
+    "second failure must keep the error dialog visible",
+  );
 });
 
 test("page source file is injection-safe", () => {
@@ -1442,19 +1435,15 @@ test("Phase 5.2 page source carries the required copy", () => {
     "搜索历史",
     "清空历史",
     "magiorix-pgy-kol-nick-history",
-    "自定义列",
     "官网展示指标",
     "官网当前未返回",
-    "增加预算并继续",
-    "增加页数并继续",
-    "采集未完整/需要处理",
+    "开始采集",
     "功能未开启",
     "magiorix-pgy-kol-columns",
     "magiorix-pgy-kol-filters",
     "已恢复筛选，请点击确定后查询",
     "确定筛选",
     "筛选条件已修改，当前结果仍基于上一次确定的条件。",
-    "这是待确认条件的本地 Payload 预览，不会请求蒲公英接口。",
     "请选择您的合作品牌",
     "合作品牌智能推荐",
     "按博主粉丝推荐",
@@ -1521,10 +1510,7 @@ test("Phase 5.2 page source carries the required copy", () => {
     "剔除已邀约博主",
     "待实证",
     "人群目标（按博主粉丝推荐）依赖合作品牌：当前账号未绑定品牌，官网禁用该筛选；无法实证前不参与查询与采集。",
-    "选择展示指标",
     "开始采集",
-    "任务历史",
-    "Payload 预览",
     "结果可能超过 5000",
     "未知字段",
     "没有匹配的博主",
@@ -1810,24 +1796,299 @@ test("note category leaf paths keep the industry prefix so cross-industry leaves
   );
 });
 
-test("collect flow opens the field-selection dialog before batch start; export uses the task snapshot", async () => {
-  const calls = [];
-  const harness = searchPageHarness((filterState) => Promise.resolve(successResult()), {
-    extraBridge: {
-      batchExport(args) { calls.push(JSON.parse(JSON.stringify(args))); return Promise.resolve({ ok: true }); },
+test("collect flow reuses the shared ExportFieldSelector: the imitation dialog is gone and the wiring matches PgyTaskPanel", () => {
+  assert.ok(!pageSource.includes("function PgyKolCollectDialog"), "the imitation collect dialog must be deleted entirely");
+  assert.ok(!pageSource.includes("PgyKolCollectDialog"), "no PgyKolCollectDialog reference may remain in the page source");
+  assert.ok(pageSource.includes("function PgyKolSharedFieldSelector(p)"), "the page must host the shared selector through a thin wrapper");
+  assert.match(pageSource, /setCollectOpen\(true\)/, "start batch must open the field-selection dialog");
+  assert.match(pageSource, /pgyKolLoadExportFieldSelector\(\)/, "the host must lazily load the shared selector");
+  assert.ok(pageSource.includes('import(/* @vite-ignore */ pgyKolFieldSelectorChunkUrl)'), "the host must use a safe dynamic import, never a static one");
+  assert.ok(pageSource.includes('var pgyKolFieldSelectorChunkUrl = "__PGY_KOL_EXPORT_FIELD_SELECTOR__"'), "the chunk filename must stay a patch-script placeholder in source");
+  assert.ok(pageSource.includes('n5(Vt, "blogger")'), "the host must take platform/schema from the main-bundle pgy blogger config factory");
+  assert.ok(
+    pageSource.includes('title: "选择采集字段", warningText: "勾选字段过多会显著增加采集时间，且可能触发平台风控。建议按需勾选。", onClose: p.onClose, onSubmit: p.onSubmit'),
+    "the host must forward the PgyTaskPanel-identical title/warningText/onClose/onSubmit",
+  );
+  assert.match(pageSource, /startBatchWithColumns\(ids\)/, "the shared selector submit must start the batch with the chosen keys");
+  assert.match(pageSource, /searchCoordinator\.startBatch\(ids\)/, "batch start must delegate the complete selected schema keys to the coordinator");
+  assert.match(
+    pageSource,
+    /magiorix:ops-assistant:show-task/,
+    "提交后必须通过 show-task 事件打开/聚焦采集助手的当前任务视图",
+  );
+  assert.ok(!pageSource.includes("pgyKolExportColumnIds"), "the collect path must not filter keys through the table column registry");
+  assert.ok(!pageSource.includes("exportableColumns"), "the collect path must not derive fields from the table registry");
+  assert.ok(!pageSource.includes("batchExport"), "导出统一在采集助手完成，找博主页面不再提供导出");
+  assert.ok(!pageSource.includes("PgyKolBatchPanel") && !pageSource.includes("PgyKolTaskHistory"), "页面不得再渲染自建任务面板/历史");
+});
+
+test("patch script substitutes the real shared-selector chunk filename and hashes the final injected source", () => {
+  assert.ok(script.includes('const pgyKolFieldSelectorChunkName = "./" + path.basename(exportFieldSelectorBundle)'), "patch script must resolve the real chunk filename");
+  assert.ok(script.includes("__PGY_KOL_EXPORT_FIELD_SELECTOR__"), "patch script must know the page-source placeholder");
+  assert.ok(script.includes("pgyKolSearchPageSourceInjected"), "patch script must substitute the placeholder before hashing and injection");
+  assert.ok(script.includes("normalizeSource(pgyKolSearchPageSourceInjected)"), "content guard must hash the final substituted source");
+  assert.ok(script.includes('throw new Error("pgy-kol page source placeholder substitution failed'), "patch script must refuse to ship a placeholder residue");
+  assert.ok(bundle.includes('var pgyKolFieldSelectorChunkUrl = "./index-IS4kgrUy.js"'), "injected bundle must carry the real chunk URL");
+  assert.ok(!bundle.includes("__PGY_KOL_EXPORT_FIELD_SELECTOR__"), "no placeholder may survive into the generated bundle");
+});
+
+test("collect fields and templates are shared with 蒲公英博主采集 (same chunk, same schema, same template pool)", () => {
+  const selectorChunk = fs.readFileSync(path.join(projectRoot, "assets", "1.2.0", "assets", "index-IS4kgrUy.js"), "utf8");
+  const taskPanel = fs.readFileSync(path.join(projectRoot, "assets", "1.2.0", "assets", "PgyTaskPanel-B4ZGEmDG.js"), "utf8");
+  assert.match(taskPanel, /import\{E as \w+\}from"\.\/index-IS4kgrUy\.js"/, "蒲公英博主采集 must import ExportFieldSelector from the shared chunk");
+  assert.ok(
+    taskPanel.includes('{open:ce,platform:$.platform,schema:$.schema,title:"选择采集字段",warningText:"勾选字段过多会显著增加采集时间，且可能触发平台风控。建议按需勾选。",onClose:he,onSubmit:xe}'),
+    "蒲公英博主采集 call-parameter baseline",
+  );
+  // 共享选择器自身保证：必选昵称不可取消、默认模板自动生效、模板池按平台共享。
+  assert.ok(selectorChunk.includes('g.required?g.label+"（必选）":g.label'), "shared selector must mark required fields with （必选）");
+  assert.ok(selectorChunk.includes("(n.required||a.required)&&r.add(a.key)"), "shared selector must fold group/field required keys into the un-cancellable set");
+  assert.match(selectorChunk, /getDefaultTemplate\(n\)/, "shared selector must auto-apply the platform default template");
+  // 主 bundle 的完整蒲公英 blogger schema（公开导出 Z，局部符号 t5）通过
+  // n5(Vt,"blogger") 同时供给任务面板与找博主页面；找博主另存为的模板
+  // 与蒲公英博主采集共用同一个 "pgy-blogger" 模板池。
+  assert.match(bundle, /e===Vt&&t==="blogger"\?\{platform:"pgy-blogger",schema:t5,headers:hr\}/, "main-bundle n5 must hand the full t5 schema to blogger collection");
+  assert.match(bundle, /\{key:"nickname",label:"昵称",required:!0\}/, "the shared schema must mark nickname required");
+  assert.match(bundle, /t5 as Z/, "main bundle must publicly export the complete blogger schema as Z");
+  assert.ok(bundle.includes('ct=["starmap","pgy-blogger","pgy-notebook","pgy","douyin"]'), "template store must key the pgy-blogger pool");
+});
+
+test("table display columns and collect fields stay independent (hidden columns stay collectible)", async () => {
+  const schema = {
+    platform: "pgy",
+    groups: [
+      { groupKey: "basic", groupLabel: "本地信息", fields: [{ key: "nickname", label: "昵称", required: true }, { key: "url", label: "主页链接" }] },
+      { groupKey: "recent", groupLabel: "近10篇表现", fields: [{ key: "avg10ReadNum", label: "平均阅读数" }] },
+      { groupKey: "quotes", groupLabel: "报价数据", fields: [{ key: "picturePrice", label: "图文报价" }] },
+    ],
+  };
+  const selectorModule = { E: function FakeSelector(props) { return { type: "FakeSelector", props }; } };
+  // 表格注册表只含昵称与 avg10ReadNum 两列，且 avg10ReadNum 未展示（用户隐藏）。
+  const harness = searchPageHarness(() => Promise.resolve(successResult()), {
+    bridgeExtra: {
+      getColumns() {
+        return Promise.resolve({
+          ok: true,
+          data: [
+            { id: "nickname", responsePath: "nickname", defaultDisplay: true },
+            { id: "avg10ReadNum", responsePath: "avg10ReadNum", defaultDisplay: false },
+          ],
+        });
+      },
+    },
+    runtime: {
+      n5: () => ({ platform: "pgy-blogger", schema, headers: {} }),
     },
   });
-  // 字段选择在"开始采集"时弹出（采集前决定采集字段），导出直接用任务快照列。
-  assert.match(pageSource, /setCollectOpen\(true\)/, "start batch must open the field-selection dialog");
-  assert.ok(pageSource.includes('children: "选择采集字段"'), "collect dialog title must be 选择采集字段");
-  assert.ok(pageSource.includes("function PgyKolCollectDialog(p)"), "collect dialog must be the grouped checkbox component");
-  assert.ok(pageSource.includes('children: "勾选字段过多会增加采集时间，可能触发平台风控，建议按需勾选。"'), "collect dialog must carry the risk hint");
-  assert.ok(pageSource.includes('children: "提交"'), "collect dialog must submit with 提交");
-  assert.ok(pageSource.includes('children: "全选"'), "collect dialog groups must offer 全选");
-  assert.match(pageSource, /startBatchWithColumns\(ids\)/, "dialog confirm must start the batch with the chosen columns");
-  assert.match(pageSource, /searchCoordinator\.startBatch\(ids\)/, "batch start must delegate the chosen columns to the coordinator");
-  assert.match(pageSource, /bridge\.batchExport\(\{ taskId: tid \}\)/, "export must use the task snapshot columns without a second dialog");
-  assert.match(pageSource, /var exportableColumns = columnList \? columnList\.filter/, "exportable columns must be derived from the registry");
+  const { runtime, renderer } = harness;
+  const pageHooks = runtime.m;
+  runtime.pgyKolLoadExportFieldSelector = () => {
+    runtime.pgyKolFieldSelectorModule = selectorModule.E;
+    runtime.pgyKolFieldSelectorLoadState = "ok";
+    return Promise.resolve(selectorModule.E);
+  };
+  let tree = renderer.render();
+  findVnodes(tree, (node) => node.props && node.props.children === "确定筛选")[0].props.onClick();
+  await new Promise(setImmediate);
+  tree = renderer.render();
+  findVnodes(tree, (node) => node.props && node.props.children === "开始采集")[0].props.onClick();
+  tree = renderer.render();
+  const hostVnode = findVnodes(tree, (node) => node.type === runtime.PgyKolSharedFieldSelector)[0];
+  assert.ok(hostVnode, "shared selector host must be mounted by the page");
+  assert.equal(hostVnode.props.open, true, "host must open after 开始采集");
+  const hostRenderer = statefulRenderer(runtime, runtime.PgyKolSharedFieldSelector, hostVnode.props, { scrollIntoView() {} });
+  hostRenderer.render();
+  await new Promise(setImmediate);
+  const hostTree = hostRenderer.render();
+  const fake = findVnodes(hostTree, (node) => node.type === selectorModule.E)[0];
+  assert.ok(fake, "shared selector must render after 开始采集");
+  assert.equal(fake.props.schema, schema, "the passed schema must be the shared full schema, never derived from table columns");
+  const offeredKeys = [];
+  for (const group of fake.props.schema.groups) for (const field of group.fields) offeredKeys.push(field.key);
+  for (const key of ["nickname", "url", "avg10ReadNum", "picturePrice"]) {
+    assert.ok(offeredKeys.includes(key), "collect dialog must still offer " + key + " even when the table hides it");
+  }
+  const startBatchFn = pageSource.slice(pageSource.indexOf("var startBatch = function"), pageSource.indexOf("var startBatchWithColumns"));
+  assert.ok(!startBatchFn.includes("columnList") && !startBatchFn.includes("selectedColumns"), "startBatch must not read table columns or custom-column state");
+  runtime.m = pageHooks;
+});
+
+test("cancel never starts a batch; submit starts exactly once with the complete schema keys", async () => {
+  const schema = {
+    platform: "pgy",
+    groups: [
+      { groupKey: "basic", groupLabel: "本地信息", fields: [{ key: "nickname", label: "昵称", required: true }, { key: "url", label: "主页链接" }] },
+      { groupKey: "recent", groupLabel: "近10篇表现", fields: [{ key: "avg10ReadNum", label: "平均阅读" }] },
+    ],
+  };
+  const selectorModule = { E: function FakeSelector(props) { return { type: "FakeSelector", props }; } };
+  const batchCalls = [];
+  let loadCalls = 0;
+  const harness = searchPageHarness(() => Promise.resolve(successResult()), {
+    bridgeExtra: {
+      batchStart(payload) {
+        batchCalls.push(JSON.parse(JSON.stringify(payload)));
+        return Promise.resolve({ ok: true, data: { taskId: "fixture-task" } });
+      },
+    },
+    runtime: {
+      n5: () => ({ platform: "pgy-blogger", schema, headers: {} }),
+    },
+  });
+  const { runtime, renderer } = harness;
+  const pageHooks = runtime.m;
+  runtime.pgyKolLoadExportFieldSelector = () => {
+    loadCalls += 1;
+    runtime.pgyKolFieldSelectorModule = selectorModule.E;
+    runtime.pgyKolFieldSelectorLoadState = "ok";
+    return Promise.resolve(selectorModule.E);
+  };
+  let tree = renderer.render();
+  findVnodes(tree, (node) => node.props && node.props.children === "确定筛选")[0].props.onClick();
+  await new Promise(setImmediate);
+  tree = renderer.render();
+  const openCollect = () => {
+    const start = findVnodes(tree, (node) => node.props && node.props.children === "开始采集")[0];
+    assert.ok(start, "开始采集 must render");
+    start.props.onClick();
+    tree = renderer.render();
+  };
+  const mountSelector = async () => {
+    const hostVnode = findVnodes(tree, (node) => node.type === runtime.PgyKolSharedFieldSelector)[0];
+    assert.ok(hostVnode, "shared selector host must be mounted by the page");
+    const hostRenderer = statefulRenderer(runtime, runtime.PgyKolSharedFieldSelector, hostVnode.props, { scrollIntoView() {} });
+    hostRenderer.render();
+    await new Promise(setImmediate);
+    const hostTree = hostRenderer.render();
+    const fake = findVnodes(hostTree, (node) => node.type === selectorModule.E)[0];
+    assert.ok(fake, "shared selector must render after 开始采集");
+    return fake;
+  };
+  openCollect();
+  let fake = await mountSelector();
+  fake.props.onClose();
+  runtime.m = pageHooks;
+  tree = renderer.render();
+  assert.equal(batchCalls.length, 0, "cancel must never start a batch");
+  openCollect();
+  fake = await mountSelector();
+  assert.equal(loadCalls, 2, "reopening loads again through the wrapper (the real loader memoizes by module state)");
+  fake.props.onSubmit(["nickname", "url", "avg10ReadNum"]);
+  assert.equal(batchCalls.length, 1, "submit must start exactly one batch");
+  assert.deepEqual(
+    batchCalls[0].fields,
+    ["nickname", "url", "avg10ReadNum"],
+    "submit must pass the complete selected schema keys through unchanged — 勾选哪些字段就采集哪些字段，绝不再裁剪",
+  );
+  runtime.m = pageHooks;
+  tree = renderer.render();
+  const afterSubmitHost = findVnodes(tree, (node) => node.type === runtime.PgyKolSharedFieldSelector)[0];
+  assert.ok(afterSubmitHost, "the selector host must keep rendering after submit");
+  const afterRenderer = statefulRenderer(runtime, runtime.PgyKolSharedFieldSelector, afterSubmitHost.props, { scrollIntoView() {} });
+  afterRenderer.render();
+  await new Promise(setImmediate);
+  const afterTree = afterRenderer.render();
+  const afterFake = findVnodes(afterTree, (node) => node.type === selectorModule.E)[0];
+  assert.ok(afterFake, "host must keep rendering the shared selector after submit");
+  afterFake.props.onSubmit(["nickname"]);
+  runtime.m = pageHooks;
+  await new Promise(setImmediate);
+  tree = renderer.render();
+  assert.equal(batchCalls.length, 1, "a second submit while the batch is starting must be ignored");
+  await new Promise(setImmediate);
+});
+
+test("end-to-end: the complete shared-schema selection survives the guard and exports every selected field with real values", async () => {
+  // 真实链路：主 bundle 完整蒲公英 blogger schema（t5/公开导出 Z）→
+  // validateBatchStartRequest（形状/键集合校验，不做裁剪）→ 详情阶段导出
+  // （buildCollectionHistoryExportPayload：规范表头按 schema 顺序保留全部
+  // 已选字段，缺失值保留表头，绝不因本批全空删列）。
+  const guard = await import("file:///" + path.join(projectRoot, "app-source", "pgy-kol", "pgy-ipc-guard.mjs").replace(/\\/g, "/"));
+  const headers = await import("file:///" + path.join(projectRoot, "app-source", "electron-main", "collection-export-headers.mjs").replace(/\\/g, "/"));
+  const start = bundle.indexOf("const t5=");
+  assert.ok(start >= 0, "main bundle must define the full pgy blogger schema (t5)");
+  let depth = 0;
+  let end = start;
+  for (; end < bundle.length; end++) {
+    const ch = bundle[end];
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) { end += 1; break; }
+    }
+  }
+  const schemaHolder = {};
+  vm.createContext(schemaHolder);
+  vm.runInContext("result=" + bundle.slice(start + "const t5=".length, end), schemaHolder);
+  const t5 = schemaHolder.result;
+  const allKeys = [];
+  const defaultKeys = [];
+  for (const group of t5.groups) {
+    for (const field of group.fields) {
+      allKeys.push(field.key);
+      if (group.required || field.required || field.defaultSelected) defaultKeys.push(field.key);
+    }
+  }
+  assert.ok(t5.groups.length >= 10, "the full shared schema must ship every official group");
+  assert.ok(allKeys.length >= 90, "the full shared schema must keep all official fields");
+  assert.ok(allKeys.includes("avg10ReadNum") && allKeys.includes("noteNumber30") && allKeys.includes("dailyNotePerformanceChart"), "关键详情字段必须在完整 schema 内");
+  const filterState = { searchType: 0, keyword: "审查用", location: [{ value: "310000", label: "上海", path: "中国 上海" }], contentTag: [] };
+  // 全选（91 键）必须原样通过——本层只做形状/键集合校验，绝不裁剪。
+  const fullSelection = guard.validateBatchStartRequest({ filterState, fields: allKeys });
+  assert.equal(fullSelection.ok, true, "the complete 91-key selection must pass batch-start validation unchanged");
+  assert.deepEqual(fullSelection.value.fields, allKeys, "fields must pass through without reordering or trimming");
+  // 默认勾选（required + defaultSelected）同样原样通过。
+  const defaultSelection = guard.validateBatchStartRequest({ filterState, fields: defaultKeys });
+  assert.equal(defaultSelection.ok, true, "the default selection must pass unchanged");
+  assert.deepEqual(defaultSelection.value.fields, defaultKeys, "default selection must not be trimmed");
+  // 未知键仍被边界拒绝（防止空行扣费/垃圾字段）。
+  const unknown = guard.validateBatchStartRequest({ filterState, fields: ["nickname", "cookie"] });
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.error.code, "unknown-field");
+  // 详情阶段导出：字段弹窗提交的集合与详情任务保存的 fields 完全一致，
+  // 表头按 schema 顺序保留全部已选字段（含本批全空的列），值来自详情采集结果。
+  const schemaHeaders = headers.resolveCollectionExportHeaders("pgy", "blogger");
+  const selectedFields = ["nickname", "url", "avg10ReadNum", "pictureReadCost", "noteNumber30", "interactionRate30", "dailyNotePerformanceChart"];
+  const detailTask = {
+    taskId: "pgykol-detail-fixture",
+    pluginId: "pgy",
+    taskType: "blogger",
+    fields: selectedFields,
+  };
+  const detailRows = [
+    { nickname: "博主甲", url: "https://www.xiaohongshu.com/user/profile/a1", avg10ReadNum: 1234, pictureReadCost: 2.5, noteNumber30: 8, interactionRate30: 0.0312, dailyNotePerformanceChart: "C:/fake/a1.png" },
+    { nickname: "博主乙", url: "https://www.xiaohongshu.com/user/profile/b2", avg10ReadNum: 567, pictureReadCost: 1.2, noteNumber30: 5, interactionRate30: 0.0215, dailyNotePerformanceChart: "C:/fake/b2.png" },
+  ];
+  const payload = headers.buildCollectionHistoryExportPayload(detailTask, detailRows);
+  assert.equal(payload.mode, "two-row");
+  assert.deepEqual(
+    payload.headers.map((header) => header.key),
+    selectedFields,
+    "详情导出表头必须按 schema 顺序完整保留每个已选字段",
+  );
+  assert.equal(payload.data.length, 2, "两博主详情行全部导出");
+  for (const field of selectedFields) {
+    assert.ok(payload.headers.some((header) => header.key === field), "缺列：" + field);
+  }
+  assert.equal(payload.data[0].nickname, "博主甲", "详情字段必须有真实值");
+  assert.equal(payload.data[0].avg10ReadNum, 1234);
+  assert.equal(payload.data[0].interactionRate30, 0.0312);
+  // 某字段全批为空：表头仍保留（缺失值导出为空/“-”，绝不删列）。
+  const sparseTask = { taskId: "pgykol-detail-sparse", pluginId: "pgy", taskType: "blogger", fields: ["nickname", "avg10ReadNum", "fansRegions"] };
+  const sparsePayload = headers.buildCollectionHistoryExportPayload(sparseTask, [{ nickname: "博主甲" }]);
+  assert.deepEqual(
+    sparsePayload.headers.map((header) => header.key),
+    ["nickname", "avg10ReadNum", "fansRegions"],
+    "全空字段（fansRegions）必须保留表头",
+  );
+  // 未勾选字段绝不导出。
+  assert.ok(!sparsePayload.headers.some((header) => header.key === "url"), "未勾选字段不得出现在表头");
+  // 无 fields 的 legacy 任务才允许按实际出现字段推断表头。
+  const legacyPayload = headers.buildCollectionHistoryExportPayload(
+    { taskId: "legacy", pluginId: "pgy", taskType: "blogger" },
+    [{ nickname: "甲", url: "https://x" }],
+  );
+  assert.deepEqual(legacyPayload.headers.map((header) => header.key), ["nickname", "url"], "legacy 任务按实际出现字段推断");
 });
 
 test("note category popover anchors to the trigger and renders a popover instead of a modal dialog", () => {
@@ -1870,17 +2131,22 @@ test("tree popovers keep their header/footer visible while only the tree body sc
   assert.ok(treeSource.includes('children: "清空"') && treeSource.includes('children: "确定"'), "tree footer actions must remain present");
 });
 
-test("official 41 metrics and Magiorix extensions stay explicitly separated", () => {
-  assert.match(pageSource, /41/, "the official metric count must remain explicit and auditable");
-  assert.ok(pageSource.includes("Magiorix 扩展字段"), "non-official fields must have a separate visible group");
-  assert.match(pageSource, /official|extension/i, "column metadata must distinguish official and extension fields");
+test("自定义列弹窗已移除：不再渲染选择展示指标/列分组弹窗，列元数据助手保留给表格使用", () => {
+  // 目标3：找博主页面不再提供“选择展示指标”入口，PgyKolColumnDialog 整体删除。
+  assert.ok(!pageSource.includes("function PgyKolColumnDialog"), "自定义列弹窗组件必须删除");
+  assert.ok(!pageSource.includes('children: "选择展示指标"'), "选择展示指标按钮必须移除");
+  assert.ok(!pageSource.includes("setColumnOpen(true)"), "页面不得再打开自定义列弹窗");
+  // 列元数据助手仍被表格列持久化（pgyKolResolveColumns）使用，不得误删。
+  assert.ok(pageSource.includes("function pgyKolResolveColumns(list,stored)"), "表格列持久化助手必须保留");
+  assert.ok(pageSource.includes('function pgyKolFixedColumnIds(){return ["kolInfo","recentNotes","actions"]}'), "固定列定义必须保留");
 });
 
-test("payload preview is advanced information and initially collapsed", () => {
-  assert.ok(pageSource.includes("高级信息"), "payload preview must be placed under the advanced-information label");
-  assert.match(pageSource, /var adv = m\.useState\(false\), advancedOpen = adv\[0\], setAdvancedOpen = adv\[1\]/, "advanced information must default to collapsed");
-  assert.match(pageSource, /advancedOpen \? o\.jsxs\(x, \{ children: \[[\s\S]{0,900}children: preview \|\|/, "payload body must render only after advanced information is opened");
-  assert.ok(pageSource.includes("这是待确认条件的本地 Payload 预览，不会请求蒲公英接口。"), "preview must state its local non-network boundary");
+test("找博主页面不再显示高级信息/Payload 预览（保留主进程 previewPayload API）", () => {
+  assert.ok(!pageSource.includes("高级信息"), "高级信息区域必须从页面移除");
+  assert.ok(!pageSource.includes("previewPayload"), "页面不得再调用 previewPayload（后台无意义预览）");
+  assert.ok(!pageSource.includes("这是待确认条件的本地 Payload 预览"), "预览文案必须移除");
+  // 主进程 previewPayload API 保留：preload 仍暴露。
+  assert.match(preload, /previewPayload:e=>r\.ipcRenderer\.invoke\("pgy-kol:payload-preview",e\)/);
 });
 
 test("PgyKolTreeNode honors leafOnly and PgyKolTree forwards it to every level", () => {
@@ -2012,34 +2278,21 @@ test("icon beautification: menu, page header, and search button use the register
   );
 });
 
-test("column dialog contract: fixed columns, price mutual exclusion, search, order, persistence", () => {
+test("column dialog contract: 弹窗整体删除，表格列默认/持久化保留", () => {
+  // 目标3：选择展示指标入口与 PgyKolColumnDialog 一起删除，避免第二套弹窗漂移；
+  // 表格展示列由默认列 + 本地持久化（pgyKolResolveColumns）决定。
+  assert.ok(!pageSource.includes("PgyKolColumnDialog"), "自定义列弹窗必须删除");
+  assert.ok(!pageSource.includes("moveDraft"), "拖拽排序逻辑随弹窗删除");
+  assert.ok(!pageSource.includes('children: "官网展示指标（"'), "官网指标计数文案随弹窗删除");
+  assert.ok(!pageSource.includes('children: "已添加 "'), "已添加计数文案随弹窗删除");
+  assert.ok(!pageSource.includes('icon: "solar:lock-bold"'), "锁定图标随弹窗删除");
+  assert.ok(!pageSource.includes('children: "选择展示指标"'), "选择展示指标按钮必须移除");
+  assert.ok(!pageSource.includes("setColumnOpen(true)"), "页面不得再打开自定义列弹窗");
   assert.ok(
-    pageSource.includes('function pgyKolColumnGroups(){return ["固定列","博主报价","账号数据","直播数据","日常笔记数据","合作笔记数据","其他指标"]}'),
-    "column groups must exist",
+    pageSource.includes('function pgyKolDefaultColumnIds(list){return list.filter(function(c){return c.defaultDisplay===true}).map(function(c){return c.id})}'),
+    "默认展示列（defaultDisplay）计算必须保留",
   );
-  assert.ok(pageSource.includes('function pgyKolFixedColumnIds(){return ["kolInfo","recentNotes","actions"]}'), "fixed column ids must exist");
-  assert.ok(pageSource.includes('if (id === "kolInfo") return "博主信息";'), "fixed kolInfo label must exist");
-  // 官网两栏式：左侧仅计算官网 41 项，扩展字段单列展示；右侧为已添加项。
-  assert.ok(pageSource.includes("pgyKolOfficialMetricColumns(list)"), "left pane must derive the official metric set from metadata");
-  assert.ok(pageSource.includes("var officialCount = officialColumns.length"), "official metric count must be derived separately");
-  assert.ok(pageSource.includes('children: "官网展示指标（" + officialCount + "）"'), "left pane must show the official metric count only");
-  assert.ok(pageSource.includes('children: "Magiorix 扩展字段（" + extensionColumns.length + "）"'), "extensions must remain visible but outside the official count");
-  assert.ok(pageSource.includes('placeholder: "请输入筛选条件"'), "dialog search must use the official placeholder");
-  assert.ok(pageSource.includes('children: "已添加 " + effective.length + " 项"'), "right pane must show the added count");
-  assert.ok(pageSource.includes('children: "以上为横向固定列"'), "fixed-column divider copy must exist");
-  assert.ok(pageSource.includes('icon: "solar:lock-bold"'), "fixed columns must carry a lock icon");
-  assert.ok(pageSource.includes('icon: "mdi:drag-vertical"'), "reorderable columns must carry a drag handle");
-  assert.ok(pageSource.includes('if (fixedIds.indexOf(id) >= 0) return;'), "fixed columns must be unremovable");
-  assert.ok(
-    pageSource.includes('c !== "price" && c !== "picturePrice" && c !== "videoPrice"'),
-    "price/picturePrice/videoPrice must be mutually exclusive",
-  );
-  assert.ok(pageSource.includes('search === "" || (c.label || "").indexOf(search) >= 0'), "dialog search must filter by label");
-  assert.ok(pageSource.includes("setDraftState(hideFixed ? [] : fixedIds.slice())"), "clear must reset to fixed columns (or empty in export mode)");
-  assert.ok(pageSource.includes('setDraftState(null);\n    setSearch("");\n    p.onClose();'), "cancel must close without applying");
-  assert.ok(pageSource.includes("p.onApply(effective.slice())"), "confirm must apply the draft");
-  assert.ok(pageSource.includes('pgyKolWriteJson("magiorix-pgy-kol-columns", ids)'), "confirm must persist to localStorage");
-  assert.ok(pageSource.includes("moveDraft(id, -1)") && pageSource.includes("moveDraft(id, 1)"), "move buttons must call moveDraft");
+  assert.ok(pageSource.includes("setSelectedColumns(pgyKolResolveColumns(res.data, stored))"), "表格列持久化加载必须保留");
 });
 
 test("column persistence: defaultDisplay fallback and invalid storage fallback", () => {
@@ -2081,36 +2334,14 @@ test("result table renders whitelisted info column and registry-driven data colu
 test("Phase 5 page source ships the batch UI copy and status texts", () => {
   for (const needle of [
     "开始采集",
-    "暂停",
-    "继续",
-    "取消",
-    "导出",
-    "完整性无法证明",
-    "已持久化",
-    "预览 ",
-    "原始条数",
-    "唯一博主数",
-    "重复数",
-    "缺UID异常数",
-    "任务进度",
-    "任务历史",
-    "暂无采集任务",
-    "请至少选择一个可导出的展示字段",
-    "查看",
+    "确定筛选",
+    "没有匹配的博主",
   ]) {
     assert.ok(pageSource.includes(needle), "page source must contain: " + needle);
   }
-  for (const [status, text] of [
-    ["running", "采集中"],
-    ["paused", "已暂停"],
-    ["auth-expired", "登录已失效"],
-    ["risk-control", "触发风控"],
-    ["cancelled", "已取消"],
-    ["failed", "采集失败"],
-    ["incomplete", "采集未完整"],
-    ["completed", "已完成"],
-  ]) {
-    assert.ok(pageSource.includes('if(s==="' + status + '")return "' + text + '"'), "status text for " + status + " must exist");
+  // 找博主页面只保留“开始采集”与必要启动错误提示：进度、历史、控制全部交给采集助手。
+  for (const removed of ["任务进度", "任务历史", "暂无采集任务", "原始条数", "唯一博主数", "缺UID异常数", "增加预算并继续", "增加页数并继续", "阶段一", "阶段二", "正在收集符合条件的博主", "正在采集博主详情"]) {
+    assert.ok(!pageSource.includes(removed), "page source must not contain removed UI copy: " + removed);
   }
 });
 
@@ -2130,131 +2361,96 @@ test("Phase 5 page source maps completeness and error copy", () => {
   );
 });
 
-test("Phase 5 page source calls the batch bridge methods with the right payloads", () => {
-  for (const method of [
-    "getColumns",
-    "batchGet",
-    "batchList",
-    "batchPause",
-    "batchResume",
-    "batchCancel",
-    "batchExport",
-    "onBatchEvent",
-  ]) {
-    assert.match(pageSource, new RegExp("bridge\\." + method + "\\("), "page source must call bridge." + method);
-  }
-  assert.match(pageSource, /api\.batchStart\(\{filterState:pgyKolClone\(appliedRequestSnapshot\),columns:pgyKolClone\(columns\|\|\[\]\)\}\)/, "coordinator must submit only its frozen applied snapshot");
+test("Phase 5 page source only starts tasks; controls/exports live in the assistant", () => {
+  assert.match(pageSource, /bridge\.getColumns\(\)/, "page must load the column registry for the result table");
+  assert.match(pageSource, /api\.batchStart\(\{filterState:pgyKolClone\(appliedRequestSnapshot\),fields:pgyKolClone\(fields\|\|\[\]\)\}\)/, "coordinator must submit only its frozen applied snapshot");
   assert.match(
     pageSource,
     /searchCoordinator\.startBatch\(ids\)/,
-    "page batch start must delegate the dialog-chosen columns to the applied-snapshot coordinator",
+    "page batch start must delegate the complete selected schema keys to the applied-snapshot coordinator",
   );
-  assert.match(
-    pageSource,
-    /pgyKolExportColumnIds\(columnList, selectedColumns\)/,
-    "startBatch must filter fixed/computed/unavailable columns out of the export column list",
-  );
-  assert.match(pageSource, /batchGet\(\{ taskId: tid \}\)/);
-  assert.match(pageSource, /batchPause\(\{ taskId: tid \}\)/);
-  assert.match(
-    pageSource,
-    /bridge\.batchResume\(budgets \? \{ taskId: tid, budgets: budgets \} : \{ taskId: tid \}\)/,
-    "batchResume must forward budgets when provided",
-  );
-  assert.match(pageSource, /batchCancel\(\{ taskId: tid \}\)/);
-  assert.match(pageSource, /bridge\.batchExport\(\{ taskId: tid \}\)/, "export must use the task snapshot columns");
   assert.match(pageSource, /setCollectOpen\(true\)/, "collect action must open the field-selection dialog");
   assert.ok(pageSource.includes('children: "选择采集字段"'), "collect dialog must carry the collect column title");
-  assert.match(pageSource, /disabled: batchBusy \|\| batchRunning/, "start button must be disabled while busy or running");
+  assert.match(pageSource, /disabled: batchBusy,/, "start button must be disabled only while starting");
+  for (const method of ["batchGet", "batchList", "batchPause", "batchResume", "batchCancel", "batchExport", "onBatchEvent", "previewPayload"]) {
+    assert.ok(!pageSource.includes("bridge." + method + "("), "page must not call bridge." + method + "（由采集助手接管）");
+  }
 });
 
-test("Phase 5 page source subscribes to batch events and disposes on unmount", () => {
-  assert.match(pageSource, /bridge\.onBatchEvent\(function \(ev\) \{/);
-  assert.match(pageSource, /if \(currentTaskId\) loadTask\(currentTaskId\)/, "batch events must refresh the current task detail");
-  assert.match(
-    pageSource,
-    /return function \(\) \{ if \(dispose && typeof dispose === "function"\) dispose\(\); \};/,
-    "onBatchEvent subscription must return a dispose cleanup",
-  );
-  assert.match(pageSource, /\[currentTaskId\]/, "event effect must re-subscribe when the current task changes");
+test("找博主页面不再订阅批量事件（进度由采集助手统一驱动）", () => {
+  assert.ok(!pageSource.includes("onBatchEvent"), "page must not subscribe to pgy-kol batch events");
+  assert.ok(!pageSource.includes("scraper.task.onProgress"), "page must not subscribe to scraper task progress");
 });
 
 test("Phase 5 preview boundary keeps a limited DOM and shows persisted counts", () => {
-  assert.match(
-    pageSource,
-    /预览 " \+ \(result\.kols \? result\.kols\.length : 0\) \+ " 条 \/ 已持久化 " \+ pgyKolCount\(currentTask, "raw"\) \+ " 条（完整数据以导出为准）"/,
-    "preview caption must state preview count vs persisted count",
-  );
+  assert.ok(!pageSource.includes("已持久化"), "preview caption must be removed");
   assert.match(pageSource, /result\.capSignal && result\.capSignal\.capped/, "cap signal chips must be kept");
   assert.match(pageSource, /quarantinedFields/, "unknown-field isolation chips must be kept");
 });
 
-test("Phase 4.1：incomplete 显示“采集未完整/需要处理”，绿色仅留给完整证明", () => {
-  assert.match(
-    pageSource,
-    /color:t\.status==="completed"&&t\.completeness==="complete"\?"success":incompleteShown\?"warning":/,
-    "green badge must require completed AND complete",
-  );
-  assert.match(pageSource, /label:incompleteShown\?"采集未完整\/需要处理":statusText/);
-  assert.match(
-    pageSource,
-    /采集未完整\/需要处理："\+\(resumePlan&&resumePlan\.reasonText\|\|completenessText\)/,
-    "incomplete panel must show a concrete reason",
-  );
-  assert.match(pageSource, /legacyUnproven=t\.status==="completed"&&t\.completeness!=="complete"/);
-  assert.match(
-    pageSource,
-    /if\(t\.status==="completed"&&t\.completeness!=="complete"\)return \{kind:"blocked"/,
-    "legacy completed+cannot-prove tasks must not offer a blind continue",
-  );
-  assert.doesNotMatch(pageSource, /color:t\.status==="completed"\?"success"/, "badge must not be green for completed alone");
+test("找博主页面移除自建任务进度卡（阶段一/阶段二/任务进度全部删除）", () => {
+  assert.ok(!pageSource.includes("PgyKolBatchPanel"), "自建进度卡组件必须删除");
+  assert.ok(!pageSource.includes("任务进度"), "任务进度文案必须删除");
+  assert.ok(!pageSource.includes("阶段一") && !pageSource.includes("阶段二"), "不得出现阶段一/阶段二文案");
+  assert.ok(!pageSource.includes("taskDetailRef"), "任务详情滚动定位必须删除");
+  assert.ok(!pageSource.includes("resumePlan"), "预算继续 UI 必须删除（内部 checkpoint 不再对用户展示）");
 });
 
 test("Phase 4.1：budget-exhausted 显示预算/已消费/允许范围与输入门控", () => {
-  assert.match(
-    pageSource,
-    /"当前"\+resumePlan\.label\+"："\+resumePlan\.current\+"；已消费请求数："\+resumePlan\.used\+"；允许新值："\+resumePlan\.min\+"～"\+resumePlan\.max/,
-    "budget resume hint must show current/consumed/allowed range",
-  );
-  assert.match(pageSource, /if\(reason==="budget-exhausted"\)\{var curB=Number\.isInteger\(cur\.queryBudget\)/);
-  assert.match(pageSource, /min=Math\.max\(curB,used\)\+1/);
-  assert.match(pageSource, /if\(min>1000\)return \{kind:"blocked"/);
-  assert.match(pageSource, /children:resumePlan\.kind==="maxPages"\?"增加页数并继续":"增加预算并继续"/);
-  assert.match(pageSource, /disabled:!inputValid/);
-  assert.match(pageSource, /Number\.isInteger\(parsedInput\)&&parsedInput>=resumePlan\.min&&parsedInput<=resumePlan\.max/);
-  assert.match(pageSource, /resumeEligible=resumePlan&&\(resumePlan\.kind==="budget"\|\|resumePlan\.kind==="maxPages"\)/);
-  assert.match(pageSource, /resumePlan&&resumePlan\.kind==="blocked"&&o\.jsx\(w,\{variant:"body2"/);
-  for (const reason of [
-    "repeat-page",
-    "capped-unprovable",
-    "checkpoint-desync",
-    "已到官方安全页数上限",
-    "已消费请求数已达预算上限",
-  ]) {
-    assert.ok(pageSource.includes(reason), "page source must carry the blocked reason: " + reason);
-  }
-  assert.match(pageSource, /if\(reason==="max-pages-reached"\)\{var curM=Number\.isInteger\(cur\.maxPagesPerLeaf\)/);
-  assert.match(pageSource, /curM>=250\)return \{kind:"blocked"/);
-  assert.match(pageSource, /min:curM\+1,max:250/);
-  assert.match(
-    pageSource,
-    /t\.status==="cancelled"\|\|t\.status==="failed"\|\|t\.status==="completed"\|\|t\.status==="incomplete"\)\?null:o\.jsx\(\$,\{size:"small",variant:"outlined",color:"error",onClick:p\.onCancel/,
-    "cancel must be hidden for incomplete",
-  );
-  assert.match(
-    pageSource,
-    /\(t\.status==="paused"\|\|t\.status==="auth-expired"\|\|t\.status==="interrupted"\|\|t\.status==="failed"\)&&o\.jsx\(\$,\{size:"small",variant:"outlined",onClick:p\.onResume,children:"继续"\}\)/,
-    "plain resume must stay for paused/auth-expired/interrupted/failed",
-  );
+  // 预算/恢复 UI 随自建进度卡一并删除：页面只保留启动错误提示。
+  assert.ok(!pageSource.includes("queryBudget"), "页面不得展示预算输入");
+  assert.ok(!pageSource.includes("已消费请求数"), "页面不得展示预算消耗提示");
+  assert.ok(!pageSource.includes("resumePlan"), "页面不得提供继续/预算 UI");
 });
 
-test("Phase 4.1：任务历史对 incomplete 使用 warning 徽章", () => {
-  assert.match(
-    pageSource,
-    /color:t\.status==="completed"&&t\.completeness==="complete"\?"success":t\.status==="incomplete"\?"warning":"default"/,
-    "history badge must warn for incomplete",
-  );
-  assert.match(pageSource, /label:t\.status==="incomplete"\?"采集未完整":pgyKolStatusText\(t\.status\)/);
+test("找博主页面移除自建任务历史（历史统一在采集助手）", () => {
+  assert.ok(!pageSource.includes("PgyKolTaskHistory"), "自建任务历史组件必须删除");
+  assert.ok(!pageSource.includes("任务历史"), "任务历史文案必须删除");
+  assert.ok(!pageSource.includes("暂无采集任务"), "历史空态文案必须删除");
+});
+
+test("采集助手接入：单任务进度卡（进度条/current/total/已用/成功/失败/暂停/继续/取消/完成下载）", () => {
+  const assistant = fs.readFileSync(path.join(projectRoot, "assets", "1.2.0", "magiorix-ops-assistant.js"), "utf8");
+  const source = fs.readFileSync(path.join(projectRoot, "scripts", "magiorix-ops-assistant.js"), "utf8");
+  assert.equal(assistant, source, "资产内采集助手必须与源文件一致（补丁脚本拷贝）");
+  // 页面提交后自动打开/聚焦助手当前任务视图。
+  assert.ok(assistant.includes("magiorix:ops-assistant:show-task"), "助手必须监听 show-task 事件");
+  assert.ok(assistant.includes('state.activeTab = "current";') && assistant.includes("state.open = true;"), "show-task 必须打开并聚焦当前任务 tab");
+  // 进度卡与蒲公英博主采集一致：进度条、current/total、已用时间、成功/失败。
+  assert.ok(assistant.includes("正在准备采集"), "准备列表阶段显示 正在准备采集（不叫阶段一）");
+  assert.ok(assistant.includes("width:${percent}%"), "进度条必须存在");
+  assert.ok(assistant.includes("已用 ${elapsedText}"), "已用时间必须显示");
+  assert.ok(assistant.includes("成功 ${task?.success || 0}") && assistant.includes("失败 ${failed}"), "成功/失败计数必须显示");
+  // 控制按钮：暂停/继续/取消/完成后下载。
+  assert.ok(assistant.includes("[data-pause-task]") && assistant.includes('window.bridge?.scraper?.task?.pause'), "暂停必须走 scraper task 通道（同一任务 ID）");
+  assert.ok(assistant.includes("[data-resume-task]") && assistant.includes('window.bridge?.scraper?.task?.resume'), "继续必须走 scraper task 通道");
+  assert.ok(assistant.includes("[data-cancel-task]") && assistant.includes('window.bridge?.scraper?.task?.cancel'), "取消必须走 scraper task 通道");
+  assert.ok(assistant.includes("[data-download-task]") && assistant.includes("function downloadCurrentTask"), "完成后下载按钮必须存在");
+  assert.ok(assistant.includes("canDownload = !!task && task.completed"), "下载只在完成后出现");
+  // 事件接线：onPaused 驱动暂停状态；inputType 随事件传递（识别 search-batch）。
+  assert.ok(assistant.includes("task.onPaused((event) => {"), "助手必须订阅 paused 事件");
+  assert.ok(assistant.includes("if (event.inputType) item.inputType = event.inputType;"), "助手必须从事件读取 inputType");
+  // search-batch 单一身份：禁止重跑失败项（避免第二条用户任务）。
+  assert.ok(assistant.includes('if (source.inputType === "search-batch") return;'), "search-batch 禁止重跑失败项");
+  // 历史导出：search-batch 未完成禁用。
+  assert.ok(assistant.includes('item.inputType === "search-batch" && item.status !== "completed" ? "disabled"'), "历史导出按钮对未完成 search-batch 禁用");
+  // 主进程事件携带 inputType（采集助手识别来源）。
+  const main = fs.readFileSync(path.join(projectRoot, "app-source", "dist-electron", "index.js"), "utf8");
+  assert.ok(main.includes("inputType: l.inputType"), "详情任务事件必须携带 inputType");
+  assert.ok(main.includes('inputType: e.inputType || ""'), "任务记录必须保存 inputType");
+});
+
+test("导出门闸后端接线：history.exportTask / batchExport / ff 对 search-batch 未完成任务拒绝", () => {
+  const main = fs.readFileSync(path.join(projectRoot, "app-source", "dist-electron", "index.js"), "utf8");
+  assert.ok(main.includes("isCollectionTaskExportReady"), "主进程必须使用导出完成判定");
+  assert.ok(main.includes('gateError.kind = "task-not-complete"'), "拒绝时必须携带 task-not-complete 错误类型");
+  assert.ok(main.includes('if (!isCollectionTaskExportReady(n))'), "history.exportTask 必须加完成门闸");
+  const store = fs.readFileSync(path.join(projectRoot, "app-source", "electron-main", "collection-history-store.mjs"), "utf8");
+  assert.ok(store.includes("inputType") && store.includes('String(task.inputType || "") !== "search-batch"'), "完成判定只对 search-batch 生效");
+  assert.ok(store.includes("async updateTaskUrls"), "详情任务必须支持延迟填充目标列表（preparing → 0/N）");
+  const service = fs.readFileSync(path.join(projectRoot, "app-source", "pgy-kol", "pgy-kol-service.mjs"), "utf8");
+  assert.ok(service.includes("return `找博主-${now.getFullYear()}"), "用户可见文件名必须为 找博主-*（不暴露内部任务 ID）");
+  assert.ok(service.includes("inputType: \"search-batch\""), "详情任务必须标记 search-batch 来源");
 });
 
 test("preload bridge exposes all pgy-kol methods the page depends on", () => {
@@ -2296,7 +2492,7 @@ test("patch script wires route, menu merge, and dev switch with idempotent guard
   assert.ok(script.includes('localStorage.getItem("magiorix-pgy-kol-enabled")==="1"'), "dev switch must gate the page");
   assert.ok(script.includes('const crypto = require("crypto")'), "patch script must require crypto for the content guard");
   assert.ok(
-    script.includes("normalizeSource(pgyKolSearchPageSource51)"),
+    script.includes("normalizeSource(pgyKolSearchPageSourceInjected)"),
     "content guard must hash the final embedded page source",
   );
   assert.ok(script.includes("existingSha1 !== sourceSha1"), "content guard must compare existing block hash with source hash");
@@ -2330,7 +2526,7 @@ test("patch script wires route, menu merge, and dev switch with idempotent guard
 
 test("page must load config, schema fields, preview payload, and search through the existing bridge", () => {
   assert.ok(pageSource.includes("bridge.getConfig("), "page must load filter config via bridge.pgyKol.getConfig");
-  assert.ok(pageSource.includes("bridge.previewPayload("), "page must preview payload via bridge.pgyKol.previewPayload");
+  assert.ok(!pageSource.includes("bridge.previewPayload("), "page must not call previewPayload（高级信息已移除）");
   assert.ok(pageSource.includes("api.searchFirstPage(pgyKolClone(request))"), "the coordinator must make the single formal search call");
   assert.ok(pageSource.includes("return searchCoordinator.applyAndSearch()"), "the page must delegate all formal searches to the coordinator");
   assert.ok(pageSource.includes('provider: "activities"'), "hot activities must load via getConfig activities provider");

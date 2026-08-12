@@ -2,7 +2,7 @@ var br = Object.defineProperty;
 var wr = (a, e, t) => e in a ? br(a, e, { enumerable: !0, configurable: !0, writable: !0, value: t }) : a[e] = t;
 var w = (a, e, t) => wr(a, typeof e != "symbol" ? e + "" : e, t);
 import { ipcMain as F, BrowserWindow as Dt, app as ye, screen as Gi, shell as Ji, dialog as Ki, net as Jt, Notification as Et, session as Pn, nativeImage as PgyNativeImage } from "electron";
-import { CollectionHistoryStore } from "../electron-main/collection-history-store.mjs";
+import { CollectionHistoryStore, isCollectionTaskExportReady } from "../electron-main/collection-history-store.mjs";
 import { buildCollectionHistoryExportPayload } from "../electron-main/collection-export-headers.mjs";
 import { createPgyKolService, registerPgyKolIpc } from "../pgy-kol/pgy-kol-service.mjs";
 import { redactLocalPathText as pgyRedactLocalPath } from "../pgy-kol/pgy-session-request.mjs";
@@ -16801,6 +16801,7 @@ class Xd {
       urls: i,
       fileName: o,
       fields: r,
+      inputType: e.inputType || "",
       current: 0,
       total: i.length,
       successCount: 0,
@@ -16888,6 +16889,7 @@ class Xd {
       l.current = m + 1;
       this.sendToRenderer(W.task.progress, {
         taskId: t,
+        inputType: l.inputType,
         current: l.current,
         total: l.total,
         percent: Math.max(0, Math.round(m / l.total * 100))
@@ -16899,6 +16901,7 @@ class Xd {
           await pgyCollectionHistory.recordSuccess(t, pgyItemIndex, pgyPending.row, v, pgyPending.sourceUrl || f);
           l.successCount++, this.sendToRenderer(W.task.itemResult, {
             taskId: t,
+            inputType: l.inputType,
             index: pgyItemIndex,
             status: "success",
             data: pgyPending.row,
@@ -16954,6 +16957,7 @@ class Xd {
         b.code === "auth" && (pgyAuthExpired = !0);
         y.status === "success" ? l.successCount++ : l.errorCount++, this.sendToRenderer(W.task.itemResult, {
           taskId: t,
+          inputType: l.inputType,
           index: pgyItemIndex,
           status: y.status,
           data: y.data,
@@ -17019,6 +17023,7 @@ class Xd {
         const v = l.pace, y = v.batchSize > 0 && (m + 1) % v.batchSize === 0, b = y ? v.batchRestMs : v.itemDelayMs;
         y && this.sendToRenderer(W.task.progress, {
           taskId: t,
+          inputType: l.inputType,
           current: l.current,
           total: l.total,
           percent: g,
@@ -17036,6 +17041,7 @@ class Xd {
     ue.info(`[task=${t}] 采集任务结束 plugin=${n} taskType=${s} cancelled=${l.cancelled} success=${l.successCount} error=${l.errorCount} durationMs=${h}`);
     l.cancelled ? this.sendToRenderer(W.task.complete, {
       taskId: t,
+      inputType: l.inputType,
       successCount: l.successCount,
       errorCount: l.errorCount,
       duration: h,
@@ -17043,6 +17049,7 @@ class Xd {
       status: pgyFinalStatus
     }) : (this.sendToRenderer(W.task.complete, {
       taskId: t,
+      inputType: l.inputType,
       successCount: l.successCount,
       errorCount: l.errorCount,
       duration: h,
@@ -22432,6 +22439,16 @@ async function pgyEmbedImagesInWorkbook(a, e, t) {
   s.file("[Content_Types].xml", pgyAddContentTypes(await s.file("[Content_Types].xml").async("string"))), s.file("xl/worksheets/sheet1.xml", pgyPatchSheetXml(i, u, n)), s.file("xl/worksheets/_rels/sheet1.xml.rels", pgySheetRelXml(r, u)), s.file("xl/drawings/drawing1.xml", pgyDrawingXml(n)), s.file("xl/drawings/_rels/drawing1.xml.rels", pgyDrawingRelXml(n)), Zi(a, await s.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
 }
 async function ff(a) {
+  // 找博主筛选来源（search-batch）的任务：只有完成且计数收口才允许导出；
+  // 纵深防御，防止 running/preparing 时导出只有部分行的 Excel。
+  if (typeof (a == null ? void 0 : a.taskId) === "string" && a.taskId.startsWith("pgykol-detail-")) {
+    const gateTask = await pgyCollectionHistory.getTask(a.taskId).catch(() => null);
+    if (gateTask && gateTask.inputType === "search-batch" && !isCollectionTaskExportReady(gateTask)) {
+      const gateError = new Error("任务尚未完成全部博主采集，暂不可导出（完成后自动解锁）");
+      gateError.kind = "task-not-complete";
+      throw gateError;
+    }
+  }
   const pausedTask = typeof (a == null ? void 0 : a.taskId) == "string" ? ge == null ? void 0 : ge.runningTasks.get(a.taskId) : null;
   if (pausedTask != null && pausedTask.paused)
     throw new Error("任务已暂停，请继续采集或等待任务完成后再下载结果");
@@ -22525,6 +22542,7 @@ function xf(a) {
 }
 const Qe = Y("Scraper");
 let ge = null;
+let pgyKolService = null;
 let pgyKolIpcDispose = null;
 function vf(a) {
   ge = new Xd(a), ge.registerPlugin(new gm()), ge.registerPlugin(new Bm()), ge.registerPlugin(new nf()), Qe.info("采集平台初始化完成"), F.handle(W.auth.check, async (e, t) => ge.checkAuth(t.pluginId)), F.handle(
@@ -22571,14 +22589,22 @@ function vf(a) {
     });
   }), F.on(W.task.pause, (e, t) => {
     ge.pauseTask(t.taskId);
+    pgyKolService && pgyKolService.forwardScraperTaskControl && pgyKolService.forwardScraperTaskControl(t.taskId, "pause").catch(() => {});
   }), F.on(W.task.resume, (e, t) => {
     ge.resumeTask(t.taskId);
+    pgyKolService && pgyKolService.forwardScraperTaskControl && pgyKolService.forwardScraperTaskControl(t.taskId, "resume").catch(() => {});
   }), F.on(W.task.cancel, (e, t) => {
     ge.cancelTask(t.taskId);
+    pgyKolService && pgyKolService.forwardScraperTaskControl && pgyKolService.forwardScraperTaskControl(t.taskId, "cancel").catch(() => {});
   }), F.handle(W.export.toExcel, async (e, t) => ff(t)), F.handle(W.history.list, async () => pgyCollectionHistory.listTasks()), F.handle(W.history.exportTask, async (e, t) => {
     const n = await pgyCollectionHistory.getTask(t.taskId), s = await pgyCollectionHistory.getExportRows(t.taskId);
     if (!n)
       throw new Error("历史任务不存在");
+    if (!isCollectionTaskExportReady(n)) {
+      const gateError = new Error("任务尚未完成全部博主采集，暂不可导出（完成后自动解锁）");
+      gateError.kind = "task-not-complete";
+      throw gateError;
+    }
     if (s.length === 0)
       throw new Error("该任务暂无可导出的成功内容");
     return ff(buildCollectionHistoryExportPayload(n, s));
@@ -22596,7 +22622,7 @@ function vf(a) {
     return { ok: !0, remaining: n.payload.urls.length };
   }), F.handle(W.history.migrateLegacy, async (e, t) => pgyCollectionHistory.importLegacyHistory(t?.history));
   try {
-    const pgyKolService = createPgyKolService({
+    pgyKolService = createPgyKolService({
       transport: (opts) => gt.request({ ...opts, timeout: opts.timeoutMs }),
       getHeaders: () => {
         const pgyPlugin = ge.getPlugin("pgy");
@@ -22610,11 +22636,33 @@ function vf(a) {
       baseDir: Oe(ye.getPath("userData"), "pgy-kol-schema"),
       taskBaseDir: Oe(ye.getPath("userData"), "pgy-kol-tasks"),
       exporter: (payload) => ff(payload),
+      // 两阶段采集：详情阶段复用现有 pgy/blogger 详情采集器（同一 CollectionHistoryStore
+      // 与 ScraperOrchestrator），不复制其请求/字段解析/图表/导出逻辑。
+      detail: {
+        initialize: () => pgyCollectionHistory.initialize(),
+        create: (payload) => pgyCollectionHistory.createTask(payload),
+        updateUrls: (taskId, urls) => pgyCollectionHistory.updateTaskUrls(taskId, urls),
+        emit: (type, payload) => {
+          const channel = W.task[type];
+          if (channel) ge.sendToRenderer(channel, payload);
+        },
+        start: (payload) => pgyCollectionHistory.createTask(payload).then(() => ge.startTask(payload)),
+        pause: (taskId) => ge.pauseTask(taskId),
+        resume: (taskId) => ge.resumeTask(taskId),
+        cancel: (taskId) => ge.cancelTask(taskId),
+        getTask: (taskId) => pgyCollectionHistory.getTask(taskId),
+        getExportRows: (taskId) => pgyCollectionHistory.getExportRows(taskId),
+        getResumePlan: (taskId) => pgyCollectionHistory.getResumePlan(taskId),
+        setStatus: (taskId, status) => pgyCollectionHistory.setStatus(taskId, status),
+      },
       logger: {
         info: (...args) => Qe.info("[pgy-kol]", ...args),
         warn: (...args) => Qe.warn("[pgy-kol]", ...args),
         error: (...args) => Qe.error("[pgy-kol]", ...args)
       }
+    });
+    pgyKolService.initialize().catch((err) => {
+      Qe.error("[pgy-kol] 两阶段编排初始化失败:", err);
     });
     pgyKolIpcDispose = registerPgyKolIpc({
       ipcMain: F,

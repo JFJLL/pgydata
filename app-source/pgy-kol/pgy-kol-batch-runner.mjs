@@ -410,9 +410,25 @@ export function createPgyKolBatchRunner({
   }
 
   async function resume(taskId, budgets) {
-    const existing = runningLoops.get(taskId);
+    let existing = runningLoops.get(taskId);
     if (existing) {
-      return existing;
+      // 旧循环可能正在收尾（pause/cancel 已落盘但 finalize 未完成，注册表
+      // 尚未移除）：此时绑定旧 promise 会导致 resume 看似成功但循环已死。
+      // 检测到任务已进入停止态时，等旧循环彻底结束再开新循环。
+      const currentTask = await store.getTask(taskId).catch(() => null);
+      const dying =
+        currentTask !== null &&
+        typeof currentTask === "object" &&
+        (currentTask.status === "paused" ||
+          currentTask.status === "cancelled" ||
+          currentTask.status === "failed");
+      if (dying) {
+        await existing.catch(() => {});
+        existing = runningLoops.get(taskId);
+      }
+      if (existing) {
+        return existing;
+      }
     }
     const task = await store.getTask(taskId);
     if (!task) {

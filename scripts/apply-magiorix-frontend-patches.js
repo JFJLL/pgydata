@@ -1009,14 +1009,25 @@ const pgyKolSearchPageSource51 = (() => {
   return source;
 })();
 
-const pgyKolPhase4Marker = "function PgyKolBatchPanel";
+// 共享采集字段选择器位于独立 chunk（assets/<version>/assets/index-IS4kgrUy.js 的 E
+// 导出）。页面源码用占位符标记 chunk 文件名，这里解析真实文件名替换进注入源码，
+// 使「找博主」与蒲公英博主采集真正共用同一个 ExportFieldSelector；占位符绝不能
+// 残留到 bundle 里（否则运行时动态 import 拿不到真实模块）。
+const pgyKolFieldSelectorChunkName = "./" + path.basename(exportFieldSelectorBundle);
+const pgyKolSearchPageSourceInjected = pgyKolSearchPageSource51
+  .split("__PGY_KOL_EXPORT_FIELD_SELECTOR__")
+  .join(pgyKolFieldSelectorChunkName);
+if (pgyKolSearchPageSourceInjected.indexOf("__PGY_KOL_EXPORT_FIELD_SELECTOR__") >= 0) {
+  throw new Error("pgy-kol page source placeholder substitution failed: __PGY_KOL_EXPORT_FIELD_SELECTOR__");
+}
+
 // Phase 4 内容级幂等守卫：以源码 SHA-1 对比 bundle 内已注入块，内容漂移时
 // 必然重建（修复“标记存在但函数体已更新导致产物陈旧”的问题）；内容一致时
 // 跳过（保持幂等）。全新 bundle 没有旧块时直接注入（Phase 1 路径）。
 const normalizeSource = (source) => String(source).replace(/\r\n/g, "\n");
 const sourceSha1 = crypto
   .createHash("sha1")
-  .update(normalizeSource(pgyKolSearchPageSource51))
+  .update(normalizeSource(pgyKolSearchPageSourceInjected))
   .digest("hex");
 const bundleBefore = fs.readFileSync(mainBundle, "utf8");
 const oldStart = bundleBefore.indexOf("V1=new Map;function pgyKolDevEnabled");
@@ -1046,7 +1057,7 @@ if (existingSha1 !== sourceSha1) {
   replaceOnce(
     mainBundle,
     "V1=new Map;function si(e){",
-    "V1=new Map;" + pgyKolSearchPageSource51.replace(/\n/g, "\r\n") + "\r\nfunction si(e){",
+    "V1=new Map;" + pgyKolSearchPageSourceInjected.replace(/\n/g, "\r\n") + "\r\nfunction si(e){",
     "inject or refresh pgy-kol Phase 4 search page component after the lazy route table",
   );
 }

@@ -85,7 +85,7 @@ function pgyKolClearJson(key){try{window.localStorage.removeItem(key)}catch(e){}
 
 function pgyKolDefaultFilter(){return {searchType:1,keyword:"",marketTarget:null,audienceGroup:null,brands:[],contentTag:[],personalTags:[],featureTags:[],gender:null,location:null,audience20:[],automotive:[],consumeBehavior:[],signed:null,contentSceneLabel:[],contentTheme:[],fansNumberLower:"",fansNumberUpper:"",fansAge:null,fansGender:null,fansLocation:null,fansMaritalStatus:null,fansConsumptionLevel:null,fansChildAgeInfo:[],fansDevicePrice:[],fansDeviceBrand:[],industryTag:[],accumCommonImpMedinNum30d:null,readMidNor30:null,interMidNor30:null,thousandLikePercent30:null,noteType:null,notePriceLower:"",notePriceUpper:"",videoPriceLower:"",videoPriceUpper:"",coopCredit:null,progressOrderCnt:"",firstIndustry:"",secondIndustry:"",tradeReportBrandIdSet:[],coopImpMedin:null,coopReadMid:null,coopInterMid:null,coopOverflowMid:null,estimatePicReadCost:null,estimateVideoReadCost:null,estimatePicEngageCost:null,estimateVideoEngageCost:null,estimatePictureCpm:null,estimateVideoCpm:null,overflowCost:null,liveCount30d:[],avgLiveViewer:[],avgLiveGmv:[],noteCategory:[],inStar:false,newHighQuality:false,isHighQualityFlag:false,hasBuyerCoopAuthFlag:false,filterIntention:false,activityCodes:[],excludeLowActive:false,fansNumUp:false,excludedTradeReportBrand:false,excludedTradeInviteReportBrand:false}}
 
-function pgyKolToFilterState(f){var out={};if(f.searchType===0||f.searchType===1)out.searchType=f.searchType;if(f.keyword)out.keyword=f.keyword;if(f.marketTarget)out.marketTarget=f.marketTarget;if(f.personalTags&&f.personalTags.length)out.personalTags=f.personalTags.map(pgyKolOptValue);var featureTags=[];if(f.featureTags&&f.featureTags.length)featureTags=featureTags.concat(f.featureTags.map(pgyKolOptValue));if(f.contentSceneLabel&&f.contentSceneLabel.length)featureTags=featureTags.concat(f.contentSceneLabel.map(pgyKolOptValue));if(featureTags.length)out.featureTags=featureTags.filter(function(v,i,a){return a.indexOf(v)===i});if(f.gender)out.gender=f.gender;if(f.location)out.location=[f.location];if(f.signed)out.signed=f.signed;if(f.audience20&&f.audience20.length)out.top20CrowdsLabel=f.audience20;if(f.automotive&&f.automotive.length)out.industrySpecificCrowdsMotorDom=f.automotive;if(f.consumeBehavior&&f.consumeBehavior.length)out.kolInfoConsumBehaviorLabel=f.consumeBehavior;if(f.contentTheme&&f.contentTheme.length)out.contentThemeLabel=f.contentTheme;if(f.fansNumberLower!==""){var lo=Number(f.fansNumberLower);if(Number.isFinite(lo)&&Number.isInteger(lo)&&lo>0)out.fansNumberLower=lo}if(f.fansNumberUpper!==""){var hi=Number(f.fansNumberUpper);if(Number.isFinite(hi)&&Number.isInteger(hi)&&hi>0)out.fansNumberUpper=hi}if(f.fansAge)out.fansAge=f.fansAge;if(f.fansGender)out.fansGender=f.fansGender;if(f.fansLocation)out.fansLocation=f.fansLocation;if(f.fansMaritalStatus)out.fansMaritalStatus=f.fansMaritalStatus;if(f.fansConsumptionLevel)out.fansConsumptionLevel=f.fansConsumptionLevel;if(f.fansChildAgeInfo&&f.fansChildAgeInfo.length)out.fansChildAgeInfo=f.fansChildAgeInfo;if(f.fansDevicePrice&&f.fansDevicePrice.length)out.fansDevicePrice=f.fansDevicePrice;if(f.fansDeviceBrand&&f.fansDeviceBrand.length)out.fansDeviceBrand=f.fansDeviceBrand;if(f.accumCommonImpMedinNum30d)out.accumCommonImpMedinNum30d=f.accumCommonImpMedinNum30d.value;if(f.readMidNor30)out.readMidNor30=f.readMidNor30.value;if(f.interMidNor30)out.interMidNor30=f.interMidNor30.value;if(f.thousandLikePercent30)out.thousandLikePercent30=f.thousandLikePercent30.value;if(f.noteType)out.noteType=f.noteType;if(f.notePriceLower!==""){var npl=Number(f.notePriceLower);if(Number.isFinite(npl)&&npl>=0)out.notePriceLower=npl}if(f.notePriceUpper!==""){var npu=Number(f.notePriceUpper);if(Number.isFinite(npu)&&npu>=0)out.notePriceUpper=npu}if(f.videoPriceLower!==""){var vpl=Number(f.videoPriceLower);if(Number.isFinite(vpl)&&vpl>=0)out.videoPriceLower=vpl}if(f.videoPriceUpper!==""){var vpu=Number(f.videoPriceUpper);if(Number.isFinite(vpu)&&vpu>=0)out.videoPriceUpper=vpu}if(f.progressOrderCnt!==""){var poc=Number(f.progressOrderCnt);if(Number.isFinite(poc)&&poc>=0)out.progressOrderCnt=poc}if(f.tradeReportBrandIdSet&&f.tradeReportBrandIdSet.length)out.tradeReportBrandIdSet=f.tradeReportBrandIdSet;if(f.activityCodes&&f.activityCodes.length)out.activityCodes=f.activityCodes;if(f.excludeLowActive)out.excludeLowActive=true;if(f.fansNumUp===true)out.fansNumUp=1;var hasBrands=f.brands&&f.brands.length>0;if(hasBrands&&f.excludedTradeReportBrand)out.excludedTradeReportBrand=true;if(hasBrands&&f.excludedTradeInviteReportBrand)out.excludedTradeInviteReportBrand=true;if(f.contentTag&&f.contentTag.length){var p51ct=f.contentTag.filter(function(t){return t!=="全部"});if(p51ct.length)out.contentTag=p51ct}if(f.coopCredit)out.inviteReply48hNumRatio=f.coopCredit.value;if(f.coopImpMedin)out.accumCoopImpMedinNum30d=f.coopImpMedin.value;if(f.coopReadMid)out.readMidCoop30=f.coopReadMid.value;if(f.coopInterMid)out.interMidCoop30=f.coopInterMid.value;if(f.coopOverflowMid)out.mCpuv30d=f.coopOverflowMid.value;if(f.estimatePicReadCost)out.estimatePicReadPrice=f.estimatePicReadCost.value;if(f.estimateVideoReadCost)out.estimateVideoReadPrice=f.estimateVideoReadCost.value;if(f.estimatePicEngageCost)out.estimatePictureEngageCost=f.estimatePicEngageCost.value;if(f.estimateVideoEngageCost)out.estimateVideoEngageCost=f.estimateVideoEngageCost.value;if(f.estimatePictureCpm)out.estimatePictureCpm=f.estimatePictureCpm.value;if(f.estimateVideoCpm)out.estimateVideoCpm=f.estimateVideoCpm.value;if(f.overflowCost)out.estimateCpuv30d=f.overflowCost.value;if(f.liveCount30d&&f.liveCount30d.length)out["filterList.kliveCnt30d"]=f.liveCount30d.map(function(n){return n.value});if(f.avgLiveViewer&&f.avgLiveViewer.length)out["filterList.avgLiveViewerNum"]=f.avgLiveViewer.map(function(n){return n.value});if(f.avgLiveGmv&&f.avgLiveGmv.length)out["filterList.avgAgmv90d"]=f.avgLiveGmv.map(function(n){return n.value});if(f.noteCategory&&f.noteCategory.length)out.contentSceneLabel=f.noteCategory;if(f.inStar===true)out.inStar=1;if(f.newHighQuality===true)out.newHighQuality=1;if(f.filterIntention===true)out.filterIntention=true;if(f.isHighQualityFlag===true)out["flagList.isHighQuality"]=true;if(f.hasBuyerCoopAuthFlag===true)out["flagList.hasBuyerCoopAuth"]=true;if(f.firstIndustry)out.firstIndustry=f.firstIndustry;if(f.secondIndustry)out.secondIndustry=f.secondIndustry;return out}
+function pgyKolToFilterState(f){var out={};if(f.searchType===0||f.searchType===1)out.searchType=f.searchType;if(f.keyword)out.keyword=f.keyword;if(f.marketTarget)out.marketTarget=f.marketTarget;if(f.personalTags&&f.personalTags.length)out.personalTags=f.personalTags.map(pgyKolOptValue);var featureTags=[];if(f.featureTags&&f.featureTags.length)featureTags=featureTags.concat(f.featureTags.map(pgyKolOptValue));if(f.contentSceneLabel&&f.contentSceneLabel.length)featureTags=featureTags.concat(f.contentSceneLabel.map(pgyKolOptValue));if(featureTags.length)out.featureTags=featureTags.filter(function(v,i,a){return a.indexOf(v)===i});if(f.gender)out.gender=f.gender;if(f.location)out.location=[f.location];if(f.signed)out.signed=f.signed;if(f.audience20&&f.audience20.length)out.top20CrowdsLabel=f.audience20;if(f.automotive&&f.automotive.length)out.industrySpecificCrowdsMotorDom=f.automotive;if(f.consumeBehavior&&f.consumeBehavior.length)out.kolInfoConsumBehaviorLabel=f.consumeBehavior;if(f.contentTheme&&f.contentTheme.length)out.contentThemeLabel=f.contentTheme;if(f.fansNumberLower!==""){var lo=Number(f.fansNumberLower);if(Number.isFinite(lo)&&Number.isInteger(lo)&&lo>=0)out.fansNumberLower=lo}if(f.fansNumberUpper!==""){var hi=Number(f.fansNumberUpper);if(Number.isFinite(hi)&&Number.isInteger(hi)&&hi>=0){out.fansNumberUpper=hi;if(out.fansNumberLower===undefined)out.fansNumberLower=0}}else if(out.fansNumberLower!==undefined)out.fansNumberUpper="UNBOUNDED";if(f.fansAge)out.fansAge=f.fansAge;if(f.fansGender)out.fansGender=f.fansGender;if(f.fansLocation)out.fansLocation=f.fansLocation;if(f.fansMaritalStatus)out.fansMaritalStatus=f.fansMaritalStatus;if(f.fansConsumptionLevel)out.fansConsumptionLevel=f.fansConsumptionLevel;if(f.fansChildAgeInfo&&f.fansChildAgeInfo.length)out.fansChildAgeInfo=f.fansChildAgeInfo;if(f.fansDevicePrice&&f.fansDevicePrice.length)out.fansDevicePrice=f.fansDevicePrice;if(f.fansDeviceBrand&&f.fansDeviceBrand.length)out.fansDeviceBrand=f.fansDeviceBrand;if(f.accumCommonImpMedinNum30d)out.accumCommonImpMedinNum30d=f.accumCommonImpMedinNum30d.value;if(f.readMidNor30)out.readMidNor30=f.readMidNor30.value;if(f.interMidNor30)out.interMidNor30=f.interMidNor30.value;if(f.thousandLikePercent30)out.thousandLikePercent30=f.thousandLikePercent30.value;if(f.noteType)out.noteType=f.noteType;if(f.notePriceLower!==""){var npl=Number(f.notePriceLower);if(Number.isFinite(npl)&&npl>=0)out.notePriceLower=npl}if(f.notePriceUpper!==""){var npu=Number(f.notePriceUpper);if(Number.isFinite(npu)&&npu>=0){out.notePriceUpper=npu;if(out.notePriceLower===undefined)out.notePriceLower=0}}else if(out.notePriceLower!==undefined)out.notePriceUpper="UNBOUNDED";if(f.videoPriceLower!==""){var vpl=Number(f.videoPriceLower);if(Number.isFinite(vpl)&&vpl>=0)out.videoPriceLower=vpl}if(f.videoPriceUpper!==""){var vpu=Number(f.videoPriceUpper);if(Number.isFinite(vpu)&&vpu>=0){out.videoPriceUpper=vpu;if(out.videoPriceLower===undefined)out.videoPriceLower=0}}else if(out.videoPriceLower!==undefined)out.videoPriceUpper="UNBOUNDED";if(f.progressOrderCnt!==""){var poc=Number(f.progressOrderCnt);if(Number.isFinite(poc)&&poc>=0)out.progressOrderCnt=poc}if(f.tradeReportBrandIdSet&&f.tradeReportBrandIdSet.length)out.tradeReportBrandIdSet=f.tradeReportBrandIdSet;if(f.activityCodes&&f.activityCodes.length)out.activityCodes=f.activityCodes;if(f.excludeLowActive)out.excludeLowActive=true;if(f.fansNumUp===true)out.fansNumUp=1;var hasBrands=f.brands&&f.brands.length>0;if(hasBrands&&f.excludedTradeReportBrand)out.excludedTradeReportBrand=true;if(hasBrands&&f.excludedTradeInviteReportBrand)out.excludedTradeInviteReportBrand=true;if(f.contentTag&&f.contentTag.length){var p51ct=f.contentTag.filter(function(t){return t!=="全部"});if(p51ct.length)out.contentTag=p51ct}if(f.coopCredit)out.inviteReply48hNumRatio=f.coopCredit.value;if(f.coopImpMedin)out.accumCoopImpMedinNum30d=f.coopImpMedin.value;if(f.coopReadMid)out.readMidCoop30=f.coopReadMid.value;if(f.coopInterMid)out.interMidCoop30=f.coopInterMid.value;if(f.coopOverflowMid)out.mCpuv30d=f.coopOverflowMid.value;if(f.estimatePicReadCost)out.estimatePicReadPrice=f.estimatePicReadCost.value;if(f.estimateVideoReadCost)out.estimateVideoReadPrice=f.estimateVideoReadCost.value;if(f.estimatePicEngageCost)out.estimatePictureEngageCost=f.estimatePicEngageCost.value;if(f.estimateVideoEngageCost)out.estimateVideoEngageCost=f.estimateVideoEngageCost.value;if(f.estimatePictureCpm)out.estimatePictureCpm=f.estimatePictureCpm.value;if(f.estimateVideoCpm)out.estimateVideoCpm=f.estimateVideoCpm.value;if(f.overflowCost)out.estimateCpuv30d=f.overflowCost.value;if(f.liveCount30d&&f.liveCount30d.length)out["filterList.kliveCnt30d"]=f.liveCount30d.map(function(n){return n.value});if(f.avgLiveViewer&&f.avgLiveViewer.length)out["filterList.avgLiveViewerNum"]=f.avgLiveViewer.map(function(n){return n.value});if(f.avgLiveGmv&&f.avgLiveGmv.length)out["filterList.avgAgmv90d"]=f.avgLiveGmv.map(function(n){return n.value});if(f.noteCategory&&f.noteCategory.length)out.contentSceneLabel=f.noteCategory;if(f.inStar===true)out.inStar=1;if(f.newHighQuality===true)out.newHighQuality=1;if(f.filterIntention===true)out.filterIntention=true;if(f.isHighQualityFlag===true)out["flagList.isHighQuality"]=true;if(f.hasBuyerCoopAuthFlag===true)out["flagList.hasBuyerCoopAuth"]=true;if(f.firstIndustry)out.firstIndustry=f.firstIndustry;if(f.secondIndustry)out.secondIndustry=f.secondIndustry;return out}
 
 var pgyKolBaseToFilterState=pgyKolToFilterState;
 pgyKolToFilterState=function(f){var out=pgyKolBaseToFilterState(f);delete out.progressOrderCnt;if(f.progressOrderCnt&&Array.isArray(f.progressOrderCnt.value))out.progressOrderCnt=f.progressOrderCnt.value.slice();if(f.tradeType&&f.tradeType!=="不限")out.tradeType=f.tradeType;if(f.tradeReportBrandIdSet&&f.tradeReportBrandIdSet.length&&f.excludedTradeReportBrandId===true)out.excludedTradeReportBrandId=true;return out};
@@ -135,13 +135,11 @@ function pgyKolCreateSearchCoordinator(options){
     inFlightByKey[key]=entry;
     return promise;
   }
-  function startBatch(columns){var api=bridge(),view=snapshot(),appliedKey=appliedRequestSnapshot?pgyKolStableSerialize(appliedRequestSnapshot):null;if(!state.appliedFilter||view.isDirty||!successfulKey||successfulKey!==appliedKey){notice("请先确定筛选并查询");return Promise.resolve({ok:false,blocked:true,error:{code:"filter-not-applied",message:"请先确定筛选并查询"}})}if(!api||typeof api.batchStart!=="function")return Promise.resolve({ok:false,error:{code:"bridge-missing",message:"当前环境不支持批量采集"}});return api.batchStart({filterState:pgyKolClone(appliedRequestSnapshot),columns:pgyKolClone(columns||[])})}
+  function startBatch(fields){var api=bridge(),view=snapshot(),appliedKey=appliedRequestSnapshot?pgyKolStableSerialize(appliedRequestSnapshot):null;if(!state.appliedFilter||view.isDirty||!successfulKey||successfulKey!==appliedKey){notice("请先确定筛选并查询");return Promise.resolve({ok:false,blocked:true,error:{code:"filter-not-applied",message:"请先确定筛选并查询"}})}if(!api||typeof api.batchStart!=="function")return Promise.resolve({ok:false,error:{code:"bridge-missing",message:"当前环境不支持批量采集"}});return api.batchStart({filterState:pgyKolClone(appliedRequestSnapshot),fields:pgyKolClone(fields||[])})}
   return {editDraft:editDraft,applyAndSearch:applyAndSearch,startBatch:startBatch,restore:restore,getState:snapshot};
 }
 
 function pgyKolUnprovenSet(){return window.__pgyKolUnproven||{}}
-
-function pgyKolExportColumnIds(list,selected){var byId={};for(var i=0;i<list.length;i++){byId[list[i].id]=list[i]}var out=[];for(var j=0;j<selected.length;j++){var c=byId[selected[j]];if(c&&c.responsePath&&typeof c.responsePath==="string"&&c.responsePath.indexOf("computed:")!==0&&c.evidence!=="unavailable"){out.push(selected[j])}}return out}
 
 function PgyKolTreeNode(p){var node=p.node,level=p.level||0,selected=p.selected||[],onToggle=p.onToggle,leafOnly=p.leafOnly||false,display=p.display||function(n){return n.fullPath||n.label||String(n.value)},has=node.children&&node.children.length>0,openState=m.useState(false),open=openState[0],setOpen=openState[1],key=pgyKolNodeKey(node),isSel=selected.indexOf(key)>-1,parentOnly=leafOnly&&has;return o.jsxs(x,{sx:{pl:level*1.5},children:[o.jsxs(x,{sx:{display:"flex",alignItems:"center",minHeight:30,gap:.25},children:[has?o.jsx(te,{size:"small",sx:{p:.25},onClick:function(e){e.stopPropagation(),setOpen(!open)},children:o.jsx(B,{icon:open?"solar:alt-arrow-up-bold-duotone":"solar:alt-arrow-down-bold-duotone",width:14,height:14})}):o.jsx(x,{sx:{width:24}}),parentOnly?o.jsx(w,{variant:"body2",sx:{wordBreak:"break-all"},children:display(node)}):o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:.75,flex:1,cursor:"pointer",py:.5},onClick:function(){onToggle(node)},children:[o.jsx(x,{sx:{width:16,height:16,borderRadius:2,border:"1px solid",borderColor:isSel?"primary.main":"divider",bgcolor:isSel?"primary.main":"transparent",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,flexShrink:0},children:isSel?"✓":null}),o.jsx(w,{variant:"body2",sx:{wordBreak:"break-all"},children:display(node)})]})]}),open&&has&&node.children.map(function(c){return o.jsx(PgyKolTreeNode,{key:pgyKolNodeKey(c),node:c,level:level+1,selected:selected,onToggle:onToggle,display:display,leafOnly:leafOnly})})]})}
 
@@ -191,7 +189,6 @@ function pgyKolStatusText(s){if(s==="running")return "采集中";if(s==="paused"
 
 function pgyKolCompletenessText(t){if(!t)return "";if(t.completeness==="complete")return "完整性已证明";if(t.completeness==="cannot-prove")return "完整性无法证明（原因："+(t.summary&&t.summary.stopReason||t.warning||"无法证明")+"）";return "完整性未证明"}
 
-function pgyKolResumePlan(t){if(!t)return null;var reason=t.summary&&t.summary.stopReason,cur=t.budgets||{},used=Number.isFinite(t.budgetUsed)?t.budgetUsed:0;if(t.status==="incomplete"){if(reason==="budget-exhausted"){var curB=Number.isInteger(cur.queryBudget)?cur.queryBudget:400,min=Math.max(curB,used)+1;if(min>1000)return {kind:"blocked",reasonText:"已消费请求数已达预算上限（1000），无法继续增加预算"};return {kind:"budget",label:"查询预算",current:curB,used:used,min:min,max:1000,reasonText:"查询预算已耗尽，请输入更大的总预算后从原检查点继续"}}if(reason==="max-pages-reached"){var curM=Number.isInteger(cur.maxPagesPerLeaf)?cur.maxPagesPerLeaf:250;if(curM>=250)return {kind:"blocked",reasonText:"已到官方安全页数上限（250 页），无法继续同一查询"};return {kind:"maxPages",label:"单叶子最大页数",current:curM,used:used,min:curM+1,max:250,reasonText:"已达单叶子最大页数，请输入更大的页数预算后从原检查点继续"}}if(reason==="repeat-page")return {kind:"blocked",reasonText:"检测到连续重复页，分页可能复读，继续无法证明完整"};if(reason==="capped-unprovable")return {kind:"blocked",reasonText:"无安全切分维度，继续会重复抓取且无法证明完整"};if(reason==="checkpoint-desync")return {kind:"blocked",reasonText:"检查点与行数据不一致，禁止继续"};return {kind:"blocked",reasonText:"该任务无法安全继续，可导出已有数据"}}if(t.status==="completed"&&t.completeness!=="complete")return {kind:"blocked",reasonText:"该任务已完成但完整性未证明（旧版任务），无法继续，可导出已有数据"};return null}
 
 function pgyKolBatchErrorMessage(e){if(!e)return "";if(e.code==="filter-not-applied")return "请先确定筛选并查询";if(e.code==="auth-expired")return "蒲公英登录已失效，请重新授权";if(e.code==="risk-control")return "触发风控，采集已停止";if(e.code==="failed"||e.kind==="failed")return "采集失败（错误码 "+(e.code||"unknown")+"）："+(e.message||"未知错误");return "任务操作失败（错误码 "+(e.code||"unknown")+"）："+(e.message||"未知错误")}
 
@@ -201,9 +198,7 @@ function pgyKolPagesDone(t){if(!t||!Array.isArray(t.leaves))return 0;var n=0;for
 
 function pgyKolAnyCapped(t){if(!t)return false;if(t.capSignal&&t.capSignal.capped)return true;if(Array.isArray(t.leaves)){for(var i=0;i<t.leaves.length;i++){if(t.leaves[i]&&t.leaves[i].capSignal&&t.leaves[i].capSignal.capped)return true}}return false}
 
-function PgyKolBatchPanel(p){var bv=m.useState(""),budgetInput=bv[0],setBudgetInput=bv[1];var t=p.task;if(!t)return null;var counts=t.counts||{},statusText=pgyKolStatusText(t.status),completenessText=pgyKolCompletenessText(t),pages=pgyKolPagesDone(t),capped=pgyKolAnyCapped(t),subCount=t.summary&&t.summary.subqueryCount!=null?t.summary.subqueryCount:0,resumePlan=pgyKolResumePlan(t),resumeEligible=resumePlan&&(resumePlan.kind==="budget"||resumePlan.kind==="maxPages"),parsedInput=budgetInput.trim()===""?NaN:Number(budgetInput),inputValid=resumeEligible&&Number.isInteger(parsedInput)&&parsedInput>=resumePlan.min&&parsedInput<=resumePlan.max,legacyUnproven=t.status==="completed"&&t.completeness!=="complete",incompleteShown=t.status==="incomplete"||legacyUnproven;return o.jsxs(xe,{variant:"outlined",sx:{mt:2},children:[o.jsxs(We,{children:[o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1,mb:1,flexWrap:"wrap"},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:"任务进度"}),o.jsx(f1,{size:"small",color:t.status==="completed"&&t.completeness==="complete"?"success":incompleteShown?"warning":t.status==="failed"||t.status==="risk-control"?"error":t.status==="running"?"info":"default",label:incompleteShown?"采集未完整/需要处理":statusText}),capped&&o.jsx(f1,{size:"small",color:"warning",label:"结果可能超过 5000"})]}),o.jsx(w,{variant:"caption",color:"text.secondary",sx:{display:"block",mb:1,fontFamily:"monospace",wordBreak:"break-all"},children:"任务 ID："+t.taskId}),incompleteShown&&o.jsx(oe,{severity:"warning",sx:{mb:1},children:"采集未完整/需要处理："+(resumePlan&&resumePlan.reasonText||completenessText)}),!incompleteShown&&o.jsx(oe,{severity:completenessText.indexOf("无法证明")>=0?"warning":"success",sx:{mb:1},children:completenessText}),o.jsxs(x,{sx:{display:"flex",gap:1,flexWrap:"wrap",mb:1},children:[o.jsx(f1,{size:"small",variant:"outlined",label:"原始条数 "+(counts.raw!=null?counts.raw:0)}),o.jsx(f1,{size:"small",variant:"outlined",label:"唯一博主数 "+(counts.unique!=null?counts.unique:0)}),o.jsx(f1,{size:"small",variant:"outlined",label:"重复数 "+(counts.dup!=null?counts.dup:0)}),o.jsx(f1,{size:"small",variant:"outlined",label:"缺UID异常数 "+(counts.missingUid!=null?counts.missingUid:0)}),o.jsx(f1,{size:"small",variant:"outlined",label:"已抓页数 "+pages}),o.jsx(f1,{size:"small",variant:"outlined",label:"子查询数 "+subCount})]}),resumeEligible&&o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1,flexWrap:"wrap",mb:1},children:[o.jsx(w,{variant:"body2",color:"text.secondary",children:"当前"+resumePlan.label+"："+resumePlan.current+"；已消费请求数："+resumePlan.used+"；允许新值："+resumePlan.min+"～"+resumePlan.max}),o.jsx(ae,{size:"small",type:"number",value:budgetInput,onChange:function(e){setBudgetInput(e.target.value)},placeholder:"请输入新"+resumePlan.label,sx:{maxWidth:180}}),o.jsx($,{size:"small",variant:"contained",disabled:!inputValid,onClick:function(){var nb={};if(resumePlan.kind==="budget"){nb.queryBudget=parsedInput}else{nb.maxPagesPerLeaf=parsedInput}p.onResumeWithBudgets(nb)},children:resumePlan.kind==="maxPages"?"增加页数并继续":"增加预算并继续"})]}),resumePlan&&resumePlan.kind==="blocked"&&o.jsx(w,{variant:"body2",color:"text.secondary",sx:{display:"block",mb:1},children:resumePlan.reasonText}),o.jsxs(x,{sx:{display:"flex",gap:1,flexWrap:"wrap"},children:[t.status==="running"&&o.jsx($,{size:"small",variant:"outlined",onClick:p.onPause,children:"暂停"}),(t.status==="paused"||t.status==="auth-expired"||t.status==="interrupted"||t.status==="failed")&&o.jsx($,{size:"small",variant:"outlined",onClick:p.onResume,children:"继续"}),(t.status==="cancelled"||t.status==="failed"||t.status==="completed"||t.status==="incomplete")?null:o.jsx($,{size:"small",variant:"outlined",color:"error",onClick:p.onCancel,children:"取消"}),o.jsx($,{size:"small",variant:"outlined",onClick:p.onExport,children:"导出"})]})]})]})}
 
-function PgyKolTaskHistory(p){return o.jsxs(xe,{variant:"outlined",sx:{mt:2},children:[o.jsxs(We,{children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,sx:{mb:1},children:"任务历史"}),p.error&&o.jsx(oe,{severity:"error",sx:{mb:1},children:"任务历史加载失败（错误码 "+(p.error.code||"unknown")+"）："+(p.error.message||"未知错误")}),!p.error&&(!p.tasks||p.tasks.length===0)&&o.jsx(w,{variant:"body2",color:"text.secondary",children:"暂无采集任务"}),p.tasks&&p.tasks.map(function(t){var c=t.counts||{};return o.jsxs(x,{key:t.taskId,sx:{display:"flex",alignItems:"center",gap:1,mb:1,flexWrap:"wrap"},children:[o.jsx(w,{variant:"body2",sx:{fontFamily:"monospace",wordBreak:"break-all"},children:t.taskId}),o.jsx(f1,{size:"small",variant:"outlined",color:t.status==="completed"&&t.completeness==="complete"?"success":t.status==="incomplete"?"warning":"default",label:t.status==="incomplete"?"采集未完整":pgyKolStatusText(t.status)}),o.jsx(f1,{size:"small",variant:"outlined",label:t.completeness==="complete"?"完整性已证明":"完整性未证明"}),o.jsx(w,{variant:"caption",color:"text.secondary",children:"原始 "+(c.raw!=null?c.raw:0)+" / 唯一 "+(c.unique!=null?c.unique:0)+" / 重复 "+(c.dup!=null?c.dup:0)+" / 缺UID "+(c.missingUid!=null?c.missingUid:0)}),o.jsx(w,{variant:"caption",color:"text.secondary",children:t.updatedAt||""}),o.jsx($,{size:"small",variant:"outlined",onClick:function(){p.onSelect(t.taskId)},children:"查看"}),o.jsx($,{size:"small",variant:"outlined",onClick:function(){p.onExport(t.taskId)},children:"导出"})]})})]})]})}
 
 function PgyKolBrandPopup(p){var kw=m.useState(""),keyword=kw[0],setKeyword=kw[1],ops=m.useState([]),options=ops[0],setOptions=ops[1],ld=m.useState(false),loading=ld[0],setLoading=ld[1],bpe=m.useState(null),brandError=bpe[0],setBrandError=bpe[1],dr=m.useState([]),draft=dr[0],setDraft=dr[1],tr=m.useRef(null);function fetchBrands(kw0){var bridge=window.bridge&&window.bridge.pgyKol;if(!bridge||!bridge.getConfig)return;setLoading(true);bridge.getConfig({provider:"brandSearch",keyword:kw0||""}).then(function(res){setLoading(false);if(res&&res.ok){var data=res.data||{},list=data.options||data.nodes||(Array.isArray(res.data)?res.data:[]);setOptions(list);setBrandError(null)}else{setBrandError(res&&res.error||{code:"unknown",message:"品牌搜索失败"})}}).catch(function(e){setLoading(false);setBrandError({code:e&&e.code||"unknown",message:e&&e.message||String(e)})})}m.useEffect(function(){if(!p.open)return;setDraft(Array.isArray(p.current)?p.current.slice():[]);setKeyword("");setOptions([]);setBrandError(null)},[p.open]);var onKeyword=function(e){var v=e.target.value;setKeyword(v);if(tr.current)window.clearTimeout(tr.current);tr.current=window.setTimeout(function(){fetchBrands(v)},300)},toggleBrand=function(n){var v=pgyKolOptValue(n);setDraft(function(prev){var i=prev.indexOf(v);return i>=0?prev.slice(0,i).concat(prev.slice(i+1)):prev.concat([v])})};return o.jsxs(ue,{open:p.open,onClose:p.onClose,maxWidth:"sm",fullWidth:true,children:[o.jsx(be,{children:o.jsxs(x,{sx:{display:"flex",alignItems:"center",gap:1},children:[o.jsx(w,{variant:"subtitle1",fontWeight:600,children:p.mode==="recent"?"近期合作品牌":"合作品牌智能推荐"}),o.jsx(te,{size:"small",sx:{ml:"auto"},onClick:p.onClose,children:o.jsx(B,{icon:"mdi:close",width:18,height:18})})]})}),o.jsxs(pe,{children:[o.jsx(ae,{size:"small",fullWidth:true,placeholder:"搜索品牌关键词",value:keyword,onChange:onKeyword,sx:{mb:1}}),brandError&&o.jsx(oe,{severity:"error",sx:{mb:1},children:"品牌搜索失败（错误码 "+(brandError.code||"unknown")+"）："+(brandError.message||"未知错误")}),loading&&o.jsx(Q1,{sx:{mb:1}}),options.length>0?o.jsxs(x,{sx:{display:"flex",flexWrap:"wrap",gap:.5,maxHeight:260,overflowY:"auto"},children:[options.map(function(n){var v=pgyKolOptValue(n),sel=draft.indexOf(v)>=0;return o.jsx(f1,{key:String(v),size:"small",label:pgyKolOptLabel(n),color:sel?"primary":"default",variant:sel?"filled":"outlined",onClick:function(){toggleBrand(n)}})}),o.jsx(w,{variant:"caption",color:"text.secondary",sx:{width:"100%"},children:"已选 "+draft.length+" 个品牌"})]}):!loading&&o.jsx(w,{variant:"body2",color:"text.secondary",children:"输入关键词搜索品牌"})]}),o.jsxs(_e,{children:[o.jsx($,{onClick:p.onClose,children:"取消"}),draft.length===0&&o.jsx(w,{variant:"caption",color:"text.secondary",children:"请选择您的合作品牌"}),o.jsx($,{variant:"contained",disabled:draft.length===0,onClick:function(){p.onApply(draft.slice());p.onClose()},children:"确定"})]})]})}
 
@@ -230,8 +225,8 @@ var pgyKolNoteTypeOptions=[{label:"不限",value:null},{label:"图文笔记为�
 var pgyKolRecentIndustryOptions=pgyKolStaticOptions(["不限","美妆个护","食品饮料","母婴","3c及电器","日用百货","服装配饰","互联网","生活服务","家居建材","汽车"]);
 var pgyKolFansAgeOptions=pgyKolStaticOptions(["18岁以下","18-24","25-34","35-44","45岁以上"]);
 var pgyKolFansGenderOptions=pgyKolStaticOptions(["不限","男","女"]);
-var pgyKolMaritalOptions=pgyKolStaticOptions(["不限","未婚","已婚","恋爱中"]);
-var pgyKolConsumptionOptions=pgyKolStaticOptions(["不限","低","中","高","极高"]);
+var pgyKolMaritalOptions=pgyKolStaticOptions(["不限","未婚","已婚"]);
+var pgyKolConsumptionOptions=pgyKolStaticOptions(["不限","低","中","高"]);
 var pgyKolChildAgeOptions=pgyKolStaticOptions(["备孕","0-6月","7-12月","1-3岁","4-6岁","7-12岁","孕早期","孕晚期"]);
 var pgyKolDevicePriceOptions=pgyKolStaticOptions(["2000元以下","2000-4000元","4000-6000元","6000元以上"]);
 var pgyKolDeviceBrandOptions=pgyKolStaticOptions(["苹果","华为","OPPO","VIVO","荣耀","小米","一加","魅族","中兴","联想"]);
@@ -1351,296 +1346,65 @@ function PgyKolField(p) {
 }
 
 /* ============ Phase 5.2：展示指标弹窗（官网两栏式：可添加列 / 已添加） ============ */
-function PgyKolCollectDialog(p) {
-  var list = p.columns || [], fixedIds = pgyKolFixedColumnIds();
-  var exportable = list.filter(function (c) {
-    if (fixedIds.indexOf(c.id) >= 0) return false;
-    if (c.evidence === "unavailable") return false;
-    if (c.responsePath && String(c.responsePath).indexOf("computed:") === 0) return false;
-    return true;
-  });
-  var groupNames = pgyKolColumnGroups().filter(function (g) {
-    return exportable.some(function (c) { return pgyKolColumnGroupOf(c) === g; });
-  }).concat(exportable.some(pgyKolIsExtensionColumn) ? ["博主信息"] : []);
-  var ds = m.useState(null), draftState = ds[0], setDraftState = ds[1];
-  var effective = draftState !== null ? draftState : (p.selected || []);
-  m.useEffect(function () { if (p.open) setDraftState(null); }, [p.open]);
-  function toggle(id) {
-    setDraftState(function (prev) {
-      var cur = (prev !== null ? prev : (p.selected || [])).slice(), i = cur.indexOf(id);
-      if (i >= 0) return cur.slice(0, i).concat(cur.slice(i + 1));
-      return cur.concat([id]);
-    });
-  }
-  function groupAll(g) {
-    var ids = exportable.filter(function (c) { return pgyKolColumnGroupOf(c) === g; }).map(function (c) { return c.id; });
-    return ids.length > 0 && ids.every(function (id) { return effective.indexOf(id) >= 0; });
-  }
-  function toggleGroup(g) {
-    var ids = exportable.filter(function (c) { return pgyKolColumnGroupOf(c) === g; }).map(function (c) { return c.id; });
-    setDraftState(function (prev) {
-      var cur = (prev !== null ? prev : (p.selected || [])).slice(), all = ids.every(function (id) { return cur.indexOf(id) >= 0; });
-      var next = all ? cur.filter(function (id) { return ids.indexOf(id) < 0; }) : cur.slice();
-      if (!all) {
-        ids.forEach(function (id) { if (next.indexOf(id) < 0) next.push(id); });
-      }
-      return next;
-    });
-  }
-  function check(id, label) {
-    var sel = effective.indexOf(id) >= 0;
-    return o.jsxs(x, {
-      key: id, onClick: function () { toggle(id); },
-      sx: { display: "flex", alignItems: "center", gap: 0.5, minHeight: 26, cursor: "pointer", px: 0.25 },
-      children: [
-        o.jsx(x, { sx: { width: 14, height: 14, borderRadius: 2, border: "1px solid", borderColor: sel ? "#ff2442" : "#c9cdd4", bgcolor: sel ? "#ff2442" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", flexShrink: 0 }, children: sel ? "✓" : null }),
-        o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.7)" }, children: label }),
-      ],
-    });
-  }
-  var closeBtn = o.jsx(te, { size: "small", sx: { ml: "auto", p: 0.25 }, onClick: p.onClose, children: o.jsx(B, { icon: "mdi:close", width: 18, height: 18 }) });
-  return o.jsxs(ue, {
-    open: p.open, onClose: p.onClose, maxWidth: "sm", fullWidth: true,
-    children: [
-      o.jsx(be, { children: o.jsxs(x, { sx: { display: "flex", alignItems: "center", gap: 1 }, children: [o.jsx(w, { variant: "subtitle1", fontWeight: 600, children: "选择采集字段" }), closeBtn] }) }),
-      o.jsxs(pe, {
-        children: [
-          o.jsx(oe, { severity: "info", sx: { mb: 1 }, children: "勾选字段过多会增加采集时间，可能触发平台风控，建议按需勾选。" }),
-          o.jsx(x, { sx: { maxHeight: 440, overflowY: "auto" }, children: groupNames.map(function (g) {
-            var cols = exportable.filter(function (c) { return pgyKolColumnGroupOf(c) === g; });
-            return o.jsxs(x, { key: g, sx: { mb: 1 }, children: [
-              o.jsxs(x, { onClick: function () { toggleGroup(g); }, sx: { display: "flex", alignItems: "center", gap: 0.5, cursor: "pointer", mb: 0.25 }, children: [
-                o.jsx(x, { sx: { width: 14, height: 14, borderRadius: 2, border: "1px solid", borderColor: groupAll(g) ? "#ff2442" : "#c9cdd4", bgcolor: groupAll(g) ? "#ff2442" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", flexShrink: 0 }, children: groupAll(g) ? "✓" : null }),
-                o.jsx(w, { sx: { fontSize: 13, fontWeight: 600, color: "rgba(0,0,0,.85)" }, children: g }),
-                o.jsx(w, { sx: { fontSize: 12, color: "rgba(0,0,0,.35)" }, children: "全选" }),
-              ] }),
-              o.jsxs(x, { sx: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.25 }, children: cols.map(function (c) { return check(c.id, c.label || c.id); }) }),
-            ] });
-          }) }),
-o.jsx(w, { sx: { fontSize: 12, color: "rgba(0,0,0,.45)", display: "block", mt: 1 }, children: "已选 " + effective.length + " 项" }),
-        ],
-      }),
-      o.jsxs(_e, {
-        children: [
-          o.jsx($, { onClick: p.onClose, children: "取消" }),
-          o.jsx($, { variant: "contained", disabled: effective.length === 0, onClick: function () { p.onApply(effective.slice()); p.onClose(); }, children: "提交" }),
-        ],
-      }),
-    ],
-  });
-}
 
-function PgyKolColumnDialog(p) {
-  var fixedIds = pgyKolFixedColumnIds(), list = p.columns || [], hideFixed = !!p.hideFixed, title = p.title || "自定义列";
-  var officialColumns = pgyKolOfficialMetricColumns(list);
-  var extensionColumns = list.filter(pgyKolIsExtensionColumn);
-  var groups = [];
-  officialColumns.forEach(function (c) {
-    var g = pgyKolColumnGroupOf(c);
-    if (g !== "固定列" && groups.indexOf(g) < 0) groups.push(g);
-  });
-  var ds = m.useState(null), draftState = ds[0], setDraftState = ds[1];
-  var ss = m.useState(""), search = ss[0], setSearch = ss[1];
-  var effective = draftState !== null ? draftState : (p.selected || []);
-  var filtered = list.filter(function (c) { return search === "" || (c.label || "").indexOf(search) >= 0; });
-  var officialCount = officialColumns.length; /* 官网主列表：41 项（固定「操作」不计指标）。 */
-  function fixedLabel(id) {
-    if (id === "kolInfo") return "博主信息";
-    if (id === "recentNotes") return "近期笔记";
-    if (id === "actions") return "操作";
-    return id;
-  }
-  function colOf(id) {
-    for (var i = 0; i < list.length; i++) {
-      if (list[i].id === id) return list[i];
-    }
+/* ============ 采集字段弹窗：复用蒲公英博主采集的共享 ExportFieldSelector ============ */
+/* 不允许再维护第二套字段弹窗（旧的表格列派生弹窗已删除）。共享选择器位于独立
+   chunk（assets/<version>/assets/index-IS4kgrUy.js 的 E 导出），由下面这个加载器在
+   用户点「开始采集」后动态 import。不能改成静态 import：主 bundle 与共享 chunk 互相
+   依赖（chunk 从主 bundle 取模板 store），静态导入会在模块初始化阶段形成环；运行时
+   动态导入时主 bundle 已完成求值，绑定安全。chunk 文件名由补丁脚本
+   apply-magiorix-frontend-patches.js 解析后替换下面的占位符。 */
+var pgyKolFieldSelectorChunkUrl = "./index-IS4kgrUy.js";
+var pgyKolFieldSelectorPromise = null;
+var pgyKolFieldSelectorModule = null;
+var pgyKolFieldSelectorLoadState = "idle";
+function pgyKolLoadExportFieldSelector() {
+  if (pgyKolFieldSelectorLoadState === "ok") return Promise.resolve(pgyKolFieldSelectorModule);
+  if (pgyKolFieldSelectorLoadState === "loading") return pgyKolFieldSelectorPromise;
+  pgyKolFieldSelectorLoadState = "loading";
+  pgyKolFieldSelectorPromise = import(/* @vite-ignore */ pgyKolFieldSelectorChunkUrl).then(function (mod) {
+    pgyKolFieldSelectorModule = mod && mod.E ? mod.E : null;
+    pgyKolFieldSelectorLoadState = pgyKolFieldSelectorModule ? "ok" : "failed";
+    return pgyKolFieldSelectorModule;
+  }).catch(function () {
+    pgyKolFieldSelectorModule = null;
+    pgyKolFieldSelectorLoadState = "failed";
     return null;
-  }
-  function toggleDraft(id) {
-    if (fixedIds.indexOf(id) >= 0) return;
-    setDraftState(function (prev) {
-      var cur = (prev !== null ? prev : (p.selected || [])).slice(), i = cur.indexOf(id);
-      if (i >= 0) return cur.slice(0, i).concat(cur.slice(i + 1));
-      if (id === "price" || id === "picturePrice" || id === "videoPrice") {
-        cur = cur.filter(function (c) { return c !== "price" && c !== "picturePrice" && c !== "videoPrice"; });
-      }
-      return cur.concat([id]);
-    });
-  }
-  function clearDraft() {
-    setDraftState(hideFixed ? [] : fixedIds.slice());
-  }
-  function moveDraft(id, dir) {
-    setDraftState(function (prev) {
-      var cur = (prev !== null ? prev : (p.selected || [])).slice(), i = cur.indexOf(id);
-      if (i < 0) return cur;
-      var j = i + dir;
-      if (j < 0 || j >= cur.length) return cur;
-      var tmp = cur[i];
-      cur[i] = cur[j];
-      cur[j] = tmp;
-      return cur;
-    });
-  }
-  function apply() {
-    p.onApply(effective.slice());
-    setDraftState(null);
-    setSearch("");
-    p.onClose();
-  }
-  function cancel() {
-    setDraftState(null);
-    setSearch("");
-    p.onClose();
-  }
-  function checkBox(c) {
-    var sel = effective.indexOf(c.id) >= 0;
-    var radio = c.id === "price" || c.id === "picturePrice" || c.id === "videoPrice";
-    return o.jsxs(x, {
-      key: c.id,
-      onClick: function () { toggleDraft(c.id); },
-      sx: { display: "flex", alignItems: "center", gap: 0.5, minHeight: 28, cursor: c.fixed ? "default" : "pointer", px: 0.25 },
-      children: [
-        o.jsx(x, {
-          sx: {
-            width: 14,
-            height: 14,
-            borderRadius: radio ? 7 : 2,
-            border: "1px solid",
-            borderColor: sel ? "#ff2442" : "#c9cdd4",
-            bgcolor: sel ? "#ff2442" : "#fff",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 10,
-            color: "#fff",
-            flexShrink: 0,
-          },
-          children: radio ? (sel ? "●" : null) : (sel ? "✓" : null),
-        }),
-        o.jsx(w, { sx: { fontSize: 13, color: c.fixed ? "rgba(0,0,0,.45)" : "rgba(0,0,0,.7)" }, children: c.label || c.id }),
-      ],
-    });
-  }
-  function rightRow(id) {
-    var c = colOf(id), label = c ? c.label : fixedLabel(id);
-    var fixed = fixedIds.indexOf(id) >= 0;
-    var idx = effective.indexOf(id), first = idx === 0, last = idx === effective.length - 1;
-    return o.jsxs(x, {
-      key: id,
-      sx: { display: "flex", alignItems: "center", gap: 0.5, minHeight: 30 },
-      children: [
-        fixed
-          ? o.jsx(B, { icon: "solar:lock-bold", width: 13, height: 13, style: { color: "rgba(0,0,0,.35)", flexShrink: 0 } })
-          : o.jsx(B, { icon: "mdi:drag-vertical", width: 14, height: 14, style: { color: "rgba(0,0,0,.25)", flexShrink: 0 } }),
-        o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.7)", flexGrow: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: label }),
-        fixed
-          ? null
-          : o.jsx($, { size: "small", sx: { minWidth: 26, p: 0 }, disabled: first, onClick: function () { moveDraft(id, -1); }, children: "↑" }),
-        fixed
-          ? null
-          : o.jsx($, { size: "small", sx: { minWidth: 26, p: 0 }, disabled: last, onClick: function () { moveDraft(id, 1); }, children: "↓" }),
-        fixed
-          ? null
-          : o.jsx(te, { size: "small", sx: { p: 0.25 }, onClick: function () { toggleDraft(id); }, children: o.jsx(B, { icon: "mdi:close", width: 14, height: 14 }) }),
-      ],
-    });
-  }
-  return o.jsxs(ue, {
-    open: p.open,
-    onClose: cancel,
-    maxWidth: "md",
-    fullWidth: true,
-    children: [
-      o.jsx(be, {
-        children: o.jsxs(x, {
-          sx: { display: "flex", alignItems: "center", gap: 1 },
-          children: [
-            o.jsx(w, { variant: "subtitle1", fontWeight: 600, children: title }),
-            o.jsx(te, { size: "small", sx: { ml: "auto", p: 0.25 }, onClick: cancel, children: o.jsx(B, { icon: "mdi:close", width: 18, height: 18 }) }),
-          ],
-        }),
-      }),
-      o.jsxs(pe, {
-        sx: { display: "flex", gap: 2, minHeight: 420 },
-        children: [
-          /* 左：可添加列 */
-          o.jsxs(x, {
-            sx: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column" },
-            children: [
-              o.jsx(w, { sx: { fontSize: 13, fontWeight: 600, color: "rgba(0,0,0,.85)", mb: 0.5 }, children: "官网展示指标（" + officialCount + "）" }),
-              o.jsx(ae, { size: "small", fullWidth: true, placeholder: "请输入筛选条件", value: search, onChange: function (e) { setSearch(e.target.value); }, sx: { mb: 1 } }),
-              p.error ? o.jsx(oe, { severity: "error", sx: { mb: 1 }, children: "字段加载失败（错误码 " + (p.error.code || "unknown") + "）：" + (p.error.message || "未知错误") }) : null,
-              o.jsx(x, {
-                sx: { flex: 1, overflowY: "auto", maxHeight: 360 },
-                children: [
-                  hideFixed ? null : o.jsxs(x, {
-                    key: "fixed-columns",
-                    sx: { mb: 1 },
-                    children: [
-                      o.jsx(w, { sx: { fontSize: 12, fontWeight: 600, color: "rgba(0,0,0,.6)", mb: 0.25 }, children: "固定列" }),
-                      fixedIds.map(function (id) {
-                        var c = colOf(id);
-                        return checkBox({ id: id, label: c && c.label || fixedLabel(id), group: "固定列", fixed: true });
-                      }),
-                    ],
-                  }),
-                ].concat(groups.map(function (g) {
-                  var cols;
-                  cols = filtered.filter(function (c) { return !pgyKolIsExtensionColumn(c) && c.id !== "actions" && pgyKolColumnGroupOf(c) === g; });
-                  if (cols.length === 0) return null;
-                  return o.jsxs(x, {
-                    key: g,
-                    sx: { mb: 1 },
-                    children: [
-                      o.jsx(w, { sx: { fontSize: 12, fontWeight: 600, color: "rgba(0,0,0,.6)", mb: 0.25 }, children: g }),
-                      cols.map(checkBox),
-                    ],
-                  });
-                })).concat(extensionColumns.filter(function (c) { return search === "" || (c.label || "").indexOf(search) >= 0; }).length ? [o.jsxs(x, {
-                  key: "magiorix-extension-columns",
-                  sx: { mt: 1, pt: 0.75, borderTop: "1px solid #f0f1f3" },
-                  children: [
-                    o.jsx(w, { sx: { fontSize: 12, fontWeight: 600, color: "rgba(0,0,0,.6)", mb: 0.25 }, children: "Magiorix 扩展字段（" + extensionColumns.length + "）" }),
-                    extensionColumns.filter(function (c) { return search === "" || (c.label || "").indexOf(search) >= 0; }).map(checkBox),
-                  ],
-                })] : []),
-              }),
-            ],
-          }),
-          /* 右：已添加 */
-          o.jsxs(x, {
-            sx: { width: 264, flexShrink: 0, borderLeft: "1px solid #f0f1f3", pl: 1.5, display: "flex", flexDirection: "column" },
-            children: [
-              o.jsxs(x, {
-                sx: { display: "flex", alignItems: "center", gap: 1, mb: 0.5 },
-                children: [
-                  o.jsx(w, { sx: { fontSize: 13, fontWeight: 600, color: "rgba(0,0,0,.85)", mr: "auto" }, children: "已添加 " + effective.length + " 项" }),
-                  o.jsx($, { size: "small", variant: "text", onClick: clearDraft, children: "清空" }),
-                ],
-              }),
-              o.jsx(x, {
-                sx: { overflowY: "auto", maxHeight: 360 },
-                children: [
-                  hideFixed ? null : fixedIds.map(rightRow),
-                  hideFixed ? null : o.jsx(w, { sx: { fontSize: 11, color: "rgba(0,0,0,.35)", display: "block", py: 0.5, borderBottom: "1px solid #f0f1f3", mb: 0.5 }, children: "以上为横向固定列" }),
-                  effective.filter(function (id) { return fixedIds.indexOf(id) < 0; }).map(rightRow),
-                ],
-              }),
-            ],
-          }),
-        ],
-      }),
-      o.jsxs(_e, {
-        children: [
-          o.jsx($, { onClick: cancel, children: "取消" }),
-          o.jsx($, { variant: "contained", disabled: hideFixed && effective.length === 0, onClick: apply, children: "确定" }),
-        ],
-      }),
-    ],
   });
+  return pgyKolFieldSelectorPromise;
 }
-
+/* 包装器：只负责按 PgyTaskPanel 蒲公英博主采集的同一套参数挂载共享组件。
+   platform/schema 复用主 bundle 的完整蒲公英 blogger schema（n5(Vt,"blogger")，
+   即公开导出 r 与插件常量 Vt="pgy"，schema 为公开导出 Z/局部符号 t5），
+   绝不复制 schema，也绝不从表格 columnList/selectedColumns 推导字段。 */
+function PgyKolSharedFieldSelector(p) {
+  var cfg = n5(Vt, "blogger") || { platform: "pgy-blogger", schema: { platform: "pgy", groups: [] } };
+  var tickState = m.useState(0), bump = tickState[1];
+  m.useEffect(function () {
+    if (!p.open) return;
+    if (pgyKolFieldSelectorLoadState === "failed") {
+      pgyKolFieldSelectorLoadState = "idle";
+      pgyKolFieldSelectorPromise = null;
+      pgyKolFieldSelectorModule = null;
+    }
+    var alive = true;
+    pgyKolLoadExportFieldSelector().then(function () {
+      if (alive) bump(function (n) { return n + 1; });
+    });
+    return function () { alive = false; };
+  }, [p.open]);
+  if (pgyKolFieldSelectorLoadState === "failed") {
+    return o.jsx(ue, { open: p.open, onClose: p.onClose, maxWidth: "sm", fullWidth: true, children: [
+      o.jsx(be, { children: "选择采集字段" }),
+      o.jsxs(pe, { children: [
+        o.jsx(oe, { severity: "error", children: "字段选择器加载失败，请关闭后重试。" }),
+        o.jsxs(_e, { children: [o.jsx($, { onClick: p.onClose, children: "关闭" })] }),
+      ] }),
+    ] });
+  }
+  if (pgyKolFieldSelectorLoadState !== "ok" || !pgyKolFieldSelectorModule) return null;
+  return o.jsx(pgyKolFieldSelectorModule, { open: p.open, platform: cfg.platform, schema: cfg.schema, title: "选择采集字段", warningText: "勾选字段过多会显著增加采集时间，且可能触发平台风控。建议按需勾选。", onClose: p.onClose, onSubmit: p.onSubmit });
+}
 
 /* ============ Phase 5.2：找博主页面 ============ */
 function PgyKolSearchPage() {
@@ -1648,38 +1412,27 @@ function PgyKolSearchPage() {
   var er = m.useState(null), error = er[0], setError = er[1];
   var cf = m.useState({}), configs = cf[0], setConfigs = cf[1];
   var fs0 = m.useState(pgyKolDefaultFilter()), filter = fs0[0], setFilterState = fs0[1];
-  var pv = m.useState(""), preview = pv[0], setPreview = pv[1];
   var rs = m.useState(null), result = rs[0], setResult = rs[1];
   var cl = m.useState(null), columnList = cl[0], setColumnList = cl[1];
   var ce2 = m.useState(null), columnError = ce2[0], setColumnError = ce2[1];
   var sc2 = m.useState([]), selectedColumns = sc2[0], setSelectedColumns = sc2[1];
-  var colOpen = m.useState(false), columnOpen = colOpen[0], setColumnOpen = colOpen[1];
   var iop = m.useState(false), industryPopupOpen = iop[0], setIndustryPopupOpen = iop[1];
   var catOpen = m.useState(false), categoryOpen = catOpen[0], setCategoryOpen = catOpen[1];
   var catInd = m.useState("汽车"), catIndustry = catInd[0], setCatIndustry = catInd[1];
   var catAnchorState = m.useState(null), noteAnchor = catAnchorState[0], setNoteAnchor = catAnchorState[1];
   var coOpen = m.useState(false), collectOpen = coOpen[0], setCollectOpen = coOpen[1];
-  var coCols = m.useState([]), collectColumns = coCols[0], setCollectColumns = coCols[1];
   var brandPopup = m.useState(null), brandPopupMode = brandPopup[0], setBrandPopupMode = brandPopup[1];
   var showAllCat = m.useState(true), showAllCategory = showAllCat[0], setShowAllCategory = showAllCat[1];
   var restored = m.useState(false), restoredNotice = restored[0], setRestoredNotice = restored[1];
   var hist = m.useState(pgyKolNickHistory()), history = hist[0], setHistory = hist[1];
   var mopen = m.useState(true), matrixOpen = mopen[0], setMatrixOpen = mopen[1];
-  var adv = m.useState(false), advancedOpen = adv[0], setAdvancedOpen = adv[1]; /* 高级信息默认收起 */
   var popst = m.useState({ id: null, anchor: null }), pop = popst[0], setPop = popst[1];
   var khint = m.useState(false), keywordHint = khint[0], setKeywordHint = khint[1];
-  var tid2 = m.useState(null), currentTaskId = tid2[0], setCurrentTaskId = tid2[1];
-  var ct2 = m.useState(null), currentTask = ct2[0], setCurrentTask = ct2[1];
-  var tl2 = m.useState([]), taskList = tl2[0], setTaskList = tl2[1];
-  var tle = m.useState(null), taskListError = tle[0], setTaskListError = tle[1];
-  var tl3 = m.useState(false), taskLoading = tl3[0], setTaskLoading = tl3[1];
   var bzy = m.useState(false), batchBusy = bzy[0], setBatchBusy = bzy[1];
   var ber = m.useState(null), batchError = ber[0], setBatchError = ber[1];
-  var bnt = m.useState(null), batchNotice = bnt[0], setBatchNotice = bnt[1];
   var snt = m.useState(null), searchNotice = snt[0], setSearchNotice = snt[1];
   var cvw = m.useState({ appliedFilter: null, appliedRequestKey: null, isDirty: true }), coordinatorView = cvw[0], setCoordinatorView = cvw[1];
   var coordinatorRef = m.useRef(null);
-  var taskDetailRef = m.useRef(null);
   if (!coordinatorRef.current) {
     coordinatorRef.current = pgyKolCreateSearchCoordinator({
       bridge: function () { return window.bridge && window.bridge.pgyKol; },
@@ -1840,46 +1593,6 @@ function PgyKolSearchPage() {
     });
   }, []);
 
-  m.useEffect(function () { refreshTaskList(); }, []);
-  m.useEffect(function () {
-    var bridge = window.bridge && window.bridge.pgyKol;
-    if (!bridge || !bridge.onBatchEvent) return;
-    var dispose = bridge.onBatchEvent(function (ev) {
-      if (currentTaskId) loadTask(currentTaskId);
-      refreshTaskList();
-    });
-    return function () { if (dispose && typeof dispose === "function") dispose(); };
-  }, [currentTaskId]);
-  m.useEffect(function () {
-    if (!currentTaskId || !currentTask || currentTask.taskId !== currentTaskId) return;
-    var frame = window.requestAnimationFrame ? window.requestAnimationFrame(function () {
-      var node = taskDetailRef.current;
-      if (node && typeof node.scrollIntoView === "function") node.scrollIntoView({ behavior: "smooth", block: "start" });
-    }) : null;
-    return function () { if (frame !== null && window.cancelAnimationFrame) window.cancelAnimationFrame(frame); };
-  }, [currentTaskId, currentTask && currentTask.taskId]);
-
-  /* Payload 预览（未实证字段仅预览，真实搜索/采集被 IPC 门控）。 */
-  m.useEffect(function () {
-    var bridge = window.bridge && window.bridge.pgyKol;
-    if (!bridge) {
-      setPreview("");
-      return;
-    }
-    var timer = window.setTimeout(function () {
-      bridge.previewPayload(pgyKolToFilterState(filter)).then(function (res) {
-        if (res && res.ok) {
-          setPreview(typeof res.data === "string" ? res.data : JSON.stringify(res.data, null, 2));
-        } else {
-          setPreview("预览不可用：" + ((res && res.error && res.error.message) || "未知错误"));
-        }
-      }).catch(function (e) {
-        setPreview("预览不可用：" + ((e && e.message) || String(e)));
-      });
-    }, 300);
-    return function () { window.clearTimeout(timer); };
-  }, [filter]);
-
   /* 筛选与展示指标持久化。 */
   m.useEffect(function () {
     var timer = window.setTimeout(function () {
@@ -1999,54 +1712,18 @@ function PgyKolSearchPage() {
       return res;
     });
   };
-
-  var loadTask = function (tid) {
-    var bridge = window.bridge && window.bridge.pgyKol;
-    if (!bridge || !bridge.batchGet || !tid) return;
-    setTaskLoading(true);
-    bridge.batchGet({ taskId: tid }).then(function (res) {
-      setTaskLoading(false);
-      if (res && res.ok) {
-        setCurrentTask(res.data);
-        setBatchError(null);
-      } else {
-        setBatchError(res && res.error || { code: "unknown", message: "任务详情加载失败" });
-      }
-    }).catch(function (e) {
-      setTaskLoading(false);
-      setBatchError({ code: e && e.code || "unknown", message: e && e.message || String(e) });
-    });
-  };
-  var refreshTaskList = function () {
-    var bridge = window.bridge && window.bridge.pgyKol;
-    if (!bridge || !bridge.batchList) return;
-    bridge.batchList().then(function (res) {
-      if (res && res.ok && Array.isArray(res.data)) {
-        setTaskList(res.data);
-        setTaskListError(null);
-      } else {
-        setTaskListError(res && res.error || { code: "unknown", message: "任务历史加载失败" });
-      }
-    }).catch(function (e) {
-      setTaskListError({ code: e && e.code || "unknown", message: e && e.message || String(e) });
-    });
-  };
   var startBatch = function () {
     if (batchBusy) return;
-    var exportColumns = pgyKolExportColumnIds(columnList, selectedColumns);
-    if (exportColumns.length === 0) {
-      setBatchError({ code: "invalid-input", message: "请至少选择一个可导出的展示字段" });
-      return;
-    }
     if (!coordinatorView.appliedFilter || coordinatorView.isDirty) {
       setBatchError({ code: "filter-not-applied", message: "请先确定筛选并查询" });
       return;
     }
-    setCollectColumns(exportColumns);
     setCollectOpen(true);
   };
   var startBatchWithColumns = function (ids) {
     if (batchBusy || !ids || !ids.length) return;
+    // 字段集合原样提交：主进程两阶段编排会在详情阶段用同一集合调用
+    // 现有 pgy/blogger 详情采集器，勾选哪些字段就采集并导出哪些字段。
     setBatchBusy(true);
     setBatchError(null);
     searchCoordinator.startBatch(ids).then(function (res) {
@@ -2054,10 +1731,9 @@ function PgyKolSearchPage() {
       if (res && res.ok) {
         var tid = res.data && res.data.taskId;
         if (tid) {
-          setCurrentTaskId(tid);
-          loadTask(tid);
+          // 唯一用户任务：打开/聚焦采集助手当前任务视图（同一任务 ID）。
+          window.dispatchEvent(new CustomEvent("magiorix:ops-assistant:show-task", { detail: { taskId: tid } }));
         }
-        refreshTaskList();
       } else {
         setBatchError(res && res.error || { code: "unknown", message: "采集启动失败" });
       }
@@ -2066,82 +1742,7 @@ function PgyKolSearchPage() {
       setBatchError({ code: e && e.code || "unknown", message: e && e.message || String(e) });
     });
   };
-  var pauseBatch = function () {
-    var bridge = window.bridge && window.bridge.pgyKol, tid = currentTaskId;
-    if (!bridge || !tid) return;
-    setBatchBusy(true);
-    setBatchError(null);
-    bridge.batchPause({ taskId: tid }).then(function (res) {
-      setBatchBusy(false);
-      if (res && res.ok) {
-        loadTask(tid);
-        refreshTaskList();
-      } else {
-        setBatchError(res && res.error || { code: "unknown", message: "任务操作失败" });
-      }
-    }).catch(function (e) {
-      setBatchBusy(false);
-      setBatchError({ code: e && e.code || "unknown", message: e && e.message || String(e) });
-    });
-  };
-  var resumeBatch = function (budgets) {
-    var bridge = window.bridge && window.bridge.pgyKol, tid = currentTaskId;
-    if (!bridge || !tid) return;
-    setBatchBusy(true);
-    setBatchError(null);
-    bridge.batchResume(budgets ? { taskId: tid, budgets: budgets } : { taskId: tid }).then(function (res) {
-      setBatchBusy(false);
-      if (res && res.ok) {
-        loadTask(tid);
-        refreshTaskList();
-      } else {
-        setBatchError(res && res.error || { code: "unknown", message: "任务操作失败" });
-      }
-    }).catch(function (e) {
-      setBatchBusy(false);
-      setBatchError({ code: e && e.code || "unknown", message: e && e.message || String(e) });
-    });
-  };
-  var cancelBatch = function () {
-    var bridge = window.bridge && window.bridge.pgyKol, tid = currentTaskId;
-    if (!bridge || !tid) return;
-    setBatchBusy(true);
-    setBatchError(null);
-    bridge.batchCancel({ taskId: tid }).then(function (res) {
-      setBatchBusy(false);
-      if (res && res.ok) {
-        loadTask(tid);
-        refreshTaskList();
-      } else {
-        setBatchError(res && res.error || { code: "unknown", message: "任务操作失败" });
-      }
-    }).catch(function (e) {
-      setBatchBusy(false);
-      setBatchError({ code: e && e.code || "unknown", message: e && e.message || String(e) });
-    });
-  };
-  var exportTask = function (tid) {
-    var bridge = window.bridge && window.bridge.pgyKol;
-    if (!bridge || !bridge.batchExport || !tid) return;
-    setBatchBusy(true);
-    setBatchError(null);
-    setBatchNotice(null);
-    bridge.batchExport({ taskId: tid }).then(function (res) {
-      setBatchBusy(false);
-      if (res && res.ok) {
-        setBatchNotice("导出已提交：" + tid + "（完整数据以导出文件为准）");
-      } else {
-        setBatchError(res && res.error || { code: "unknown", message: "导出失败" });
-      }
-    }).catch(function (e) {
-      setBatchBusy(false);
-      setBatchError({ code: e && e.code || "unknown", message: e && e.message || String(e) });
-    });
-  };
-  var selectTask = function (tid) {
-    setCurrentTaskId(tid);
-    loadTask(tid);
-  };
+
   var applyBrands = function (ids) {
     if (brandPopupMode === "recent") {
       update({ tradeReportBrandIdSet: ids, audienceGroup: null });
@@ -2211,7 +1812,6 @@ function PgyKolSearchPage() {
   var audGroupCfg = configs.audienceGroup || null;
   var actCfg = configs.activities || null;
   var autoLeaves = [];
-  var batchRunning = currentTask && currentTask.status === "running";
   var hasBrands = filter.brands && filter.brands.length > 0;
   var catOptions = showAllCategory ? pgyKolCategoryFull : pgyKolCategoryCommon;
   filter.automotive.forEach(function (n) { pgyKolFlattenLeaves(n, autoLeaves); });
@@ -2293,12 +1893,6 @@ function PgyKolSearchPage() {
   var industryCount = filter.firstIndustry ? (filter.secondIndustry ? 2 : 1) : 0;
   var noteCats = configs.noteCategory && configs.noteCategory.nodes && configs.noteCategory.nodes.length ? configs.noteCategory.nodes : pgyKolNoteCatFallback();
   var actList = actCfg && actCfg.nodes && actCfg.nodes.length ? actCfg.nodes : actCfg && actCfg.options && actCfg.options.length ? actCfg.options : [];
-  var exportableColumns = columnList ? columnList.filter(function (c) {
-    if (pgyKolFixedColumnIds().indexOf(c.id) >= 0) return false;
-    if (c.evidence === "unavailable") return false;
-    if (c.responsePath && String(c.responsePath).indexOf("computed:") === 0) return false;
-    return true;
-  }) : [];
   var leavesOf = function (nodes) {
     var out = [];
     for (var i = 0; i < nodes.length; i++) {
@@ -2626,7 +2220,6 @@ function PgyKolSearchPage() {
               children: [
                 o.jsx(w, { variant: "h6", children: "共 " + (result.total != null ? result.total : "?") + " 位博主" }),
                 o.jsx(f1, { size: "small", label: "当前展示 " + (result.kols ? result.kols.length : 0) + " 条" }),
-                o.jsx(f1, { size: "small", variant: "outlined", label: "预览 " + (result.kols ? result.kols.length : 0) + " 条 / 已持久化 " + pgyKolCount(currentTask, "raw") + " 条（完整数据以导出为准）" }),
                 result.capSignal && result.capSignal.capped ? o.jsx(f1, { size: "small", color: "warning", label: "结果可能超过 5000" }) : null,
                 result.quarantinedFields && result.quarantinedFields.length > 0 ? o.jsx(f1, { size: "small", variant: "outlined", label: "未知字段 " + result.quarantinedFields.length + " 个已隔离" }) : null,
               ],
@@ -2636,56 +2229,17 @@ function PgyKolSearchPage() {
           ],
         }) : null,
 
-        /* 批量采集与任务历史属于结果工具：放在官网结果工具栏和表格之后。 */
         o.jsxs(x, {
           sx: { display: "flex", alignItems: "center", gap: 1.5, mt: result ? 2 : 1, mb: 1, flexWrap: "wrap" },
           children: [
-            o.jsx($, { variant: "outlined", size: "medium", onClick: function () { setColumnOpen(true); }, children: "选择展示指标" }),
-            o.jsx($, { variant: "contained", color: "secondary", size: "medium", onClick: startBatch, disabled: batchBusy || batchRunning, startIcon: batchBusy ? o.jsx(de, { size: 18, color: "inherit" }) : null, children: batchBusy ? "启动中..." : "开始采集" }),
+            o.jsx($, { variant: "contained", color: "secondary", size: "medium", onClick: startBatch, disabled: batchBusy, startIcon: batchBusy ? o.jsx(de, { size: 18, color: "inherit" }) : null, children: batchBusy ? "启动中..." : "开始采集" }),
             status === "empty" ? o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)" }, children: "没有匹配的博主" }) : null,
           ],
         }),
         batchError ? o.jsx(oe, { severity: "error", sx: { mt: 1 }, children: pgyKolBatchErrorMessage(batchError) }) : null,
-        batchNotice ? o.jsx(oe, { severity: "success", sx: { mt: 1 }, children: batchNotice }) : null,
-        o.jsx(x, { ref: taskDetailRef, children: o.jsx(PgyKolBatchPanel, { task: currentTask, onPause: pauseBatch, onResume: resumeBatch, onResumeWithBudgets: function (budgets) { resumeBatch(budgets); }, onCancel: cancelBatch, onExport: function () { exportTask(currentTaskId); } }) }),
-        taskLoading ? o.jsx(Q1, { sx: { mt: 1 } }) : null,
-        o.jsx(PgyKolTaskHistory, { tasks: taskList, error: taskListError, onSelect: selectTask, onExport: exportTask }),
-
-        /* 高级信息不占据官网主流程；默认折叠，仍保留原始 Payload 供排查。 */
-        o.jsxs(xe, {
-          variant: "outlined",
-          sx: { mt: 2 },
-          children: [
-            o.jsxs(We, {
-              sx: { pb: advancedOpen ? 1 : "12px!important", "&:last-child": { pb: advancedOpen ? 1 : "12px!important" } },
-              children: [
-                o.jsxs(x, {
-                  component: "button",
-                  type: "button",
-                  onClick: function () { setAdvancedOpen(!advancedOpen); },
-                  sx: { display: "flex", alignItems: "center", width: "100%", p: 0, border: 0, bgcolor: "transparent", cursor: "pointer", color: "rgba(0,0,0,.7)", textAlign: "left" },
-                  children: [
-                    o.jsx(w, { variant: "subtitle2", fontWeight: 600, children: "高级信息" }),
-                    o.jsx(w, { sx: { ml: 0.75, fontSize: 12, color: "rgba(0,0,0,.45)" }, children: "待确认条件的本地 Payload 预览" }),
-                    o.jsx(B, { icon: advancedOpen ? "solar:alt-arrow-up-bold-duotone" : "solar:alt-arrow-down-bold-duotone", width: 14, height: 14, style: { marginLeft: "auto", color: "rgba(0,0,0,.45)" } }),
-                  ],
-                }),
-                advancedOpen ? o.jsxs(x, { children: [
-                  o.jsx(w, { sx: { mt: 1, fontSize: 12, color: "rgba(0,0,0,.45)" }, children: "这是待确认条件的本地 Payload 预览，不会请求蒲公英接口。" }),
-                  o.jsx(x, {
-                    component: "pre",
-                    sx: { mt: 0.5, mb: 0, maxHeight: 160, overflow: "auto", p: 1, bgcolor: "#fafafa", borderRadius: 0.5, fontSize: 11, fontFamily: "monospace", whiteSpace: "pre-wrap", wordBreak: "break-all" },
-                    children: preview || "（未配置筛选条件）",
-                  }),
-                ] }) : null,
-              ],
-            }),
-          ],
-        }),
 
         /* 弹窗 */
-        o.jsx(PgyKolColumnDialog, { open: columnOpen, onClose: function () { setColumnOpen(false); }, columns: columnList, error: columnError, selected: selectedColumns, onApply: function (ids) { setSelectedColumns(ids); pgyKolWriteJson("magiorix-pgy-kol-columns", ids); } }),
-        o.jsx(PgyKolCollectDialog, { open: collectOpen, onClose: function () { setCollectOpen(false); }, columns: exportableColumns, selected: collectColumns, onApply: function (ids) { setCollectOpen(false); startBatchWithColumns(ids); } }),
+        o.jsx(PgyKolSharedFieldSelector, { open: collectOpen, onClose: function () { setCollectOpen(false); }, onSubmit: function (ids) { setCollectOpen(false); startBatchWithColumns(ids); } }),
         o.jsx(PgyKolBrandPopup, { open: brandPopupMode != null, onClose: function () { setBrandPopupMode(null); }, mode: brandPopupMode, current: brandPopupMode === "recent" ? filter.tradeReportBrandIdSet : filter.brands, onApply: applyBrands }),
         o.jsx(PgyKolNoteCategoryPopup, { open: categoryOpen, anchor: noteAnchor, onClose: function () { setCategoryOpen(false); }, nodes: noteCats, industry: catIndustry, onSelectIndustry: setCatIndustry, selected: filter.noteCategory, onToggle: function (next) { update({ noteCategory: next }); } }),
         o.jsx(PgyKolIndustryPopup, { open: industryPopupOpen, onClose: function () { setIndustryPopupOpen(false); }, cfg: configs.industry, first: filter.firstIndustry, second: filter.secondIndustry, onFirst: function (v) { update({ firstIndustry: v }); }, onSecond: function (v) { update({ secondIndustry: v }); } }),
