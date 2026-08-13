@@ -10,6 +10,13 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(assetVersion)) {
 }
 const assetsRoot = path.join(projectRoot, "assets", assetVersion);
 const assetsDir = path.join(assetsRoot, "assets");
+const assetVersionFile = path.join(assetsRoot, "version.json");
+const sourceAssetVersion = fs.existsSync(assetVersionFile)
+  ? String(JSON.parse(fs.readFileSync(assetVersionFile, "utf8")).version || "").trim()
+  : "";
+if (sourceAssetVersion && !/^\d+\.\d+\.\d+$/.test(sourceAssetVersion)) {
+  throw new Error(`Invalid source asset version in ${assetVersionFile}: ${sourceAssetVersion}`);
+}
 const legacyChineseName = ["易美", "数据抓取"].join("");
 const legacyExeName = ["PYG", "data"].join("");
 const legacyVersion = ["1.0", "4"].join(".");
@@ -985,6 +992,9 @@ for (const entry of fs.readdirSync(assetsDir)) {
   replaceAllIfExists(filePath, legacyPublisher, "magiorix");
   replaceAllIfExists(filePath, legacyExeName, "magiorix");
   replaceAllIfExists(filePath, legacyVersion, assetVersion);
+  if (sourceAssetVersion && sourceAssetVersion !== assetVersion) {
+    replaceAllIfExists(filePath, sourceAssetVersion, assetVersion);
+  }
   replaceAllIfExists(filePath, "薯苗", "积分");
   replaceAllIfExists(filePath, "树苗", "积分");
   if (filePath !== pointsRechargeBundle) {
@@ -1022,7 +1032,7 @@ fs.writeFileSync(
 );
 
 // ===========================================================================
-// pgy-kol「找博主」phase-2+5.2：原生筛选 MVP（开发开关默认关闭）。
+// pgy-kol「找博主」phase-2+5.2：原生筛选与采集功能。
 // 页面源码单一权威来源：scripts/pgy-kol-phase52-page-source.js（Phase 5.2
 // 官网高保真矩阵复刻：紧凑触发器 + Popover、搜笔记/搜昵称、搜索历史、
 // 地域三级级联、树形弹层、范围选择、已选条件、一键清空/收起筛选等）。
@@ -1032,8 +1042,7 @@ fs.writeFileSync(
 //    同一 G 加载器，默认导出 PgyKolSearchPage）。
 // 2. 菜单 store 末尾追加 {name:"找博主",path:"/pgy-kol-search",...}。路由生成 ci/ii 与
 //    菜单合并均带幂等守卫。
-// 开关：localStorage.getItem("magiorix-pgy-kol-enabled")==="1"；关闭时菜单不
-// 出现、页面不可达（开发开关，默认关闭）。
+// 菜单默认显示，卸载或清理本机数据后仍可直接进入。
 const pgyKolSearchPageSource = fs.readFileSync(
   path.join(projectRoot, "scripts", "pgy-kol-phase52-page-source.js"),
   "utf8",

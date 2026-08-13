@@ -1,6 +1,6 @@
 {
   "name": "red-magic-api",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "Minimal Express + SQLite backend for magiorix.red-magic.cn compatibility.",
   "main": "server.js",
   "scripts": {

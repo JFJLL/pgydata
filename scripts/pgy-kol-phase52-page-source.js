@@ -1,4 +1,4 @@
-function pgyKolDevEnabled(){try{return window.localStorage.getItem("magiorix-pgy-kol-enabled")==="1"}catch(e){return!1}}
+function pgyKolDevEnabled(){return true}
 
 function pgyKolWithLocalMenu(e){if(!pgyKolDevEnabled()||!Array.isArray(e))return e;for(var i=0;i<e.length;i++){if(e[i]&&e[i].path==="/pgy-kol-search")return e}return e.concat([{name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"solar:magnifer-bold-duotone"}])}
 
@@ -1730,10 +1730,6 @@ function PgyKolSearchPage() {
     update({ excludeLowActive: true, fansNumUp: true, excludedTradeReportBrand: !!hasBrands, excludedTradeInviteReportBrand: !!hasBrands });
   };
 
-  if (!pgyKolDevEnabled()) {
-    return o.jsx(x, { sx: { p: 4 }, children: o.jsx(oe, { severity: "warning", children: "功能未开启" }) });
-  }
-
   var bridgeOk = !!(window.bridge && window.bridge.pgyKol);
   var areasCfg = configs.areas && configs.areas.nodes && configs.areas.nodes.length
     ? configs.areas
@@ -1869,7 +1865,7 @@ function PgyKolSearchPage() {
               children: o.jsx(B, { icon: "solar:magnifer-bold-duotone", width: 18, height: 18 }),
             }),
             o.jsx(w, { variant: "h4", fontWeight: "bold", children: "找博主" }),
-            o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)", ml: 1 }, children: "蒲公英博主原生筛选。开发开关开启后显示菜单与路由，关闭时页面不可达。" }),
+            o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)", ml: 1 }, children: "蒲公英博主原生筛选与采集。" }),
           ],
         }),
         !bridgeOk ? o.jsx(oe, { severity: "error", sx: { mb: 1.5 }, children: "当前环境不支持蒲公英找博主（bridge 缺失）" }) : null,
