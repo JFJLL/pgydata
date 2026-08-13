@@ -172,6 +172,11 @@ assert.doesNotMatch(
 assert.match(runtimePatch, /daily-note-performance/, "runtime patch must route the daily note chart renderer");
 assert.match(runtimePatch, /replaceSection/, "runtime patch must migrate an existing daily note renderer section");
 assert.match(runtimePatch, /pgy_daily_note_svg\.js/, "runtime patch must load the maintained daily note SVG source");
+assert.match(runtimePatch, /recentNoteInteractionFluctuationChart/, "runtime patch must generate the recent note fluctuation chart");
+assert.match(runtimePatch, /recent-note-interaction-fluctuation/, "runtime patch must route the recent note fluctuation renderer");
+assert.match(runtimePatch, /pgy_recent_note_fluctuation_svg\.js/, "runtime patch must load the maintained recent note fluctuation SVG source");
+assert.match(runtimePatch, /def save_recent_note_fluctuation\(chart\):/, "runtime patch must embed the recent note fluctuation Python renderer");
+assert.match(runtimePatch, /recentNoteInteractionFluctuationChart",\n    "bloggerOverviewChart"/, "recent note fluctuation must ride the daily30 endpoint (no new request)");
 // Phase 4 可复现构建（fresh reviewer H1/H2）：runtime 补丁必须自带
 // redactLocalPathText import 与 pgy-kol 批量主进程/preload 接线步骤，
 // 干净重建不得产生未定义引用或静默丢失批量功能。
@@ -188,6 +193,9 @@ assert.match(dailyNoteSvgSource, /width="808" height="378"/, "daily note SVG mus
 assert.match(dailyNoteSvgSource, /pgyDailyNoteEllipsize/, "daily note SVG must bound long category text");
 assert.match(dailyNoteSvgSource, /pgyNoteTypeLabel/, "daily note SVG must render its selected note type");
 assert.match(bloggerOverviewSvgSource, /width="2048" height="1066"/, "blogger overview SVG must match the approved crop");
+const recentNoteSvgSource = readFileSync("tools/pgy_recent_note_fluctuation_svg.js", "utf8");
+assert.match(recentNoteSvgSource, /width="' \+ width \+ '" height="' \+ height \+ '"/, "recent note fluctuation SVG must use the approved 783x420 canvas");
+assert.match(recentNoteSvgSource, /interactionMedian/, "recent note fluctuation SVG must render the interaction median");
 assert.match(bloggerOverviewSvgSource, /function pgyBuildBloggerOverviewData/, "blogger overview must normalize raw PGY fields");
 assert.match(bloggerOverviewSvgSource, /interactionPeerText/, "blogger overview must preserve peer percentile metrics");
 assert.match(bloggerOverviewSvgSource, /kolAdvantage/, "blogger overview must read the web kolAdvantage field");
@@ -246,13 +254,13 @@ assert.match(
 );
 assert.match(
   mainBundle,
-  /dailyNotePerformanceChart",headerName:"日常笔记表现图（图文\+视频）",width:320\},\{field:"dailyNotePicturePerformanceChart",headerName:"日常笔记表现图（图文）",width:320\},\{field:"dailyNoteVideoPerformanceChart",headerName:"日常笔记表现图（视频）",width:320\},\{field:"bloggerOverviewChart",headerName:"博主数据概览图"/,
-  "typed daily note chart columns must precede the blogger overview chart",
+  /dailyNotePerformanceChart",headerName:"日常笔记表现图（图文\+视频）",width:320\},\{field:"dailyNotePicturePerformanceChart",headerName:"日常笔记表现图（图文）",width:320\},\{field:"dailyNoteVideoPerformanceChart",headerName:"日常笔记表现图（视频）",width:320\},\{field:"recentNoteInteractionFluctuationChart",headerName:"近期笔记波动图（互动量）",width:320\},\{field:"bloggerOverviewChart",headerName:"博主数据概览图"/,
+  "typed daily note chart columns and recent note fluctuation must precede the blogger overview chart",
 );
 assert.match(
   mainBundle,
-  /key:"dailyNoteVideoPerformanceChart",label:"日常笔记表现图（视频）"\},\{key:"bloggerOverviewChart",label:"博主数据概览图"\}\]\},\{groupKey:"daily-90"/,
-  "blogger overview selector must immediately follow the three daily note chart selectors",
+  /key:"dailyNoteVideoPerformanceChart",label:"日常笔记表现图（视频）"\},\{key:"recentNoteInteractionFluctuationChart",label:"近期笔记波动图（互动量）"\},\{key:"bloggerOverviewChart",label:"博主数据概览图"\}\]\},\{groupKey:"daily-90"/,
+  "recent note fluctuation selector must sit between the daily note charts and the blogger overview selector",
 );
 assert.match(
   mainBundle,

@@ -292,6 +292,7 @@ export function createPgyKolBatchRunner({
   retry = { maxAttempts: 2, backoffMs: 300 },
   now = () => Date.now(),
   onEvent,
+  onPageCommitted,
   sessionProvider,
 } = {}) {
   if (!store || typeof store.getTask !== "function") {
@@ -323,6 +324,10 @@ export function createPgyKolBatchRunner({
   const controlFlags = new Map(); // taskId → { pause, cancel }
   const sequences = new Map(); // `${taskId}:${leafId}` → [{pageNum, newUidCount}]
   const emitEvent = typeof onEvent === "function" ? onEvent : () => {};
+  const emitPageCommitted =
+    typeof onPageCommitted === "function"
+      ? onPageCommitted
+      : () => {};
 
   function getControl(taskId) {
     let ctrl = controlFlags.get(taskId);
@@ -684,6 +689,9 @@ export function createPgyKolBatchRunner({
       state.counts.unique += uniqueCount;
       state.counts.dup += dupCount;
       state.counts.missingUid += missingUidCount;
+
+      // 边发现边采集：每页提交后立即通知编排层追加新 UID 到详情队列。
+      emitPageCommitted(taskId, { pageNum, rows, newUidCount, uniqueCount: state.counts.unique });
 
       emitEvent({
         taskId,

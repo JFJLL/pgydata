@@ -49,8 +49,8 @@
     },
     {
       "path": "assets/index-B09sHfUO.js",
-      "size": 684281,
-      "sha256": "32b2835bd8a08a6167a2b4fd79ffa9c58ca217ea976aab3a4ab9edf99ef347fa"
+      "size": 684591,
+      "sha256": "37c42da24e72f0a6949715d1df5a4b0f94f5dedf7962f2eae357fb6c1aaee23f"
     },
     {
       "path": "assets/index-b5Geql4X.js",
@@ -264,8 +264,8 @@
     },
     {
       "path": "assets/url-validator-00wRYD83.js",
-      "size": 10629,
-      "sha256": "12d758dec7602e585b80c082a802679ff3b15be77f15ab2f6fb6a2752c2adfea"
+      "size": 10669,
+      "sha256": "40049a9818c0270dc6c4091c1cb80345d15a43bc8ebe0d0f7de6b7322a83d5af"
     },
     {
       "path": "assets/use-enabled-platforms-BQtycakb.js",
@@ -299,8 +299,8 @@
     },
     {
       "path": "magiorix-ops-assistant.js",
-      "size": 43012,
-      "sha256": "0e959351769863dfeaf802592d9cfc560db46a8c638938012b52e0f515059eab"
+      "size": 43528,
+      "sha256": "20e0c5008cf61da0d599aaff153c66a0669c4512e400cc19aa0cb5d5318779bb"
     }
   ]
 }

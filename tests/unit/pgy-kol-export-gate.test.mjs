@@ -19,6 +19,7 @@ function searchBatchTask(overrides = {}) {
     taskType: "blogger",
     inputType: "search-batch",
     status: "running",
+    discoveryClosed: true,
     total: 205,
     successCount: 1,
     failedCount: 0,
@@ -67,19 +68,24 @@ test("search-batch 导出状态矩阵：preparing/running/paused/interrupted/aut
 
 test("search-batch 完成且计数收口才允许导出；total=0 永不导出", () => {
   assert.equal(
-    isCollectionTaskExportReady(searchBatchTask({ status: "completed", successCount: 200, failedCount: 5 })),
+    isCollectionTaskExportReady(searchBatchTask({ status: "completed", successCount: 200, failedCount: 5, discoveryClosed: true })),
     true,
     "completed 且 200+5=205、无 pending charge 必须允许",
   );
   assert.equal(
-    isCollectionTaskExportReady(searchBatchTask({ status: "completed", successCount: 205, failedCount: 0 })),
+    isCollectionTaskExportReady(searchBatchTask({ status: "completed", successCount: 205, failedCount: 0, discoveryClosed: true })),
     true,
     "全部成功同样允许",
   );
   assert.equal(
-    isCollectionTaskExportReady(searchBatchTask({ status: "completed", total: 0, successCount: 0, failedCount: 0 })),
+    isCollectionTaskExportReady(searchBatchTask({ status: "completed", total: 0, successCount: 0, failedCount: 0, discoveryClosed: true })),
     false,
     "total=0（无博主）不允许导出",
+  );
+  assert.equal(
+    isCollectionTaskExportReady(searchBatchTask({ status: "completed", successCount: 205, failedCount: 0, discoveryClosed: undefined })),
+    false,
+    "completed 且计数收口但发现未收口（discoveryClosed 缺失）必须拒绝",
   );
 });
 

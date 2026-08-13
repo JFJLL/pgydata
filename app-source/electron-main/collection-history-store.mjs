@@ -42,7 +42,8 @@ export function sanitizeExcelValue(value) {
 /**
  * 导出完成门闸：search-batch 来源（找博主筛选）的任务只有在 status=completed
  * 且计数收口（successCount + failedCount === total，无 pending charge，total>0）
- * 时才允许导出。其他来源（手动输入/xlsx/legacy）保持原有行为（允许导出已采集内容）。
+ * 且发现阶段已收口（discoveryClosed，边发现边采集后不再有追加）时才允许导出。
+ * 其他来源（手动输入/xlsx/legacy）保持原有行为（允许导出已采集内容）。
  *
  * @param {object} task getTask 返回的任务记录
  * @returns {boolean}
@@ -53,6 +54,7 @@ export function isCollectionTaskExportReady(task) {
   const total = Number(task.total) || 0;
   if (total <= 0) return false;
   if (task.status !== "completed") return false;
+  if (task.discoveryClosed !== true) return false;
   const success = Number(task.successCount) || 0;
   const failed = Number(task.failedCount) || 0;
   const pending = Number(task.pendingChargeCount) || 0;
@@ -411,6 +413,79 @@ export class CollectionHistoryStore {
       this.eventCache.delete(safeId);
       return clone({ ...metadata, ...input });
     });
+  }
+
+  /**
+   * 动态追加 search-batch 详情任务的目标列表（边发现边采集）：
+   * 追加前先去重（同一 URL 只入队一次），更新 input.urls/totalRows 与
+   * metadata.total；任务必须处于 running（preparing/采集中）或 interrupted
+   * （重启恢复中），终态任务拒绝追加。
+   */
+  async appendTaskUrls(taskId, urls) {
+    const safeId = assertSafeTaskId(taskId);
+    return this.withLock(safeId, async () => {
+      const taskPaths = this.paths(safeId);
+      const metadata = await readJson(taskPaths.metadata, null);
+      const input = await readJson(taskPaths.input, null);
+      if (!metadata || !input) throw new Error("任务不存在");
+      if (input.inputType !== "search-batch") {
+        throw new Error("只有 search-batch 任务允许动态追加目标列表");
+      }
+      if (metadata.status !== "running" && metadata.status !== "interrupted") {
+        throw new Error(`任务状态 ${metadata.status} 不允许追加目标列表`);
+      }
+      const existing = new Set(Array.isArray(input.urls) ? input.urls.map((u) => String(u ?? "")) : []);
+      const added = (Array.isArray(urls) ? urls : [])
+        .map((url) => String(url ?? ""))
+        .filter((url) => url.length > 0 && !existing.has(url));
+      if (added.length === 0) {
+        return clone({ ...metadata, ...input });
+      }
+      const nextUrls = [...existing, ...added];
+      input.urls = nextUrls;
+      input.totalRows = nextUrls.length;
+      metadata.total = nextUrls.length;
+      metadata.updatedAt = iso(this.now());
+      await atomicWriteJson(taskPaths.input, input);
+      await atomicWriteJson(taskPaths.metadata, metadata);
+      this.eventCache.delete(safeId);
+      return clone({ ...metadata, ...input });
+    });
+  }
+
+  /**
+   * 标记 search-batch 详情任务“发现阶段已收口”（幂等）：动态追加队列之后，
+   * ge 任务循环据此判断队列耗尽即可结束；导出完成门闸也要求该标记。
+   */
+  async setDiscoveryClosed(taskId) {
+    const safeId = assertSafeTaskId(taskId);
+    return this.withLock(safeId, async () => {
+      const taskPaths = this.paths(safeId);
+      const metadata = await readJson(taskPaths.metadata, null);
+      if (!metadata) throw new Error("任务不存在");
+      metadata.discoveryClosed = true;
+      metadata.updatedAt = iso(this.now());
+      await atomicWriteJson(taskPaths.metadata, metadata);
+      this.eventCache.delete(safeId);
+      return clone(metadata);
+    });
+  }
+
+  /**
+   * 已进入终态（成功/失败）的 itemIndex 列表：动态队列下 ge 任务循环据此
+   * 跳过已完成项（重启恢复时以完整队列启动，不重抓已成功/已失败项）。
+   */
+  async getTerminalIndexes(taskId) {
+    const safeId = assertSafeTaskId(taskId);
+    const events = await this.loadEvents(safeId);
+    const terminal = new Set();
+    for (const event of events) {
+      if (!event || typeof event !== "object") continue;
+      if (event.state !== "success" && event.state !== "failed") continue;
+      const index = normalizeIndex(event.itemIndex);
+      if (index !== null) terminal.add(index);
+    }
+    return [...terminal];
   }
 
   async getTask(taskId) {

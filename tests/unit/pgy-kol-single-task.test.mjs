@@ -49,8 +49,11 @@ function createFakeDetailRunner({ baseDir, gate } = {}) {
   const running = new Map();
   const started = [];
   async function run(taskId) {
-    const payload = running.get(taskId).payload;
-    for (let m = 0; m < payload.urls.length; m += 1) {
+    const entry = running.get(taskId);
+    const payload = entry.payload;
+    let terminal = new Set((await store.getTerminalIndexes(taskId).catch(() => [])) || []);
+    let waitMs = 0;
+    for (let m = 0; ; m += 1) {
       const current = running.get(taskId);
       if (!current || current.cancelled) break;
       if (gate && gate.shouldBlock(taskId, m)) {
@@ -58,7 +61,27 @@ function createFakeDetailRunner({ baseDir, gate } = {}) {
         m -= 1;
         continue;
       }
+      const taskData = await store.getTask(taskId);
+      const liveUrls = taskData && Array.isArray(taskData.urls) ? taskData.urls : payload.urls;
+      if (liveUrls.length > payload.urls.length) {
+        payload.urls = liveUrls.map((url) => String(url));
+        terminal = new Set((await store.getTerminalIndexes(taskId).catch(() => [])) || []);
+      }
+      if (m >= payload.urls.length) {
+        const closed = taskData && taskData.discoveryClosed === true;
+        if (closed) break;
+        // 兜底上限：流程卡住时让测试快速失败而不是挂起整个套件。
+        waitMs += 10;
+        if (waitMs > 20000) {
+          await store.setStatus(taskId, "cancelled").catch(() => {});
+          break;
+        }
+        await sleep(10);
+        m -= 1;
+        continue;
+      }
       const itemIndex = payload.sourceIndexes ? payload.sourceIndexes[m] : m;
+      if (terminal.has(itemIndex)) continue;
       const row = { nickname: `博主${m + 1}`, url: payload.urls[m], avg10ReadNum: 100 + m };
       await store.recordPendingCharge(taskId, itemIndex, row, payload.urls[m]);
       await store.recordSuccess(taskId, itemIndex, row, 1, payload.urls[m]);
@@ -74,6 +97,8 @@ function createFakeDetailRunner({ baseDir, gate } = {}) {
     started,
     create: (payload) => store.createTask(payload),
     updateUrls: (taskId, urls) => store.updateTaskUrls(taskId, urls),
+    appendTaskUrls: (taskId, urls) => store.appendTaskUrls(taskId, urls),
+    setDiscoveryClosed: (taskId) => store.setDiscoveryClosed(taskId),
     emit: () => {},
     async start(payload) {
       started.push(payload);

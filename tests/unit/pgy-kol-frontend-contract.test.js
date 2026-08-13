@@ -335,7 +335,7 @@ test("formal submit reads the complete current draft and builds one normalized f
     audience20: [audience20],
     automotive: [automotive],
     consumeBehavior: [consume],
-    signed: "已签约",
+    signed: "机构博主",
     contentSceneLabel: [scene],
     contentTheme: [theme],
     fansNumberLower: "10000",
@@ -345,7 +345,7 @@ test("formal submit reads the complete current draft and builds one normalized f
     fansLocation: location,
     fansMaritalStatus: "已婚",
     fansConsumptionLevel: "高",
-    fansChildAgeInfo: [{ value: "0-3", label: "0-3岁" }],
+    fansChildAgeInfo: [{ value: "1-3岁", label: "1-3岁" }],
     fansDevicePrice: [{ value: "5000+", label: "5000元以上" }],
     fansDeviceBrand: [{ value: "Apple", label: "Apple" }],
     accumCommonImpMedinNum30d: range([1000, 5000]),
@@ -401,7 +401,7 @@ test("formal submit reads the complete current draft and builds one normalized f
     featureTags: ["医生", "开箱测评"],
     gender: "女",
     location: [location],
-    signed: "已签约",
+    signed: "机构博主",
     top20CrowdsLabel: [audience20],
     industrySpecificCrowdsMotorDom: [automotive],
     kolInfoConsumBehaviorLabel: [consume],
@@ -413,7 +413,7 @@ test("formal submit reads the complete current draft and builds one normalized f
     fansLocation: location,
     fansMaritalStatus: "已婚",
     fansConsumptionLevel: "高",
-    fansChildAgeInfo: [{ value: "0-3", label: "0-3岁" }],
+    fansChildAgeInfo: [{ value: "1-3岁", label: "1-3岁" }],
     fansDevicePrice: [{ value: "5000+", label: "5000元以上" }],
     fansDeviceBrand: [{ value: "Apple", label: "Apple" }],
     accumCommonImpMedinNum30d: [1000, 5000],
@@ -2418,6 +2418,11 @@ test("采集助手接入：单任务进度卡（进度条/current/total/已用/�
   assert.ok(assistant.includes('state.activeTab = "current";') && assistant.includes("state.open = true;"), "show-task 必须打开并聚焦当前任务 tab");
   // 进度卡与蒲公英博主采集一致：进度条、current/total、已用时间、成功/失败。
   assert.ok(assistant.includes("正在准备采集"), "准备列表阶段显示 正在准备采集（不叫阶段一）");
+  // 边发现边采集：发现进度（已发现 X / 预计 N）随 progress 事件合并并渲染。
+  assert.ok(assistant.includes("item.discovered = event.discovered"), "助手必须合并发现进度 discovered");
+  assert.ok(assistant.includes("item.estimateTotal = event.estimateTotal"), "助手必须合并预计总数 estimateTotal");
+  assert.ok(assistant.includes('discoveryText || "正在准备采集"'), "准备态优先显示 已发现 X / 预计 N");
+  assert.ok(assistant.includes("已发现 ${task.discovered}"), "已发现文案必须存在");
   assert.ok(assistant.includes("width:${percent}%"), "进度条必须存在");
   assert.ok(assistant.includes("已用 ${elapsedText}"), "已用时间必须显示");
   assert.ok(assistant.includes("成功 ${task?.success || 0}") && assistant.includes("失败 ${failed}"), "成功/失败计数必须显示");

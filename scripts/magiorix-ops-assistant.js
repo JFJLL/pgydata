@@ -411,6 +411,10 @@
       if (event.inputType) item.inputType = event.inputType;
       item.current = event.current ?? item.current;
       item.total = event.total ?? item.total;
+      // 边发现边采集：发现阶段的实时计数（已发现 X / 预计 N）。
+      if (event.discovered !== undefined) item.discovered = event.discovered;
+      if (event.estimateTotal !== undefined) item.estimateTotal = event.estimateTotal;
+      if (event.phase === "discovery") item.discoveryActive = true;
       if (event.batchResting) {
         log("info", `批次休息：已完成 ${event.current}/${event.total}，等待 ${Math.round((event.batchRestMs || 0) / 1000)} 秒`);
       }
@@ -792,6 +796,7 @@
     const failed = task?.failed?.length || 0;
     const failures = task?.failed?.slice(-10).reverse() || [];
     const preparing = !!task && !task.completed && !task.total;
+    const discoveryText = task && task.discovered ? `已发现 ${task.discovered}${task.estimateTotal ? ` / 预计 ${task.estimateTotal}` : ""}` : "";
     const percent = task && task.total ? Math.max(0, Math.min(100, Math.round(((task.current || 0) / task.total) * 100))) : 0;
     const elapsed = task && task.startedAt ? Math.max(0, Math.floor((Date.now() - task.startedAt) / 1000)) : 0;
     const elapsedText = elapsed < 60 ? `${elapsed}秒` : `${Math.floor(elapsed / 60)}分${elapsed % 60}秒`;
@@ -805,10 +810,10 @@
         <div class="moa-title">当前任务</div>
         ${task ? `<div class="moa-sub" style="margin-bottom:6px">${escapeHtml(task.payload?.fileName || "找博主筛选采集")}</div>` : ""}
         <div class="moa-row">
-          <span class="moa-pill ${task ? "red" : ""}">${task ? (preparing ? "正在准备采集" : `${task.current}/${task.total}`) : "暂无任务"}</span>
+          <span class="moa-pill ${task ? "red" : ""}">${task ? (preparing ? (discoveryText || "正在准备采集") : `${task.current}/${task.total}`) : "暂无任务"}</span>
           <span class="moa-pill">成功 ${task?.success || 0}</span>
           <span class="moa-pill">失败 ${failed}</span>
-          ${task && !preparing ? `<span class="moa-pill">已用 ${elapsedText}</span>` : ""}
+          ${task && (!preparing || discoveryText) ? `<span class="moa-pill">已用 ${elapsedText}</span>` : ""}
         </div>
         ${task && !preparing ? `<div style="height:8px;border-radius:4px;background:#eee;margin:8px 0;overflow:hidden"><div style="height:100%;width:${percent}%;background:linear-gradient(90deg,#4fc3f7,#0288d1);transition:width .3s"></div></div>` : ""}
         <div class="moa-row" style="margin-top:7px;margin-bottom:0">

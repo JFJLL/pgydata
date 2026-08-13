@@ -24,6 +24,7 @@ export const PGY_IMAGE_FIELDS = new Set([
   "dailyNotePerformanceChart",
   "dailyNotePicturePerformanceChart",
   "dailyNoteVideoPerformanceChart",
+  "recentNoteInteractionFluctuationChart",
   "bloggerOverviewChart",
 ]);
 

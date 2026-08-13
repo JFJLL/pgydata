@@ -135,6 +135,9 @@ export function createPgyKolService({
   let storeInitPromise = null;
   let batchRunner = null;
   const detailPolls = new Map();
+  // 已对详情任务调用过 detail.start 的 checkpoint（幂等防双启动；
+  // 重启后为空，由 recoverDetailPhase 负责恢复并回填）。
+  const detailStarted = new Set();
 
   function emitBatchEvent(event) {
     for (const listener of Array.from(batchListeners)) {
@@ -201,6 +204,12 @@ export function createPgyKolService({
         analyzePageSequence: (options) => planner.analyzePageSequence(options),
         sessionProvider,
         onEvent: emitBatchEvent,
+        onPageCommitted: (taskId) => {
+          // 边发现边采集：每页提交后立即把新 UID 追加进详情队列并推送发现进度。
+          feedDiscoveryToDetail(taskId).catch((err) => {
+            logger.warn && logger.warn("[pgy-kol] 边发现边采集追加失败:", redactError(err));
+          });
+        },
       });
     }
     return batchRunner;
@@ -333,7 +342,13 @@ export function createPgyKolService({
       const stateField = schema.getFieldByStateKey(key);
       const needsPayloadSerialization =
         containsNodeObject(state[key]) ||
-        (stateField !== undefined && stateField.serializer === "percent-range-option");
+        (stateField !== undefined &&
+          (stateField.serializer === "percent-range-option" ||
+            // 官网枚举（label-to-code）与上下限（range-bound）：快照必须落盘
+            // builder 的最终 Payload 值（数字编码 / null），否则批量分页会把
+            // 中文标签或 "UNBOUNDED" 字符串直发官网（10090102）。
+            stateField.serializer === "label-to-code" ||
+            stateField.serializer === "range-bound"));
       normalized[key] = sanitizeSnapshotValue(
         isSpecialKey
           ? payload0[key]
@@ -398,7 +413,7 @@ export function createPgyKolService({
     const loop = ensureBatchRunner().start(checkpointTaskId);
     if (loop !== undefined && loop !== null && typeof loop.then === "function") {
       loop
-        .then(() => startSearchBatchDetail(checkpointTaskId))
+        .then(() => settleSearchBatchAfterDiscovery(checkpointTaskId))
         .catch((err) => {
           logger.error &&
             logger.error(
@@ -408,11 +423,28 @@ export function createPgyKolService({
               ),
             );
           taskStore.setStatus(checkpointTaskId, "failed").catch(() => {});
+          settleDetailOnCheckpointFailure(checkpointTaskId).catch(() => {});
         });
     }
     return detailTaskId
       ? { taskId: detailTaskId, checkpointTaskId }
       : { taskId: checkpointTaskId, checkpointTaskId, detailTaskId: null };
+  }
+
+  /**
+   * 发现循环正常 resolve 后统一收口：completed/incomplete 进入最终队列提交；
+   * failed/auth/cancel 等状态必须结束详情等待循环，不能留下用户历史 running。
+   */
+  async function settleSearchBatchAfterDiscovery(checkpointTaskId) {
+    const task = await taskStore.getTask(checkpointTaskId).catch(() => null);
+    if (!task) return;
+    if (task.status === "completed" || task.status === "incomplete") {
+      await startSearchBatchDetail(checkpointTaskId);
+      return;
+    }
+    if (task.status !== "paused" && task.status !== "interrupted") {
+      await settleDetailOnCheckpointFailure(checkpointTaskId);
+    }
   }
 
   // ==================== 两阶段编排（找博主 ID → 现有 pgy/blogger 详情采集器） ====================
@@ -508,10 +540,9 @@ export function createPgyKolService({
 
   /**
    * 阶段一收口后调用：把全部唯一博主 ID 交给现有 pgy/blogger 详情采集器。
-   * - ID 去重：同一博主只进入详情任务一次（采集/扣费/导出均只一次）。
-   * - fields 原样传递：不做任何裁剪（详情采集器按字段映射调用对应接口）。
-   * - 先原子落盘 detailTaskId/detailUrls 再启动，崩溃/重启可识别阶段并继续。
-   * - 任务已进入详情阶段（detailTaskId 已存在）时不再重复启动。
+   * - 边发现边采集：每页提交后由 feedDiscoveryToDetail 立即追加新 UID 并启动
+   *   详情任务；本函数在发现收口时做最终追加、标记 discoveryClosed（ge 循环
+   *   据此结束、导出门闸据此放行），并确保详情任务已启动。
    */
   async function startSearchBatchDetail(taskId) {
     if (!detail || typeof detail.start !== "function") return;
@@ -525,27 +556,55 @@ export function createPgyKolService({
     const fields = Array.isArray(task.fields) ? task.fields : [];
     if (fields.length === 0 || !task.detailTaskId) return;
     if (!isDiscoveryPhase(task)) return;
-    // 只在阶段一真正收口（completed/incomplete）时进入详情阶段；
-    // paused/cancelled/failed/interrupted 由对应控制路径处理，不得自动启动详情。
+    // 只在阶段一真正收口（completed/incomplete）时进入详情收口；
+    // paused/cancelled/failed/interrupted 由对应控制路径处理，不得自动收口。
     if (task.status !== "completed" && task.status !== "incomplete") return;
-    const rows = await taskStore.getRows(taskId).catch(() => []);
-    const seen = new Set();
-    const urls = [];
-    for (const row of rows) {
-      const uid =
-        row && row.uid !== undefined && row.uid !== null ? String(row.uid).trim() : "";
-      if (!uid || seen.has(uid)) continue;
-      seen.add(uid);
-      urls.push(`${PGY_ORIGIN}/solar/pre-trade/blogger-detail/${encodeURIComponent(uid)}`);
+    const urls = await detailRows(taskId);
+    const detailTaskId = task.detailTaskId;
+    const detailFileName =
+      typeof task.detailFileName === "string" && task.detailFileName.length > 0
+        ? task.detailFileName
+        : searchBatchFileName();
+    // 严格按“详情队列追加成功 → checkpoint 收口 → 关闭 discovery”提交。
+    // 任一步失败都保留可恢复状态，绝不能在详情队列仍缩水时关闭 discovery，
+    // 否则旧 total 会满足完成/导出门闸而静默漏采。
+    try {
+      await detail.appendTaskUrls(detailTaskId, urls);
+      await taskStore.setDetailPhase(taskId, {
+        detailTaskId,
+        detailUrls: urls,
+        detailFileName,
+      });
+      if (detail && typeof detail.setDiscoveryClosed === "function") {
+        await detail.setDiscoveryClosed(detailTaskId);
+      }
+    } catch (err) {
+      await taskStore.setStatus(taskId, "interrupted").catch(() => {});
+      logger.warn && logger.warn("[pgy-kol] 详情队列最终收口失败，可继续重试:", redactError(err));
+      emitBatchEvent({
+        taskId,
+        type: "status",
+        status: "interrupted",
+        detailTaskId,
+        detail: { handoffFailed: true, message: redactError(err) },
+      });
+      return;
     }
+    emitBatchEvent({
+      taskId,
+      type: "phase",
+      phase: "details",
+      detailTaskId,
+      detailTotal: urls.length,
+    });
     if (urls.length === 0) {
-      // 没有找到任何博主：详情任务直接收口为 cancelled（无内容可采）。
+      // 没有任何博主：详情任务直接收口为 cancelled（无内容可采）。
       if (detail && typeof detail.setStatus === "function") {
-        await detail.setStatus(task.detailTaskId, "cancelled").catch(() => {});
+        await detail.setStatus(detailTaskId, "cancelled").catch(() => {});
       }
       await taskStore.setStatus(taskId, "cancelled").catch(() => {});
       emitDetailEvent("complete", {
-        taskId: task.detailTaskId,
+        taskId: detailTaskId,
         successCount: 0,
         errorCount: 0,
         duration: 0,
@@ -556,30 +615,106 @@ export function createPgyKolService({
         taskId,
         type: "done",
         status: "cancelled",
-        detail: { skipped: true, reason: "no-bloggers", detailTaskId: task.detailTaskId },
+        detail: { skipped: true, reason: "no-bloggers", detailTaskId },
       });
       return;
     }
+    // 确保详情任务已启动（流式路径可能已由 feedDiscoveryToDetail 启动，幂等）。
+    await ensureDetailStarted(taskId, task, detailTaskId, urls);
+    // 阶段二进行中：父任务回到 running（详情完成后再由收口写入终态）。
+    await taskStore.setStatus(taskId, "running").catch(() => {});
+    startDetailPoll(taskId, detailTaskId);
+  }
+
+  /**
+   * 从 checkpoint 持久化行构建去重后的博主详情 URL 列表（与导出同一 UID 口径）。
+   */
+  async function detailRows(checkpointTaskId) {
+    const rows = await taskStore.getRows(checkpointTaskId).catch(() => []);
+    const seen = new Set();
+    const urls = [];
+    for (const row of rows) {
+      const uid =
+        row && row.uid !== undefined && row.uid !== null ? String(row.uid).trim() : "";
+      if (!uid || seen.has(uid)) continue;
+      seen.add(uid);
+      urls.push(`${PGY_ORIGIN}/solar/pre-trade/blogger-detail/${encodeURIComponent(uid)}`);
+    }
+    return urls;
+  }
+
+  /**
+   * 发现阶段预计总数（首个叶子的 search total，官网口径）；未知时回落已发现数。
+   */
+  async function expectedDiscoveryTotal(checkpointTaskId) {
+    const task = await taskStore.getTask(checkpointTaskId).catch(() => null);
+    if (!task || !Array.isArray(task.leaves)) return null;
+    let total = null;
+    for (const leaf of task.leaves) {
+      if (leaf && Number.isFinite(leaf.total)) {
+        total = total === null ? leaf.total : Math.max(total, leaf.total);
+      }
+    }
+    return total;
+  }
+
+  /**
+   * 边发现边采集：每页提交后把新 UID 追加进详情队列（同一 URL 只入队一次），
+   * 首次非空队列即启动详情任务，并向采集助手推送发现进度（已发现 X / 预计 N）。
+   */
+  async function feedDiscoveryToDetail(checkpointTaskId) {
+    if (!detail || typeof detail.appendTaskUrls !== "function") return;
+    const task = await taskStore.getTask(checkpointTaskId).catch(() => null);
+    if (!task || !task.detailTaskId) return;
+    if (!isDiscoveryPhase(task)) return; // 已收口，由 startSearchBatchDetail 处理
+    // 分页提交回调是异步 fire-and-forget；用户可能恰好在行块提交后点击取消。
+    // 取消/失败/暂停均不得再追加或启动详情任务，避免终态被并发回调“复活”。
+    if (task.status !== "running" && task.status !== "paused") return;
+    const urls = await detailRows(checkpointTaskId);
     const detailTaskId = task.detailTaskId;
+    const appended = await detail.appendTaskUrls(detailTaskId, urls).catch((err) => {
+      logger.warn && logger.warn("[pgy-kol] 详情队列追加失败:", redactError(err));
+      return false;
+    });
+    if (appended === false) return;
+    const latest = await taskStore.getTask(checkpointTaskId).catch(() => null);
+    if (
+      !latest ||
+      (latest.status !== "running" && latest.status !== "paused") ||
+      !isDiscoveryPhase(latest)
+    ) return;
+    await ensureDetailStarted(checkpointTaskId, latest, detailTaskId, urls);
+    const estimateTotal = await expectedDiscoveryTotal(checkpointTaskId);
+    emitDetailEvent("progress", {
+      taskId: detailTaskId,
+      phase: "discovery",
+      discovered: urls.length,
+      estimateTotal: estimateTotal === null ? urls.length : estimateTotal,
+    });
+  }
+
+  /**
+   * 确保详情任务已启动（幂等）：首次非空队列启动；重启恢复由
+   * recoverDetailPhase 负责（通过 detailStarted 集合避免双启动）。
+   */
+  async function ensureDetailStarted(checkpointTaskId, task, detailTaskId, urls) {
+    if (!detail || typeof detail.start !== "function") return;
+    if (detailStarted.has(checkpointTaskId)) return;
+    const fields = Array.isArray(task.fields) ? task.fields : [];
+    if (fields.length === 0 || urls.length === 0) return;
+    // 在首个 await 前占位。分页提交回调是 fire-and-forget，连续两页可能并发
+    // 进入本函数；若等 getTask/create 后才标记，生产详情采集器会被启动两次，
+    // 第二次因“已有同平台任务”把同一任务写成 interrupted。
+    detailStarted.add(checkpointTaskId);
     const detailFileName =
       typeof task.detailFileName === "string" && task.detailFileName.length > 0
         ? task.detailFileName
         : searchBatchFileName();
-    // 填充目标列表（checkpoint + 详情任务两处原子落盘），然后启动现有采集器。
-    await taskStore.setDetailPhase(taskId, {
-      detailTaskId,
-      detailUrls: urls,
-      detailFileName,
-    });
-    // 重启恢复：详情任务在历史存储 initialize 时 running → interrupted；
-    // 目标列表尚未填充（updateUrls 拒绝重复填充且要求 running），先恢复为
-    // running 再填充，避免“发现阶段崩溃重启后父任务直接 failed”。若详情任务
-    // 尚未创建（进程在 batchStart 的 detail.create 之前退出），用父任务持久化
-    // 的数据重建，避免重启后采集静默丢失。
-    const existingDetail = await detail.getTask(detailTaskId).catch(() => null);
-    if (!existingDetail) {
-      await detail
-        .create({
+    try {
+      const existingDetail = await detail.getTask(detailTaskId).catch(() => null);
+      if (!existingDetail) {
+        // 崩溃窗口：详情任务尚未创建（进程在 batchStart 的 detail.create 之前退出）。
+        await detail.create({
           taskId: detailTaskId,
           pluginId: "pgy",
           taskType: "blogger",
@@ -587,20 +722,11 @@ export function createPgyKolService({
           fileName: detailFileName,
           fields,
           inputType: "search-batch",
-        })
-        .catch(() => {});
-    } else if (existingDetail.status === "interrupted") {
-      await detail.setStatus(detailTaskId, "running").catch(() => {});
-    }
-    await detail.updateUrls(detailTaskId, urls);
-    emitBatchEvent({
-      taskId,
-      type: "phase",
-      phase: "details",
-      detailTaskId,
-      detailTotal: urls.length,
-    });
-    try {
+        });
+      } else if (existingDetail.status === "interrupted") {
+        // 重启恢复兜底：历史存储 initialize 把 running → interrupted。
+        await detail.setStatus(detailTaskId, "running");
+      }
       await detail.start({
         taskId: detailTaskId,
         pluginId: "pgy",
@@ -610,20 +736,34 @@ export function createPgyKolService({
         fields,
         inputType: "search-batch",
       });
-      // 阶段二进行中：父任务回到 running（详情完成后再由收口写入终态）。
-      await taskStore.setStatus(taskId, "running").catch(() => {});
+      // pause/cancel 可能发生在 detail.getTask/create/start 的任意 await 窗口。
+      // 启动完成后再读一次 checkpoint，让详情循环继承同一用户任务的控制状态。
+      const latest = await taskStore.getTask(checkpointTaskId).catch(() => null);
+      if (!latest || latest.status === "cancelled") {
+        if (typeof detail.cancel === "function") detail.cancel(detailTaskId);
+        if (typeof detail.setStatus === "function") {
+          await detail.setStatus(detailTaskId, "cancelled").catch(() => {});
+        }
+        return;
+      }
+      if (latest.status === "paused" && typeof detail.pause === "function") {
+        detail.pause(detailTaskId);
+      }
     } catch (err) {
       logger.error && logger.error("[pgy-kol] 详情阶段启动失败:", redactError(err));
-      await taskStore.setStatus(taskId, "failed").catch(() => {});
+      detailStarted.delete(checkpointTaskId);
+      const latest = await taskStore.getTask(checkpointTaskId).catch(() => null);
+      if (latest && latest.status !== "cancelled") {
+        await taskStore.setStatus(checkpointTaskId, "failed").catch(() => {});
+      }
+      settleDetailOnCheckpointFailure(checkpointTaskId).catch(() => {});
       emitBatchEvent({
-        taskId,
+        taskId: checkpointTaskId,
         type: "done",
-        status: "failed",
+        status: latest?.status === "cancelled" ? "cancelled" : "failed",
         detail: { startFailed: true, message: redactError(err) },
       });
-      return;
     }
-    startDetailPoll(taskId, detailTaskId);
   }
 
   function startDetailPoll(taskId, detailTaskId) {
@@ -712,7 +852,7 @@ export function createPgyKolService({
    * （history store initialize 处理）后，走 getResumePlan 跳过已成功项，
    * pending charge 补确认（服务端按 taskId+itemIndex 幂等，绝不重复扣费）。
    */
-  async function recoverDetailPhase(task) {
+  async function recoverDetailPhase(task, { forcePaused = false } = {}) {
     if (!detail) return;
     const detailTaskId = task.detailTaskId;
     const detailTask = await detail.getTask(detailTaskId).catch(() => null);
@@ -722,7 +862,8 @@ export function createPgyKolService({
       if (
         !RESUMABLE_TASK_STATUSES.has(task.status) ||
         task.status === "incomplete" ||
-        task.status === "failed"
+        task.status === "failed" ||
+        (task.status === "paused" && !forcePaused)
       ) {
         // incomplete 需要用户显式加预算；failed 保持失败等待用户显式继续，
         // 避免持久性失败每次应用启动自动重试、反复消耗查询预算。
@@ -736,6 +877,20 @@ export function createPgyKolService({
       const fields = Array.isArray(task.fields) ? task.fields : [];
       const urls = Array.isArray(task.detailUrls) ? task.detailUrls : [];
       if (urls.length === 0) {
+        if (fields.length > 0 && isDiscoveryPhase(task)) {
+          await detail.create({
+            taskId: detailTaskId,
+            pluginId: "pgy",
+            taskType: "blogger",
+            urls: [],
+            fileName:
+              typeof task.detailFileName === "string" && task.detailFileName.length > 0
+                ? task.detailFileName
+                : searchBatchFileName(),
+            fields,
+            inputType: "search-batch",
+          }).catch(() => {});
+        }
         resumeDiscovery();
         return;
       }
@@ -752,6 +907,11 @@ export function createPgyKolService({
           fields,
           inputType: "search-batch",
         }).catch(() => {});
+        // checkpoint 的 detailUrls 已填充 = 发现已收口，恢复时同步标记，
+        // 否则详情任务循环会一直等待追加（永不到达）。
+        if (detail && typeof detail.setDiscoveryClosed === "function") {
+          await detail.setDiscoveryClosed(detailTaskId).catch(() => {});
+        }
         await detail.start({
           taskId: detailTaskId,
           pluginId: "pgy",
@@ -777,14 +937,52 @@ export function createPgyKolService({
       return;
     }
     if (isDiscoveryPhase(task)) {
-      // 详情任务已创建但列表未填充（crash 于发现中途）：恢复发现循环。
+      // 发现循环已完成、但进程崩溃在 append/setDetailPhase/close 的任一窗口：
+      // 不再尝试 resume 已终态 checkpoint，直接重放幂等的最终队列提交。
+      if (task.status === "completed" || task.status === "incomplete") {
+        await startSearchBatchDetail(task.taskId);
+        return;
+      }
+      // 详情任务已创建但 checkpoint 未收口（crash 于发现中途）：
+      // 恢复发现循环；若详情队列已有部分 UID 且未处理完，用恢复计划继续
+      // （ge 循环以完整队列 + 终态跳过运行，不重抓已成功项）。
       resumeDiscovery();
+      const currentDetail = await detail.getTask(detailTaskId).catch(() => null);
+      if (
+        currentDetail &&
+        Array.isArray(currentDetail.urls) &&
+        currentDetail.urls.length > 0 &&
+        currentDetail.status !== "running"
+      ) {
+        const plan = await detail.getResumePlan(detailTaskId).catch(() => null);
+        if (plan && Array.isArray(plan.pendingCharges)) {
+          await detail.setStatus(detailTaskId, "running").catch(() => {});
+          // 发现仍在恢复，不能提前关闭动态队列。最终收口只允许由
+          // startSearchBatchDetail 在 checkpoint completed/incomplete 后执行；
+          // 否则旧队列会先 completed，后续页的新 UID 将无法追加。
+          // 与 ensureDetailStarted 一致：在首个 start await 前占位，避免恢复线程
+          // 与仍在收尾的 feed 回调并发双启动同一详情任务。
+          detailStarted.add(task.taskId);
+          await detail.start({
+            taskId: detailTaskId,
+            pluginId: "pgy",
+            taskType: "blogger",
+            urls: currentDetail.urls,
+            fileName: currentDetail.fileName || searchBatchFileName(),
+            fields: Array.isArray(currentDetail.fields) ? currentDetail.fields : [],
+            inputType: "search-batch",
+            pendingCharges: plan.pendingCharges,
+          });
+          startDetailPoll(task.taskId, detailTaskId);
+        }
+      }
       return;
     }
     if (isDetailTerminal(detailTask.status)) {
       await finalizeParentAfterDetail(task.taskId, detailTask);
       return;
     }
+    const currentDetailForRestart = await detail.getTask(detailTaskId).catch(() => null);
     let plan;
     try {
       plan = await detail.getResumePlan(detailTaskId);
@@ -797,8 +995,26 @@ export function createPgyKolService({
       await finalizeParentAfterDetail(task.taskId, await detail.getTask(detailTaskId));
       return;
     }
+    // search-batch：以完整队列 + 终态跳过运行（ge 循环不重抓已成功项、
+    // 追加项经队列刷新自动续采）；非 search-batch 保持恢复计划语义。
     await detail.setStatus(detailTaskId, "running");
-    await detail.start({ ...plan.payload, pendingCharges: plan.pendingCharges });
+    if (detail && typeof detail.setDiscoveryClosed === "function") {
+      await detail.setDiscoveryClosed(detailTaskId).catch(() => {});
+    }
+    if (currentDetailForRestart && Array.isArray(currentDetailForRestart.urls)) {
+      await detail.start({
+        taskId: detailTaskId,
+        pluginId: "pgy",
+        taskType: "blogger",
+        urls: currentDetailForRestart.urls,
+        fileName: currentDetailForRestart.fileName || searchBatchFileName(),
+        fields: Array.isArray(currentDetailForRestart.fields) ? currentDetailForRestart.fields : [],
+        inputType: "search-batch",
+        pendingCharges: plan.pendingCharges,
+      });
+    } else {
+      await detail.start({ ...plan.payload, pendingCharges: plan.pendingCharges });
+    }
     startDetailPoll(task.taskId, detailTaskId);
   }
 
@@ -811,10 +1027,23 @@ export function createPgyKolService({
     if (!detailTask) {
       throw new Error("详情任务不存在");
     }
+    // checkpoint 已收口但 discoveryClosed 落盘失败的崩溃窗口：继续时先补齐
+    // 关闭标记，再允许详情循环完成/导出。该操作幂等且失败会显式留在当前状态。
+    if (
+      detailTask.inputType === "search-batch" &&
+      Array.isArray(task.detailUrls) &&
+      task.detailUrls.length > 0 &&
+      detailTask.discoveryClosed !== true &&
+      detail &&
+      typeof detail.setDiscoveryClosed === "function"
+    ) {
+      await detail.setDiscoveryClosed(detailTaskId);
+    }
     if (detailTask.status === "running") {
       if (typeof detail.resume === "function") {
         detail.resume(detailTaskId);
       }
+      await taskStore.setStatus(task.taskId, "running");
       return { taskId: task.taskId, detailTaskId, status: "running" };
     }
     let plan;
@@ -834,7 +1063,29 @@ export function createPgyKolService({
       return { taskId: task.taskId, detailTaskId, remaining: 0, completed: true };
     }
     await detail.setStatus(detailTaskId, "running");
+    // search-batch：以完整队列 + 终态跳过运行（含动态追加项）；其他来源保持
+    // 恢复计划语义（剩余列表）。
+    if (detailTask.inputType === "search-batch" && Array.isArray(detailTask.urls)) {
+      await detail.start({
+        taskId: detailTaskId,
+        pluginId: "pgy",
+        taskType: "blogger",
+        urls: detailTask.urls,
+        fileName: detailTask.fileName || searchBatchFileName(),
+        fields: Array.isArray(detailTask.fields) ? detailTask.fields : [],
+        inputType: "search-batch",
+        pendingCharges: plan.pendingCharges,
+      });
+      await taskStore.setStatus(task.taskId, "running");
+      startDetailPoll(task.taskId, detailTaskId);
+      return {
+        taskId: task.taskId,
+        detailTaskId,
+        remaining: detailTask.urls.length,
+      };
+    }
     await detail.start({ ...plan.payload, pendingCharges: plan.pendingCharges });
+    await taskStore.setStatus(task.taskId, "running");
     startDetailPoll(task.taskId, detailTaskId);
     return { taskId: task.taskId, detailTaskId, remaining: plan.payload.urls.length };
   }
@@ -856,8 +1107,17 @@ export function createPgyKolService({
     }
     const tasks = await taskStore.listTasks();
     for (const task of tasks) {
-      // 详情阶段任务：无论父任务当前状态（含重启后 interrupted）都交给
-      // recoverDetailPhase 判定（终态收口 / 可恢复则重建详情任务）。
+    // paused 是用户显式控制状态：重启后必须原样保持，不能自动发请求或扣费。
+    // 详情历史 initialize 会把其内存 running 状态转为 interrupted，待用户点击
+    // “继续”时再由 batchResume 恢复同一详情任务。
+    if (task.status === "paused") {
+      if (task.detailTaskId) {
+        emitDetailEvent("paused", { taskId: task.detailTaskId, paused: true });
+      }
+      continue;
+    }
+    // 详情阶段任务：父任务非 paused 时交给 recoverDetailPhase 判定
+    // （终态收口 / 可恢复则重建详情任务）。
       if (task.detailTaskId) {
         await recoverDetailPhase(task).catch((err) => {
           logger.warn && logger.warn("[pgy-kol] 详情阶段恢复失败:", redactError(err));
@@ -872,7 +1132,8 @@ export function createPgyKolService({
         fields.length > 0 &&
         RESUMABLE_TASK_STATUSES.has(task.status) &&
         task.status !== "incomplete" &&
-        task.status !== "failed"
+        task.status !== "failed" &&
+        task.status !== "paused"
       ) {
         ensureBatchRunner()
           .resume(task.taskId)
@@ -934,11 +1195,15 @@ export function createPgyKolService({
     if (!task) {
       throw new Error("任务不存在");
     }
-    // 两阶段任务：暂停作用于当前阶段。发现阶段（准备博主列表）暂停发现循环，
-    // 并向采集助手同步 paused 事件（同一个任务 ID）；详情阶段暂停详情任务。
+    // 两阶段任务是用户眼中的一个任务：暂停必须同时停止发现分页与已启动的
+    // 详情队列，并先持久化 paused，保证并发 feed/start 及应用重启都不会续费。
     if (task.detailTaskId) {
       if (isDiscoveryPhase(task)) {
+        await taskStore.setStatus(taskId, "paused");
         ensureBatchRunner().pause(taskId);
+        if (typeof detail?.pause === "function") {
+          detail.pause(task.detailTaskId);
+        }
         emitDetailEvent("paused", { taskId: task.detailTaskId, paused: true });
         emitBatchEvent({
           taskId,
@@ -948,6 +1213,7 @@ export function createPgyKolService({
         });
         return { taskId, detailTaskId: task.detailTaskId, phase: "preparing" };
       }
+      await taskStore.setStatus(taskId, "paused");
       if (typeof detail?.pause === "function") {
         detail.pause(task.detailTaskId);
       }
@@ -968,7 +1234,8 @@ export function createPgyKolService({
     if (!task) {
       throw new Error("任务不存在");
     }
-    // 两阶段任务：继续作用于当前阶段（发现阶段恢复发现循环）。
+    // 两阶段任务：继续时同时恢复发现分页和详情队列；重启后的详情历史已是
+    // interrupted，则用恢复计划重建同一任务，不创建第二条历史。
     if (task.detailTaskId) {
       if (!detail) {
         throw new Error("详情采集依赖未启用");
@@ -979,8 +1246,22 @@ export function createPgyKolService({
           error.kind = "resume-not-allowed";
           throw error;
         }
-        const loopPromise = ensureBatchRunner().resume(taskId, pickResumeDelta(budgets));
-        attachResumeLoopCatch(loopPromise, taskId);
+        if (typeof detail.resume === "function") {
+          detail.resume(task.detailTaskId);
+        }
+        const detailTask = await detail.getTask(task.detailTaskId).catch(() => null);
+        if (
+          detailTask &&
+          Array.isArray(detailTask.urls) &&
+          detailTask.urls.length > 0 &&
+          detailTask.status !== "running"
+        ) {
+          // recoverDetailPhase 会同时恢复发现循环和详情计划。
+          await recoverDetailPhase(task, { forcePaused: true });
+        } else {
+          const loopPromise = ensureBatchRunner().resume(taskId, pickResumeDelta(budgets));
+          attachResumeLoopCatch(loopPromise, taskId);
+        }
         emitDetailEvent("paused", { taskId: task.detailTaskId, paused: false });
         return { taskId, detailTaskId: task.detailTaskId, phase: "preparing", status: "running" };
       }
@@ -1062,7 +1343,7 @@ export function createPgyKolService({
   function attachResumeLoopCatch(loopPromise, taskId) {
     if (loopPromise && typeof loopPromise.then === "function") {
       void loopPromise
-        .then(() => startSearchBatchDetail(taskId))
+        .then(() => settleSearchBatchAfterDiscovery(taskId))
         .catch((err) => {
           logger.error &&
             logger.error(
@@ -1072,7 +1353,23 @@ export function createPgyKolService({
               ),
             );
           taskStore.setStatus(taskId, "failed").catch(() => {});
+          // 发现失败时详情任务必须结束，否则其循环会一直等待追加（僵尸任务）。
+          settleDetailOnCheckpointFailure(taskId).catch(() => {});
         });
+    }
+  }
+
+  /**
+   * 发现阶段失败/异常时收口详情任务（取消），避免详情循环在 discoveryClosed
+   * 永远不到达的情况下无限等待（生产与测试均适用）。
+   */
+  async function settleDetailOnCheckpointFailure(checkpointTaskId) {
+    if (!detail || typeof detail.setStatus !== "function") return;
+    const task = await taskStore.getTask(checkpointTaskId).catch(() => null);
+    if (!task || !task.detailTaskId) return;
+    const detailTask = await detail.getTask(task.detailTaskId).catch(() => null);
+    if (detailTask && !isDetailTerminal(detailTask.status)) {
+      await detail.setStatus(task.detailTaskId, "cancelled").catch(() => {});
     }
   }
 
@@ -1086,7 +1383,15 @@ export function createPgyKolService({
     // 详情阶段：取消详情任务。
     if (task.detailTaskId) {
       if (isDiscoveryPhase(task)) {
+        // 先把终态落盘，使并发中的 feed/start 二次复核立即拒绝复活。
+        await taskStore.setStatus(taskId, "cancelled");
         ensureBatchRunner().cancel(taskId);
+        // 同时取消详情任务的运行循环：仅 setStatus(cancelled) 无法阻止
+        // 运行中的 runner 继续消费队列（收口后 discoveryClosed 置位会使其
+        // 正常完成并允许导出部分数据）。
+        if (detail && typeof detail.cancel === "function") {
+          detail.cancel(task.detailTaskId);
+        }
         if (detail && typeof detail.setStatus === "function") {
           await detail.setStatus(task.detailTaskId, "cancelled").catch(() => {});
         }
@@ -1125,8 +1430,8 @@ export function createPgyKolService({
 
   /**
    * 采集助手按钮（scraper:task:pause/resume/cancel）转发：详情任务 ID → 内部
-   * 检查点。发现阶段（准备列表）的控制落到发现循环；详情阶段由 ge 处理，
-   * 这里只负责发现阶段的收口。
+   * 检查点。详情阶段由 ge 先执行内存控制；发现阶段还需把同一控制同步到
+   * checkpoint，确保分页、详情、持久化状态一致。
    */
   async function forwardScraperTaskControl(detailTaskId, action) {
     if (typeof detailTaskId !== "string" || !detailTaskId.startsWith("pgykol-detail-")) return;
@@ -1135,22 +1440,30 @@ export function createPgyKolService({
     if (!checkpoint) return;
     if (action === "pause") {
       if (isDiscoveryPhase(checkpoint)) {
+        await taskStore.setStatus(checkpoint.taskId, "paused").catch(() => {});
         ensureBatchRunner().pause(checkpoint.taskId);
+        if (detail && typeof detail.pause === "function") {
+          detail.pause(detailTaskId);
+        }
         emitDetailEvent("paused", { taskId: detailTaskId, paused: true });
       }
       return;
     }
     if (action === "resume") {
       if (isDiscoveryPhase(checkpoint)) {
-        const loopPromise = ensureBatchRunner().resume(checkpoint.taskId, undefined);
-        attachResumeLoopCatch(loopPromise, checkpoint.taskId);
-        emitDetailEvent("paused", { taskId: detailTaskId, paused: false });
+        await batchResume({ taskId: checkpoint.taskId }).catch((err) => {
+          logger.warn && logger.warn("[pgy-kol] 采集助手恢复失败:", redactError(err));
+        });
       }
       return;
     }
     if (action === "cancel") {
       if (isDiscoveryPhase(checkpoint)) {
+        await taskStore.setStatus(checkpoint.taskId, "cancelled").catch(() => {});
         ensureBatchRunner().cancel(checkpoint.taskId);
+        if (detail && typeof detail.cancel === "function") {
+          detail.cancel(detailTaskId);
+        }
         if (detail && typeof detail.setStatus === "function") {
           await detail.setStatus(detailTaskId, "cancelled").catch(() => {});
         }
