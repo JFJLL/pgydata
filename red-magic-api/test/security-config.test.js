@@ -7,7 +7,7 @@ const { spawn } = require("node:child_process");
 
 const apiRoot = path.resolve(__dirname, "..");
 
-test("server refuses the public admin password placeholder", async () => {
+test("server keeps client APIs available when the management password is not configured", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "magiorix-security-"));
   const child = spawn(process.execPath, ["server.js"], {
     cwd: apiRoot,
@@ -24,21 +24,29 @@ test("server refuses the public admin password placeholder", async () => {
   let stderr = "";
   child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
   try {
-    const exit = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        child.kill();
-        reject(new Error("server did not reject the placeholder password"));
-      }, 5000);
+    const started = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`server did not start: ${stderr}`)), 5000);
+      child.stdout.on("data", (chunk) => {
+        if (chunk.toString().includes("red-magic-api listening")) {
+          clearTimeout(timer);
+          resolve(true);
+        }
+      });
       child.once("error", reject);
-      child.once("exit", (code, signal) => {
+      child.once("exit", (code) => {
         clearTimeout(timer);
-        resolve({ code, signal });
+        reject(new Error(`server exited before startup (${code}): ${stderr}`));
       });
     });
-    assert.equal(exit.code, 1, stderr);
-    assert.match(stderr, /ADMIN_PASSWORD/);
+    assert.equal(started, true);
+    assert.equal(child.exitCode, null, stderr);
   } finally {
-    if (child.exitCode === null) child.kill();
+    if (child.exitCode === null) {
+      await new Promise((resolve) => {
+        child.once("exit", resolve);
+        child.kill();
+      });
+    }
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });

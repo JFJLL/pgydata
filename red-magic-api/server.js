@@ -624,10 +624,12 @@ function trustProxyValue() {
   return TRUST_PROXY.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
-function assertAdminPasswordConfigured() {
-  if (!ADMIN_PASSWORD || ADMIN_PASSWORD.length < 16 || ADMIN_PASSWORD_PLACEHOLDERS.has(ADMIN_PASSWORD.toLowerCase())) {
-    throw new Error("必须配置至少 16 位且不是公开占位值的 ADMIN_PASSWORD");
-  }
+function isAdminPasswordConfigured() {
+  return Boolean(
+    ADMIN_PASSWORD
+    && ADMIN_PASSWORD.length >= 16
+    && !ADMIN_PASSWORD_PLACEHOLDERS.has(ADMIN_PASSWORD.toLowerCase()),
+  );
 }
 
 app.set("trust proxy", trustProxyValue());
@@ -1510,6 +1512,9 @@ app.get("/api/desktop-versions/check", asyncHandler(async (req, res) => {
 }));
 
 app.post("/api/admin/login", asyncHandler(async (req, res) => {
+  if (!isAdminPasswordConfigured()) {
+    return fail(res, 503, "管理后台尚未配置 ADMIN_PASSWORD");
+  }
   const username = String(req.body.username || "").trim();
   const password = String(req.body.password || "");
 
@@ -2141,7 +2146,6 @@ async function runReconciliation() {
 
 initDb()
   .then(() => {
-    assertAdminPasswordConfigured();
     app.listen(PORT, () => {
       logInfo("server_started", {
         port: PORT,
@@ -2150,6 +2154,9 @@ initDb()
         logDir: LOG_DIR,
         nodeEnv: process.env.NODE_ENV || "development",
       });
+      if (!isAdminPasswordConfigured()) {
+        logWarn("admin_password_not_configured", { message: "管理后台登录已禁用，不影响客户端服务" });
+      }
       console.log(`red-magic-api listening on http://127.0.0.1:${PORT}`);
     });
     if (paymentEnabled && process.env.RECONCILIATION_ENABLED === "1") {
