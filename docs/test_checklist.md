@@ -62,5 +62,3 @@
 - [ ] 已阅读 `docs/release_process.md` 并按流程完成发布。
 - [ ] 已阅读 `docs/deploy.md` 并确认没有覆盖数据库、`.env`、日志和备份文件。
 - [ ] 如需推送，已确认工作区状态、版本提交和发布提交都正确。
-- [ ] `pwsh -NoProfile -File scripts/verify-change.ps1` 生成当前 diff 对应的通过回执。
-- [ ] Hook 和 CI 未启用；本次后台发布链路不要求浏览器测试。

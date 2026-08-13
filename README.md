@@ -160,16 +160,6 @@ pm2 restart red-magic-api
 - 不重新引入旧品牌或旧项目命名：`zs`、`@zsdesktop`、`PYGdata`、旧 Emagic/PYG 命名等。
 - 涉及发布、部署、数据库、密钥、登录鉴权时，先确认影响面再操作。
 
-## 变更验证
-
-项目已接入风险路由验证系统，默认不启用 Hook 和 CI。本项目当前发布链路不要求浏览器测试。
-
-```powershell
-rtk pwsh -NoProfile -File scripts/verify-change.ps1 -PlanOnly
-rtk pwsh -NoProfile -File scripts/verify-change.ps1
-rtk pwsh -NoProfile -File scripts/verify-change.ps1 -CheckReceipt
-```
-
 ## 常用文档
 
 - [CHANGELOG.md](CHANGELOG.md)：版本历史、发布记录、安装包路径、SHA256。
