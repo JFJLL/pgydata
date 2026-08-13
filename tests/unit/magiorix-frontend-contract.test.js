@@ -6,8 +6,8 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const projectRoot = path.resolve(__dirname, "../..");
-const authBundle = path.join(projectRoot, "assets", "1.2.0", "assets", "index-B09sHfUO.js");
-const rechargeBundle = path.join(projectRoot, "assets", "1.2.0", "assets", "index-C0Ke2Ul0.js");
+const authBundle = path.join(projectRoot, "assets", "1.3.0", "assets", "index-B09sHfUO.js");
+const rechargeBundle = path.join(projectRoot, "assets", "1.3.0", "assets", "index-C0Ke2Ul0.js");
 const patchScript = path.join(projectRoot, "scripts", "apply-magiorix-frontend-patches.js");
 const runtimePatchScript = path.join(projectRoot, "scripts", "apply-magiorix-runtime-patches.js");
 const runtimeMain = path.join(projectRoot, "app-source", "dist-electron", "index.js");
@@ -15,9 +15,9 @@ const runtimePreload = path.join(projectRoot, "app-source", "dist-electron", "pr
 const legacyFrontendBrandPattern = /(?:\bzs\.|@zsdesktop|PYGdata|Emagic(?:DataCrawler| Data Crawler)?|易美(?:传播|数据抓取)?)/i;
 
 function readFrontendBundleSource() {
-  return fs.readdirSync(path.join(projectRoot, "assets", "1.2.0", "assets"))
+  return fs.readdirSync(path.join(projectRoot, "assets", "1.3.0", "assets"))
     .filter((file) => /\.(?:js|css|html|svg)$/i.test(file))
-    .map((file) => fs.readFileSync(path.join(projectRoot, "assets", "1.2.0", "assets", file), "utf8"))
+    .map((file) => fs.readFileSync(path.join(projectRoot, "assets", "1.3.0", "assets", file), "utf8"))
     .join("\n");
 }
 
@@ -29,16 +29,16 @@ function sha256(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
-test("1.2.0 auth bundle uses verified registration and password recovery flows", () => {
+test("1.3.0 auth bundle uses verified registration and password recovery flows", () => {
   const source = fs.readFileSync(authBundle, "utf8");
   for (const endpoint of ["/api/auth/sms/send", "/api/auth/register", "/api/auth/password/reset"]) {
     assert.match(source, new RegExp(endpoint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing ${endpoint}`);
   }
-  assert.match(source, /purpose:"register"/);
+  // 注册默认使用密码，不再请求短信验证码；只有找回密码才用短信验证。
   assert.match(source, /purpose:"reset_password"/);
   assert.match(source, /\\d\{4\}/);
-  assert.match(source, /验证码有效期 5 分钟/);
-  assert.match(source, /C>0/);
+  assert.doesNotMatch(source, /purpose:"register"/);
+  assert.doesNotMatch(source, /验证码有效期 5 分钟/);
   assert.match(source, /loginType:"password"/);
   assert.doesNotMatch(source, /不支持在线找回密码/);
 
@@ -46,14 +46,21 @@ test("1.2.0 auth bundle uses verified registration and password recovery flows",
   const flowEnd = source.indexOf("function kr(e){", flowStart);
   assert.ok(flowStart >= 0 && flowEnd > flowStart, "auth flow patch is present");
   const registrationFlow = source.slice(flowStart, flowEnd);
+  const registerOnlyEnd = source.indexOf("function b5({", flowStart);
+  const registerOnly = source.slice(flowStart, registerOnlyEnd);
   assert.doesNotMatch(registrationFlow, /auth\/sms\/login|Jl\(/);
-  assert.match(registrationFlow, /pgyRegister\(\{phone:q,code:T,password:c\}\)/);
+  assert.match(registerOnly, /pgyRegister\(\{phone:v,password:l\}\)/);
+  assert.doesNotMatch(registerOnly, /获取验证码|purpose:"register"|验证码已发送/);
+  assert.match(registerOnly, /placeholder:"确认密码"/);
+  // 找回密码（b5）仍保留短信验证码。
+  assert.match(registrationFlow, /purpose:"reset_password"/);
+  assert.match(registrationFlow, /获取验证码/);
   assert.match(registrationFlow, /Zt\.getState\(\)\.setToken\(R\.token\)/);
   assert.match(registrationFlow, /Se\.getState\(\)\.setUserInfo\(R\.userInfo\)/);
   assert.doesNotMatch(registrationFlow, /pgyRegister\(\{phone:q,code:T,password:c\}\),await r\(\{loginType:"password"/);
 });
 
-test("1.2.0 frontend bundle is branded and uses the safe dashboard contract", () => {
+test("1.3.0 frontend bundle is branded and uses the safe dashboard contract", () => {
   const source = readFrontendBundleSource();
   assertCleanFrontendBundle(source);
   assert.match(source, /magiorix\.login\.method/);
@@ -75,7 +82,7 @@ test("1.2.0 frontend bundle is branded and uses the safe dashboard contract", ()
   assert.throws(() => assertCleanFrontendBundle(temporarilyInjected), /legacy frontend brand residue/);
 });
 
-test("1.2.0 points recharge bundle exposes the Alipay-only contract", () => {
+test("1.3.0 points recharge bundle exposes the Alipay-only contract", () => {
   const source = fs.readFileSync(rechargeBundle, "utf8");
   for (const label of ["积分充值", "立即充值", "支付宝", "payUrl", "/query"]) {
     assert.match(source, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing ${label}`);
@@ -85,7 +92,7 @@ test("1.2.0 points recharge bundle exposes the Alipay-only contract", () => {
   }
 });
 
-test("frontend patch script is repeatable for the 1.2.0 asset copy", () => {
+test("frontend patch script is repeatable for the 1.3.0 asset copy", () => {
   const before = sha256(rechargeBundle);
   const authBefore = sha256(authBundle);
   const first = spawnSync(process.execPath, [patchScript], { cwd: projectRoot, encoding: "utf8" });
@@ -104,7 +111,7 @@ test("frontend patch script is repeatable for the 1.2.0 asset copy", () => {
 
 test("server exposes only the three points-center menu entries", () => {
   const server = fs.readFileSync(path.join(projectRoot, "red-magic-api", "server.js"), "utf8");
-  const mainBundle = fs.readFileSync(path.join(projectRoot, "assets", "1.2.0", "assets", "index-B09sHfUO.js"), "utf8");
+  const mainBundle = fs.readFileSync(path.join(projectRoot, "assets", "1.3.0", "assets", "index-B09sHfUO.js"), "utf8");
   assert.match(server, /name: "积分充值"/);
   assert.match(server, /name: "充值记录"/);
   assert.match(server, /name: "消耗记录"/);

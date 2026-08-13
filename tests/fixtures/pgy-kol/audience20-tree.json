@@ -1,0 +1,652 @@
+{
+  "code": 0,
+  "data": {
+    "automotiveIndustryTag": [],
+    "audience20": [
+      {
+        "value": 101,
+        "label": "自在户外",
+        "children": [
+          {
+            "value": 10101,
+            "label": "挑战极限者"
+          },
+          {
+            "value": 10102,
+            "label": "测评专家"
+          },
+          {
+            "value": 10103,
+            "label": "新锐博主"
+          },
+          {
+            "value": 10104,
+            "label": "日常记录"
+          },
+          {
+            "value": 10105,
+            "label": "好物分享"
+          },
+          {
+            "value": 10106,
+            "label": "资深玩家"
+          },
+          {
+            "value": 10107,
+            "label": "潮流风向标"
+          }
+        ]
+      },
+      {
+        "value": 102,
+        "label": "时尚穿搭",
+        "children": [
+          {
+            "value": 10201,
+            "label": "测评专家"
+          },
+          {
+            "value": 10202,
+            "label": "新锐博主"
+          },
+          {
+            "value": 10203,
+            "label": "日常记录"
+          },
+          {
+            "value": 10204,
+            "label": "好物分享"
+          },
+          {
+            "value": 10205,
+            "label": "资深玩家"
+          },
+          {
+            "value": 10206,
+            "label": "潮流风向标"
+          },
+          {
+            "value": 10207,
+            "label": "性价比之选"
+          }
+        ]
+      },
+      {
+        "value": 103,
+        "label": "美食探店",
+        "children": [
+          {
+            "value": 10301,
+            "label": "新锐博主"
+          },
+          {
+            "value": 10302,
+            "label": "日常记录"
+          },
+          {
+            "value": 10303,
+            "label": "好物分享"
+          },
+          {
+            "value": 10304,
+            "label": "资深玩家"
+          },
+          {
+            "value": 10305,
+            "label": "潮流风向标"
+          },
+          {
+            "value": 10306,
+            "label": "性价比之选"
+          },
+          {
+            "value": 10307,
+            "label": "品质生活家"
+          }
+        ]
+      },
+      {
+        "value": 104,
+        "label": "数码科技",
+        "children": [
+          {
+            "value": 10401,
+            "label": "日常记录"
+          },
+          {
+            "value": 10402,
+            "label": "好物分享"
+          },
+          {
+            "value": 10403,
+            "label": "资深玩家"
+          },
+          {
+            "value": 10404,
+            "label": "潮流风向标"
+          },
+          {
+            "value": 10405,
+            "label": "性价比之选"
+          },
+          {
+            "value": 10406,
+            "label": "品质生活家"
+          },
+          {
+            "value": 10407,
+            "label": "极简主义者"
+          }
+        ]
+      },
+      {
+        "value": 105,
+        "label": "母婴亲子",
+        "children": [
+          {
+            "value": 10501,
+            "label": "好物分享"
+          },
+          {
+            "value": 10502,
+            "label": "资深玩家"
+          },
+          {
+            "value": 10503,
+            "label": "潮流风向标"
+          },
+          {
+            "value": 10504,
+            "label": "性价比之选"
+          },
+          {
+            "value": 10505,
+            "label": "品质生活家"
+          },
+          {
+            "value": 10506,
+            "label": "极简主义者"
+          },
+          {
+            "value": 10507,
+            "label": "收藏家"
+          }
+        ]
+      },
+      {
+        "value": 106,
+        "label": "家居生活",
+        "children": [
+          {
+            "value": 10601,
+            "label": "资深玩家"
+          },
+          {
+            "value": 10602,
+            "label": "潮流风向标"
+          },
+          {
+            "value": 10603,
+            "label": "性价比之选"
+          },
+          {
+            "value": 10604,
+            "label": "品质生活家"
+          },
+          {
+            "value": 10605,
+            "label": "极简主义者"
+          },
+          {
+            "value": 10606,
+            "label": "收藏家"
+          },
+          {
+            "value": 10607,
+            "label": "体验官"
+          }
+        ]
+      },
+      {
+        "value": 107,
+        "label": "美妆个护",
+        "children": [
+          {
+            "value": 10701,
+            "label": "潮流风向标"
+          },
+          {
+            "value": 10702,
+            "label": "性价比之选"
+          },
+          {
+            "value": 10703,
+            "label": "品质生活家"
+          },
+          {
+            "value": 10704,
+            "label": "极简主义者"
+          },
+          {
+            "value": 10705,
+            "label": "收藏家"
+          },
+          {
+            "value": 10706,
+            "label": "体验官"
+          },
+          {
+            "value": 10707,
+            "label": "开箱博主"
+          }
+        ]
+      },
+      {
+        "value": 108,
+        "label": "健身运动",
+        "children": [
+          {
+            "value": 10801,
+            "label": "性价比之选"
+          },
+          {
+            "value": 10802,
+            "label": "品质生活家"
+          },
+          {
+            "value": 10803,
+            "label": "极简主义者"
+          },
+          {
+            "value": 10804,
+            "label": "收藏家"
+          },
+          {
+            "value": 10805,
+            "label": "体验官"
+          },
+          {
+            "value": 10806,
+            "label": "开箱博主"
+          }
+        ]
+      },
+      {
+        "value": 109,
+        "label": "汽车出行",
+        "children": [
+          {
+            "value": 10901,
+            "label": "品质生活家"
+          },
+          {
+            "value": 10902,
+            "label": "极简主义者"
+          },
+          {
+            "value": 10903,
+            "label": "收藏家"
+          },
+          {
+            "value": 10904,
+            "label": "体验官"
+          },
+          {
+            "value": 10905,
+            "label": "开箱博主"
+          },
+          {
+            "value": 10906,
+            "label": "避坑指南"
+          }
+        ]
+      },
+      {
+        "value": 110,
+        "label": "旅行摄影",
+        "children": [
+          {
+            "value": 11001,
+            "label": "极简主义者"
+          },
+          {
+            "value": 11002,
+            "label": "收藏家"
+          },
+          {
+            "value": 11003,
+            "label": "体验官"
+          },
+          {
+            "value": 11004,
+            "label": "开箱博主"
+          },
+          {
+            "value": 11005,
+            "label": "避坑指南"
+          },
+          {
+            "value": 11006,
+            "label": "教程作者"
+          }
+        ]
+      },
+      {
+        "value": 111,
+        "label": "教育学习",
+        "children": [
+          {
+            "value": 11101,
+            "label": "收藏家"
+          },
+          {
+            "value": 11102,
+            "label": "体验官"
+          },
+          {
+            "value": 11103,
+            "label": "开箱博主"
+          },
+          {
+            "value": 11104,
+            "label": "避坑指南"
+          },
+          {
+            "value": 11105,
+            "label": "教程作者"
+          },
+          {
+            "value": 11106,
+            "label": "直播达人"
+          }
+        ]
+      },
+      {
+        "value": 112,
+        "label": "职场进阶",
+        "children": [
+          {
+            "value": 11201,
+            "label": "体验官"
+          },
+          {
+            "value": 11202,
+            "label": "开箱博主"
+          },
+          {
+            "value": 11203,
+            "label": "避坑指南"
+          },
+          {
+            "value": 11204,
+            "label": "教程作者"
+          },
+          {
+            "value": 11205,
+            "label": "直播达人"
+          },
+          {
+            "value": 11206,
+            "label": "联名主理人"
+          }
+        ]
+      },
+      {
+        "value": 113,
+        "label": "宠物生活",
+        "children": [
+          {
+            "value": 11301,
+            "label": "开箱博主"
+          },
+          {
+            "value": 11302,
+            "label": "避坑指南"
+          },
+          {
+            "value": 11303,
+            "label": "教程作者"
+          },
+          {
+            "value": 11304,
+            "label": "直播达人"
+          },
+          {
+            "value": 11305,
+            "label": "联名主理人"
+          },
+          {
+            "value": 11306,
+            "label": "社群领袖"
+          }
+        ]
+      },
+      {
+        "value": 114,
+        "label": "游戏电竞",
+        "children": [
+          {
+            "value": 11401,
+            "label": "避坑指南"
+          },
+          {
+            "value": 11402,
+            "label": "教程作者"
+          },
+          {
+            "value": 11403,
+            "label": "直播达人"
+          },
+          {
+            "value": 11404,
+            "label": "联名主理人"
+          },
+          {
+            "value": 11405,
+            "label": "社群领袖"
+          },
+          {
+            "value": 11406,
+            "label": "本地向导"
+          }
+        ]
+      },
+      {
+        "value": 115,
+        "label": "影视娱乐",
+        "children": [
+          {
+            "value": 11501,
+            "label": "教程作者"
+          },
+          {
+            "value": 11502,
+            "label": "直播达人"
+          },
+          {
+            "value": 11503,
+            "label": "联名主理人"
+          },
+          {
+            "value": 11504,
+            "label": "社群领袖"
+          },
+          {
+            "value": 11505,
+            "label": "本地向导"
+          },
+          {
+            "value": 11506,
+            "label": "生活方式"
+          }
+        ]
+      },
+      {
+        "value": 116,
+        "label": "财经投资",
+        "children": [
+          {
+            "value": 11601,
+            "label": "直播达人"
+          },
+          {
+            "value": 11602,
+            "label": "联名主理人"
+          },
+          {
+            "value": 11603,
+            "label": "社群领袖"
+          },
+          {
+            "value": 11604,
+            "label": "本地向导"
+          },
+          {
+            "value": 11605,
+            "label": "生活方式"
+          },
+          {
+            "value": 11606,
+            "label": "种草达人"
+          }
+        ]
+      },
+      {
+        "value": 117,
+        "label": "健康养生",
+        "children": [
+          {
+            "value": 11701,
+            "label": "联名主理人"
+          },
+          {
+            "value": 11702,
+            "label": "社群领袖"
+          },
+          {
+            "value": 11703,
+            "label": "本地向导"
+          },
+          {
+            "value": 11704,
+            "label": "生活方式"
+          },
+          {
+            "value": 11705,
+            "label": "种草达人"
+          },
+          {
+            "value": 11706,
+            "label": "测评专家"
+          }
+        ]
+      },
+      {
+        "value": 118,
+        "label": "婚恋情感",
+        "children": [
+          {
+            "value": 11801,
+            "label": "社群领袖"
+          },
+          {
+            "value": 11802,
+            "label": "本地向导"
+          },
+          {
+            "value": 11803,
+            "label": "生活方式"
+          },
+          {
+            "value": 11804,
+            "label": "种草达人"
+          },
+          {
+            "value": 11805,
+            "label": "测评专家"
+          },
+          {
+            "value": 11806,
+            "label": "新锐博主"
+          }
+        ]
+      },
+      {
+        "value": 119,
+        "label": "二次元文化",
+        "children": [
+          {
+            "value": 11901,
+            "label": "本地向导"
+          },
+          {
+            "value": 11902,
+            "label": "生活方式"
+          },
+          {
+            "value": 11903,
+            "label": "种草达人"
+          },
+          {
+            "value": 11904,
+            "label": "测评专家"
+          },
+          {
+            "value": 11905,
+            "label": "新锐博主"
+          },
+          {
+            "value": 11906,
+            "label": "日常记录"
+          }
+        ]
+      }
+    ],
+    "contentTheme": [],
+    "industryTags": [
+      {
+        "id": "it-001",
+        "orderId": 1,
+        "taxonomy1Tag": "美妆个护",
+        "taxonomy2Tags": [
+          "护肤",
+          "彩妆",
+          "美发",
+          "美甲"
+        ],
+        "taxonomy2Tag": "护肤",
+        "taxonomy3Tags": null
+      },
+      {
+        "id": "it-002",
+        "orderId": 2,
+        "taxonomy1Tag": "食品饮料",
+        "taxonomy2Tags": [
+          "乳制品",
+          "零食",
+          "饮料",
+          "速食",
+          "调味品",
+          "烘焙",
+          "糖果",
+          "茶叶",
+          "酒类",
+          "保健食品"
+        ],
+        "taxonomy2Tag": "乳制品",
+        "taxonomy3Tags": null
+      },
+      {
+        "id": "it-003",
+        "orderId": 3,
+        "taxonomy1Tag": "母婴",
+        "taxonomy2Tags": [
+          "奶粉",
+          "童装"
+        ],
+        "taxonomy2Tag": "奶粉",
+        "taxonomy3Tags": null
+      }
+    ]
+  }
+}

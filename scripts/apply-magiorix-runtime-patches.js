@@ -11,6 +11,14 @@ const chinaGeoJsonSourcePath = path.join(projectRoot, "tools", "china-provinces.
 const chinaGeoJsonTargetPath = path.join(projectRoot, "app-source", "dist-electron", "static", "china-provinces.geojson");
 const dailyNoteSvgSourcePath = path.join(projectRoot, "tools", "pgy_daily_note_svg.js");
 const dailyNoteSvgSource = fs.readFileSync(dailyNoteSvgSourcePath, "utf8").trim();
+const recentNoteFluctuationSvgSourcePath = path.join(
+  projectRoot,
+  "tools",
+  "pgy_recent_note_fluctuation_svg.js",
+);
+const recentNoteFluctuationSvgSource = fs
+  .readFileSync(recentNoteFluctuationSvgSourcePath, "utf8")
+  .trim();
 const bloggerOverviewSvgSourcePath = path.join(projectRoot, "tools", "pgy_blogger_overview_svg.js");
 const bloggerOverviewSvgSource = fs.readFileSync(bloggerOverviewSvgSourcePath, "utf8").trim();
 const trendSvgSourcePath = path.join(projectRoot, "tools", "pgy_trend_svg.js");
@@ -19,35 +27,44 @@ const overviewIconsSourcePath = path.join(projectRoot, "tools", "overview-icons"
 const overviewIconsTargetPath = path.join(projectRoot, "app-source", "dist-electron", "static", "overview-icons");
 
 function replaceOnce(source, from, to, label) {
-  const fromCrLf = from.replace(/\n/g, "\r\n");
-  const toCrLf = to.replace(/\n/g, "\r\n");
-  if (!source.includes(from)) {
-    if (source.includes(fromCrLf)) return source.replace(fromCrLf, toCrLf);
-    if (source.includes(to)) return source;
-    if (source.includes(toCrLf)) return source;
+  // 行尾无关：源码与模板统一按 LF 比较，输出统一为 LF。
+  // 这样同一补丁在 LF 源码、CRLF 源码、混合行尾源码上都幂等。
+  const norm = (value) => value.replace(/\r\n/g, "\n");
+  const sourceNorm = norm(source);
+  const fromNorm = norm(from);
+  const toNorm = norm(to);
+  if (!sourceNorm.includes(fromNorm)) {
+    if (sourceNorm.includes(toNorm)) return source;
     throw new Error(`Missing patch target: ${label}`);
   }
-  return source.replace(from, to);
+  return sourceNorm.replace(fromNorm, toNorm);
 }
 
 function replaceSection(source, startMarker, endMarker, replacement, label) {
-  const start = source.indexOf(startMarker);
-  const end = start >= 0 ? source.indexOf(endMarker, start) : -1;
+  const norm = (value) => value.replace(/\r\n/g, "\n");
+  const sourceNorm = norm(source);
+  const start = sourceNorm.indexOf(norm(startMarker));
+  const end = start >= 0 ? sourceNorm.indexOf(norm(endMarker), start) : -1;
   if (start < 0 || end < 0) throw new Error(`Missing patch section: ${label}`);
-  const newline = source.includes("\r\n") ? "\r\n" : "\n";
-  const normalized = replacement.replace(/\r?\n/g, newline).trimEnd() + newline + newline;
-  return source.slice(0, start) + normalized + source.slice(end);
+  const normalized = norm(replacement).trimEnd() + "\n\n";
+  return sourceNorm.slice(0, start) + normalized + sourceNorm.slice(end);
 }
 
 function replaceAllIfExists(source, from, to) {
-  if (!source.includes(from)) return source;
-  return source.split(from).join(to);
+  const norm = (value) => value.replace(/\r\n/g, "\n");
+  const sourceNorm = norm(source);
+  const fromNorm = norm(from);
+  if (!sourceNorm.includes(fromNorm)) return sourceNorm;
+  return sourceNorm.split(fromNorm).join(norm(to));
 }
 
 function insertAfterOnce(source, marker, insert, already, label) {
-  if (source.includes(already)) return source;
-  if (!source.includes(marker)) throw new Error(`Missing patch marker: ${label}`);
-  return source.replace(marker, `${marker}\n${insert}`);
+  const norm = (value) => value.replace(/\r\n/g, "\n");
+  const sourceNorm = norm(source);
+  if (sourceNorm.includes(norm(already))) return source;
+  const markerNorm = norm(marker);
+  if (!sourceNorm.includes(markerNorm)) throw new Error(`Missing patch marker: ${label}`);
+  return sourceNorm.replace(markerNorm, `${markerNorm}\n${norm(insert)}`);
 }
 
 let main = fs.readFileSync(mainPath, "utf8");
@@ -94,14 +111,14 @@ main = replaceAllIfExists(
 main = insertAfterOnce(
   main,
   'import { ipcMain as F, BrowserWindow as Dt, app as ye, screen as Gi, shell as Ji, dialog as Ki, net as Jt, Notification as Et, session as Pn, nativeImage as PgyNativeImage } from "electron";',
-  'import { CollectionHistoryStore } from "../electron-main/collection-history-store.mjs";',
-  'import { CollectionHistoryStore }',
+  'import { CollectionHistoryStore, isCollectionTaskExportReady } from "../electron-main/collection-history-store.mjs";',
+  'import { CollectionHistoryStore',
   "collection history store import",
 );
 
 main = insertAfterOnce(
   main,
-  'import { CollectionHistoryStore } from "../electron-main/collection-history-store.mjs";',
+  'import { CollectionHistoryStore, isCollectionTaskExportReady } from "../electron-main/collection-history-store.mjs";',
   'import { buildCollectionHistoryExportPayload } from "../electron-main/collection-export-headers.mjs";',
   'import { buildCollectionHistoryExportPayload }',
   "collection export headers import",
@@ -1725,18 +1742,28 @@ main = replaceOnce(
     "pgy typed daily note endpoint list",
   );
 
-main = replaceOnce(
+// 基线 bundle（1.2.0 发布）已含 typed 日常图字段依赖，仅更早原始 bundle 才需扩展。
+const hasTypedDailyNoteDeps = main.includes(
+  'dailyNotePicturePerformanceChart: ["dailyNotePicturePerformanceChart"]',
+);
+if (!hasTypedDailyNoteDeps) {
+  main = replaceOnce(
     main,
     `  dailyNotePerformanceChart: ["dailyNotePerformanceChart"],
   bloggerOverviewChart: ["bloggerOverviewChart"]`,
     `  dailyNotePerformanceChart: ["dailyNotePerformanceChart"],
   dailyNotePicturePerformanceChart: ["dailyNotePicturePerformanceChart"],
   dailyNoteVideoPerformanceChart: ["dailyNoteVideoPerformanceChart"],
+  recentNoteInteractionFluctuationChart: ["recentNoteInteractionFluctuationChart"],
   bloggerOverviewChart: ["bloggerOverviewChart"]`,
     "pgy typed daily note field dependencies",
   );
+}
 
-main = replaceOnce(
+// 基线 bundle（1.2.0 发布）已含 typed 日常图请求路由与图表字段，仅更早原始
+// bundle 才需要扩展（守卫防止对当前基线抛 Missing patch target）。
+if (!main.includes('daily30Picture: ["dailyNotePicturePerformanceChart"]')) {
+  main = replaceOnce(
     main,
     `    "dailyNotePerformanceChart",
     "bloggerOverviewChart"
@@ -1750,8 +1777,12 @@ main = replaceOnce(
   daily90: [`,
     "pgy typed daily note request routing",
   );
-
-main = replaceOnce(
+}
+const hasTypedDailyNoteImageFields = main.includes(
+  'dailyNotePicturePerformance: "dailyNotePicturePerformanceChart"',
+);
+if (!hasTypedDailyNoteImageFields) {
+  main = replaceOnce(
     main,
     `  dailyNotePerformance: "dailyNotePerformanceChart",
   bloggerOverview: "bloggerOverviewChart"`,
@@ -1761,6 +1792,7 @@ main = replaceOnce(
   bloggerOverview: "bloggerOverviewChart"`,
     "pgy typed daily note chart fields",
   );
+}
 
 main = replaceOnce(
     main,
@@ -1783,16 +1815,20 @@ main = replaceOnce(
     `async function buildPgyBloggerChartFields(a, e, t, n, d, B, P, V) {`,
     "pgy typed daily note chart inputs",
   );
-main = replaceOnce(
+// 基线 bundle（1.2.0 发布）已含 typed 日常图生图队列，仅更早原始 bundle 才需扩展。
+if (!main.includes('pgyNoteTypeLabel: "图文"')) {
+  main = replaceOnce(
     main,
     `  pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePerformance) && i.push({ field: "dailyNotePerformanceChart", type: "daily-note-performance", data: d ?? {}, output: pgyChartFile("daily-note", a, "daily-note-performance") });
   pgyHasSelectedField(n, PYG_CHART_FIELDS.bloggerOverview)`,
     `  pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePerformance) && i.push({ field: "dailyNotePerformanceChart", type: "daily-note-performance", data: { ...(d ?? {}), pgyNoteTypeLabel: "图文+视频" }, output: pgyChartFile("daily-note", a, "daily-note-performance") });
   pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePicturePerformance) && i.push({ field: "dailyNotePicturePerformanceChart", type: "daily-note-performance", data: { ...(P ?? {}), pgyNoteTypeLabel: "图文" }, output: pgyChartFile("daily-note", a, "daily-note-picture-performance") });
   pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNoteVideoPerformance) && i.push({ field: "dailyNoteVideoPerformanceChart", type: "daily-note-performance", data: { ...(V ?? {}), pgyNoteTypeLabel: "视频" }, output: pgyChartFile("daily-note", a, "daily-note-video-performance") });
+  pgyHasSelectedField(n, PYG_CHART_FIELDS.recentNoteInteractionFluctuation) && i.push({ field: "recentNoteInteractionFluctuationChart", type: "recent-note-interaction-fluctuation", data: d ?? {}, output: pgyChartFile("daily-note", a, "recent-note-interaction-fluctuation") });
   pgyHasSelectedField(n, PYG_CHART_FIELDS.bloggerOverview)`,
     "pgy typed daily note chart queue",
   );
+}
 
 main = replaceOnce(
     main,
@@ -1874,6 +1910,61 @@ main = replaceOnce(
   "pgy overview inline avatar and emoji",
 );
 
+// 近期笔记波动图（互动量）：字段依赖（复用 notes_rate/daily30 数据，不新增请求）、
+// 图片字段注册、生图队列（三张日常笔记图之后、博主概览图之前）、JS/SVG 兜底路由。
+if (!main.includes("recentNoteInteractionFluctuationChart")) {
+  main = replaceOnce(
+    main,
+    `  dailyNoteVideoPerformanceChart: ["dailyNoteVideoPerformanceChart"],
+  bloggerOverviewChart: ["bloggerOverviewChart"]`,
+    `  dailyNoteVideoPerformanceChart: ["dailyNoteVideoPerformanceChart"],
+  recentNoteInteractionFluctuationChart: ["recentNoteInteractionFluctuationChart"],
+  bloggerOverviewChart: ["bloggerOverviewChart"]`,
+    "pgy recent note fluctuation field dependency",
+  );
+  main = replaceOnce(
+    main,
+    `    "shareMedian",
+    "interactRate",
+    "dailyNotePerformanceChart",
+    "bloggerOverviewChart"
+  ],`,
+    `    "shareMedian",
+    "interactRate",
+    "dailyNotePerformanceChart",
+    "recentNoteInteractionFluctuationChart",
+    "bloggerOverviewChart"
+  ],`,
+    "pgy recent note fluctuation daily30 endpoint dependency",
+  );
+  main = replaceOnce(
+    main,
+    `  dailyNotePerformance: "dailyNotePerformanceChart",
+  dailyNotePicturePerformance: "dailyNotePicturePerformanceChart",
+  dailyNoteVideoPerformance: "dailyNoteVideoPerformanceChart",
+  bloggerOverview: "bloggerOverviewChart"`,
+    `  dailyNotePerformance: "dailyNotePerformanceChart",
+  dailyNotePicturePerformance: "dailyNotePicturePerformanceChart",
+  dailyNoteVideoPerformance: "dailyNoteVideoPerformanceChart",
+  recentNoteInteractionFluctuation: "recentNoteInteractionFluctuationChart",
+  bloggerOverview: "bloggerOverviewChart"`,
+    "pgy recent note fluctuation image field",
+  );
+  main = replaceOnce(
+    main,
+    `  pgyHasSelectedField(n, PYG_CHART_FIELDS.bloggerOverview) && i.push({ field: "bloggerOverviewChart", type: "blogger-overview", data: await pgyPrepareOverviewData(B), output: pgyChartFile("blogger-overview", a, "blogger-overview") });`,
+    `  pgyHasSelectedField(n, PYG_CHART_FIELDS.recentNoteInteractionFluctuation) && i.push({ field: "recentNoteInteractionFluctuationChart", type: "recent-note-interaction-fluctuation", data: d ?? {}, output: pgyChartFile("daily-note", a, "recent-note-interaction-fluctuation") });
+  pgyHasSelectedField(n, PYG_CHART_FIELDS.bloggerOverview) && i.push({ field: "bloggerOverviewChart", type: "blogger-overview", data: await pgyPrepareOverviewData(B), output: pgyChartFile("blogger-overview", a, "blogger-overview") });`,
+    "pgy recent note fluctuation generation queue",
+  );
+  main = replaceOnce(
+    main,
+    `o.type === "daily-note-performance" ? r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output) : o.type === "blogger-overview" && (r = pgyWriteSvgPng(pgyBloggerOverviewSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);`,
+    `o.type === "daily-note-performance" ? r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output) : o.type === "recent-note-interaction-fluctuation" ? r = pgyWriteSvgPng(pgyRecentNoteFluctuationSvg(o.data ?? {}), o.output) : o.type === "blogger-overview" && (r = pgyWriteSvgPng(pgyBloggerOverviewSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);`,
+    "pgy recent note fluctuation JS fallback route",
+  );
+}
+
 const chartRendererSource = fs.readFileSync(chartRendererSourcePath, "utf8");
 if (!main.includes("import urllib.request")) {
   main = replaceOnce(
@@ -1934,6 +2025,42 @@ main = replaceSection(
   pythonDailySource,
   "pgy daily note Python renderer synchronization",
 );
+// 近期笔记波动图（互动量）：Python 渲染函数 + 路由（复用 notes_rate/daily30 响应）。
+const pythonRecentStart = chartRendererSource.indexOf(
+  "def save_recent_note_fluctuation(chart):",
+);
+const pythonRecentEnd = chartRendererSource.indexOf("def main():", pythonRecentStart);
+if (pythonRecentStart < 0 || pythonRecentEnd < 0)
+  throw new Error("Missing maintained Python recent note fluctuation renderer section");
+const pythonRecentSource = chartRendererSource
+  .slice(pythonRecentStart, pythonRecentEnd)
+  .trim();
+if (main.includes("def save_recent_note_fluctuation(chart):")) {
+  main = replaceSection(
+    main,
+    "def save_recent_note_fluctuation(chart):",
+    "def main():",
+    pythonRecentSource,
+    "pgy recent note fluctuation Python renderer synchronization",
+  );
+} else {
+  main = replaceOnce(
+    main,
+    "def main():",
+    `${pythonRecentSource}\n\ndef main():`,
+    "pgy recent note fluctuation Python renderer",
+  );
+  main = replaceOnce(
+    main,
+    `            elif chart_type == "daily-note-performance":
+                ok = save_daily_note_performance(chart)`,
+    `            elif chart_type == "daily-note-performance":
+                ok = save_daily_note_performance(chart)
+            elif chart_type == "recent-note-interaction-fluctuation":
+                ok = save_recent_note_fluctuation(chart)`,
+    "pgy recent note fluctuation Python route",
+  );
+}
 const dailyNoteSvgStart = main.includes("function pgyDailyNoteTextWidth(a) {")
   ? "function pgyDailyNoteTextWidth(a) {"
   : "function pgyDailyNotePerformanceSvg(a) {";
@@ -1941,7 +2068,7 @@ main = replaceSection(
   main,
   dailyNoteSvgStart,
   "async function buildPgyBloggerChartFields",
-  `${dailyNoteSvgSource}\n\n${bloggerOverviewSvgSource}`,
+  `${dailyNoteSvgSource}\n\n${bloggerOverviewSvgSource}\n\n${recentNoteFluctuationSvgSource}`,
   "pgy chart SVG renderer synchronization",
 );
 main = replaceSection(
@@ -2114,8 +2241,8 @@ main = replaceOnce(
 
 main = replaceOnce(
   main,
-  'return Ve.utils.book_append_sheet(s, n, "Sheet1"), Ve.writeFile(s, t), a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, a.headers ?? [], a.data ?? []), $i.info(`Excel 已导出: ${t}`), { success: !0, filePath: t };',
   'return Ve.utils.book_append_sheet(s, n, "Sheet1"), Ve.writeFile(s, t), a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, a.headers ?? [], i), $i.info(`Excel 已导出: ${t}`), { success: !0, filePath: t };',
+  'return Ve.utils.book_append_sheet(s, n, "Sheet1"), Ve.writeFile(s, t), a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, a.headers ?? [], i), $i.info(`Excel 已导出: ${pgyRedactLocalPath(String(t))}`), { success: !0, filePath: t };',
   "excel export embeds images from original data",
 );
 
@@ -2703,6 +2830,13 @@ if (!main.includes("W.history.list")) {
     const n = await pgyCollectionHistory.getTask(t.taskId), s = await pgyCollectionHistory.getExportRows(t.taskId);
     if (!n)
       throw new Error("历史任务不存在");
+    // 找博主筛选来源（search-batch）的任务：只有完成且计数收口才允许导出；
+    // 纵深防御，防止 running/preparing 时导出只有部分行的 Excel。
+    if (!isCollectionTaskExportReady(n)) {
+      const gateError = new Error("任务尚未完成全部博主采集，暂不可导出（完成后自动解锁）");
+      gateError.kind = "task-not-complete";
+      throw gateError;
+    }
     if (s.length === 0)
       throw new Error("该任务暂无可导出的成功内容");
     return ff({ taskId: t.taskId, fileName: n.fileName || \`\${t.taskId}.xlsx\`, data: s });
@@ -2799,7 +2933,7 @@ if (!main.includes('await pgyCollectionHistory.setStatus(t, "interrupted")')) {
   );
 }
 
-if (!main.includes("const pgyPending = pgyPendingCharges.get(pgyItemIndex)")) {
+if (!main.includes("pgyPending = pgyPendingCharges.get(pgyItemIndex)")) {
   main = replaceOnce(
     main,
     `      const f = i[m];
@@ -2810,7 +2944,32 @@ if (!main.includes("const pgyPending = pgyPendingCharges.get(pgyItemIndex)")) {
   );
   main = replaceOnce(
     main,
-    `      ue.info(\`[task=\${t}] 开始采集第 \${m + 1}/\${i.length} 条 plugin=\${n} taskType=\${s} url=\${String(f).slice(0, 180)}\`);
+    // 目标状态以“已烤进 release 的 reconcile 块”为基准（from），
+    // 输出在其 itemResult 中补充 inputType（to）；两态幂等。
+    `      ue.info(\`[task=\${t}] 开始采集原始第 \${pgyItemIndex + 1} 条，当前 \${m + 1}/\${i.length} plugin=\${n} taskType=\${s} url=\${String(f).slice(0, 180)}\`);
+      if (pgyPending) {
+        try {
+          const v = await Le.get().consumeShumiaoForItem(e, m, pgyItemIndex);
+          await pgyCollectionHistory.recordSuccess(t, pgyItemIndex, pgyPending.row, v, pgyPending.sourceUrl || f);
+          l.successCount++, this.sendToRenderer(W.task.itemResult, {
+            taskId: t,
+            index: pgyItemIndex,
+            status: "success",
+            data: pgyPending.row,
+            balanceAfter: v,
+            recoveredPendingCharge: !0
+          });
+          continue;
+        } catch (v) {
+          pgyInterrupted = !0, this.sendToRenderer(W.task.error, {
+            taskId: t,
+            message: v instanceof Error ? v.message : String(v),
+            errorCategory: "balance",
+            errorCategoryLabel: "扣费确认失败"
+          });
+          break;
+        }
+      }
       try {`,
     `      ue.info(\`[task=\${t}] 开始采集原始第 \${pgyItemIndex + 1} 条，当前 \${m + 1}/\${i.length} plugin=\${n} taskType=\${s} url=\${String(f).slice(0, 180)}\`);
       if (pgyPending) {
@@ -2819,6 +2978,7 @@ if (!main.includes("const pgyPending = pgyPendingCharges.get(pgyItemIndex)")) {
           await pgyCollectionHistory.recordSuccess(t, pgyItemIndex, pgyPending.row, v, pgyPending.sourceUrl || f);
           l.successCount++, this.sendToRenderer(W.task.itemResult, {
             taskId: t,
+            inputType: l.inputType,
             index: pgyItemIndex,
             status: "success",
             data: pgyPending.row,
@@ -3022,6 +3182,357 @@ if (!main.includes('if (existingTask) {\n      await pgyCollectionHistory.setSta
   );
 }
 
+// ===== Phase 4：蒲公英批量采集主进程/preload 接线（可复现构建，全部幂等）=====
+// 仅在已有 Phase 1 只读 bridge 的运行时上扩展批量能力。旧版日常图运行时
+// 没有找博主入口，仍须能独立完成图表升级，不能因缺少批量桥接锚点而失败。
+if (preload.includes('previewPayload:e=>r.ipcRenderer.invoke("pgy-kol:payload-preview",e)')) {
+// preload：pgyKol bridge 追加批量通道与事件订阅（to 已存在则跳过）。
+if (!preload.includes('"pgy-kol:batch-start"')) {
+  preload = replaceOnce(
+    preload,
+    'previewPayload:e=>r.ipcRenderer.invoke("pgy-kol:payload-preview",e)}});',
+    'previewPayload:e=>r.ipcRenderer.invoke("pgy-kol:payload-preview",e),batchStart:e=>r.ipcRenderer.invoke("pgy-kol:batch-start",e),batchList:()=>r.ipcRenderer.invoke("pgy-kol:batch-list"),batchGet:e=>r.ipcRenderer.invoke("pgy-kol:batch-get",e),batchPause:e=>r.ipcRenderer.invoke("pgy-kol:batch-pause",e),batchResume:e=>r.ipcRenderer.invoke("pgy-kol:batch-resume",e),batchCancel:e=>r.ipcRenderer.invoke("pgy-kol:batch-cancel",e),batchExport:e=>r.ipcRenderer.invoke("pgy-kol:batch-export",e),getColumns:()=>r.ipcRenderer.invoke("pgy-kol:columns"),onBatchEvent:e=>{const n=(a,t)=>e(t);return r.ipcRenderer.on("pgy-kol:batch-event",n),()=>r.ipcRenderer.removeListener("pgy-kol:batch-event",n)}}});',
+    "pgy-kol Phase 4 preload bridge methods",
+  );
+}
+// main：redactLocalPathText import（Excel 导出日志脱敏依赖，先于导出替换步骤生效）。
+if (!main.includes("redactLocalPathText as pgyRedactLocalPath")) {
+  main = replaceOnce(
+    main,
+    'import { createPgyKolService, registerPgyKolIpc } from "../pgy-kol/pgy-kol-service.mjs";',
+    'import { createPgyKolService, registerPgyKolIpc } from "../pgy-kol/pgy-kol-service.mjs";\nimport { redactLocalPathText as pgyRedactLocalPath } from "../pgy-kol/pgy-session-request.mjs";',
+    "pgy-kol Phase 4 redactLocalPathText import",
+  );
+}
+// main：批量任务存储目录与 Excel 导出器接线。
+if (!main.includes('taskBaseDir: Oe(ye.getPath("userData"), "pgy-kol-tasks")')) {
+  main = replaceOnce(
+    main,
+    'baseDir: Oe(ye.getPath("userData"), "pgy-kol-schema"),',
+    'baseDir: Oe(ye.getPath("userData"), "pgy-kol-schema"),\n      taskBaseDir: Oe(ye.getPath("userData"), "pgy-kol-tasks"),\n      exporter: (payload) => ff(payload),',
+    "pgy-kol Phase 4 task store and exporter wiring",
+  );
+}
+// main：批量任务事件广播接线（BrowserWindow.getAllWindows → webContents.send）。
+if (!main.includes("broadcast: (channel, payload) => Dt.getAllWindows()")) {
+  main = replaceOnce(
+    main,
+    'pgyKolIpcDispose = registerPgyKolIpc({ ipcMain: F, service: pgyKolService });',
+    'pgyKolIpcDispose = registerPgyKolIpc({\n      ipcMain: F,\n      service: pgyKolService,\n      broadcast: (channel, payload) => Dt.getAllWindows().forEach((window) => window.webContents.send(channel, payload))\n    });',
+    "pgy-kol Phase 4 batch event broadcast wiring",
+  );
+}
+
+// ===== Phase 5.1：preload pgyKol bridge 暴露 schema-fields（前端单一 Schema 来源）=====
+if (!preload.includes('getSchemaFields:()=>r.ipcRenderer.invoke("pgy-kol:schema-fields")')) {
+  preload = replaceOnce(
+    preload,
+    'onBatchEvent:e=>{const n=(a,t)=>e(t);return r.ipcRenderer.on("pgy-kol:batch-event",n),()=>r.ipcRenderer.removeListener("pgy-kol:batch-event",n)}}});',
+    'onBatchEvent:e=>{const n=(a,t)=>e(t);return r.ipcRenderer.on("pgy-kol:batch-event",n),()=>r.ipcRenderer.removeListener("pgy-kol:batch-event",n)},getSchemaFields:()=>r.ipcRenderer.invoke("pgy-kol:schema-fields")}});',
+    "pgy-kol Phase 5.1 preload schema-fields bridge method",
+  );
+}
+
+// ===== 找博主“一次完整采集”（search-batch 单任务收敛）=====
+// 以上补丁均为幂等：目标状态已存在时 replaceOnce 直接返回原文，重复执行无副作用。
+
+// 1) 导入 isCollectionTaskExportReady（导出完成门闸）。
+main = replaceOnce(
+  main,
+  'import { CollectionHistoryStore } from "../electron-main/collection-history-store.mjs";',
+  'import { CollectionHistoryStore, isCollectionTaskExportReady } from "../electron-main/collection-history-store.mjs";',
+  "collection history store import carries export gate",
+);
+
+// 2) ge.startTask 的任务记录携带 inputType（导出门闸按来源识别 search-batch）。
+main = replaceOnce(
+  main,
+  `      fields: r,
+      current: 0,`,
+  `      fields: r,
+      inputType: e.inputType || "",
+      current: 0,`,
+  "startTask record carries inputType",
+);
+
+// 3) 运行中任务事件携带 inputType（progress/itemResult/complete，共 5 处 +
+// reconcile 块 1 处已在上方 reconcile 补丁内处理）。
+main = replaceOnce(
+  main,
+  `      l.current = m + 1;
+      this.sendToRenderer(W.task.progress, {
+        taskId: t,
+        current: l.current,`,
+  `      l.current = m + 1;
+      this.sendToRenderer(W.task.progress, {
+        taskId: t,
+        inputType: l.inputType,
+        current: l.current,`,
+  "progress event carries inputType",
+);
+main = replaceOnce(
+  main,
+  `        y.status === "success" ? l.successCount++ : l.errorCount++, this.sendToRenderer(W.task.itemResult, {
+          taskId: t,
+          index: pgyItemIndex,
+          status: y.status,`,
+  `        y.status === "success" ? l.successCount++ : l.errorCount++, this.sendToRenderer(W.task.itemResult, {
+          taskId: t,
+          inputType: l.inputType,
+          index: pgyItemIndex,
+          status: y.status,`,
+  "itemResult event carries inputType",
+);
+main = replaceOnce(
+  main,
+  `        y && this.sendToRenderer(W.task.progress, {
+          taskId: t,
+          current: l.current,
+          total: l.total,
+          percent: g,`,
+  `        y && this.sendToRenderer(W.task.progress, {
+          taskId: t,
+          inputType: l.inputType,
+          current: l.current,
+          total: l.total,
+          percent: g,`,
+  "batch progress event carries inputType",
+);
+main = replaceOnce(
+  main,
+  `    l.cancelled ? this.sendToRenderer(W.task.complete, {
+      taskId: t,
+      successCount: l.successCount,`,
+  `    l.cancelled ? this.sendToRenderer(W.task.complete, {
+      taskId: t,
+      inputType: l.inputType,
+      successCount: l.successCount,`,
+  "complete event carries inputType",
+);
+main = replaceOnce(
+  main,
+  `    }) : (this.sendToRenderer(W.task.complete, {
+      taskId: t,
+      successCount: l.successCount,`,
+  `    }) : (this.sendToRenderer(W.task.complete, {
+      taskId: t,
+      inputType: l.inputType,
+      successCount: l.successCount,`,
+  "complete cancelled event carries inputType",
+);
+
+// 4) 采集助手按钮（scraper:task:pause/resume/cancel）转发到 pgy-kol 编排，
+// 让“准备博主列表”阶段也能响应暂停/继续/取消。
+main = replaceOnce(
+  main,
+  `  }), F.on(W.task.pause, (e, t) => {
+    ge.pauseTask(t.taskId);
+  }), F.on(W.task.resume, (e, t) => {
+    ge.resumeTask(t.taskId);
+  }), F.on(W.task.cancel, (e, t) => {
+    ge.cancelTask(t.taskId);
+  }), F.handle(W.export.toExcel`,
+  `  }), F.on(W.task.pause, (e, t) => {
+    ge.pauseTask(t.taskId);
+    pgyKolService && pgyKolService.forwardScraperTaskControl && pgyKolService.forwardScraperTaskControl(t.taskId, "pause").catch(() => {});
+  }), F.on(W.task.resume, (e, t) => {
+    ge.resumeTask(t.taskId);
+    pgyKolService && pgyKolService.forwardScraperTaskControl && pgyKolService.forwardScraperTaskControl(t.taskId, "resume").catch(() => {});
+  }), F.on(W.task.cancel, (e, t) => {
+    ge.cancelTask(t.taskId);
+    pgyKolService && pgyKolService.forwardScraperTaskControl && pgyKolService.forwardScraperTaskControl(t.taskId, "cancel").catch(() => {});
+  }), F.handle(W.export.toExcel`,
+  "scraper task controls forward to pgy-kol orchestration",
+);
+
+// 5) pgy-kol 编排服务提升为模块级（供事件转发引用）并接线详情采集依赖。
+main = replaceOnce(
+  main,
+  `let ge = null;
+let pgyKolIpcDispose = null;`,
+  `let ge = null;
+let pgyKolService = null;
+let pgyKolIpcDispose = null;`,
+  "module-level pgyKolService holder",
+);
+main = replaceOnce(
+  main,
+  "const pgyKolService = createPgyKolService({",
+  "pgyKolService = createPgyKolService({",
+  "pgyKolService uses module-level holder",
+);
+// 基线 bundle（1.2.0 发布）已含旧版 detail deps，仅在完全没有 detail 注入时
+// （更早的原始 bundle）才执行本补丁；幂等守卫用注入注释做标记。
+if (!main.includes("两阶段采集：详情阶段复用现有 pgy/blogger")) {
+  main = replaceOnce(
+    main,
+    `      exporter: (payload) => ff(payload),
+      logger: {`,
+    `      exporter: (payload) => ff(payload),
+      // 两阶段采集：详情阶段复用现有 pgy/blogger 详情采集器（同一 CollectionHistoryStore
+      // 与 ScraperOrchestrator），不复制其请求/字段解析/图表/导出逻辑。
+      detail: {
+        initialize: () => pgyCollectionHistory.initialize(),
+        create: (payload) => pgyCollectionHistory.createTask(payload),
+        updateUrls: (taskId, urls) => pgyCollectionHistory.updateTaskUrls(taskId, urls),
+        emit: (type, payload) => {
+          const channel = W.task[type];
+          if (channel) ge.sendToRenderer(channel, payload);
+        },
+        start: (payload) => pgyCollectionHistory.createTask(payload).then(async () => {
+          const live = await pgyCollectionHistory.getTask(payload.taskId);
+          if (!live || live.status !== "running") return;
+          return ge.startTask(payload);
+        }),
+        pause: (taskId) => ge.pauseTask(taskId),
+        resume: (taskId) => ge.resumeTask(taskId),
+        cancel: (taskId) => ge.cancelTask(taskId),
+        getTask: (taskId) => pgyCollectionHistory.getTask(taskId),
+        getExportRows: (taskId) => pgyCollectionHistory.getExportRows(taskId),
+        getResumePlan: (taskId) => pgyCollectionHistory.getResumePlan(taskId),
+        setStatus: (taskId, status) => pgyCollectionHistory.setStatus(taskId, status),
+      },
+      logger: {`,
+    "pgy-kol detail collection dependency wiring",
+  );
+}
+// 已注入旧版 detail.start 的增量迁移：启动前复核持久状态，关闭
+// “取消与首次 feed 并发后仍调用 ge.startTask”这一复活窗口。
+main = replaceAllIfExists(
+  main,
+  "        start: (payload) => pgyCollectionHistory.createTask(payload).then(() => ge.startTask(payload)),",
+  `        start: (payload) => pgyCollectionHistory.createTask(payload).then(async () => {
+          const live = await pgyCollectionHistory.getTask(payload.taskId);
+          if (!live || live.status !== "running") return;
+          return ge.startTask(payload);
+        }),`,
+);
+// 5a) 流式采集：detail 依赖补充动态队列能力（追加目标列表 / 标记发现收口）。
+//     基线 bundle（1.2.0 发布）已含旧版 detail deps，本补丁在其上增量添加。
+main = replaceOnce(
+  main,
+  `        create: (payload) => pgyCollectionHistory.createTask(payload),
+        updateUrls: (taskId, urls) => pgyCollectionHistory.updateTaskUrls(taskId, urls),
+        emit: (type, payload) => {`,
+  `        create: (payload) => pgyCollectionHistory.createTask(payload),
+        updateUrls: (taskId, urls) => pgyCollectionHistory.updateTaskUrls(taskId, urls),
+        appendTaskUrls: (taskId, urls) => pgyCollectionHistory.appendTaskUrls(taskId, urls),
+        setDiscoveryClosed: (taskId) => pgyCollectionHistory.setDiscoveryClosed(taskId),
+        emit: (type, payload) => {`,
+  "detail deps carry streaming queue methods",
+);
+main = replaceOnce(
+  main,
+  `      }
+    });
+    pgyKolIpcDispose = registerPgyKolIpc({`,
+  `      }
+    });
+    pgyKolService.initialize().catch((err) => {
+      Qe.error("[pgy-kol] 两阶段编排初始化失败:", err);
+    });
+    pgyKolIpcDispose = registerPgyKolIpc({`,
+  "pgy-kol orchestration initialize on app ready",
+);
+
+// 5b) 边发现边采集：详情任务循环以“完整队列 + 终态跳过 + 队列耗尽等待”运行。
+//     search-batch 任务每次迭代从历史存储刷新目标列表（动态追加的 UID 自动续采，
+//     total 同步更新），跳过已成功/已失败项（重启恢复不重抓不重扣），
+//     discoveryClosed 后队列耗尽即正常结束。
+// 先迁移早期版本：它直接给 bundle 解构得到的 const `i` 重新赋值，真实运行
+// 会抛 Assignment to constant variable。恢复原循环锚点后再应用可变队列版本。
+main = replaceAllIfExists(
+  main,
+  `    let pgyTerminal = new Set((await pgyCollectionHistory.getTerminalIndexes(t).catch(() => [])) || []);
+    for (let m = 0; await (async () => { while (m < i.length && pgyTerminal.has(pgySourceIndexes[m] ?? m)) { l.current = m + 1; m += 1; } if (m < i.length) return !0; if (l.cancelled) return !1; if (l.paused) { await this.waitForResume(l); if (l.cancelled) return !1; } const live = await pgyCollectionHistory.getTask(t).catch(() => null); if (!live || live.inputType !== "search-batch" || live.discoveryClosed === true) return !1; if (Array.isArray(live.urls) && live.urls.length > i.length) { i = live.urls.map((u) => String(u ?? "")); pgyTerminal = new Set((await pgyCollectionHistory.getTerminalIndexes(t).catch(() => [])) || []); l.total = Number.isFinite(live.total) ? live.total : i.length; } await new Promise((r) => setTimeout(r, 500)); return !0; })(); m++) {`,
+  `    for (let m = 0; m < i.length && !(l.cancelled || l.paused && (await this.waitForResume(l), l.cancelled)); m++) {`,
+);
+main = replaceAllIfExists(
+  main,
+  `    let pgyUrls = i.map((u) => String(u ?? ""));
+    let pgyTerminal = new Set((await pgyCollectionHistory.getTerminalIndexes(t).catch(() => [])) || []);
+    for (let m = 0; await (async () => { while (m < pgyUrls.length && pgyTerminal.has(pgySourceIndexes[m] ?? m)) { l.current = m + 1; m += 1; } if (m < pgyUrls.length) return !0; if (l.cancelled) return !1; if (l.paused) { await this.waitForResume(l); if (l.cancelled) return !1; } const live = await pgyCollectionHistory.getTask(t).catch(() => null); if (!live || live.inputType !== "search-batch" || live.discoveryClosed === true) return !1; if (Array.isArray(live.urls) && live.urls.length > pgyUrls.length) { pgyUrls = live.urls.map((u) => String(u ?? "")); pgyTerminal = new Set((await pgyCollectionHistory.getTerminalIndexes(t).catch(() => [])) || []); l.total = Number.isFinite(live.total) ? live.total : pgyUrls.length; } await new Promise((r) => setTimeout(r, 500)); return !0; })(); m++) {`,
+  `    for (let m = 0; m < i.length && !(l.cancelled || l.paused && (await this.waitForResume(l), l.cancelled)); m++) {`,
+);
+main = replaceAllIfExists(
+  main,
+  `    let pgyUrls = i.map((u) => String(u ?? ""));
+    let pgyTerminal = new Set((await pgyCollectionHistory.getTerminalIndexes(t).catch(() => [])) || []);
+    for (let m = 0; await (async () => { if (l.cancelled) return !1; if (l.paused) { await this.waitForResume(l); if (l.cancelled) return !1; } while (m < pgyUrls.length && pgyTerminal.has(pgySourceIndexes[m] ?? m)) { l.current = m + 1; m += 1; } if (m < pgyUrls.length) return !0; const live = await pgyCollectionHistory.getTask(t).catch(() => null); if (!live || live.inputType !== "search-batch" || live.discoveryClosed === true) return !1; if (Array.isArray(live.urls) && live.urls.length > pgyUrls.length) { pgyUrls = live.urls.map((u) => String(u ?? "")); pgyTerminal = new Set((await pgyCollectionHistory.getTerminalIndexes(t).catch(() => [])) || []); l.total = Number.isFinite(live.total) ? live.total : pgyUrls.length; } await new Promise((r) => setTimeout(r, 500)); return !0; })(); m++) {`,
+  `    for (let m = 0; m < i.length && !(l.cancelled || l.paused && (await this.waitForResume(l), l.cancelled)); m++) {`,
+);
+main = replaceOnce(
+  main,
+  `    for (let m = 0; m < i.length && !(l.cancelled || l.paused && (await this.waitForResume(l), l.cancelled)); m++) {`,
+  `    let pgyUrls = i.map((u) => String(u ?? ""));
+    let pgyTerminal = new Set((await pgyCollectionHistory.getTerminalIndexes(t).catch(() => [])) || []);
+    for (let m = 0; await (async () => { for (;;) { if (l.cancelled) return !1; if (l.paused) { await this.waitForResume(l); if (l.cancelled) return !1; } while (m < pgyUrls.length && pgyTerminal.has(pgySourceIndexes[m] ?? m)) { l.current = m + 1; m += 1; } if (m < pgyUrls.length) return !0; const live = await pgyCollectionHistory.getTask(t).catch(() => null); if (!live || live.inputType !== "search-batch") return !1; if (Array.isArray(live.urls) && live.urls.length > pgyUrls.length) { pgyUrls = live.urls.map((u) => String(u ?? "")); pgyTerminal = new Set((await pgyCollectionHistory.getTerminalIndexes(t).catch(() => [])) || []); l.total = Number.isFinite(live.total) ? live.total : pgyUrls.length; continue; } if (live.discoveryClosed === true) return !1; await new Promise((r) => setTimeout(r, 500)); } })(); m++) {`,
+  "scraper loop streams dynamic search-batch queue with terminal skip",
+);
+main = replaceOnce(
+  main,
+  `      const f = i[m], pgyItemIndex = pgySourceIndexes[m] ?? m, pgyPending = pgyPendingCharges.get(pgyItemIndex);`,
+  `      const f = pgyUrls[m], pgyItemIndex = pgySourceIndexes[m] ?? m, pgyPending = pgyPendingCharges.get(pgyItemIndex);`,
+  "scraper loop reads the mutable streaming queue",
+);
+main = replaceOnce(
+  main,
+  `      ue.info(\`[task=\${t}] 开始采集原始第 \${pgyItemIndex + 1} 条，当前 \${m + 1}/\${i.length} plugin=\${n} taskType=\${s} url=\${String(f).slice(0, 180)}\`);`,
+  `      ue.info(\`[task=\${t}] 开始采集原始第 \${pgyItemIndex + 1} 条，当前 \${m + 1}/\${pgyUrls.length} plugin=\${n} taskType=\${s} url=\${String(f).slice(0, 180)}\`);`,
+  "scraper loop start log uses the streaming queue length",
+);
+main = replaceOnce(
+  main,
+  `        ue.info(\`[task=\${t}] 完成采集第 \${m + 1}/\${i.length} 条 plugin=\${n} status=\${y.status} errorCode=\${y.errorCode ?? "NONE"} success=\${l.successCount} error=\${l.errorCount}\`);`,
+  `        ue.info(\`[task=\${t}] 完成采集第 \${m + 1}/\${pgyUrls.length} 条 plugin=\${n} status=\${y.status} errorCode=\${y.errorCode ?? "NONE"} success=\${l.successCount} error=\${l.errorCount}\`);`,
+  "scraper loop completion log uses the streaming queue length",
+);
+main = replaceOnce(
+  main,
+  `      if (m < i.length - 1 && !l.cancelled) {`,
+  `      if (m < pgyUrls.length - 1 && !l.cancelled) {`,
+  "scraper loop pacing uses the streaming queue length",
+);
+
+// 6) 历史导出 IPC 完成门闸（release bundle 自带 exportTask handler）。
+main = replaceOnce(
+  main,
+  `    const n = await pgyCollectionHistory.getTask(t.taskId), s = await pgyCollectionHistory.getExportRows(t.taskId);
+    if (!n)
+      throw new Error("历史任务不存在");
+    if (s.length === 0)`,
+  `    const n = await pgyCollectionHistory.getTask(t.taskId), s = await pgyCollectionHistory.getExportRows(t.taskId);
+    if (!n)
+      throw new Error("历史任务不存在");
+    if (!isCollectionTaskExportReady(n)) {
+      const gateError = new Error("任务尚未完成全部博主采集，暂不可导出（完成后自动解锁）");
+      gateError.kind = "task-not-complete";
+      throw gateError;
+    }
+    if (s.length === 0)`,
+  "history export task completion gate",
+);
+
+// 6) 导出对话框纵深门闸：search-batch 来源任务未完成时拒绝导出。
+main = replaceOnce(
+  main,
+  `async function ff(a) {
+  const pausedTask = typeof (a == null ? void 0 : a.taskId) == "string" ? ge == null ? void 0 : ge.runningTasks.get(a.taskId) : null;`,
+  `async function ff(a) {
+  // 找博主筛选来源（search-batch）的任务：只有完成且计数收口才允许导出；
+  // 纵深防御，防止 running/preparing 时导出只有部分行的 Excel。
+  if (typeof (a == null ? void 0 : a.taskId) === "string" && a.taskId.startsWith("pgykol-detail-")) {
+    const gateTask = await pgyCollectionHistory.getTask(a.taskId).catch(() => null);
+    if (gateTask && gateTask.inputType === "search-batch" && !isCollectionTaskExportReady(gateTask)) {
+      const gateError = new Error("任务尚未完成全部博主采集，暂不可导出（完成后自动解锁）");
+      gateError.kind = "task-not-complete";
+      throw gateError;
+    }
+  }
+  const pausedTask = typeof (a == null ? void 0 : a.taskId) == "string" ? ge == null ? void 0 : ge.runningTasks.get(a.taskId) : null;`,
+  "export dialog rejects incomplete search-batch tasks",
+);
+}
 main = replaceSection(
   main,
   "const PGY_PYTHON_CHART_SCRIPT = String.raw`",

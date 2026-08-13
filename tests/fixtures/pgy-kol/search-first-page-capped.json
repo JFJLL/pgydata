@@ -1,0 +1,181 @@
+{
+  "code": 0,
+  "data": {
+    "kols": [
+      {
+        "userId": "kol_0001",
+        "nickname": "虚构博主一号",
+        "fansNum": 123456,
+        "readMidNor30": 5200,
+        "interMidNor30": 430,
+        "picturePrice": 800,
+        "videoPrice": 1500,
+        "location": "上海",
+        "gender": "女",
+        "contentTags": ["美妆", "穿搭"],
+        "personalTags": ["精致生活"],
+        "featureTags": ["高颜值"],
+        "avatar": "https://example.test/avatar/kol_0001.png",
+        "redId": "red_0001",
+        "currentLevel": 3,
+        "liveSign": 0,
+        "fansCount": 123456,
+        "fansNumTrend": 0.12,
+        "noteNumber30": 8,
+        "hundredLikePercent30": 0.35,
+        "thousandLikePercent30": 0.08,
+        "readMedian30": 4200,
+        "interactionRate30": 0.041,
+        "fansActiveIn28d": 88000,
+        "fansActiveIn28dNum": 88000,
+        "fansActiveIn28dLv": "LV4",
+        "fansCpuvNum30d": 99000,
+        "fansCpuv30d": 0.8,
+        "videoFullViewRate30": 0.62,
+        "picture3sViewRate30": 0.55,
+        "fansFemale": 0.72,
+        "fansMale": 0.28,
+        "fansProvinceChart": "浙江 30%,广东 20%",
+        "fansCityChart": "杭州 15%,深圳 10%"
+      },
+      {
+        "userId": "kol_0002",
+        "nickname": "虚构博主二号",
+        "fansNum": 88888,
+        "picturePrice": 500,
+        "videoPrice": 900,
+        "location": "北京",
+        "gender": "女",
+        "contentTags": ["美食"],
+        "mengagementNum": 132
+      },
+      {
+        "userId": "kol_0003"
+      },
+      {
+        "userId": "kol_0004",
+        "nickname": "虚构博主四号",
+        "fansNum": 66666,
+        "readMidNor30": 3100,
+        "interMidNor30": 220,
+        "location": "广州",
+        "gender": "男",
+        "superSecretField": "quarantine-me"
+      },
+      {
+        "userId": "kol_0005",
+        "nickname": "虚构博主五号",
+        "fansNum": 55555,
+        "location": "深圳",
+        "gender": "女"
+      },
+      {
+        "userId": "kol_0006",
+        "nickname": "虚构博主六号",
+        "fansNum": 44444,
+        "location": "杭州",
+        "gender": "男"
+      },
+      {
+        "userId": "kol_0007",
+        "nickname": "虚构博主七号",
+        "fansNum": 33333,
+        "location": "成都",
+        "gender": "女"
+      },
+      {
+        "userId": "kol_0008",
+        "nickname": "虚构博主八号",
+        "fansNum": 22222,
+        "location": "武汉",
+        "gender": "女"
+      },
+      {
+        "userId": "kol_0009",
+        "nickname": "虚构博主九号",
+        "fansNum": 11111,
+        "location": "南京",
+        "gender": "男"
+      },
+      {
+        "userId": "kol_0010",
+        "nickname": "虚构博主十号",
+        "fansNum": 99999,
+        "location": "重庆",
+        "gender": "女"
+      },
+      {
+        "userId": "kol_0011",
+        "nickname": "虚构博主十一号",
+        "fansNum": 77777,
+        "location": "西安",
+        "gender": "女"
+      },
+      {
+        "userId": "kol_0012",
+        "nickname": "虚构博主十二号",
+        "fansNum": 66660,
+        "location": "苏州",
+        "gender": "男"
+      },
+      {
+        "userId": "kol_0013",
+        "nickname": "虚构博主十三号",
+        "fansNum": 55550,
+        "location": "长沙",
+        "gender": "女"
+      },
+      {
+        "userId": "kol_0014",
+        "nickname": "虚构博主十四号",
+        "fansNum": 44440,
+        "location": "天津",
+        "gender": "女"
+      },
+      {
+        "userId": "kol_0015",
+        "nickname": "虚构博主十五号",
+        "fansNum": 33330,
+        "location": "郑州",
+        "gender": "男"
+      },
+      {
+        "userId": "kol_0016",
+        "nickname": "虚构博主十六号",
+        "fansNum": 22220,
+        "location": "青岛",
+        "gender": "女"
+      },
+      {
+        "userId": "kol_0017",
+        "nickname": "虚构博主十七号",
+        "fansNum": 11110,
+        "location": "厦门",
+        "gender": "女"
+      },
+      {
+        "userId": "kol_0018",
+        "nickname": "虚构博主十八号",
+        "fansNum": 10000,
+        "location": "宁波",
+        "gender": "男"
+      },
+      {
+        "userId": "kol_0019",
+        "nickname": "虚构博主十九号",
+        "fansNum": 9000,
+        "location": "合肥",
+        "gender": "女"
+      },
+      {
+        "userId": "kol_0020",
+        "nickname": "虚构博主二十号",
+        "fansNum": 8000,
+        "location": "昆明",
+        "gender": "女"
+      }
+    ],
+    "total": 5000
+  },
+  "msg": ""
+}

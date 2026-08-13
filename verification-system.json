@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "starterVersion": "2.0.0",
+  "policyVersion": 1,
+  "installedAt": "2026-08-11",
+  "mode": "upgrade-conservative",
+  "notes": [
+    "项目自 2026-08-05 起已使用自研 verification-policy.json (v1) 与 scripts/verify-change.ps1（多轮 R3 receipt 验证）；升级保留项目版命令映射与 pgy-kol 定制路由，不覆盖模板。",
+    "本仓库主分支为 origin/master（模板默认 origin/main），receipt 指纹基于 HEAD 工作区 diff（非 merge-base），保持项目既有语义。",
+    "kimi-browser lane 未加入 verification-policy.json：项目 UI 验收由真实 Electron/WebBridge 手动流程承担（AGENTS.md 明确 Browser testing intentionally excluded）。scripts/kimi-browser.ps1 已安装为可用工具。",
+    "Hook 与 CI 保持关闭（用户未要求开启）。"
+  ],
+  "installedFiles": [
+    "verification-policy.json",
+    "scripts/verify-change.ps1",
+    "scripts/kimi-browser.ps1",
+    "templates/kimi-browser-qa.md",
+    "templates/agent-review.json"
+  ]
+}

@@ -51,6 +51,18 @@
       "addLanes": ["integration", "data", "agent-review"]
     },
     {
+      "id": "pgy-kol-batch-state",
+      "risk": "R3",
+      "patterns": ["^app-source/pgy-kol/pgy-kol-(task-store|batch-runner|column-registry|batch-export)\\.mjs$", "^tests/unit/pgy-kol-batch-"],
+      "addLanes": ["integration", "data", "agent-review"]
+    },
+    {
+      "id": "pgy-kol-modules",
+      "risk": "R3",
+      "patterns": ["^app-source/pgy-kol/"],
+      "addLanes": ["integration", "agent-review"]
+    },
+    {
       "id": "critical-user-journey",
       "risk": "R3",
       "patterns": ["(auth|permission|tenant|credit|billing|payment|cookie|session)"],
@@ -79,7 +91,7 @@
       "modes": ["local", "ci"],
       "minExecuted": 1,
       "commands": [
-        {"id": "node-unit", "program": "node", "args": ["--test", "tests/unit/release-manifest.test.js", "tests/unit/collection-history-store.test.mjs", "tests/unit/collection-runtime-contract.test.js", "tests/unit/collection-history-export.test.mjs", "tests/unit/magiorix-frontend-contract.test.js"], "required": true}
+        {"id": "node-unit", "program": "node", "args": ["--test", "tests/unit/release-manifest.test.js", "tests/unit/collection-history-store.test.mjs", "tests/unit/collection-runtime-contract.test.js", "tests/unit/collection-history-export.test.mjs", "tests/unit/magiorix-frontend-contract.test.js", "tests/unit/pgy-kol-session-request.test.mjs", "tests/unit/pgy-kol-filter-schema.test.mjs", "tests/unit/pgy-kol-payload-builder.test.mjs", "tests/unit/pgy-kol-search-client.test.mjs", "tests/unit/pgy-kol-pagination-planner.test.mjs", "tests/unit/pgy-kol-ipc.test.mjs", "tests/unit/pgy-kol-contract.test.js", "tests/unit/pgy-kol-ipc-guard.test.mjs", "tests/unit/pgy-kol-frontend-contract.test.js", "tests/unit/pgy-kol-batch-contract.test.mjs", "tests/unit/pgy-kol-batch-runner.test.mjs", "tests/unit/pgy-kol-task-store.test.mjs", "tests/unit/pgy-kol-column-registry.test.mjs", "tests/unit/pgy-kol-batch-export.test.mjs", "tests/unit/pgy-kol-batch-integration.test.mjs", "tests/unit/pgy-kol-batch-resume.test.mjs", "tests/unit/pgy-kol-two-phase.test.mjs", "tests/unit/pgy-kol-single-task.test.mjs", "tests/unit/pgy-kol-export-gate.test.mjs"], "required": true}
       ]
     },
     "build": {

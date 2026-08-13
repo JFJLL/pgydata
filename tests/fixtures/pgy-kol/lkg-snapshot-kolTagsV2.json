@@ -1,0 +1,35 @@
+{
+  "version": "pgy-filter-schema/3.0.0",
+  "provider": "kolTagsV2.automotiveIndustryTag",
+  "savedAt": "2026-08-04T00:00:00.000Z",
+  "nodes": [
+    {
+      "provider": "kolTagsV2",
+      "payloadField": "industrySpecificCrowdsMotorDom",
+      "value": "1001",
+      "label": "日化家清",
+      "fullPath": "日化家清",
+      "children": [],
+      "disabled": false,
+      "rawVersion": {
+        "value": 1001,
+        "label": "日化家清"
+      },
+      "uniqueKey": "industrySpecificCrowdsMotorDom:1001:日化家清"
+    },
+    {
+      "provider": "kolTagsV2",
+      "payloadField": "industrySpecificCrowdsMotorDom",
+      "value": "19188199",
+      "label": "纸品-留子跨国囤货党",
+      "fullPath": "日化家清 > 纸品 > 场景 > 纸品-留子跨国囤货党",
+      "children": [],
+      "disabled": false,
+      "rawVersion": {
+        "value": 19188199,
+        "label": "纸品-留子跨国囤货党"
+      },
+      "uniqueKey": "industrySpecificCrowdsMotorDom:19188199:日化家清 > 纸品 > 场景 > 纸品-留子跨国囤货党"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "capturedAt": "2026-08-06T17:12:00+08:00",
+  "method": "real Electron (magiorix-desktop runtime + app-source dist-electron asar) hidden window, real login session, 1 x POST /api/solar/cooperator/blogger/v2 with empty filter",
+  "result": {
+    "ok": true,
+    "total": 5000,
+    "capSignal": { "capped": true, "reason": "total-window" },
+    "pageSize": 20,
+    "kolCount": 20,
+    "whitelistedFieldsOnFirstKol": [
+      "userId", "redId", "location", "personalTags", "fansCount", "picturePrice",
+      "videoPrice", "liveSign", "contentTags", "featureTags", "gender", "currentLevel",
+      "fansNum", "fansActiveIn28dLv", "hundredLikePercent30", "thousandLikePercent30"
+    ],
+    "quarantinedFieldNamesOnly": [
+      "accumCommonImpMedinNum30d", "accumCoopImpMedinNum30d", "accumPicCommonImpMedinNum30d",
+      "accumVideoCommonImpMedinNum30d", "activityList", "algoRecommendReasons", "authorityList",
+      "avgAgmv90d", "avgLiveViewerNum", "businessNoteCount", "buyerType", "classifyCode",
+      "clickMidNum", "clickMidNumMcn", "clothingIndustryPrice", "controlState", "coopNoteNum30d",
+      "cooperType", "cooperateState", "cpc", "cps", "efficiencyValidUser", "estimateCpuv30d",
+      "estimatePictureCpm", "estimatePictureCpmCompare", "estimatePictureEngageCost",
+      "estimatePictureEngageCostCompare", "estimateVideoCpm", "estimateVideoCpmCompare",
+      "estimateVideoEngageCost", "estimateVideoEngageCostCompare", "fans30GrowthNum",
+      "fans30GrowthRate", "fansEngageNum", "fansEngageNum30dLv", "fansRiseNum", "fbState",
+      "forecastGroupCoverRateLower", "forecastGroupCoverRateUpper", "forecastReadUvLower",
+      "forecastReadUvUpper", "goodRecommendPermission", "hasBuyerAuth", "headPhoto",
+      "homePageDisplay", "industryTag", "intentionInfo", "interMidCoop30", "interMidNum",
+      "inviteReply48hNumRatio", "isCollect", "isIndustryRecommend", "isStar", "kliveCnt30d",
+      "kolHeadLabel", "kolType", "likeCollectCountInfo", "live", "liveGMV", "liveId", "liveImg",
+      "lowActive", "lowerPrice", "mCpuvNum30d", "mEngagementNum", "mEngagementNumMcn",
+      "marketTarget", "matchNoteNumber", "mcpuvNum30d", "mengagementNum", "mengagementNumMcn",
+      "name", "newHighQuality", "nextLevel", "nextPicturePrice", "nextVideoPrice", "note",
+      "noteList", "noteSign", "overflowNum", "picPriceRemind", "pictureClickMidNum",
+      "pictureCpcBasePrice", "pictureCpcEstimateNum", "pictureCpcInCart", "pictureCpcPerPrice",
+      "pictureHundredLikePercent30", "pictureInCart", "pictureInterMidNum", "picturePriceGtZero",
+      "pictureReadCost", "pictureShowState", "pictureState", "pictureThousandLikePercent30",
+      "predictiveExposure", "priceState", "processingAuthorities", "promiseImpNum",
+      "readMidCoop30", "recommend", "recommendReason", "resemblance", "seedAndHarcest",
+      "sellerRealIncomeAmt90d", "showPrice", "showPromiseTag", "specialIndustryLimit",
+      "top2CategoryList", "totalNoteCount", "tradeType", "travelAreaList", "type", "userType",
+      "valid", "videoClickMidNum", "videoCpcBasePrice", "videoCpcEstimateNum", "videoCpcInCart",
+      "videoCpcPerPrice", "videoCpcState", "videoFinishRate", "videoHundredLikePercent30",
+      "videoInCart", "videoInterMidNum", "videoPriceGtZero", "videoPriceRemind", "videoReadCost",
+      "videoShowState", "videoState", "videoThousandLikePercent30"
+    ],
+    "notes": [
+      "contentTags real shape: [{taxonomy1Tag, taxonomy2Tags:[...]}]",
+      "fansActiveIn28dLv real value is numeric percentage (e.g. 40.6), not a level string",
+      "case variants exist in the wild: mEngagementNum vs mengagementNum (both quarantined)",
+      "no kol values or identifiers are stored in this evidence file"
+    ]
+  }
+}

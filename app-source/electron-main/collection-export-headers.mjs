@@ -15,6 +15,7 @@ const PGY_IMAGE_EXPORT_FIELDS = Object.freeze([
   "dailyNotePerformanceChart",
   "dailyNotePicturePerformanceChart",
   "dailyNoteVideoPerformanceChart",
+  "recentNoteInteractionFluctuationChart",
   "bloggerOverviewChart",
 ]);
 
@@ -114,6 +115,7 @@ const PGY_BLOGGER_EXPORT_HEADERS = Object.freeze([
   { group: "日常30天", label: "日常笔记表现图（图文+视频）", key: "dailyNotePerformanceChart" },
   { group: "日常30天", label: "日常笔记表现图（图文）", key: "dailyNotePicturePerformanceChart" },
   { group: "日常30天", label: "日常笔记表现图（视频）", key: "dailyNoteVideoPerformanceChart" },
+  { group: "日常30天", label: "近期笔记波动图（互动量）", key: "recentNoteInteractionFluctuationChart" },
   { group: "日常30天", label: "博主数据概览图", key: "bloggerOverviewChart" },
 ]);
 
@@ -317,6 +319,13 @@ function normalizeFieldKey(field) {
 export function filterCollectionExportHeaders(headers, fields, rows) {
   const source = Array.isArray(headers) ? headers : [];
   const selected = new Set((Array.isArray(fields) ? fields : []).map(normalizeFieldKey).filter(Boolean));
+  // 任务明确保存了 fields：规范表头按 schema 顺序保留所有已选字段，
+  // 某字段在本批全部为空也保留（缺失值由单元格渲染为空白/“-”），
+  // 绝不因“没有任何行出现该键”而静默删除列。
+  if (selected.size > 0) {
+    return source.filter((header) => header && selected.has(header.key));
+  }
+  // 只有没有 fields 的 legacy 历史任务，才允许按“实际出现字段”推断表头。
   const present = new Set();
   for (const row of Array.isArray(rows) ? rows : []) {
     if (!row || typeof row !== "object") continue;

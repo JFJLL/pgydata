@@ -1104,6 +1104,176 @@ def save_trend(chart):
     return True
 
 
+def save_recent_note_fluctuation(chart):
+    """近期笔记波动图（互动量）：783x420 白底卡片，蓝色柱 + 互动量中位数虚线。
+
+    数据契约（复用 notes_rate/daily30 响应）：
+      data.notes[]          逐笔记互动量（缺失项跳过，不伪造 0）
+      data.interactionMedian 互动量中位数（缺失则不画参考线）
+    """
+    try:
+        width, height = 783, 420
+        output = chart.get("output") or ""
+        if not output:
+            return False
+        ensure_dir(output)
+        data = chart.get("data") or {}
+        raw_notes = data.get("notes")
+        note_slots = []
+        if isinstance(raw_notes, list):
+            for item in raw_notes:
+                if not isinstance(item, dict):
+                    note_slots.append(None)
+                    continue
+                raw_value = item.get("interactionNum")
+                if raw_value is None or isinstance(raw_value, bool) or (
+                    isinstance(raw_value, str) and not raw_value.strip()
+                ):
+                    note_slots.append(None)
+                    continue
+                try:
+                    val = float(raw_value)
+                except Exception:
+                    note_slots.append(None)
+                    continue
+                note_slots.append(val if math.isfinite(val) and val >= 0 else None)
+        notes = [value for value in note_slots if value is not None]
+        median = None
+        median_raw = data.get("interactionMedian")
+        if median_raw is not None and not isinstance(median_raw, bool) and not (
+            isinstance(median_raw, str) and not median_raw.strip()
+        ):
+            try:
+                parsed_median = float(median_raw)
+                if math.isfinite(parsed_median) and parsed_median >= 0:
+                    median = parsed_median
+            except Exception:
+                median = None
+
+        img = Image.new("RGB", (width, height), "#FFFFFF")
+        draw = ImageDraw.Draw(img)
+        # 浅灰卡片边框 + 8px 圆角。
+        draw.rounded_rectangle(
+            [2, 2, width - 3, height - 3], radius=8, outline="#E0E0E0", width=2
+        )
+
+        # 标题 + 14px 灰色信息图标。
+        draw.text((26, 18), "近期笔记波动", font=FONT_TITLE, fill="#262626")
+        title_w = text_bbox(draw, "近期笔记波动", FONT_TITLE)[2]
+        icon_cx, icon_cy = 26 + title_w + 20, 33
+        draw.ellipse(
+            [icon_cx - 9, icon_cy - 9, icon_cx + 9, icon_cy + 9],
+            outline="#BFBFBF",
+            width=2,
+        )
+        draw.text((icon_cx - 4, icon_cy - 10), "?", font=load_font(14), fill="#BFBFBF")
+
+        # 分段控件（阅读量/互动量/曝光量），静态固定选中 互动量。
+        seg_y, seg_h = 58, 26
+        seg_x = 26
+        for label, selected in (("阅读量", False), ("互动量", True), ("曝光量", False)):
+            pill_w = text_bbox(draw, label, FONT_SMALL)[2] + 24
+            if selected:
+                draw.rounded_rectangle(
+                    [seg_x, seg_y, seg_x + pill_w, seg_y + seg_h],
+                    radius=13,
+                    fill="#FFFFFF",
+                    outline="#D9D9D9",
+                    width=1,
+                )
+                seg_fill = "#262626"
+            else:
+                draw.rounded_rectangle(
+                    [seg_x, seg_y, seg_x + pill_w, seg_y + seg_h],
+                    radius=13,
+                    fill="#F7F7F7",
+                    outline="#F0F0F0",
+                    width=1,
+                )
+                seg_fill = "#747474"
+            draw.text((seg_x + 12, seg_y + 5), label, font=FONT_SMALL, fill=seg_fill)
+            seg_x += pill_w + 8
+
+        plot_left, plot_right = 46, width - 46
+        plot_top, plot_bottom = 112, height - 42
+
+        if notes:
+            raw_max = max(max(notes), median if median is not None else 0.0)
+            if raw_max <= 0:
+                raw_max = 1.0
+            # 1/2/5/10 nice scale；避免极大有限值在 step*=2 时溢出为 inf。
+            exponent = math.floor(math.log10(raw_max))
+            power = 10.0 ** exponent
+            normalized = raw_max / power
+            factor = 1.0 if normalized <= 1 else 2.0 if normalized <= 2 else 5.0 if normalized <= 5 else 10.0
+            grid_max = factor * power
+            if not math.isfinite(grid_max) or grid_max < raw_max:
+                grid_max = float.fromhex("0x1.fffffffffffffp+1023")
+            grid_count = 5
+
+            def chart_number(value):
+                if abs(value) >= 1e12:
+                    return ("%.2e" % value).replace("e+", "e")
+                return format_integer(int(round(value)))
+
+            # 水平虚线网格 + 左侧刻度标签。
+            for g in range(grid_count + 1):
+                value = (grid_max / grid_count) * g
+                y = plot_bottom - (value / grid_max) * (plot_bottom - plot_top)
+                x0, x1 = plot_left, plot_right
+                if g > 0 and g < grid_count:
+                    y0 = y
+                    draw.line(
+                        [(x0, y0), (x1, y0)],
+                        fill="#E8E8E8",
+                        width=1,
+                    )
+                label = chart_number(value)
+                draw.text((x0 - text_bbox(draw, label, FONT_SMALL)[2] - 8, y - 10), label, font=FONT_SMALL, fill="#8C8C8C")
+
+            # 柱：宽 18，圆角 [1,1,0,0]，柱顶数值。
+            bar_w = 18
+            slot = (plot_right - plot_left) / len(note_slots)
+            for idx, value in enumerate(note_slots):
+                cx = plot_left + slot * idx + slot / 2
+                note_label = "笔记%d" % (idx + 1)
+                nw = text_bbox(draw, note_label, FONT_SMALL)[2]
+                draw.text((cx - nw / 2, plot_bottom + 8), note_label, font=FONT_SMALL, fill="#595959")
+                if value is None:
+                    continue
+                h = (value / grid_max) * (plot_bottom - plot_top)
+                x0 = cx - bar_w / 2
+                y0 = plot_bottom - h
+                draw.rounded_rectangle(
+                    [x0, y0, x0 + bar_w, plot_bottom],
+                    radius=1,
+                    fill="#3A64FF",
+                )
+                val_label = chart_number(value)
+                vw = text_bbox(draw, val_label, FONT_SMALL)[2]
+                draw.text((cx - vw / 2, y0 - 24), val_label, font=FONT_SMALL, fill="#3A64FF")
+
+            # 互动量中位数虚线（#3A64FF），标签在右端。
+            if median is not None:
+                y_m = plot_bottom - (median / grid_max) * (plot_bottom - plot_top)
+                dash = 6
+                x = plot_left
+                while x < plot_right:
+                    draw.line([(x, y_m), (min(x + dash, plot_right), y_m)], fill="#3A64FF", width=2)
+                    x += dash * 2
+                med_label = chart_number(median)
+                draw.text((plot_right - text_bbox(draw, med_label, FONT_SMALL)[2], y_m - 20), med_label, font=FONT_SMALL, fill="#3A64FF")
+        else:
+            draw.text((plot_left, plot_top + 40), "暂无笔记数据", font=FONT_TEXT, fill="#BFBFBF")
+
+        img.save(output, "PNG", optimize=True)
+        return True
+    except Exception:
+        # 交给 main 的逐图表错误收集器记录；不要把渲染异常静默降级为
+        # “没有生成路径”，调用方据此才能可靠切换 JS/SVG 兜底。
+        raise
+
+
 def main():
     raw = sys.stdin.buffer.read()
     payload = json.loads(raw.decode("utf-8"))
@@ -1128,6 +1298,8 @@ def main():
                 ok = save_trend(chart)
             elif chart_type == "daily-note-performance":
                 ok = save_daily_note_performance(chart)
+            elif chart_type == "recent-note-interaction-fluctuation":
+                ok = save_recent_note_fluctuation(chart)
             elif chart_type == "blogger-overview":
                 ok = save_blogger_overview(chart)
             if ok and field:

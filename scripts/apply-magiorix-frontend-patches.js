@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const projectRoot = path.resolve(__dirname, "..");
 const packageConfig = JSON.parse(fs.readFileSync(path.join(projectRoot, "app-source", "package.json"), "utf8"));
@@ -105,23 +106,42 @@ replaceOnce(
 
 const pgyAuthFlow = [
   'function pgyAuthNavigate(n,t,r){var a,l,s=(l=(a=t.state)==null?void 0:a.from)==null?void 0:l.pathname;if(s&&s!=="/sign-in"){n(s,{replace:!0});return}const e=Se.getState().menus;n((r?r(e):vr(e))||"/",{replace:!0})}',
-  'function y5(){const e=Te(),t=r1(),{login:r}=ze(),[a,n]=m.useState(()=>localStorage.getItem("zs.login.phone")??""),[l,s]=m.useState(""),[i,d]=m.useState(""),[c,u]=m.useState(""),[f,b]=m.useState(!1),[C,h]=m.useState(0),[g,v]=m.useState(!1),[j,S]=m.useState(""),[A,E]=m.useState("");m.useEffect(()=>{if(C<=0)return;const R=window.setInterval(()=>h(q=>q<=1?0:q-1),1e3);return()=>window.clearInterval(R)},[C]);const D=m.useCallback(async()=>{if(f||C>0)return;const R=a.trim();if(!/^1[3-9]\\d{9}$/.test(R)){S("请输入正确的手机号格式");return}b(!0),S(""),E("");try{await pgySendSms({phone:R,purpose:"register"}),h(60),E("验证码已发送，请查收短信")}catch(q){S(q.message||"验证码发送失败，请稍后重试")}finally{b(!1)}},[a,f,C]),O=m.useCallback(async R=>{R.preventDefault();if(g)return;const q=a.trim(),T=i.trim();if(!/^1[3-9]\\d{9}$/.test(q)){S("请输入正确的手机号格式");return}if(!/^\\d{4}$/.test(T)){S("请输入 4 位验证码");return}if(c.length<8||c.length>64){S("密码长度必须在 8 到 64 个字符之间");return}v(!0),S("");try{await pgyRegister({phone:q,code:T,password:c}),await r({loginType:"password",phone:q,password:c}),localStorage.setItem("zs.login.phone",q),pgyAuthNavigate(e,t,vr)}catch(R){S(R.message||"注册失败，请稍后重试")}finally{v(!1)}},[a,i,c,g,r,e,t]);return o.jsxs(x,{component:"form",onSubmit:O,noValidate:!0,className:"sms-login",children:[o.jsx(_1,{open:!!j,autoHideDuration:3e3,onClose:()=>S(""),anchorOrigin:{vertical:"top",horizontal:"center"},children:o.jsx(oe,{severity:"error",children:j})}),o.jsxs(x,{className:"sms-login__fields",children:[o.jsx(ae,{fullWidth:!0,variant:"outlined",value:a,onChange:R=>n(R.target.value),autoComplete:"tel",autoFocus:!0,disabled:g||f,placeholder:"请输入手机号",className:"sms-login__input",size:"small"}),o.jsxs(x,{sx:{display:"flex",gap:1},children:[o.jsx(ae,{fullWidth:!0,variant:"outlined",value:i,onChange:R=>d(R.target.value),autoComplete:"one-time-code",disabled:g,placeholder:"4 位验证码",className:"sms-login__input",size:"small",slotProps:{htmlInput:{maxLength:4,inputMode:"numeric"}}}),o.jsx($,{type:"button",variant:"outlined",onClick:D,disabled:g||f||C>0,size:"small",children:f?"发送中...":C>0?C+"s":"获取验证码"})]}),o.jsx(ae,{fullWidth:!0,variant:"outlined",type:"password",value:c,onChange:R=>u(R.target.value),autoComplete:"new-password",disabled:g,placeholder:"设置密码（8-64 位）",size:"small",className:"sms-login__input"}),o.jsx(w,{variant:"body2",color:"text.secondary",children:A||"验证码有效期 5 分钟，发送失败可稍后重试"})]}),o.jsx($,{fullWidth:!0,size:"large",type:"submit",variant:"contained",disabled:g,className:"sms-login__submit",startIcon:g?o.jsx(de,{size:20,color:"inherit"}):void 0,children:g?"注册中...":"注册"})]})}',
-  'function b5({open:e,onClose:t}){const[a,n]=m.useState(""),[l,s]=m.useState(""),[i,d]=m.useState(""),[c,u]=m.useState(!1),[f,b]=m.useState(0),[C,h]=m.useState(!1),[g,v]=m.useState(""),[j,S]=m.useState("");m.useEffect(()=>{if(f<=0)return;const E=window.setInterval(()=>b(q=>q<=1?0:q-1),1e3);return()=>window.clearInterval(E)},[f]);const A=()=>{u(!1),b(0),v(""),S(""),t()},D=async()=>{if(c||f>0)return;const E=a.trim();if(!/^1[3-9]\\d{9}$/.test(E)){v("请输入正确的手机号格式");return}u(!0),v(""),S("");try{await pgySendSms({phone:E,purpose:"reset_password"}),b(60),S("验证码已发送，请查收短信")}catch(q){v(q.message||"验证码发送失败，请稍后重试")}finally{u(!1)}},O=async E=>{E.preventDefault();if(C)return;const q=a.trim(),T=l.trim();if(!/^1[3-9]\\d{9}$/.test(q)){v("请输入正确的手机号格式");return}if(!/^\\d{4}$/.test(T)){v("请输入 4 位验证码");return}if(i.length<8||i.length>64){v("新密码长度必须在 8 到 64 个字符之间");return}h(!0),v("");try{await pgyResetPassword({phone:q,code:T,newPassword:i}),S("密码已重置，请返回登录"),setTimeout(A,600)}catch(R){v(R.message||"密码重置失败，请稍后重试")}finally{h(!1)}};return o.jsxs(ue,{open:e,onClose:A,PaperProps:{sx:{width:380}},children:[o.jsxs(be,{sx:{display:"flex",alignItems:"center",justifyContent:"space-between"},children:["找回密码",o.jsx(te,{onClick:A,size:"small",children:o.jsx(B,{icon:"solar:close-circle-bold",width:22})})]}),o.jsxs(x,{component:"form",onSubmit:O,sx:{px:3,pb:3,display:"flex",flexDirection:"column",gap:1.5},children:[o.jsx(ae,{fullWidth:!0,variant:"outlined",value:a,onChange:E=>n(E.target.value),disabled:C||c,placeholder:"请输入手机号",autoComplete:"tel",size:"small"}),o.jsxs(x,{sx:{display:"flex",gap:1},children:[o.jsx(ae,{fullWidth:!0,variant:"outlined",value:l,onChange:E=>s(E.target.value),disabled:C,placeholder:"4 位验证码",autoComplete:"one-time-code",size:"small",slotProps:{htmlInput:{maxLength:4,inputMode:"numeric"}}}),o.jsx($,{type:"button",variant:"outlined",onClick:D,disabled:C||c||f>0,size:"small",children:c?"发送中...":f>0?f+"s":"获取验证码"})]}),o.jsx(ae,{fullWidth:!0,variant:"outlined",type:"password",value:i,onChange:E=>d(E.target.value),disabled:C,placeholder:"新密码（8-64 位）",autoComplete:"new-password",size:"small"}),g&&o.jsx(oe,{severity:"error",children:g}),j&&o.jsx(w,{variant:"body2",color:"success.main",children:j}),o.jsx($,{fullWidth:!0,type:"submit",variant:"contained",disabled:C,children:C?"提交中...":"重置密码"})]})]})}',
+  'function y5(){const e=Te(),t=r1(),{login:r}=ze(),[a,n]=m.useState(()=>localStorage.getItem("magiorix.login.phone")??""),[l,s]=m.useState(""),[i,d]=m.useState(""),[c,u]=m.useState(!1),[f,b]=m.useState(""),[C,h]=m.useState(!1),g=m.useCallback(async y=>{y.preventDefault();if(c)return;b("");const v=a.trim();if(!/^1[3-9]\\d{9}$/.test(v)){b("请输入正确的手机号格式");return}if(l.length<8||l.length>64){b("密码长度必须在 8 到 64 个字符之间");return}if(l!==i){b("两次输入的密码不一致");return}u(!0);try{const R=await pgyRegister({phone:v,password:l});if(!R?.token||!R?.userInfo)throw new Error("注册响应无效，请重试");Zt.getState().setToken(R.token),Se.getState().setUserInfo(R.userInfo);const M=await Ht();Se.getState().setPermissions(M?.permissions||[]),Se.getState().setMenus(M?.menus||[]),Ee.system.auth.setLoginState(!0),localStorage.setItem("magiorix.login.phone",v),pgyAuthNavigate(e,t,vr)}catch(S){b(S.message||"注册失败，请稍后重试")}finally{u(!1)}},[r,t,e,c,a,l,i]);return o.jsxs(x,{component:"form",onSubmit:g,noValidate:!0,className:"password-login",children:[o.jsx(_1,{open:!!f,autoHideDuration:3e3,onClose:()=>b(""),anchorOrigin:{vertical:"top",horizontal:"center"},children:o.jsx(oe,{severity:"error",children:f})}),o.jsxs(x,{className:"password-login__fields",children:[o.jsx(ae,{fullWidth:!0,variant:"outlined",value:a,onChange:y=>n(y.target.value),autoComplete:"tel",autoFocus:!0,disabled:c,placeholder:"请输入手机号",className:"password-login__input",size:"small"}),o.jsx(ae,{fullWidth:!0,variant:"outlined",type:"password",value:l,onChange:y=>s(y.target.value),autoComplete:"new-password",disabled:c,placeholder:"设置密码（8-64 位）",size:"small",className:"password-login__input"}),o.jsx(ae,{fullWidth:!0,variant:"outlined",type:"password",value:i,onChange:y=>d(y.target.value),autoComplete:"new-password",disabled:c,placeholder:"确认密码",size:"small",className:"password-login__input"})]}),o.jsx($,{fullWidth:!0,size:"large",type:"submit",variant:"contained",disabled:c,className:"password-login__submit",startIcon:c?o.jsx(de,{size:20,color:"inherit"}):void 0,children:c?"注册中...":"注册"})]})}',  'function b5({open:e,onClose:t}){const[a,n]=m.useState(""),[l,s]=m.useState(""),[i,d]=m.useState(""),[c,u]=m.useState(!1),[f,b]=m.useState(0),[C,h]=m.useState(!1),[g,v]=m.useState(""),[j,S]=m.useState("");m.useEffect(()=>{if(f<=0)return;const E=window.setInterval(()=>b(q=>q<=1?0:q-1),1e3);return()=>window.clearInterval(E)},[f]);const A=()=>{u(!1),b(0),v(""),S(""),t()},D=async()=>{if(c||f>0)return;const E=a.trim();if(!/^1[3-9]\\d{9}$/.test(E)){v("请输入正确的手机号格式");return}u(!0),v(""),S("");try{await pgySendSms({phone:E,purpose:"reset_password"}),b(60),S("验证码已发送，请查收短信")}catch(q){v(q.message||"验证码发送失败，请稍后重试")}finally{u(!1)}},O=async E=>{E.preventDefault();if(C)return;const q=a.trim(),T=l.trim();if(!/^1[3-9]\\d{9}$/.test(q)){v("请输入正确的手机号格式");return}if(!/^\\d{4}$/.test(T)){v("请输入 4 位验证码");return}if(i.length<8||i.length>64){v("新密码长度必须在 8 到 64 个字符之间");return}h(!0),v("");try{await pgyResetPassword({phone:q,code:T,newPassword:i}),S("密码已重置，请返回登录"),setTimeout(A,600)}catch(R){v(R.message||"密码重置失败，请稍后重试")}finally{h(!1)}};return o.jsxs(ue,{open:e,onClose:A,PaperProps:{sx:{width:380}},children:[o.jsxs(be,{sx:{display:"flex",alignItems:"center",justifyContent:"space-between"},children:["找回密码",o.jsx(te,{onClick:A,size:"small",children:o.jsx(B,{icon:"solar:close-circle-bold",width:22})})]}),o.jsxs(x,{component:"form",onSubmit:O,sx:{px:3,pb:3,display:"flex",flexDirection:"column",gap:1.5},children:[o.jsx(ae,{fullWidth:!0,variant:"outlined",value:a,onChange:E=>n(E.target.value),disabled:C||c,placeholder:"请输入手机号",autoComplete:"tel",size:"small"}),o.jsxs(x,{sx:{display:"flex",gap:1},children:[o.jsx(ae,{fullWidth:!0,variant:"outlined",value:l,onChange:E=>s(E.target.value),disabled:C,placeholder:"4 位验证码",autoComplete:"one-time-code",size:"small",slotProps:{htmlInput:{maxLength:4,inputMode:"numeric"}}}),o.jsx($,{type:"button",variant:"outlined",onClick:D,disabled:C||c||f>0,size:"small",children:c?"发送中...":f>0?f+"s":"获取验证码"})]}),o.jsx(ae,{fullWidth:!0,variant:"outlined",type:"password",value:i,onChange:E=>d(E.target.value),disabled:C,placeholder:"新密码（8-64 位）",autoComplete:"new-password",size:"small"}),g&&o.jsx(oe,{severity:"error",children:g}),j&&o.jsx(w,{variant:"body2",color:"success.main",children:j}),o.jsx($,{fullWidth:!0,type:"submit",variant:"contained",disabled:C,children:C?"提交中...":"重置密码"})]})]})}',
   'function wr(e){for(const t of e){if(t.children&&t.children.length>0){const r=wr(t.children);if(r)return r}if(t.path)return t.path}return""}',
   'function x5(){const e=Te(),t=r1(),{login:r}=ze(),[a,n]=m.useState(()=>localStorage.getItem("zs.login.phone")??""),[l,s]=m.useState(""),[i,d]=m.useState(!1),[c,u]=m.useState(!1),[f,b]=m.useState(""),[C,h]=m.useState(!1),g=m.useCallback(async y=>{y.preventDefault();if(c)return;b("");const v=a.trim();if(!/^1[3-9]\\d{9}$/.test(v)){b("请输入正确的手机号格式");return}if(!l){b("请输入密码");return}u(!0);try{await r({loginType:"password",phone:v,password:l}),localStorage.setItem("zs.login.phone",v),pgyAuthNavigate(e,t,wr)}catch(S){b(S.message||"登录失败，请检查登录信息")}finally{u(!1)}},[r,t,e,c,a,l]);return o.jsxs(x,{component:"form",onSubmit:g,noValidate:!0,className:"password-login",children:[o.jsx(_1,{open:!!f,autoHideDuration:3e3,onClose:()=>b(""),anchorOrigin:{vertical:"top",horizontal:"center"},children:o.jsx(oe,{severity:"error",children:f})}),o.jsxs(x,{className:"password-login__fields",children:[o.jsx(ae,{fullWidth:!0,variant:"outlined",value:a,onChange:y=>n(y.target.value),autoComplete:"tel",autoFocus:!0,disabled:c,placeholder:"请输入手机号",className:"password-login__input",size:"small"}),o.jsx(ae,{fullWidth:!0,variant:"outlined",type:i?"text":"password",value:l,onChange:y=>s(y.target.value),autoComplete:"current-password",disabled:c,placeholder:"请输入密码",size:"small",slotProps:{input:{endAdornment:o.jsx(y1,{position:"end",children:o.jsx(te,{onClick:()=>d(y=>!y),edge:"end",disabled:c,size:"small",children:i?o.jsx(B,{icon:"solar:eye-closed-bold-duotone",width:18,height:18}):o.jsx(B,{icon:"solar:eye-bold-duotone",width:18,height:18})})})}}}),o.jsx(lo,{component:"button",type:"button",variant:"caption",color:"primary",onClick:()=>h(!0),sx:{alignSelf:"flex-end",mt:.2,position:"relative",top:"-10px"},children:"忘记密码？"})]}),o.jsx($,{fullWidth:!0,size:"large",type:"submit",variant:"contained",disabled:c,startIcon:c?o.jsx(de,{size:20,color:"inherit"}):void 0,children:c?"登录中...":"登录"}),o.jsx(b5,{open:C,onClose:()=>h(!1)})]})}',
-].join("\n")
-  .replaceAll('"zs.login.phone"', '"magiorix.login.phone"')
-  .replace(
-    'await pgyRegister({phone:q,code:T,password:c}),await r({loginType:"password",phone:q,password:c}),localStorage.setItem("magiorix.login.phone",q),pgyAuthNavigate(e,t,vr)',
-    'const R=await pgyRegister({phone:q,code:T,password:c});if(!R?.token||!R?.userInfo)throw new Error("注册响应无效，请重试");Zt.getState().setToken(R.token),Se.getState().setUserInfo(R.userInfo);const M=await Ht();Se.getState().setPermissions(M?.permissions||[]),Se.getState().setMenus(M?.menus||[]),Ee.system.auth.setLoginState(!0),localStorage.setItem("magiorix.login.phone",q),pgyAuthNavigate(e,t,vr)',
-  );
-
+].join("\n").replaceAll('"zs.login.phone"', '"magiorix.login.phone"');
 replaceRange(
   mainBundle,
   "function y5(){",
   "function kr(e){",
   pgyAuthFlow,
   "replace client registration and password recovery flow",
+);
+replaceOnce(
+  mainBundle,
+  'o.jsxs(x,{className:"sign-in__left",children:[o.jsx(w,{variant:"h6",className:"sign-in__section-title",children:"扫码登录"}),o.jsx(C5,{})]}),o.jsx(x,{className:"sign-in__divider"}),',
+  "",
+  "remove the wechat qr panel from the sign-in page",
+);
+replaceOnce(
+  mainBundle,
+  'if(typeof window>"u")return"sms";const r=window.localStorage.getItem(Z0);return r==="sms"||r==="password"?r:"sms"',
+  'if(typeof window>"u")return"password";const r=window.localStorage.getItem(Z0);return r==="sms"||r==="password"?r:"password"',
+  "sign-in defaults to the password login tab",
+);
+replaceOnce(mainBundle, 'children:"手机号注册"', 'children:"注册"', "sign-in register tab label");
+replaceOnce(mainBundle, 'children:"密码登录"', 'children:"登录"', "sign-in login tab label");
+replaceOnce(
+  path.join(assetsDir, "index-kuUVLowI.css"),
+  ".sign-in__card{width:764px;height:486px;",
+  ".sign-in__card{width:420px;height:auto;",
+  "sign-in card width without the qr panel",
+);
+replaceOnce(
+  path.join(assetsDir, "index-kuUVLowI.css"),
+  ".sign-in__right{flex:1;display:flex;flex-direction:column;padding:0 20px 0 40px}",
+  ".sign-in__right{width:100%;display:flex;flex-direction:column;align-items:center;padding:0}",
+  "sign-in right column fills the narrowed card",
 );
 replaceAllIfExists(pgyTaskPanelBundle, "积分余额不足", "树苗余额不足");
 replaceAllIfExists(mainBundle, "刷新积分余额失败", "刷新树苗余额失败");
@@ -210,26 +230,26 @@ if (!fs.readFileSync(urlValidatorBundle, "utf8").includes('"bloggerOverviewChart
 replaceOnce(
     mainBundle,
     '{field:"dailyNotePerformanceChart",headerName:"日常笔记表现图",width:320},{field:"bloggerOverviewChart",headerName:"博主数据概览图",width:320}',
-    '{field:"dailyNotePerformanceChart",headerName:"日常笔记表现图（图文+视频）",width:320},{field:"dailyNotePicturePerformanceChart",headerName:"日常笔记表现图（图文）",width:320},{field:"dailyNoteVideoPerformanceChart",headerName:"日常笔记表现图（视频）",width:320},{field:"bloggerOverviewChart",headerName:"博主数据概览图",width:320}',
+    '{field:"dailyNotePerformanceChart",headerName:"日常笔记表现图（图文+视频）",width:320},{field:"dailyNotePicturePerformanceChart",headerName:"日常笔记表现图（图文）",width:320},{field:"dailyNoteVideoPerformanceChart",headerName:"日常笔记表现图（视频）",width:320},{field:"recentNoteInteractionFluctuationChart",headerName:"近期笔记波动图（互动量）",width:320},{field:"bloggerOverviewChart",headerName:"博主数据概览图",width:320}',
     "add typed daily note chart columns",
 );
 replaceOnce(
     mainBundle,
     '{group:"日常30天",label:"日常笔记表现图",key:"dailyNotePerformanceChart"},{group:"日常30天",label:"博主数据概览图",key:"bloggerOverviewChart"}',
-    '{group:"日常30天",label:"日常笔记表现图（图文+视频）",key:"dailyNotePerformanceChart"},{group:"日常30天",label:"日常笔记表现图（图文）",key:"dailyNotePicturePerformanceChart"},{group:"日常30天",label:"日常笔记表现图（视频）",key:"dailyNoteVideoPerformanceChart"},{group:"日常30天",label:"博主数据概览图",key:"bloggerOverviewChart"}',
+    '{group:"日常30天",label:"日常笔记表现图（图文+视频）",key:"dailyNotePerformanceChart"},{group:"日常30天",label:"日常笔记表现图（图文）",key:"dailyNotePicturePerformanceChart"},{group:"日常30天",label:"日常笔记表现图（视频）",key:"dailyNoteVideoPerformanceChart"},{group:"日常30天",label:"近期笔记波动图（互动量）",key:"recentNoteInteractionFluctuationChart"},{group:"日常30天",label:"博主数据概览图",key:"bloggerOverviewChart"}',
     "add typed daily note export fields",
 );
 replaceOnce(
     mainBundle,
     '{key:"dailyNotePerformanceChart",label:"日常笔记表现图"},{key:"bloggerOverviewChart",label:"博主数据概览图"}',
-    '{key:"dailyNotePerformanceChart",label:"日常笔记表现图（图文+视频）"},{key:"dailyNotePicturePerformanceChart",label:"日常笔记表现图（图文）"},{key:"dailyNoteVideoPerformanceChart",label:"日常笔记表现图（视频）"},{key:"bloggerOverviewChart",label:"博主数据概览图"}',
+    '{key:"dailyNotePerformanceChart",label:"日常笔记表现图（图文+视频）"},{key:"dailyNotePicturePerformanceChart",label:"日常笔记表现图（图文）"},{key:"dailyNoteVideoPerformanceChart",label:"日常笔记表现图（视频）"},{key:"recentNoteInteractionFluctuationChart",label:"近期笔记波动图（互动量）"},{key:"bloggerOverviewChart",label:"博主数据概览图"}',
     "add typed daily note field selectors",
 );
 if (!fs.readFileSync(urlValidatorBundle, "utf8").includes('"dailyNotePicturePerformanceChart"')) {
   replaceOnce(
     urlValidatorBundle,
     'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart","bloggerOverviewChart"])',
-    'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart","dailyNotePicturePerformanceChart","dailyNoteVideoPerformanceChart","bloggerOverviewChart"])',
+    'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart","dailyNotePicturePerformanceChart","dailyNoteVideoPerformanceChart","recentNoteInteractionFluctuationChart","bloggerOverviewChart"])',
     "include typed daily note charts in duration estimate",
   );
 }
@@ -264,6 +284,33 @@ if (!fs.readFileSync(urlValidatorBundle, "utf8").includes('"fansGenderAgeChart"'
     '"fansGenderChart","fansGrowthTrendChart"',
     '"fansGenderChart","fansGenderAgeChart","fansGrowthTrendChart"',
     "include combined gender-age chart in duration estimate",
+  );
+}
+
+if (!fs.readFileSync(mainBundle, "utf8").includes('field:"recentNoteInteractionFluctuationChart"')) {
+  replaceOnce(
+    mainBundle,
+    '{field:"dailyNoteVideoPerformanceChart",headerName:"日常笔记表现图（视频）",width:320},{field:"bloggerOverviewChart",headerName:"博主数据概览图",width:320}',
+    '{field:"dailyNoteVideoPerformanceChart",headerName:"日常笔记表现图（视频）",width:320},{field:"recentNoteInteractionFluctuationChart",headerName:"近期笔记波动图（互动量）",width:320},{field:"bloggerOverviewChart",headerName:"博主数据概览图",width:320}',
+    "add recent note fluctuation chart column",
+  );
+  replaceOnce(
+    mainBundle,
+    '{group:"日常30天",label:"日常笔记表现图（视频）",key:"dailyNoteVideoPerformanceChart"},{group:"日常30天",label:"博主数据概览图",key:"bloggerOverviewChart"}',
+    '{group:"日常30天",label:"日常笔记表现图（视频）",key:"dailyNoteVideoPerformanceChart"},{group:"日常30天",label:"近期笔记波动图（互动量）",key:"recentNoteInteractionFluctuationChart"},{group:"日常30天",label:"博主数据概览图",key:"bloggerOverviewChart"}',
+    "add recent note fluctuation export field",
+  );
+  replaceOnce(
+    mainBundle,
+    '{key:"dailyNoteVideoPerformanceChart",label:"日常笔记表现图（视频）"},{key:"bloggerOverviewChart",label:"博主数据概览图"}',
+    '{key:"dailyNoteVideoPerformanceChart",label:"日常笔记表现图（视频）"},{key:"recentNoteInteractionFluctuationChart",label:"近期笔记波动图（互动量）"},{key:"bloggerOverviewChart",label:"博主数据概览图"}',
+    "add optional recent note fluctuation field selector",
+  );
+  replaceOnce(
+    urlValidatorBundle,
+    'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart","dailyNotePicturePerformanceChart","dailyNoteVideoPerformanceChart","recentNoteInteractionFluctuationChart","bloggerOverviewChart"])',
+    'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart","dailyNotePicturePerformanceChart","dailyNoteVideoPerformanceChart","recentNoteInteractionFluctuationChart","bloggerOverviewChart"])',
+    "include recent note fluctuation chart in duration estimate",
   );
 }
 
@@ -973,5 +1020,122 @@ fs.writeFileSync(
   path.join(assetsRoot, "version.json"),
   `${JSON.stringify({ version: assetVersion }, null, 2)}\n`,
 );
+
+// ===========================================================================
+// pgy-kol「找博主」phase-2+5.2：原生筛选 MVP（开发开关默认关闭）。
+// 页面源码单一权威来源：scripts/pgy-kol-phase52-page-source.js（Phase 5.2
+// 官网高保真矩阵复刻：紧凑触发器 + Popover、搜笔记/搜昵称、搜索历史、
+// 地域三级级联、树形弹层、范围选择、已选条件、一键清空/收起筛选等）。
+// 注入块必须以 pgyKolDevEnabled 开头（bundle 内容守卫锚点）。
+// 菜单/路由注入说明（保持 Phase 1 不变）：
+// 1. li 路由表追加 "../pages/pgy-kol-search/index.tsx" 懒加载键（与 dashboard
+//    同一 G 加载器，默认导出 PgyKolSearchPage）。
+// 2. 菜单 store 末尾追加 {name:"找博主",path:"/pgy-kol-search",...}。路由生成 ci/ii 与
+//    菜单合并均带幂等守卫。
+// 开关：localStorage.getItem("magiorix-pgy-kol-enabled")==="1"；关闭时菜单不
+// 出现、页面不可达（开发开关，默认关闭）。
+const pgyKolSearchPageSource = fs.readFileSync(
+  path.join(projectRoot, "scripts", "pgy-kol-phase52-page-source.js"),
+  "utf8",
+);
+const pgyKolStoreFrom = "setMenus:t=>e({menus:t})";
+const pgyKolStoreTo = "setMenus:t=>e({menus:pgyKolWithLocalMenu(t)})";
+const pgyKolRouteFrom = '"../pages/dashboard/index.tsx":()=>G(()=>Promise.resolve().then(()=>W5),void 0,import.meta.url),';
+const pgyKolRouteTo = pgyKolRouteFrom + '"../pages/pgy-kol-search/index.tsx":()=>G(()=>Promise.resolve().then(()=>({default:PgyKolSearchPage})),void 0,import.meta.url),';
+const pgyKolRouteMarker = '"../pages/pgy-kol-search/index.tsx":()=>G(';
+
+// ===========================================================================
+// Phase 5.1 转换记录：pairs/helpers 现为空（转换已冻结进 git 历史）；
+// base 模板已是 Phase 5.2 最终形态，pairs 保留空数组以维持分层机制与记录完整。
+// 单一权威来源：payloadProven 只由后端 Schema 维护，前端通过 schema-fields IPC
+// 读取（pgyKolSchemaUnproven 写入 window.__pgyKolUnproven）。
+const pgyKolPhase51Patch = JSON.parse(
+  fs.readFileSync(path.join(projectRoot, "scripts", "pgy-kol-phase51-pairs.json"), "utf8"),
+);
+const pgyKolSearchPageSource51 = (() => {
+  let source = pgyKolSearchPageSource;
+  for (const item of pgyKolPhase51Patch.pairs) {
+    if (!source.includes(item.from)) {
+      throw new Error(`Missing pgy-kol Phase 5.1 patch target: ${item.label}`);
+    }
+    if (source.indexOf(item.from) !== source.lastIndexOf(item.from)) {
+      throw new Error(`Ambiguous pgy-kol Phase 5.1 patch target (multiple matches): ${item.label}`);
+    }
+    source = source.replace(item.from, item.to);
+  }
+  // 追加 helpers（覆盖旧的 PgyKolUnprovenSet / PgyKolNoteCategoryPopup 实现）。
+  // helpers 为空时不得追加换行，否则注入分隔符产生双换行，内容守卫哈希永不匹配。
+  if (pgyKolPhase51Patch.helpers) {
+    source = `${source}\n${pgyKolPhase51Patch.helpers}`;
+  }
+  return source;
+})();
+
+// 共享采集字段选择器位于独立 chunk（assets/<version>/assets/index-IS4kgrUy.js 的 E
+// 导出）。页面源码用占位符标记 chunk 文件名，这里解析真实文件名替换进注入源码，
+// 使「找博主」与蒲公英博主采集真正共用同一个 ExportFieldSelector；占位符绝不能
+// 残留到 bundle 里（否则运行时动态 import 拿不到真实模块）。
+const pgyKolFieldSelectorChunkName = "./" + path.basename(exportFieldSelectorBundle);
+const pgyKolSearchPageSourceInjected = pgyKolSearchPageSource51
+  .split("__PGY_KOL_EXPORT_FIELD_SELECTOR__")
+  .join(pgyKolFieldSelectorChunkName);
+if (pgyKolSearchPageSourceInjected.indexOf("__PGY_KOL_EXPORT_FIELD_SELECTOR__") >= 0) {
+  throw new Error("pgy-kol page source placeholder substitution failed: __PGY_KOL_EXPORT_FIELD_SELECTOR__");
+}
+
+// Phase 4 内容级幂等守卫：以源码 SHA-1 对比 bundle 内已注入块，内容漂移时
+// 必然重建（修复“标记存在但函数体已更新导致产物陈旧”的问题）；内容一致时
+// 跳过（保持幂等）。全新 bundle 没有旧块时直接注入（Phase 1 路径）。
+const normalizeSource = (source) => String(source).replace(/\r\n/g, "\n");
+const sourceSha1 = crypto
+  .createHash("sha1")
+  .update(normalizeSource(pgyKolSearchPageSourceInjected))
+  .digest("hex");
+const bundleBefore = fs.readFileSync(mainBundle, "utf8");
+const oldStart = bundleBefore.indexOf("V1=new Map;function pgyKolDevEnabled");
+const oldEnd = oldStart >= 0 ? bundleBefore.indexOf("function si(e){", oldStart) : -1;
+const existingBlock =
+  oldStart >= 0 && oldEnd > oldStart
+    ? bundleBefore.slice(oldStart + "V1=new Map;".length, oldEnd)
+    : null;
+const existingSha1 =
+  existingBlock === null
+    ? null
+    // 注入块末尾带一个分隔换行（"\r\nfunction si(e){" 前），哈希前剔除，
+    // 使“内容一致时跳过”的幂等比较真正成立（fresh reviewer M1）。
+    : crypto
+        .createHash("sha1")
+        .update(normalizeSource(existingBlock).replace(/\n$/, ""))
+        .digest("hex");
+if (existingSha1 !== sourceSha1) {
+  if (existingBlock !== null) {
+    replaceOnce(
+      mainBundle,
+      bundleBefore.slice(oldStart, oldEnd),
+      "V1=new Map;",
+      "remove stale pgy-kol page source before refresh",
+    );
+  }
+  replaceOnce(
+    mainBundle,
+    "V1=new Map;function si(e){",
+    "V1=new Map;" + pgyKolSearchPageSourceInjected.replace(/\n/g, "\r\n") + "\r\nfunction si(e){",
+    "inject or refresh pgy-kol Phase 4 search page component after the lazy route table",
+  );
+}
+if (!fs.readFileSync(mainBundle, "utf8").includes(pgyKolRouteMarker)) {
+  replaceOnce(mainBundle, pgyKolRouteFrom, pgyKolRouteTo, "register pgy-kol search lazy route");
+}
+if (!fs.readFileSync(mainBundle, "utf8").includes(pgyKolStoreTo)) {
+  replaceOnce(mainBundle, pgyKolStoreFrom, pgyKolStoreTo, "merge dev-gated local pgy-kol menu into user menus");
+}
+
+// 统一 mainBundle 行尾为 CRLF（Windows 构建产物惯例），避免混合 EOL 导致
+// integrity-manifest 哈希在 fresh checkout（autocrlf）下不可复现；幂等：重复运行结果一致。
+const normalizedMainBundle = fs
+  .readFileSync(mainBundle, "utf8")
+  .replace(/\r\n/g, "\n")
+  .replace(/\n/g, "\r\n");
+fs.writeFileSync(mainBundle, normalizedMainBundle);
 
 console.log("Applied magiorix frontend patches.");
