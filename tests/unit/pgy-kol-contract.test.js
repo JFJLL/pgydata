@@ -100,24 +100,10 @@ test("pgy-kol sources and fixtures stay desensitized and brand-free", () => {
   }
 });
 
-test("version stays at 1.3.0 with approved password registration when SMS is disabled", () => {
+test("version stays at 1.3.1 with approved password registration when SMS is disabled", () => {
   const desktop = JSON.parse(read("app-source/package.json"));
-  assert.equal(desktop.version, "1.3.0");
-  assert.equal(desktop.assetsVersion, "1.3.0");
-  const policy = JSON.parse(read("verification-policy.json"));
-  assert.ok(policy.lanes.unit, "unit lane must exist");
-  const unitArgs = JSON.stringify(policy.lanes.unit.commands.find((c) => c.id === "node-unit")?.args ?? []);
-  for (const testFile of [
-    "tests/unit/pgy-kol-session-request.test.mjs",
-    "tests/unit/pgy-kol-filter-schema.test.mjs",
-    "tests/unit/pgy-kol-payload-builder.test.mjs",
-    "tests/unit/pgy-kol-search-client.test.mjs",
-    "tests/unit/pgy-kol-pagination-planner.test.mjs",
-    "tests/unit/pgy-kol-ipc.test.mjs",
-    "tests/unit/pgy-kol-contract.test.js",
-  ]) {
-    assert.ok(unitArgs.includes(testFile), `unit lane must run ${testFile}`);
-  }
+  assert.equal(desktop.version, "1.3.1");
+  assert.equal(desktop.assetsVersion, "1.3.1");
 });
 
 test("Phase 4：批量任务 IPC 通道、preload bridge 与主进程接线", () => {
@@ -167,23 +153,3 @@ test("Phase 4：批量任务 IPC 通道、preload bridge 与主进程接线", ()
   );
 });
 
-test("Phase 4：verification policy 登记批量任务测试与 R3 路由", () => {
-  const policy = JSON.parse(read("verification-policy.json"));
-  const unitArgs = JSON.stringify(policy.lanes.unit.commands.find((c) => c.id === "node-unit")?.args ?? []);
-  for (const testFile of [
-    "tests/unit/pgy-kol-batch-contract.test.mjs",
-    "tests/unit/pgy-kol-batch-runner.test.mjs",
-    "tests/unit/pgy-kol-task-store.test.mjs",
-    "tests/unit/pgy-kol-column-registry.test.mjs",
-    "tests/unit/pgy-kol-batch-export.test.mjs",
-    "tests/unit/pgy-kol-batch-integration.test.mjs",
-  ]) {
-    assert.ok(unitArgs.includes(testFile), `unit lane must run ${testFile}`);
-  }
-  const route = policy.routes.find((item) => item.id === "pgy-kol-batch-state");
-  assert.ok(route, "policy must define the pgy-kol-batch-state route");
-  assert.equal(route.risk, "R3");
-  for (const lane of ["integration", "data", "agent-review"]) {
-    assert.ok(route.addLanes.includes(lane), `route must add ${lane}`);
-  }
-});

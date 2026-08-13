@@ -291,7 +291,8 @@ Invoke-CheckedProcess -FilePath (Join-Path $PSHOME "pwsh.exe") -Arguments @("-No
 Write-Output "Packing Electron app.asar from app-source..."
 $asarOut = Join-Path (Join-Path $sourceAppDir "resources") "app.asar"
 Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "apply-magiorix-runtime-patches.js")) -WorkingDirectory $projectRoot
-Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "pack-asar.js"), $appSourceDir, $asarOut) -WorkingDirectory $projectRoot
+Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "pack-asar.js"), $appSourceDir, $asarOut, "--require", "node_modules/unzipper/package.json") -WorkingDirectory $projectRoot
+Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "verify-asar-entries.js"), $asarOut, "node_modules/unzipper/package.json", "node_modules/unzipper/unzip.js") -WorkingDirectory $projectRoot
 
 $payloadAppDir = Join-Path $payloadDir "app"
 $payloadAssetsRoot = Join-Path $payloadDir "assets"

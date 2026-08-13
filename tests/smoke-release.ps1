@@ -47,4 +47,10 @@ foreach ($marker in @("pgyHasSingleInstanceLock", "pgyDesktopUpdateActive", ".pa
   if (-not $runtimeSource.Contains($marker)) { throw "Runtime build is missing marker: $marker" }
 }
 
+$asarPath = Join-Path $projectRoot "runtime\magiorix-desktop\resources\app.asar"
+$node = Get-Command "node.exe" -ErrorAction SilentlyContinue
+if (-not $node) { $node = Get-Command "node" -ErrorAction Stop }
+& $node.Source (Join-Path $projectRoot "scripts\verify-asar-entries.js") $asarPath "node_modules/unzipper/package.json" "node_modules/unzipper/unzip.js"
+if ($LASTEXITCODE -ne 0) { throw "Runtime ASAR dependency verification failed" }
+
 Write-Output "Release smoke passed for magiorix $version."
