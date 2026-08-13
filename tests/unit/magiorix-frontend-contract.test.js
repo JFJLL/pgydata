@@ -138,13 +138,17 @@ test("payment external links stay behind the main-process HTTPS allowlist", () =
   assert.doesNotMatch(main, /Ji\.openExternal\(n\)/);
   assert.match(main, /F\.handle\(Fe\.shell\.openExternal/);
   assert.match(main, /支付地址不安全或不受支持/);
+  assert.match(main, /function pgyOpenPaymentWindow/);
+  assert.match(main, /支付宝支付 - magiorix/);
+  assert.match(main, /url\.hostname\.endsWith\("\.alipay\.com"\)/);
+  assert.match(main, /nodeIntegration: false, contextIsolation: true, sandbox: true/);
   assert.match(preload, /openExternal:e=>r\.ipcRenderer\.invoke/);
   assert.doesNotMatch(main, /树苗|薯苗/);
   assert.match(preload, /openSafeExternal/);
   const rechargeSource = fs.readFileSync(rechargeBundle, "utf8");
   assert.match(rechargeSource, /shell\?\.openExternal/);
   assert.match(rechargeSource, /await window\.bridge\?\.system\?\.shell\?\.openExternal/);
-  assert.match(rechargeSource, /无法打开支付页面/);
+  assert.match(rechargeSource, /支付宝支付窗口已打开/);
   assert.doesNotMatch(rechargeSource, /openSafeExternal/);
   const first = spawnSync(process.execPath, [runtimePatchScript], { cwd: projectRoot, encoding: "utf8" });
   assert.equal(first.status, 0, first.stderr || first.stdout);

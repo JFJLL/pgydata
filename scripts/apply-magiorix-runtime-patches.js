@@ -247,6 +247,48 @@ main = replaceAllIfExists(
   }), F.on(Fe.window.minimize, () => {`,
 );
 
+if (!main.includes("function pgyOpenPaymentWindow")) {
+  main = replaceOnce(
+    main,
+    "const Wr = (a) => {",
+    `function pgyIsPaymentWindowUrl(value) {
+  try {
+    const url = new URL(String(value));
+    if (url.protocol !== "https:" || url.username || url.password) return false;
+    return pgyPaymentExternalOrigins.has(url.origin) || url.hostname === "alipay.com" || url.hostname.endsWith(".alipay.com");
+  } catch {
+    return false;
+  }
+}
+async function pgyOpenPaymentWindow(value) {
+  const target = pgyResolveExternal(value, pgyPaymentExternalOrigins);
+  if (!target) throw new Error("支付地址不安全或不受支持");
+  const paymentWindow = new Dt({ width: 1180, height: 820, minWidth: 960, minHeight: 680, show: false, title: "支付宝支付 - magiorix", autoHideMenuBar: true, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true } });
+  paymentWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  const blockUnexpectedNavigation = (event, url) => { if (!pgyIsPaymentWindowUrl(url)) event.preventDefault(); };
+  paymentWindow.webContents.on("will-navigate", blockUnexpectedNavigation);
+  paymentWindow.webContents.on("will-redirect", blockUnexpectedNavigation);
+  try {
+    await paymentWindow.loadURL(target);
+    if (!paymentWindow.isDestroyed()) paymentWindow.show();
+    return true;
+  } catch (error) {
+    if (!paymentWindow.isDestroyed()) paymentWindow.destroy();
+    throw new Error("支付窗口加载失败：" + pgyAssetErrorMessage(error));
+  }
+}
+const Wr = (a) => {`,
+    "embedded payment window",
+  );
+}
+
+main = replaceAllIfExists(
+  main,
+  `    await Ji.openExternal(s);
+    return true;`,
+  `    return await pgyOpenPaymentWindow(s);`,
+);
+
 if (!main.includes("function pgyCompareAssetVersions")) {
   main = replaceOnce(
     main,
