@@ -6,8 +6,8 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const projectRoot = path.resolve(__dirname, "../..");
-const authBundle = path.join(projectRoot, "assets", "1.3.2", "assets", "index-B09sHfUO.js");
-const rechargeBundle = path.join(projectRoot, "assets", "1.3.2", "assets", "index-C0Ke2Ul0.js");
+const authBundle = path.join(projectRoot, "assets", "1.3.3", "assets", "index-B09sHfUO.js");
+const rechargeBundle = path.join(projectRoot, "assets", "1.3.3", "assets", "index-C0Ke2Ul0.js");
 const patchScript = path.join(projectRoot, "scripts", "apply-magiorix-frontend-patches.js");
 const runtimePatchScript = path.join(projectRoot, "scripts", "apply-magiorix-runtime-patches.js");
 const runtimeMain = path.join(projectRoot, "app-source", "dist-electron", "index.js");
@@ -15,9 +15,9 @@ const runtimePreload = path.join(projectRoot, "app-source", "dist-electron", "pr
 const legacyFrontendBrandPattern = /(?:\bzs\.|@zsdesktop|PYGdata|Emagic(?:DataCrawler| Data Crawler)?|易美(?:传播|数据抓取)?)/i;
 
 function readFrontendBundleSource() {
-  return fs.readdirSync(path.join(projectRoot, "assets", "1.3.2", "assets"))
+  return fs.readdirSync(path.join(projectRoot, "assets", "1.3.3", "assets"))
     .filter((file) => /\.(?:js|css|html|svg)$/i.test(file))
-    .map((file) => fs.readFileSync(path.join(projectRoot, "assets", "1.3.2", "assets", file), "utf8"))
+    .map((file) => fs.readFileSync(path.join(projectRoot, "assets", "1.3.3", "assets", file), "utf8"))
     .join("\n");
 }
 
@@ -29,7 +29,7 @@ function sha256(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
-test("1.3.2 auth bundle uses verified registration and password recovery flows", () => {
+test("1.3.3 auth bundle uses verified registration and password recovery flows", () => {
   const source = fs.readFileSync(authBundle, "utf8");
   for (const endpoint of ["/api/auth/sms/send", "/api/auth/register", "/api/auth/password/reset"]) {
     assert.match(source, new RegExp(endpoint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing ${endpoint}`);
@@ -60,7 +60,7 @@ test("1.3.2 auth bundle uses verified registration and password recovery flows",
   assert.doesNotMatch(registrationFlow, /pgyRegister\(\{phone:q,code:T,password:c\}\),await r\(\{loginType:"password"/);
 });
 
-test("1.3.2 frontend bundle is branded and uses the safe dashboard contract", () => {
+test("1.3.3 frontend bundle is branded and uses the safe dashboard contract", () => {
   const source = readFrontendBundleSource();
   assertCleanFrontendBundle(source);
   assert.match(source, /magiorix\.login\.method/);
@@ -82,7 +82,7 @@ test("1.3.2 frontend bundle is branded and uses the safe dashboard contract", ()
   assert.throws(() => assertCleanFrontendBundle(temporarilyInjected), /legacy frontend brand residue/);
 });
 
-test("1.3.2 points recharge bundle exposes the Alipay-only contract", () => {
+test("1.3.3 points recharge bundle exposes the Alipay-only contract", () => {
   const source = fs.readFileSync(rechargeBundle, "utf8");
   for (const label of ["积分充值", "立即充值", "支付宝", "payUrl", "/query"]) {
     assert.match(source, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing ${label}`);
@@ -92,7 +92,7 @@ test("1.3.2 points recharge bundle exposes the Alipay-only contract", () => {
   }
 });
 
-test("frontend patch script is repeatable for the 1.3.2 asset copy", () => {
+test("frontend patch script is repeatable for the 1.3.3 asset copy", () => {
   const before = sha256(rechargeBundle);
   const authBefore = sha256(authBundle);
   const first = spawnSync(process.execPath, [patchScript], { cwd: projectRoot, encoding: "utf8" });
@@ -111,7 +111,7 @@ test("frontend patch script is repeatable for the 1.3.2 asset copy", () => {
 
 test("server exposes only the three points-center menu entries", () => {
   const server = fs.readFileSync(path.join(projectRoot, "red-magic-api", "server.js"), "utf8");
-  const mainBundle = fs.readFileSync(path.join(projectRoot, "assets", "1.3.2", "assets", "index-B09sHfUO.js"), "utf8");
+  const mainBundle = fs.readFileSync(path.join(projectRoot, "assets", "1.3.3", "assets", "index-B09sHfUO.js"), "utf8");
   assert.match(server, /name: "积分充值"/);
   assert.match(server, /name: "充值记录"/);
   assert.match(server, /name: "消耗记录"/);
@@ -125,6 +125,9 @@ test("payment external links stay behind the main-process HTTPS allowlist", () =
   assert.match(main, /pgyPaymentExternalOrigin/);
   assert.match(main, /t\.protocol !== "https:"/);
   assert.match(main, /pgyPaymentExternalOrigins/);
+  assert.match(main, /function pgyCompareAssetVersions/);
+  assert.match(main, /远程资源较旧，拒绝回退/);
+  assert.match(main, /拒绝将前端资源从/);
   assert.match(main, /setWindowOpenHandler\(\(\) => \(\{ action: "deny" \}\)\)/);
   assert.match(main, /pgyIsMainWindowNavigationAllowed/);
   assert.match(main, /allowedFilePath/);
@@ -133,10 +136,15 @@ test("payment external links stay behind the main-process HTTPS allowlist", () =
   assert.match(main, /webContents\.on\("will-navigate"/);
   assert.match(main, /webContents\.on\("will-redirect"/);
   assert.doesNotMatch(main, /Ji\.openExternal\(n\)/);
+  assert.match(main, /F\.handle\(Fe\.shell\.openExternal/);
+  assert.match(main, /支付地址不安全或不受支持/);
+  assert.match(preload, /openExternal:e=>r\.ipcRenderer\.invoke/);
   assert.doesNotMatch(main, /树苗|薯苗/);
   assert.match(preload, /openSafeExternal/);
   const rechargeSource = fs.readFileSync(rechargeBundle, "utf8");
   assert.match(rechargeSource, /shell\?\.openExternal/);
+  assert.match(rechargeSource, /await window\.bridge\?\.system\?\.shell\?\.openExternal/);
+  assert.match(rechargeSource, /无法打开支付页面/);
   assert.doesNotMatch(rechargeSource, /openSafeExternal/);
   const first = spawnSync(process.execPath, [runtimePatchScript], { cwd: projectRoot, encoding: "utf8" });
   assert.equal(first.status, 0, first.stderr || first.stdout);

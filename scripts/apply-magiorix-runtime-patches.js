@@ -225,6 +225,81 @@ const Wr = (a) => {
   );
 }
 
+main = replaceAllIfExists(
+  main,
+  `const Wr = (a) => {
+  F.on(Fe.shell.openExternal, (t, n) => {
+    const s = pgyResolveExternal(n, pgyPaymentExternalOrigins);
+    if (s) void Ji.openExternal(s);
+  }), F.on(Fe.shell.openSafeExternal, (t, n) => {
+    const s = pgyResolveExternal(n, pgySafeExternalOrigins);
+    if (s) void Ji.openExternal(s);
+  }), F.on(Fe.window.minimize, () => {`,
+  `const Wr = (a) => {
+  F.handle(Fe.shell.openExternal, async (t, n) => {
+    const s = pgyResolveExternal(n, pgyPaymentExternalOrigins);
+    if (!s) throw new Error("支付地址不安全或不受支持");
+    await Ji.openExternal(s);
+    return true;
+  }), F.on(Fe.shell.openSafeExternal, (t, n) => {
+    const s = pgyResolveExternal(n, pgySafeExternalOrigins);
+    if (s) void Ji.openExternal(s);
+  }), F.on(Fe.window.minimize, () => {`,
+);
+
+if (!main.includes("function pgyCompareAssetVersions")) {
+  main = replaceOnce(
+    main,
+    "class Ae {",
+    `function pgyCompareAssetVersions(a, b) {
+  const parse = (value) => String(value || "").split(".").map((part) => Number.parseInt(part, 10));
+  const left = parse(a), right = parse(b);
+  if (left.some((part) => !Number.isInteger(part)) || right.some((part) => !Number.isInteger(part))) return 0;
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const delta = (left[index] || 0) - (right[index] || 0);
+    if (delta !== 0) return delta;
+  }
+  return 0;
+}
+class Ae {`,
+    "asset version comparator",
+  );
+}
+
+main = replaceAllIfExists(
+  main,
+  `  static async applyAssets(e, t) {
+    const n = Oe($n, t), s = \`${'${n}'}.partial-${'${process.pid}'}\`;`,
+  `  static async applyAssets(e, t) {
+    const currentVersion = this.getLocalVersion();
+    if (currentVersion && pgyCompareAssetVersions(t, currentVersion) < 0)
+      throw new Error(\`拒绝将前端资源从 ${'${currentVersion}'} 回退到 ${'${t}'}\`);
+    const n = Oe($n, t), s = \`${'${n}'}.partial-${'${process.pid}'}\`;`,
+);
+
+main = replaceAllIfExists(
+  main,
+  `      if (K.info(\`版本对比 — 本地: ${'${e}'}, 远程: ${'${t.version}'}\`), e === t.version) {
+        K.info("已是最新版本");
+        return;
+      }
+      K.info(\`发现新版本 ${'${t.version}'}，开始下载...\`),`,
+  `      const compare = e ? pgyCompareAssetVersions(t.version, e) : 1;
+      if (K.info(\`版本对比 — 本地: ${'${e}'}, 远程: ${'${t.version}'}, compare=${'${compare}'}\`), compare <= 0) {
+        K.info(compare < 0 ? "远程资源较旧，拒绝回退" : "已是最新版本");
+        return;
+      }
+      K.info(\`发现新版本 ${'${t.version}'}，开始下载...\`),`,
+);
+
+main = replaceAllIfExists(
+  main,
+  `    if (!a || a !== e.version) {
+      Ee.info(\`发现新版本 ${'${e.version}'}，后台下载中...\`);`,
+  `    if (!a || pgyCompareAssetVersions(e.version, a) > 0) {
+      Ee.info(\`发现新版本 ${'${e.version}'}，后台下载中...\`);`,
+);
+
 preload = replaceOnce(
   preload,
   'shell:{openExternal:"system:shell:open-external"}',
@@ -249,6 +324,11 @@ if (!preload.includes("openSafeExternal:e=>")) {
 preload = preload.replace(
   'openExternal:e=>{r.ipcRenderer.send(i.shell.openExternal,e)},openSafeExternal:e=>{r.ipcRenderer.send(i.shell.openSafeExternal,e)},openSafeExternal:e=>{r.ipcRenderer.send(i.shell.openSafeExternal,e)}',
   'openExternal:e=>{r.ipcRenderer.send(i.shell.openExternal,e)},openSafeExternal:e=>{r.ipcRenderer.send(i.shell.openSafeExternal,e)}',
+);
+preload = replaceAllIfExists(
+  preload,
+  'openExternal:e=>{r.ipcRenderer.send(i.shell.openExternal,e)}',
+  'openExternal:e=>r.ipcRenderer.invoke(i.shell.openExternal,e)',
 );
 
 if (!main.includes("pgyIsMainWindowNavigationAllowed")) {

@@ -84,7 +84,7 @@ for (const industry of ["美妆个护", "食品饮料", "3c及电器", "日用�
 }
 // 2026-08-11 官网实测字段契约：分组筛选树/国家地域/母婴阶段/手机品牌必须进入产物，
 // 旧的平铺候选（宝妈/公务员/三星）不得残留（防产物级漂移）。
-const kolBundle = readFileSync("assets/1.3.2/assets/index-B09sHfUO.js", "utf8");
+const kolBundle = readFileSync("assets/1.3.3/assets/index-B09sHfUO.js", "utf8");
 for (const marker of ['"家庭角色"', '"出镜人关系"', '"备考经验"', '"皮肤养护"', '"生活方式"', '"传统行业"', '"专业服务"', '"新加坡"', '"7-12月"', '"魅族"', '"中兴"']) {
   assert.ok(kolBundle.includes(marker), `bundle must carry official grouped-filter marker: ${marker}`);
 }
@@ -93,8 +93,8 @@ for (const stale of ['"二胎妈妈"', '"公务员"', '"三星"', '"自由职业
 }
 
 // 登录页补丁契约（2026-08-11）：登录/注册默认密码、只有找回密码用短信、无二维码。
-const signInBundle = readFileSync("assets/1.3.2/assets/index-B09sHfUO.js", "utf8");
-const signInCss = readFileSync("assets/1.3.2/assets/index-kuUVLowI.css", "utf8");
+const signInBundle = readFileSync("assets/1.3.3/assets/index-B09sHfUO.js", "utf8");
+const signInCss = readFileSync("assets/1.3.3/assets/index-kuUVLowI.css", "utf8");
 assert.ok(signInBundle.includes('className:"sign-in__card"'), "sign-in page must still render (positive guard against whole-page removal)");
 assert.ok(signInCss.includes(".sign-in__card{"), "sign-in card styles must still exist");
 assert.ok(!signInBundle.includes('className:"sign-in__left"'), "sign-in qr panel must be removed from the bundle");
@@ -220,7 +220,7 @@ const frontendBundleSources = readdirSync(`${assetRoot}/assets`)
   .map((file) => readFileSync(`${assetRoot}/assets/${file}`, "utf8"))
   .join("\n");
 const legacyFrontendBrandPattern = /(?:\bzs\.|@zsdesktop|PYGdata|Emagic(?:DataCrawler| Data Crawler)?|易美(?:传播|数据抓取)?)/i;
-assert.doesNotMatch(frontendBundleSources, legacyFrontendBrandPattern, "1.3.2 frontend bundle must not contain legacy brand residue");
+assert.doesNotMatch(frontendBundleSources, legacyFrontendBrandPattern, "1.3.3 frontend bundle must not contain legacy brand residue");
 assert.match(frontendBundleSources, /magiorix\.login\.method/, "frontend auth storage must use magiorix.login.method");
 assert.doesNotMatch(frontendBundleSources, /\/api\/statistics\/admin-dashboard/, "ordinary frontend must not call the admin dashboard endpoint");
 assert.match(frontendBundleSources, /\/api\/statistics\/dashboard/, "ordinary frontend must call the safe dashboard endpoint");

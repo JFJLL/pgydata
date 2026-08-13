@@ -5,7 +5,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const projectRoot = path.resolve(__dirname, "../..");
-const mainBundlePath = path.join(projectRoot, "assets", "1.3.2", "assets", "index-B09sHfUO.js");
+const mainBundlePath = path.join(projectRoot, "assets", "1.3.3", "assets", "index-B09sHfUO.js");
 const patchScriptPath = path.join(projectRoot, "scripts", "apply-magiorix-frontend-patches.js");
 const pageSourcePath = path.join(projectRoot, "scripts", "pgy-kol-phase52-page-source.js");
 const preloadPath = path.join(projectRoot, "app-source", "dist-electron", "preload.mjs");
@@ -1833,8 +1833,8 @@ test("patch script substitutes the real shared-selector chunk filename and hashe
 });
 
 test("collect fields and templates are shared with 蒲公英博主采集 (same chunk, same schema, same template pool)", () => {
-  const selectorChunk = fs.readFileSync(path.join(projectRoot, "assets", "1.3.2", "assets", "index-IS4kgrUy.js"), "utf8");
-  const taskPanel = fs.readFileSync(path.join(projectRoot, "assets", "1.3.2", "assets", "PgyTaskPanel-B4ZGEmDG.js"), "utf8");
+  const selectorChunk = fs.readFileSync(path.join(projectRoot, "assets", "1.3.3", "assets", "index-IS4kgrUy.js"), "utf8");
+  const taskPanel = fs.readFileSync(path.join(projectRoot, "assets", "1.3.3", "assets", "PgyTaskPanel-B4ZGEmDG.js"), "utf8");
   assert.match(taskPanel, /import\{E as \w+\}from"\.\/index-IS4kgrUy\.js"/, "蒲公英博主采集 must import ExportFieldSelector from the shared chunk");
   assert.ok(
     taskPanel.includes('{open:ce,platform:$.platform,schema:$.schema,title:"选择采集字段",warningText:"勾选字段过多会显著增加采集时间，且可能触发平台风控。建议按需勾选。",onClose:he,onSubmit:xe}'),
@@ -2410,7 +2410,7 @@ test("找博主页面移除自建任务历史（历史统一在采集助手）",
 });
 
 test("采集助手接入：单任务进度卡（进度条/current/total/已用/成功/失败/暂停/继续/取消/完成下载）", () => {
-  const assistant = fs.readFileSync(path.join(projectRoot, "assets", "1.3.2", "magiorix-ops-assistant.js"), "utf8");
+  const assistant = fs.readFileSync(path.join(projectRoot, "assets", "1.3.3", "magiorix-ops-assistant.js"), "utf8");
   const source = fs.readFileSync(path.join(projectRoot, "scripts", "magiorix-ops-assistant.js"), "utf8");
   assert.equal(assistant, source, "资产内采集助手必须与源文件一致（补丁脚本拷贝）");
   // 页面提交后自动打开/聚焦助手当前任务视图。

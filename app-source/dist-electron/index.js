@@ -275,9 +275,11 @@ function pgyIsMainWindowNavigationAllowed(value, allowedFilePath) {
   }
 }
 const Wr = (a) => {
-  F.on(Fe.shell.openExternal, (t, n) => {
+  F.handle(Fe.shell.openExternal, async (t, n) => {
     const s = pgyResolveExternal(n, pgyPaymentExternalOrigins);
-    if (s) void Ji.openExternal(s);
+    if (!s) throw new Error("支付地址不安全或不受支持");
+    await Ji.openExternal(s);
+    return true;
   }), F.on(Fe.shell.openSafeExternal, (t, n) => {
     const s = pgyResolveExternal(n, pgySafeExternalOrigins);
     if (s) void Ji.openExternal(s);
@@ -461,6 +463,16 @@ function pgyVerifyAssets(a) {
   }
   return !0;
 }
+function pgyCompareAssetVersions(a, b) {
+  const parse = (value) => String(value || "").split(".").map((part) => Number.parseInt(part, 10));
+  const left = parse(a), right = parse(b);
+  if (left.some((part) => !Number.isInteger(part)) || right.some((part) => !Number.isInteger(part))) return 0;
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const delta = (left[index] || 0) - (right[index] || 0);
+    if (delta !== 0) return delta;
+  }
+  return 0;
+}
 class Ae {
   // 5分钟
   /**
@@ -566,6 +578,9 @@ class Ae {
    * 解压并应用资源包
    */
   static async applyAssets(e, t) {
+    const currentVersion = this.getLocalVersion();
+    if (currentVersion && pgyCompareAssetVersions(t, currentVersion) < 0)
+      throw new Error(`拒绝将前端资源从 ${currentVersion} 回退到 ${t}`);
     const n = Oe($n, t), s = `${n}.partial-${process.pid}`;
     kt(s) && Kt.rmSync(s, { recursive: !0, force: !0 }), Sr(s, { recursive: !0 });
     try {
@@ -672,8 +687,9 @@ class Ae {
     try {
       this.isDownloading = !0;
       const e = this.getLocalVersion(), t = await this.getRemoteVersion();
-      if (K.info(`版本对比 — 本地: ${e}, 远程: ${t.version}`), e === t.version) {
-        K.info("已是最新版本");
+      const compare = e ? pgyCompareAssetVersions(t.version, e) : 1;
+      if (K.info(`版本对比 — 本地: ${e}, 远程: ${t.version}, compare=${compare}`), compare <= 0) {
+        K.info(compare < 0 ? "远程资源较旧，拒绝回退" : "已是最新版本");
         return;
       }
       K.info(`发现新版本 ${t.version}，开始下载...`), this.sendToRenderer(Me.assetsUpdateAvailable, {
@@ -25516,7 +25532,7 @@ function Ga(a) {
 async function mh() {
   try {
     const a = Ae.getLocalVersion(), e = await Ae.getRemoteVersion();
-    if (!a || a !== e.version) {
+    if (!a || pgyCompareAssetVersions(e.version, a) > 0) {
       Ee.info(`发现新版本 ${e.version}，后台下载中...`);
       const t = await Ae.downloadAssets(e, () => {
       });
