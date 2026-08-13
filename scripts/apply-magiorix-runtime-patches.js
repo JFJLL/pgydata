@@ -11,14 +11,6 @@ const chinaGeoJsonSourcePath = path.join(projectRoot, "tools", "china-provinces.
 const chinaGeoJsonTargetPath = path.join(projectRoot, "app-source", "dist-electron", "static", "china-provinces.geojson");
 const dailyNoteSvgSourcePath = path.join(projectRoot, "tools", "pgy_daily_note_svg.js");
 const dailyNoteSvgSource = fs.readFileSync(dailyNoteSvgSourcePath, "utf8").trim();
-const recentNoteFluctuationSvgSourcePath = path.join(
-  projectRoot,
-  "tools",
-  "pgy_recent_note_fluctuation_svg.js",
-);
-const recentNoteFluctuationSvgSource = fs
-  .readFileSync(recentNoteFluctuationSvgSourcePath, "utf8")
-  .trim();
 const bloggerOverviewSvgSourcePath = path.join(projectRoot, "tools", "pgy_blogger_overview_svg.js");
 const bloggerOverviewSvgSource = fs.readFileSync(bloggerOverviewSvgSourcePath, "utf8").trim();
 const trendSvgSourcePath = path.join(projectRoot, "tools", "pgy_trend_svg.js");
@@ -58,6 +50,16 @@ function replaceAllIfExists(source, from, to) {
   return sourceNorm.split(fromNorm).join(norm(to));
 }
 
+function removeSectionIfExists(source, startMarker, endMarker) {
+  const norm = (value) => value.replace(/\r\n/g, "\n");
+  const sourceNorm = norm(source);
+  const start = sourceNorm.indexOf(norm(startMarker));
+  if (start < 0) return sourceNorm;
+  const end = sourceNorm.indexOf(norm(endMarker), start);
+  if (end < 0) throw new Error(`Missing removal end marker: ${endMarker}`);
+  return sourceNorm.slice(0, start) + sourceNorm.slice(end);
+}
+
 function insertAfterOnce(source, marker, insert, already, label) {
   const norm = (value) => value.replace(/\r\n/g, "\n");
   const sourceNorm = norm(source);
@@ -68,6 +70,17 @@ function insertAfterOnce(source, marker, insert, already, label) {
 }
 
 let main = fs.readFileSync(mainPath, "utf8");
+
+// 近期笔记波动只保留 interactionMedian 数据列，不再生成或导出图片。
+main = replaceAllIfExists(main, '  recentNoteInteractionFluctuationChart: ["recentNoteInteractionFluctuationChart"],\n', "");
+main = replaceAllIfExists(main, '    "recentNoteInteractionFluctuationChart",\n', "");
+main = replaceAllIfExists(main, '  recentNoteInteractionFluctuation: "recentNoteInteractionFluctuationChart",\n', "");
+main = replaceAllIfExists(main, '  pgyHasSelectedField(n, PYG_CHART_FIELDS.recentNoteInteractionFluctuation) && i.push({ field: "recentNoteInteractionFluctuationChart", type: "recent-note-interaction-fluctuation", data: d ?? {}, output: pgyChartFile("daily-note", a, "recent-note-interaction-fluctuation") });\n', "");
+main = main.replace(' : o.type === "recent-note-interaction-fluctuation" ? r = pgyWriteSvgPng(pgyRecentNoteFluctuationSvg(o.data ?? {}), o.output)', "");
+main = main.replace(/            elif chart_type == "recent-note-interaction-fluctuation":\r?\n                ok = save_recent_note_fluctuation\(chart\)\r?\n/g, "");
+main = removeSectionIfExists(main, "def save_recent_note_fluctuation(chart):", "def main():");
+main = removeSectionIfExists(main, "// 近期笔记波动图（互动量）JS/SVG 兜底", "async function buildPgyBloggerChartFields");
+main = replaceAllIfExists(main, "mEngagementNum30: o.mEngagementNum,", "mEngagementNum30: o.interactionMedian,");
 let preload = fs.readFileSync(preloadPath, "utf8");
 
 main = main.split("薯苗").join("积分");
@@ -197,6 +210,7 @@ function pgyResolveExternal(value, allowedOrigins) {
     return null;
   }
 }
+
 function pgyIsMainWindowNavigationAllowed(value, allowedFilePath) {
   try {
     const t = new URL(String(value));
@@ -1934,7 +1948,6 @@ if (!hasTypedDailyNoteDeps) {
     `  dailyNotePerformanceChart: ["dailyNotePerformanceChart"],
   dailyNotePicturePerformanceChart: ["dailyNotePicturePerformanceChart"],
   dailyNoteVideoPerformanceChart: ["dailyNoteVideoPerformanceChart"],
-  recentNoteInteractionFluctuationChart: ["recentNoteInteractionFluctuationChart"],
   bloggerOverviewChart: ["bloggerOverviewChart"]`,
     "pgy typed daily note field dependencies",
   );
@@ -2004,7 +2017,6 @@ if (!main.includes('pgyNoteTypeLabel: "图文"')) {
     `  pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePerformance) && i.push({ field: "dailyNotePerformanceChart", type: "daily-note-performance", data: { ...(d ?? {}), pgyNoteTypeLabel: "图文+视频" }, output: pgyChartFile("daily-note", a, "daily-note-performance") });
   pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePicturePerformance) && i.push({ field: "dailyNotePicturePerformanceChart", type: "daily-note-performance", data: { ...(P ?? {}), pgyNoteTypeLabel: "图文" }, output: pgyChartFile("daily-note", a, "daily-note-picture-performance") });
   pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNoteVideoPerformance) && i.push({ field: "dailyNoteVideoPerformanceChart", type: "daily-note-performance", data: { ...(V ?? {}), pgyNoteTypeLabel: "视频" }, output: pgyChartFile("daily-note", a, "daily-note-video-performance") });
-  pgyHasSelectedField(n, PYG_CHART_FIELDS.recentNoteInteractionFluctuation) && i.push({ field: "recentNoteInteractionFluctuationChart", type: "recent-note-interaction-fluctuation", data: d ?? {}, output: pgyChartFile("daily-note", a, "recent-note-interaction-fluctuation") });
   pgyHasSelectedField(n, PYG_CHART_FIELDS.bloggerOverview)`,
     "pgy typed daily note chart queue",
   );
@@ -2090,61 +2102,6 @@ main = replaceOnce(
   "pgy overview inline avatar and emoji",
 );
 
-// 近期笔记波动图（互动量）：字段依赖（复用 notes_rate/daily30 数据，不新增请求）、
-// 图片字段注册、生图队列（三张日常笔记图之后、博主概览图之前）、JS/SVG 兜底路由。
-if (!main.includes("recentNoteInteractionFluctuationChart")) {
-  main = replaceOnce(
-    main,
-    `  dailyNoteVideoPerformanceChart: ["dailyNoteVideoPerformanceChart"],
-  bloggerOverviewChart: ["bloggerOverviewChart"]`,
-    `  dailyNoteVideoPerformanceChart: ["dailyNoteVideoPerformanceChart"],
-  recentNoteInteractionFluctuationChart: ["recentNoteInteractionFluctuationChart"],
-  bloggerOverviewChart: ["bloggerOverviewChart"]`,
-    "pgy recent note fluctuation field dependency",
-  );
-  main = replaceOnce(
-    main,
-    `    "shareMedian",
-    "interactRate",
-    "dailyNotePerformanceChart",
-    "bloggerOverviewChart"
-  ],`,
-    `    "shareMedian",
-    "interactRate",
-    "dailyNotePerformanceChart",
-    "recentNoteInteractionFluctuationChart",
-    "bloggerOverviewChart"
-  ],`,
-    "pgy recent note fluctuation daily30 endpoint dependency",
-  );
-  main = replaceOnce(
-    main,
-    `  dailyNotePerformance: "dailyNotePerformanceChart",
-  dailyNotePicturePerformance: "dailyNotePicturePerformanceChart",
-  dailyNoteVideoPerformance: "dailyNoteVideoPerformanceChart",
-  bloggerOverview: "bloggerOverviewChart"`,
-    `  dailyNotePerformance: "dailyNotePerformanceChart",
-  dailyNotePicturePerformance: "dailyNotePicturePerformanceChart",
-  dailyNoteVideoPerformance: "dailyNoteVideoPerformanceChart",
-  recentNoteInteractionFluctuation: "recentNoteInteractionFluctuationChart",
-  bloggerOverview: "bloggerOverviewChart"`,
-    "pgy recent note fluctuation image field",
-  );
-  main = replaceOnce(
-    main,
-    `  pgyHasSelectedField(n, PYG_CHART_FIELDS.bloggerOverview) && i.push({ field: "bloggerOverviewChart", type: "blogger-overview", data: await pgyPrepareOverviewData(B), output: pgyChartFile("blogger-overview", a, "blogger-overview") });`,
-    `  pgyHasSelectedField(n, PYG_CHART_FIELDS.recentNoteInteractionFluctuation) && i.push({ field: "recentNoteInteractionFluctuationChart", type: "recent-note-interaction-fluctuation", data: d ?? {}, output: pgyChartFile("daily-note", a, "recent-note-interaction-fluctuation") });
-  pgyHasSelectedField(n, PYG_CHART_FIELDS.bloggerOverview) && i.push({ field: "bloggerOverviewChart", type: "blogger-overview", data: await pgyPrepareOverviewData(B), output: pgyChartFile("blogger-overview", a, "blogger-overview") });`,
-    "pgy recent note fluctuation generation queue",
-  );
-  main = replaceOnce(
-    main,
-    `o.type === "daily-note-performance" ? r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output) : o.type === "blogger-overview" && (r = pgyWriteSvgPng(pgyBloggerOverviewSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);`,
-    `o.type === "daily-note-performance" ? r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output) : o.type === "recent-note-interaction-fluctuation" ? r = pgyWriteSvgPng(pgyRecentNoteFluctuationSvg(o.data ?? {}), o.output) : o.type === "blogger-overview" && (r = pgyWriteSvgPng(pgyBloggerOverviewSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);`,
-    "pgy recent note fluctuation JS fallback route",
-  );
-}
-
 const chartRendererSource = fs.readFileSync(chartRendererSourcePath, "utf8");
 if (!main.includes("import urllib.request")) {
   main = replaceOnce(
@@ -2205,42 +2162,6 @@ main = replaceSection(
   pythonDailySource,
   "pgy daily note Python renderer synchronization",
 );
-// 近期笔记波动图（互动量）：Python 渲染函数 + 路由（复用 notes_rate/daily30 响应）。
-const pythonRecentStart = chartRendererSource.indexOf(
-  "def save_recent_note_fluctuation(chart):",
-);
-const pythonRecentEnd = chartRendererSource.indexOf("def main():", pythonRecentStart);
-if (pythonRecentStart < 0 || pythonRecentEnd < 0)
-  throw new Error("Missing maintained Python recent note fluctuation renderer section");
-const pythonRecentSource = chartRendererSource
-  .slice(pythonRecentStart, pythonRecentEnd)
-  .trim();
-if (main.includes("def save_recent_note_fluctuation(chart):")) {
-  main = replaceSection(
-    main,
-    "def save_recent_note_fluctuation(chart):",
-    "def main():",
-    pythonRecentSource,
-    "pgy recent note fluctuation Python renderer synchronization",
-  );
-} else {
-  main = replaceOnce(
-    main,
-    "def main():",
-    `${pythonRecentSource}\n\ndef main():`,
-    "pgy recent note fluctuation Python renderer",
-  );
-  main = replaceOnce(
-    main,
-    `            elif chart_type == "daily-note-performance":
-                ok = save_daily_note_performance(chart)`,
-    `            elif chart_type == "daily-note-performance":
-                ok = save_daily_note_performance(chart)
-            elif chart_type == "recent-note-interaction-fluctuation":
-                ok = save_recent_note_fluctuation(chart)`,
-    "pgy recent note fluctuation Python route",
-  );
-}
 const dailyNoteSvgStart = main.includes("function pgyDailyNoteTextWidth(a) {")
   ? "function pgyDailyNoteTextWidth(a) {"
   : "function pgyDailyNotePerformanceSvg(a) {";
@@ -2248,7 +2169,7 @@ main = replaceSection(
   main,
   dailyNoteSvgStart,
   "async function buildPgyBloggerChartFields",
-  `${dailyNoteSvgSource}\n\n${bloggerOverviewSvgSource}\n\n${recentNoteFluctuationSvgSource}`,
+  `${dailyNoteSvgSource}\n\n${bloggerOverviewSvgSource}`,
   "pgy chart SVG renderer synchronization",
 );
 main = replaceSection(

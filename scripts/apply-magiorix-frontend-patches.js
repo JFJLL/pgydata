@@ -83,6 +83,7 @@ function removeIfExists(filePath) {
 const mainBundle = path.join(assetsDir, "index-B09sHfUO.js");
 const pointsRechargeBundle = path.join(assetsDir, "index-C0Ke2Ul0.js");
 const rechargeRecordsBundle = path.join(assetsDir, "index-DHMLmlYD.js");
+const consumeRecordsBundle = path.join(assetsDir, "index-CgHBiVER.js");
 const dateTimePickerBundle = path.join(assetsDir, "index-CB4FiGU9.js");
 const exportTemplateBundle = path.join(assetsDir, "index-CiEqCfGB.js");
 const exportFieldSelectorBundle = path.join(assetsDir, "index-IS4kgrUy.js");
@@ -238,26 +239,26 @@ if (!fs.readFileSync(urlValidatorBundle, "utf8").includes('"bloggerOverviewChart
 replaceOnce(
     mainBundle,
     '{field:"dailyNotePerformanceChart",headerName:"日常笔记表现图",width:320},{field:"bloggerOverviewChart",headerName:"博主数据概览图",width:320}',
-    '{field:"dailyNotePerformanceChart",headerName:"日常笔记表现图（图文+视频）",width:320},{field:"dailyNotePicturePerformanceChart",headerName:"日常笔记表现图（图文）",width:320},{field:"dailyNoteVideoPerformanceChart",headerName:"日常笔记表现图（视频）",width:320},{field:"recentNoteInteractionFluctuationChart",headerName:"近期笔记波动图（互动量）",width:320},{field:"bloggerOverviewChart",headerName:"博主数据概览图",width:320}',
+    '{field:"dailyNotePerformanceChart",headerName:"日常笔记表现图（图文+视频）",width:320},{field:"dailyNotePicturePerformanceChart",headerName:"日常笔记表现图（图文）",width:320},{field:"dailyNoteVideoPerformanceChart",headerName:"日常笔记表现图（视频）",width:320},{field:"bloggerOverviewChart",headerName:"博主数据概览图",width:320}',
     "add typed daily note chart columns",
 );
 replaceOnce(
     mainBundle,
     '{group:"日常30天",label:"日常笔记表现图",key:"dailyNotePerformanceChart"},{group:"日常30天",label:"博主数据概览图",key:"bloggerOverviewChart"}',
-    '{group:"日常30天",label:"日常笔记表现图（图文+视频）",key:"dailyNotePerformanceChart"},{group:"日常30天",label:"日常笔记表现图（图文）",key:"dailyNotePicturePerformanceChart"},{group:"日常30天",label:"日常笔记表现图（视频）",key:"dailyNoteVideoPerformanceChart"},{group:"日常30天",label:"近期笔记波动图（互动量）",key:"recentNoteInteractionFluctuationChart"},{group:"日常30天",label:"博主数据概览图",key:"bloggerOverviewChart"}',
+    '{group:"日常30天",label:"日常笔记表现图（图文+视频）",key:"dailyNotePerformanceChart"},{group:"日常30天",label:"日常笔记表现图（图文）",key:"dailyNotePicturePerformanceChart"},{group:"日常30天",label:"日常笔记表现图（视频）",key:"dailyNoteVideoPerformanceChart"},{group:"日常30天",label:"博主数据概览图",key:"bloggerOverviewChart"}',
     "add typed daily note export fields",
 );
 replaceOnce(
     mainBundle,
     '{key:"dailyNotePerformanceChart",label:"日常笔记表现图"},{key:"bloggerOverviewChart",label:"博主数据概览图"}',
-    '{key:"dailyNotePerformanceChart",label:"日常笔记表现图（图文+视频）"},{key:"dailyNotePicturePerformanceChart",label:"日常笔记表现图（图文）"},{key:"dailyNoteVideoPerformanceChart",label:"日常笔记表现图（视频）"},{key:"recentNoteInteractionFluctuationChart",label:"近期笔记波动图（互动量）"},{key:"bloggerOverviewChart",label:"博主数据概览图"}',
+    '{key:"dailyNotePerformanceChart",label:"日常笔记表现图（图文+视频）"},{key:"dailyNotePicturePerformanceChart",label:"日常笔记表现图（图文）"},{key:"dailyNoteVideoPerformanceChart",label:"日常笔记表现图（视频）"},{key:"bloggerOverviewChart",label:"博主数据概览图"}',
     "add typed daily note field selectors",
 );
 if (!fs.readFileSync(urlValidatorBundle, "utf8").includes('"dailyNotePicturePerformanceChart"')) {
   replaceOnce(
     urlValidatorBundle,
     'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart","bloggerOverviewChart"])',
-    'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart","dailyNotePicturePerformanceChart","dailyNoteVideoPerformanceChart","recentNoteInteractionFluctuationChart","bloggerOverviewChart"])',
+    'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart","dailyNotePicturePerformanceChart","dailyNoteVideoPerformanceChart","bloggerOverviewChart"])',
     "include typed daily note charts in duration estimate",
   );
 }
@@ -295,31 +296,14 @@ if (!fs.readFileSync(urlValidatorBundle, "utf8").includes('"fansGenderAgeChart"'
   );
 }
 
-if (!fs.readFileSync(mainBundle, "utf8").includes('field:"recentNoteInteractionFluctuationChart"')) {
-  replaceOnce(
-    mainBundle,
-    '{field:"dailyNoteVideoPerformanceChart",headerName:"日常笔记表现图（视频）",width:320},{field:"bloggerOverviewChart",headerName:"博主数据概览图",width:320}',
-    '{field:"dailyNoteVideoPerformanceChart",headerName:"日常笔记表现图（视频）",width:320},{field:"recentNoteInteractionFluctuationChart",headerName:"近期笔记波动图（互动量）",width:320},{field:"bloggerOverviewChart",headerName:"博主数据概览图",width:320}',
-    "add recent note fluctuation chart column",
-  );
-  replaceOnce(
-    mainBundle,
-    '{group:"日常30天",label:"日常笔记表现图（视频）",key:"dailyNoteVideoPerformanceChart"},{group:"日常30天",label:"博主数据概览图",key:"bloggerOverviewChart"}',
-    '{group:"日常30天",label:"日常笔记表现图（视频）",key:"dailyNoteVideoPerformanceChart"},{group:"日常30天",label:"近期笔记波动图（互动量）",key:"recentNoteInteractionFluctuationChart"},{group:"日常30天",label:"博主数据概览图",key:"bloggerOverviewChart"}',
-    "add recent note fluctuation export field",
-  );
-  replaceOnce(
-    mainBundle,
-    '{key:"dailyNoteVideoPerformanceChart",label:"日常笔记表现图（视频）"},{key:"bloggerOverviewChart",label:"博主数据概览图"}',
-    '{key:"dailyNoteVideoPerformanceChart",label:"日常笔记表现图（视频）"},{key:"recentNoteInteractionFluctuationChart",label:"近期笔记波动图（互动量）"},{key:"bloggerOverviewChart",label:"博主数据概览图"}',
-    "add optional recent note fluctuation field selector",
-  );
-  replaceOnce(
-    urlValidatorBundle,
-    'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart","dailyNotePicturePerformanceChart","dailyNoteVideoPerformanceChart","recentNoteInteractionFluctuationChart","bloggerOverviewChart"])',
-    'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart","dailyNotePicturePerformanceChart","dailyNoteVideoPerformanceChart","recentNoteInteractionFluctuationChart","bloggerOverviewChart"])',
-    "include recent note fluctuation chart in duration estimate",
-  );
+for (const [from, to] of [
+  [',{field:"recentNoteInteractionFluctuationChart",headerName:"近期笔记波动图（互动量）",width:320}', ""],
+  [',{group:"日常30天",label:"近期笔记波动图（互动量）",key:"recentNoteInteractionFluctuationChart"}', ""],
+  [',{key:"recentNoteInteractionFluctuationChart",label:"近期笔记波动图（互动量）"}', ""],
+  [',"recentNoteInteractionFluctuationChart"', ""],
+]) {
+  replaceAllIfExists(mainBundle, from, to);
+  replaceAllIfExists(urlValidatorBundle, from, to);
 }
 
 replaceOnce(
@@ -1153,6 +1137,22 @@ if (!fs.readFileSync(mainBundle, "utf8").includes(pgyKolRouteMarker)) {
 if (!fs.readFileSync(mainBundle, "utf8").includes(pgyKolStoreTo)) {
   replaceOnce(mainBundle, pgyKolStoreFrom, pgyKolStoreTo, "merge dev-gated local pgy-kol menu into user menus");
 }
+
+replaceAllIfExists(
+  consumeRecordsBundle,
+  'Math.abs(a.consumeCount).toLocaleString()',
+  'Math.abs(Number(a.consumeCount??a.count||0)).toLocaleString()',
+);
+replaceAllIfExists(
+  consumeRecordsBundle,
+  'a.balanceBefore.toLocaleString()',
+  'Number(a.balanceBefore??(Number(a.balanceAfter||0)+Number(a.consumeCount??a.count||0))).toLocaleString()',
+);
+replaceAllIfExists(
+  consumeRecordsBundle,
+  'a.balanceAfter.toLocaleString()',
+  'Number(a.balanceAfter||0).toLocaleString()',
+);
 
 // 统一 mainBundle 行尾为 CRLF（Windows 构建产物惯例），避免混合 EOL 导致
 // integrity-manifest 哈希在 fresh checkout（autocrlf）下不可复现；幂等：重复运行结果一致。

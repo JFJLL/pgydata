@@ -222,7 +222,7 @@ const PGY_OVERVIEW_SHIELD_PNG = {
 function pgyOverviewShieldSvg(a, e, t, s = {}) {
   const risk = Number(a) !== 2;
   const source = risk ? s.healthRisk || PGY_OVERVIEW_SHIELD_PNG[0] : s.health || PGY_OVERVIEW_SHIELD_PNG[2];
-  return `<image href="${source}" x="${e}" y="${t}" width="16" height="16" preserveAspectRatio="xMidYMid meet"/>`;
+  return `<image href="${source}" x="${e}" y="${t}" width="28" height="28" preserveAspectRatio="xMidYMid meet"/>`;
 }
 
 function pgyOverviewNicknameSvg(a, e, t, n, s) {
@@ -326,25 +326,38 @@ async function pgyPrepareOverviewData(a) {
 function pgyBloggerOverviewSvg(a) {
   const e = a ?? {}, t = (n) => pgyChartEscape(n == null || n === "" ? "-" : String(n));
   const overviewIcons = e.overviewIconImages && typeof e.overviewIconImages === "object" ? e.overviewIconImages : {};
-  const overviewIcon = (key, x, y, width, height, extra = "") => overviewIcons[key]
-    ? `<image href="${t(overviewIcons[key])}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid meet" ${extra}/>`
-    : "";
+  const overviewIcon = (key, x, y, width, height, extra = "") => {
+    if (!overviewIcons[key]) return "";
+    const targetSize = {
+      cooperationPrice: 34,
+      notes: 40,
+      service: 40,
+      growth: 40,
+      favorite: 28,
+      invite: 24,
+    }[key];
+    const renderWidth = targetSize ?? width;
+    const renderHeight = targetSize ?? height;
+    const renderX = x - (renderWidth - width) / 2;
+    const renderY = y - (renderHeight - height) / 2;
+    return `<image href="${t(overviewIcons[key])}" x="${renderX}" y="${renderY}" width="${renderWidth}" height="${renderHeight}" preserveAspectRatio="xMidYMid meet" ${extra}/>`;
+  };
   const nickname = pgyOverviewFitText(e.nickname, 22, 278);
   const nicknameMarkup = pgyOverviewNicknameSvg(nickname, 252, 192, 22, e.nicknameEmojiImages);
   let iconX = 252 + Math.ceil(pgyOverviewTextWidth(nickname, 22)) + 8;
   let profileIcons = "";
   if (e.genderText === "女" || e.genderText === "男") {
-    profileIcons += overviewIcon(e.genderText === "女" ? "genderFemale" : "genderMale", iconX, 177, 16, 16);
-    iconX += 24;
+    profileIcons += overviewIcon(e.genderText === "女" ? "genderFemale" : "genderMale", iconX, 175, 20, 20);
+    iconX += 28;
   }
-  if (e.healthLevel != null) profileIcons += pgyOverviewShieldSvg(e.healthLevel, iconX, 177, overviewIcons);
+  if (e.healthLevel != null) profileIcons += pgyOverviewShieldSvg(e.healthLevel, iconX, 171, overviewIcons);
   const redId = pgyOverviewFitText(e.redId, 20, 165);
   const copyIconX = Math.min(520, 354 + Math.ceil(pgyOverviewTextWidth(redId, 20)) + 6);
   const healthRisk = e.healthRisk === true || (e.healthLevel != null && Number.isFinite(Number(e.healthLevel)) && Number(e.healthLevel) !== 2);
   const picturePriceText = healthRisk ? "暂停接单" : e.picturePriceText;
   const videoPriceText = healthRisk ? "暂停接单" : e.videoPriceText;
-  const picturePriceIcon = healthRisk ? "" : overviewIcon("cooperationPrice", 544, 790, 16, 16);
-  const videoPriceIcon = healthRisk ? "" : overviewIcon("cooperationPrice", 544, 936, 16, 16);
+  const picturePriceIcon = healthRisk ? "" : overviewIcon("cooperationPrice", 535, 781, 34, 34);
+  const videoPriceIcon = healthRisk ? "" : overviewIcon("cooperationPrice", 535, 927, 34, 34);
   const hasSummary = e.profileSummaryText && e.profileSummaryText !== "-";
   const summaryRow = hasSummary
     ? `<text x="252" y="275" font-size="18" fill="#999">${t(pgyOverviewFitText(e.profileSummaryText, 18, 210))}</text>`

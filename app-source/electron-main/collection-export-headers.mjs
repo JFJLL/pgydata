@@ -15,7 +15,6 @@ const PGY_IMAGE_EXPORT_FIELDS = Object.freeze([
   "dailyNotePerformanceChart",
   "dailyNotePicturePerformanceChart",
   "dailyNoteVideoPerformanceChart",
-  "recentNoteInteractionFluctuationChart",
   "bloggerOverviewChart",
 ]);
 
@@ -115,7 +114,6 @@ const PGY_BLOGGER_EXPORT_HEADERS = Object.freeze([
   { group: "日常30天", label: "日常笔记表现图（图文+视频）", key: "dailyNotePerformanceChart" },
   { group: "日常30天", label: "日常笔记表现图（图文）", key: "dailyNotePicturePerformanceChart" },
   { group: "日常30天", label: "日常笔记表现图（视频）", key: "dailyNoteVideoPerformanceChart" },
-  { group: "日常30天", label: "近期笔记波动图（互动量）", key: "recentNoteInteractionFluctuationChart" },
   { group: "日常30天", label: "博主数据概览图", key: "bloggerOverviewChart" },
 ]);
 

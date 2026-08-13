@@ -17899,7 +17899,6 @@ const dm = {
   dailyNotePerformanceChart: ["dailyNotePerformanceChart"],
   dailyNotePicturePerformanceChart: ["dailyNotePicturePerformanceChart"],
   dailyNoteVideoPerformanceChart: ["dailyNoteVideoPerformanceChart"],
-  recentNoteInteractionFluctuationChart: ["recentNoteInteractionFluctuationChart"],
   bloggerOverviewChart: ["bloggerOverviewChart"]
 }, mm = {
   profile: [
@@ -17951,7 +17950,6 @@ const dm = {
     "shareMedian",
     "interactRate",
     "dailyNotePerformanceChart",
-    "recentNoteInteractionFluctuationChart",
     "bloggerOverviewChart"
   ],
   daily30Picture: ["dailyNotePicturePerformanceChart"],
@@ -18050,7 +18048,6 @@ const PYG_CHART_FIELDS = {
   dailyNotePerformance: "dailyNotePerformanceChart",
   dailyNotePicturePerformance: "dailyNotePicturePerformanceChart",
   dailyNoteVideoPerformance: "dailyNoteVideoPerformanceChart",
-  recentNoteInteractionFluctuation: "recentNoteInteractionFluctuationChart",
   bloggerOverview: "bloggerOverviewChart"
 };
 function pgyHasSelectedField(a, e) {
@@ -18557,7 +18554,6 @@ def save_age_distribution(chart):
     put(15, 43, f"{dominant['name']}居多，占比{dominant['value']:.1f}%", body_font, "#8c8c8c")
 
     axis_x, axis_top, axis_bottom = 55, 82, 343
-    draw.rectangle((axis_x * scale, axis_top * scale, 324 * scale, 134 * scale), fill="#f6f8fc")
     draw.line((axis_x * scale, axis_top * scale, axis_x * scale, axis_bottom * scale), fill="#e4e6ea", width=scale)
 
     # The source uses a fixed 0-40% horizontal scale and five 52px rows.
@@ -19033,20 +19029,20 @@ def save_blogger_overview(chart):
     gender = value("genderText")
     if gender in ("女", "男"):
         gender_key = "genderFemale" if gender == "女" else "genderMale"
-        paste_overview_icon(gender_key, icon_x, 177, 16)
-        icon_x += 24
+        paste_overview_icon(gender_key, icon_x, 175, 20)
+        icon_x += 28
     health_level = data.get("healthLevel")
     health_risk = data.get("healthRisk") is True or (
         isinstance(health_level, (int, float)) and int(health_level) != 2
     )
     if isinstance(health_level, (int, float)):
         health_key = "healthRisk" if health_risk else "health"
-        shield_icon = overview_icon(health_key, 16)
+        shield_icon = overview_icon(health_key, 28)
         if shield_icon is None:
             shield_b64 = PGY_OVERVIEW_SHIELD_PNG.get(0 if health_risk else 2)
-            shield_icon = load_inline_image("data:image/png;base64," + shield_b64, 16)
+            shield_icon = load_inline_image("data:image/png;base64," + shield_b64, 28)
         if shield_icon is not None:
-            img.paste(shield_icon, (int(icon_x), 177), shield_icon)
+            img.paste(shield_icon, (int(icon_x), 171), shield_icon)
     put(252, 216, "小红书号：", font_19, "#999999")
     red_id_text = ellipsize(draw, value("redId"), font_20, 165)
     put(354, 216, red_id_text, font_20, "#2878ff")
@@ -19084,9 +19080,9 @@ def save_blogger_overview(chart):
     line(126, 500, 586, 500, "#f1f1f1")
     box((126, 530, 336, 586), 6, "#f7f7f7")
     box((352, 530, 586, 586), 6, "#f23b49")
-    paste_overview_icon("favorite", 188, 550, 16)
+    paste_overview_icon("favorite", 182, 544, 28)
     put(216, 545, "收藏", font_22)
-    paste_overview_icon("invite", 410, 550, 16)
+    paste_overview_icon("invite", 406, 546, 24)
     put(442, 545, "邀约", font_22, "white")
 
     box((96, 650, 616, 1040), 14)
@@ -19099,7 +19095,7 @@ def save_blogger_overview(chart):
         put(158, y + 26, label, font_22, "#595959")
         put(158, y + 70, "暂停接单" if health_risk else value(key), font_22)
         if not health_risk:
-            paste_overview_icon("cooperationPrice", 544, y + 54, 16)
+            paste_overview_icon("cooperationPrice", 535, y + 45, 34)
 
     # Overview content column.
     box((650, 112, 1948, 1040), 14)
@@ -19119,7 +19115,7 @@ def save_blogger_overview(chart):
         line(x, 257, x, 302, "#dddddd")
 
     box((700, 344, 1898, 636), 9, "white", "#e8e8e8")
-    paste_overview_icon("notes", 726, 377, 24)
+    paste_overview_icon("notes", 718, 369, 40)
     put(766, 374, "笔记数据", font_24)
     box((726, 430, 838, 478), 6, "#fff0f1")
     put(748, 439, "按规模", font_21, "#d43d51")
@@ -19143,7 +19139,7 @@ def save_blogger_overview(chart):
     line(1500, 506, 1500, 608)
 
     box((700, 662, 1274, 902), 9, "white", "#e8e8e8")
-    paste_overview_icon("service", 726, 695, 24)
+    paste_overview_icon("service", 718, 687, 40)
     put(766, 692, "服务表现", font_24)
     put(726, 755, "近7天活跃天数", font_21, "#666666")
     dashed(726, 786, 862)
@@ -19164,7 +19160,7 @@ def save_blogger_overview(chart):
         put(1030, 850, reply_label, font_18, "#5273b4")
 
     box((1300, 662, 1898, 902), 9, "white", "#e8e8e8")
-    paste_overview_icon("growth", 1326, 695, 24)
+    paste_overview_icon("growth", 1318, 687, 40)
     put(1366, 692, "成长表现", font_24)
     put(1326, 755, "粉丝量变化幅度", font_21, "#666666")
     dashed(1326, 786, 1464)
@@ -19305,176 +19301,6 @@ def save_trend(chart):
     return True
 
 
-def save_recent_note_fluctuation(chart):
-    """近期笔记波动图（互动量）：783x420 白底卡片，蓝色柱 + 互动量中位数虚线。
-
-    数据契约（复用 notes_rate/daily30 响应）：
-      data.notes[]          逐笔记互动量（缺失项跳过，不伪造 0）
-      data.interactionMedian 互动量中位数（缺失则不画参考线）
-    """
-    try:
-        width, height = 783, 420
-        output = chart.get("output") or ""
-        if not output:
-            return False
-        ensure_dir(output)
-        data = chart.get("data") or {}
-        raw_notes = data.get("notes")
-        note_slots = []
-        if isinstance(raw_notes, list):
-            for item in raw_notes:
-                if not isinstance(item, dict):
-                    note_slots.append(None)
-                    continue
-                raw_value = item.get("interactionNum")
-                if raw_value is None or isinstance(raw_value, bool) or (
-                    isinstance(raw_value, str) and not raw_value.strip()
-                ):
-                    note_slots.append(None)
-                    continue
-                try:
-                    val = float(raw_value)
-                except Exception:
-                    note_slots.append(None)
-                    continue
-                note_slots.append(val if math.isfinite(val) and val >= 0 else None)
-        notes = [value for value in note_slots if value is not None]
-        median = None
-        median_raw = data.get("interactionMedian")
-        if median_raw is not None and not isinstance(median_raw, bool) and not (
-            isinstance(median_raw, str) and not median_raw.strip()
-        ):
-            try:
-                parsed_median = float(median_raw)
-                if math.isfinite(parsed_median) and parsed_median >= 0:
-                    median = parsed_median
-            except Exception:
-                median = None
-
-        img = Image.new("RGB", (width, height), "#FFFFFF")
-        draw = ImageDraw.Draw(img)
-        # 浅灰卡片边框 + 8px 圆角。
-        draw.rounded_rectangle(
-            [2, 2, width - 3, height - 3], radius=8, outline="#E0E0E0", width=2
-        )
-
-        # 标题 + 14px 灰色信息图标。
-        draw.text((26, 18), "近期笔记波动", font=FONT_TITLE, fill="#262626")
-        title_w = text_bbox(draw, "近期笔记波动", FONT_TITLE)[2]
-        icon_cx, icon_cy = 26 + title_w + 20, 33
-        draw.ellipse(
-            [icon_cx - 9, icon_cy - 9, icon_cx + 9, icon_cy + 9],
-            outline="#BFBFBF",
-            width=2,
-        )
-        draw.text((icon_cx - 4, icon_cy - 10), "?", font=load_font(14), fill="#BFBFBF")
-
-        # 分段控件（阅读量/互动量/曝光量），静态固定选中 互动量。
-        seg_y, seg_h = 58, 26
-        seg_x = 26
-        for label, selected in (("阅读量", False), ("互动量", True), ("曝光量", False)):
-            pill_w = text_bbox(draw, label, FONT_SMALL)[2] + 24
-            if selected:
-                draw.rounded_rectangle(
-                    [seg_x, seg_y, seg_x + pill_w, seg_y + seg_h],
-                    radius=13,
-                    fill="#FFFFFF",
-                    outline="#D9D9D9",
-                    width=1,
-                )
-                seg_fill = "#262626"
-            else:
-                draw.rounded_rectangle(
-                    [seg_x, seg_y, seg_x + pill_w, seg_y + seg_h],
-                    radius=13,
-                    fill="#F7F7F7",
-                    outline="#F0F0F0",
-                    width=1,
-                )
-                seg_fill = "#747474"
-            draw.text((seg_x + 12, seg_y + 5), label, font=FONT_SMALL, fill=seg_fill)
-            seg_x += pill_w + 8
-
-        plot_left, plot_right = 46, width - 46
-        plot_top, plot_bottom = 112, height - 42
-
-        if notes:
-            raw_max = max(max(notes), median if median is not None else 0.0)
-            if raw_max <= 0:
-                raw_max = 1.0
-            # 1/2/5/10 nice scale；避免极大有限值在 step*=2 时溢出为 inf。
-            exponent = math.floor(math.log10(raw_max))
-            power = 10.0 ** exponent
-            normalized = raw_max / power
-            factor = 1.0 if normalized <= 1 else 2.0 if normalized <= 2 else 5.0 if normalized <= 5 else 10.0
-            grid_max = factor * power
-            if not math.isfinite(grid_max) or grid_max < raw_max:
-                grid_max = float.fromhex("0x1.fffffffffffffp+1023")
-            grid_count = 5
-
-            def chart_number(value):
-                if abs(value) >= 1e12:
-                    return ("%.2e" % value).replace("e+", "e")
-                return format_integer(int(round(value)))
-
-            # 水平虚线网格 + 左侧刻度标签。
-            for g in range(grid_count + 1):
-                value = (grid_max / grid_count) * g
-                y = plot_bottom - (value / grid_max) * (plot_bottom - plot_top)
-                x0, x1 = plot_left, plot_right
-                if g > 0 and g < grid_count:
-                    y0 = y
-                    draw.line(
-                        [(x0, y0), (x1, y0)],
-                        fill="#E8E8E8",
-                        width=1,
-                    )
-                label = chart_number(value)
-                draw.text((x0 - text_bbox(draw, label, FONT_SMALL)[2] - 8, y - 10), label, font=FONT_SMALL, fill="#8C8C8C")
-
-            # 柱：宽 18，圆角 [1,1,0,0]，柱顶数值。
-            bar_w = 18
-            slot = (plot_right - plot_left) / len(note_slots)
-            for idx, value in enumerate(note_slots):
-                cx = plot_left + slot * idx + slot / 2
-                note_label = "笔记%d" % (idx + 1)
-                nw = text_bbox(draw, note_label, FONT_SMALL)[2]
-                draw.text((cx - nw / 2, plot_bottom + 8), note_label, font=FONT_SMALL, fill="#595959")
-                if value is None:
-                    continue
-                h = (value / grid_max) * (plot_bottom - plot_top)
-                x0 = cx - bar_w / 2
-                y0 = plot_bottom - h
-                draw.rounded_rectangle(
-                    [x0, y0, x0 + bar_w, plot_bottom],
-                    radius=1,
-                    fill="#3A64FF",
-                )
-                val_label = chart_number(value)
-                vw = text_bbox(draw, val_label, FONT_SMALL)[2]
-                draw.text((cx - vw / 2, y0 - 24), val_label, font=FONT_SMALL, fill="#3A64FF")
-
-            # 互动量中位数虚线（#3A64FF），标签在右端。
-            if median is not None:
-                y_m = plot_bottom - (median / grid_max) * (plot_bottom - plot_top)
-                dash = 6
-                x = plot_left
-                while x < plot_right:
-                    draw.line([(x, y_m), (min(x + dash, plot_right), y_m)], fill="#3A64FF", width=2)
-                    x += dash * 2
-                med_label = chart_number(median)
-                draw.text((plot_right - text_bbox(draw, med_label, FONT_SMALL)[2], y_m - 20), med_label, font=FONT_SMALL, fill="#3A64FF")
-        else:
-            draw.text((plot_left, plot_top + 40), "暂无笔记数据", font=FONT_TEXT, fill="#BFBFBF")
-
-        img.save(output, "PNG", optimize=True)
-        return True
-    except Exception:
-        # 交给 main 的逐图表错误收集器记录；不要把渲染异常静默降级为
-        # “没有生成路径”，调用方据此才能可靠切换 JS/SVG 兜底。
-        raise
-
-
 def main():
     raw = sys.stdin.buffer.read()
     payload = json.loads(raw.decode("utf-8"))
@@ -19499,8 +19325,6 @@ def main():
                 ok = save_trend(chart)
             elif chart_type == "daily-note-performance":
                 ok = save_daily_note_performance(chart)
-            elif chart_type == "recent-note-interaction-fluctuation":
-                ok = save_recent_note_fluctuation(chart)
             elif chart_type == "blogger-overview":
                 ok = save_blogger_overview(chart)
             if ok and field:
@@ -19956,7 +19780,7 @@ const PGY_OVERVIEW_SHIELD_PNG = {
 function pgyOverviewShieldSvg(a, e, t, s = {}) {
   const risk = Number(a) !== 2;
   const source = risk ? s.healthRisk || PGY_OVERVIEW_SHIELD_PNG[0] : s.health || PGY_OVERVIEW_SHIELD_PNG[2];
-  return `<image href="${source}" x="${e}" y="${t}" width="16" height="16" preserveAspectRatio="xMidYMid meet"/>`;
+  return `<image href="${source}" x="${e}" y="${t}" width="28" height="28" preserveAspectRatio="xMidYMid meet"/>`;
 }
 
 function pgyOverviewNicknameSvg(a, e, t, n, s) {
@@ -20060,25 +19884,38 @@ async function pgyPrepareOverviewData(a) {
 function pgyBloggerOverviewSvg(a) {
   const e = a ?? {}, t = (n) => pgyChartEscape(n == null || n === "" ? "-" : String(n));
   const overviewIcons = e.overviewIconImages && typeof e.overviewIconImages === "object" ? e.overviewIconImages : {};
-  const overviewIcon = (key, x, y, width, height, extra = "") => overviewIcons[key]
-    ? `<image href="${t(overviewIcons[key])}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid meet" ${extra}/>`
-    : "";
+  const overviewIcon = (key, x, y, width, height, extra = "") => {
+    if (!overviewIcons[key]) return "";
+    const targetSize = {
+      cooperationPrice: 34,
+      notes: 40,
+      service: 40,
+      growth: 40,
+      favorite: 28,
+      invite: 24,
+    }[key];
+    const renderWidth = targetSize ?? width;
+    const renderHeight = targetSize ?? height;
+    const renderX = x - (renderWidth - width) / 2;
+    const renderY = y - (renderHeight - height) / 2;
+    return `<image href="${t(overviewIcons[key])}" x="${renderX}" y="${renderY}" width="${renderWidth}" height="${renderHeight}" preserveAspectRatio="xMidYMid meet" ${extra}/>`;
+  };
   const nickname = pgyOverviewFitText(e.nickname, 22, 278);
   const nicknameMarkup = pgyOverviewNicknameSvg(nickname, 252, 192, 22, e.nicknameEmojiImages);
   let iconX = 252 + Math.ceil(pgyOverviewTextWidth(nickname, 22)) + 8;
   let profileIcons = "";
   if (e.genderText === "女" || e.genderText === "男") {
-    profileIcons += overviewIcon(e.genderText === "女" ? "genderFemale" : "genderMale", iconX, 177, 16, 16);
-    iconX += 24;
+    profileIcons += overviewIcon(e.genderText === "女" ? "genderFemale" : "genderMale", iconX, 175, 20, 20);
+    iconX += 28;
   }
-  if (e.healthLevel != null) profileIcons += pgyOverviewShieldSvg(e.healthLevel, iconX, 177, overviewIcons);
+  if (e.healthLevel != null) profileIcons += pgyOverviewShieldSvg(e.healthLevel, iconX, 171, overviewIcons);
   const redId = pgyOverviewFitText(e.redId, 20, 165);
   const copyIconX = Math.min(520, 354 + Math.ceil(pgyOverviewTextWidth(redId, 20)) + 6);
   const healthRisk = e.healthRisk === true || (e.healthLevel != null && Number.isFinite(Number(e.healthLevel)) && Number(e.healthLevel) !== 2);
   const picturePriceText = healthRisk ? "暂停接单" : e.picturePriceText;
   const videoPriceText = healthRisk ? "暂停接单" : e.videoPriceText;
-  const picturePriceIcon = healthRisk ? "" : overviewIcon("cooperationPrice", 544, 790, 16, 16);
-  const videoPriceIcon = healthRisk ? "" : overviewIcon("cooperationPrice", 544, 936, 16, 16);
+  const picturePriceIcon = healthRisk ? "" : overviewIcon("cooperationPrice", 535, 781, 34, 34);
+  const videoPriceIcon = healthRisk ? "" : overviewIcon("cooperationPrice", 535, 927, 34, 34);
   const hasSummary = e.profileSummaryText && e.profileSummaryText !== "-";
   const summaryRow = hasSummary
     ? `<text x="252" y="275" font-size="18" fill="#999">${t(pgyOverviewFitText(e.profileSummaryText, 18, 210))}</text>`
@@ -20126,104 +19963,6 @@ function pgyBloggerOverviewSvg(a) {
 </g></svg>`;
 }
 
-// 近期笔记波动图（互动量）JS/SVG 兜底（与 Python 渲染器同契约）：
-// 783x420 白底卡片、蓝色柱 + 互动量中位数虚线；数据缺失时稳定降级，不伪造 0 或参考线。
-function pgyRecentNoteFluctuationSvg(a) {
-  var width = 783, height = 420;
-  var data = (a && a.data) || a || {};
-  var rawNotes = Array.isArray(data.notes) ? data.notes : [];
-  var finiteNonNegative = function (value) {
-    if (value === null || value === undefined || typeof value === "boolean") return null;
-    if (typeof value === "string" && value.trim() === "") return null;
-    var parsed = typeof value === "number" ? value : Number(value);
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-  };
-  var noteSlots = [];
-  for (var i = 0; i < rawNotes.length; i++) {
-    var item = rawNotes[i];
-    noteSlots.push(item && typeof item === "object" ? finiteNonNegative(item.interactionNum) : null);
-  }
-  var notes = noteSlots.filter(function (value) { return value !== null; });
-  var median = finiteNonNegative(data.interactionMedian);
-  var escapeXml = function (text) {
-    return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  };
-  var formatInt = function (value) {
-    if (Math.abs(value) >= 1e12) return value.toExponential(2).replace("e+", "e");
-    return Math.round(value).toLocaleString("en-US");
-  };
-  var niceGridMax = function (value) {
-    if (!(value > 0)) return 1;
-    var exponent = Math.floor(Math.log10(value));
-    var power = Math.pow(10, exponent);
-    var normalized = value / power;
-    var factor = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
-    var result = factor * power;
-    return Number.isFinite(result) && result >= value ? result : Number.MAX_VALUE;
-  };
-  var plotLeft = 46, plotRight = width - 46;
-  var plotTop = 112, plotBottom = height - 42;
-  var parts = [];
-  parts.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + " " + height + '">');
-  parts.push('<rect x="2" y="2" width="' + (width - 5) + '" height="' + (height - 5) + '" rx="8" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="2"/>');
-  parts.push('<text x="26" y="42" font-size="24" font-weight="bold" fill="#262626">近期笔记波动</text>');
-  parts.push('<circle cx="150" cy="33" r="9" fill="none" stroke="#BFBFBF" stroke-width="2"/>');
-  parts.push('<text x="146" y="39" font-size="14" fill="#BFBFBF">?</text>');
-  var segs = [["阅读量", false], ["互动量", true], ["曝光量", false]];
-  var segX = 26, segY = 58, segH = 26;
-  for (var s = 0; s < segs.length; s++) {
-    var label = segs[s][0], selected = segs[s][1];
-    var pw = label.length * 15 + 24;
-    if (selected) {
-      parts.push('<rect x="' + segX + '" y="' + segY + '" width="' + pw + '" height="' + segH + '" rx="13" fill="#FFFFFF" stroke="#D9D9D9"/>');
-      parts.push('<text x="' + (segX + 12) + '" y="' + (segY + 18) + '" font-size="15" fill="#262626">' + escapeXml(label) + "</text>");
-    } else {
-      parts.push('<rect x="' + segX + '" y="' + segY + '" width="' + pw + '" height="' + segH + '" rx="13" fill="#F7F7F7" stroke="#F0F0F0"/>');
-      parts.push('<text x="' + (segX + 12) + '" y="' + (segY + 18) + '" font-size="15" fill="#747474">' + escapeXml(label) + "</text>");
-    }
-    segX += pw + 8;
-  }
-  if (notes.length > 0) {
-    var rawMax = Math.max.apply(null, notes.concat(median === null ? [0] : [median]));
-    var gridMax = niceGridMax(rawMax);
-    var gridCount = 5;
-    for (var g = 0; g <= gridCount; g++) {
-      var value = (gridMax / gridCount) * g;
-      var y = plotBottom - (value / gridMax) * (plotBottom - plotTop);
-      if (g > 0 && g < gridCount) {
-        parts.push('<line x1="' + plotLeft + '" y1="' + y + '" x2="' + plotRight + '" y2="' + y + '" stroke="#E8E8E8" stroke-width="1" stroke-dasharray="4 4"/>');
-      }
-      parts.push('<text x="' + (plotLeft - 8) + '" y="' + (y + 5) + '" font-size="15" fill="#8C8C8C" text-anchor="end">' + formatInt(value) + "</text>");
-    }
-    var barW = 18;
-    var slot = (plotRight - plotLeft) / noteSlots.length;
-    for (var n = 0; n < noteSlots.length; n++) {
-      var cx = plotLeft + slot * n + slot / 2;
-      parts.push('<text x="' + cx + '" y="' + (plotBottom + 24) + '" font-size="15" fill="#595959" text-anchor="middle">笔记' + (n + 1) + "</text>");
-      var val = noteSlots[n];
-      if (val === null) continue;
-      var h = (val / gridMax) * (plotBottom - plotTop);
-      var x0 = cx - barW / 2;
-      var y0 = plotBottom - h;
-      parts.push('<rect x="' + x0 + '" y="' + y0 + '" width="' + barW + '" height="' + (plotBottom - y0) + '" rx="1" fill="#3A64FF"/>');
-      parts.push('<text x="' + cx + '" y="' + (y0 - 8) + '" font-size="15" fill="#3A64FF" text-anchor="middle">' + formatInt(val) + "</text>");
-    }
-    if (median !== null) {
-      var yM = plotBottom - (median / gridMax) * (plotBottom - plotTop);
-      var dashText = "";
-      for (var dx = plotLeft; dx < plotRight; dx += 12) {
-        dashText += (dx > plotLeft ? " " : "") + dx + "," + yM + " " + Math.min(dx + 6, plotRight) + "," + yM;
-      }
-      parts.push('<polyline points="' + dashText + '" fill="none" stroke="#3A64FF" stroke-width="2"/>');
-      parts.push('<text x="' + plotRight + '" y="' + (yM - 8) + '" font-size="15" fill="#3A64FF" text-anchor="end">' + formatInt(median) + "</text>");
-    }
-  } else {
-    parts.push('<text x="' + plotLeft + '" y="' + (plotTop + 60) + '" font-size="18" fill="#BFBFBF">暂无笔记数据</text>');
-  }
-  parts.push("</svg>");
-  return parts.join("");
-}
-
 async function buildPgyBloggerChartFields(a, e, t, n, d, B, P, V) {
   const s = {}, i = [];
   const pgyProvinceRows = pgyTopPercentRows(e.provinces), pgyCityRows = pgyTopPercentRows(e.cities);
@@ -20252,7 +19991,6 @@ async function buildPgyBloggerChartFields(a, e, t, n, d, B, P, V) {
   pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePerformance) && i.push({ field: "dailyNotePerformanceChart", type: "daily-note-performance", data: { ...(d ?? {}), pgyNoteTypeLabel: "图文+视频" }, output: pgyChartFile("daily-note", a, "daily-note-performance") });
   pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePicturePerformance) && i.push({ field: "dailyNotePicturePerformanceChart", type: "daily-note-performance", data: { ...(P ?? {}), pgyNoteTypeLabel: "图文" }, output: pgyChartFile("daily-note", a, "daily-note-picture-performance") });
   pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNoteVideoPerformance) && i.push({ field: "dailyNoteVideoPerformanceChart", type: "daily-note-performance", data: { ...(V ?? {}), pgyNoteTypeLabel: "视频" }, output: pgyChartFile("daily-note", a, "daily-note-video-performance") });
-  pgyHasSelectedField(n, PYG_CHART_FIELDS.recentNoteInteractionFluctuation) && i.push({ field: "recentNoteInteractionFluctuationChart", type: "recent-note-interaction-fluctuation", data: d ?? {}, output: pgyChartFile("daily-note", a, "recent-note-interaction-fluctuation") });
   pgyHasSelectedField(n, PYG_CHART_FIELDS.bloggerOverview) && i.push({ field: "bloggerOverviewChart", type: "blogger-overview", data: await pgyPrepareOverviewData(B), output: pgyChartFile("blogger-overview", a, "blogger-overview") });
   if (!i.length) return s;
   try {
@@ -20266,7 +20004,7 @@ async function buildPgyBloggerChartFields(a, e, t, n, d, B, P, V) {
   for (const o of i)
     if (!s[o.field]) {
       let r = "";
-      o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "age-distribution" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "region-distribution" ? r = pgyWriteBarChartPng((o.data == null ? void 0 : o.data.mode) === "city" ? o.data.cityRows ?? [] : o.data.provinceRows ?? [], o.output) : o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "gender-age-distribution" ? r = pgyWriteBarChartPng(o.data?.rows ?? [], o.output) : o.type === "trend" ? r = pgyWriteSvgPng(pgyTrendChartSvg(o.rows ?? []), o.output) : o.type === "daily-note-performance" ? r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output) : o.type === "recent-note-interaction-fluctuation" ? r = pgyWriteSvgPng(pgyRecentNoteFluctuationSvg(o.data ?? {}), o.output) : o.type === "blogger-overview" && (r = pgyWriteSvgPng(pgyBloggerOverviewSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);
+      o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "age-distribution" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "region-distribution" ? r = pgyWriteBarChartPng((o.data == null ? void 0 : o.data.mode) === "city" ? o.data.cityRows ?? [] : o.data.provinceRows ?? [], o.output) : o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "gender-age-distribution" ? r = pgyWriteBarChartPng(o.data?.rows ?? [], o.output) : o.type === "trend" ? r = pgyWriteSvgPng(pgyTrendChartSvg(o.rows ?? []), o.output) : o.type === "daily-note-performance" ? r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output) : o.type === "blogger-overview" && (r = pgyWriteSvgPng(pgyBloggerOverviewSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);
     }
   if (Object.keys(s).length)
     j.info(`[pgy-chart] 已生成 ${Object.keys(s).length}/${i.length} 张图表`);
@@ -20806,7 +20544,7 @@ class hm {
       interactionRate30: o.interactionRate + "%",
       videoFullViewRate30: o.videoFullViewRate + "%",
       picture3sViewRate30: o.picture3sViewRate + "%",
-      mEngagementNum30: o.mEngagementNum,
+      mEngagementNum30: o.interactionMedian,
       impMedian30: o.impMedian || "无",
       likeMedian: o.likeMedian || "无",
       collectMedian: o.collectMedian || "无",

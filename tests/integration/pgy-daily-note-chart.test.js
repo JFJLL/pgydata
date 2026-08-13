@@ -118,7 +118,6 @@ test("runtime patch upgrades the legacy daily-note layout and is idempotent", (t
   );
   copyFileSync(path.join(projectRoot, "tools", "pgy_chart_renderer.py"), path.join(toolsDir, "pgy_chart_renderer.py"));
   copyFileSync(path.join(projectRoot, "tools", "pgy_daily_note_svg.js"), path.join(toolsDir, "pgy_daily_note_svg.js"));
-  copyFileSync(path.join(projectRoot, "tools", "pgy_recent_note_fluctuation_svg.js"), path.join(toolsDir, "pgy_recent_note_fluctuation_svg.js"));
   copyFileSync(path.join(projectRoot, "tools", "pgy_blogger_overview_svg.js"), path.join(toolsDir, "pgy_blogger_overview_svg.js"));
   copyFileSync(path.join(projectRoot, "tools", "pgy_trend_svg.js"), path.join(toolsDir, "pgy_trend_svg.js"));
   copyFileSync(path.join(projectRoot, "tools", "china-provinces.geojson"), path.join(toolsDir, "china-provinces.geojson"));
@@ -350,10 +349,10 @@ test("blogger overview prefers the web data_summary source over legacy guesses",
   ]) {
     assert.ok(svg.includes(expected), `overview SVG is missing ${expected}`);
   }
-  assert.match(svg, /base64,FEMALE"[^>]+width="16" height="16"/, "gender icon must use the reference 16px size");
-  assert.match(svg, /base64,HEALTH"[^>]+width="16" height="16"/, "healthy icon must use the reference 16px size");
-  assert.match(svg, /base64,NOTES"[^>]+width="24" height="24"/, "section icons must use their native 24px size");
-  assert.match(svg, /base64,PRICE"[^>]+width="16" height="16"/, "price icon must match the smaller reference size");
+  assert.match(svg, /base64,FEMALE"[^>]+width="20" height="20"/, "gender icon must use the enlarged output size");
+  assert.match(svg, /base64,HEALTH"[^>]+width="28" height="28"/, "healthy icon must use the enlarged output size");
+  assert.match(svg, /base64,NOTES"[^>]+width="40" height="40"/, "section icons must use the enlarged output size");
+  assert.match(svg, /base64,PRICE"[^>]+width="34" height="34"/, "price icon must use the enlarged output size");
   assert.match(svg, /<text x="766" y="400" font-size="24" fill="#262626">笔记数据<\/text>/, "section title must use the lighter reference typography");
   assert.match(svg, /<text x="252" y="192" font-size="22" fill="#262626">/, "nickname must use the lighter reference typography");
 
@@ -577,112 +576,6 @@ test("Python renderer writes a 2048 by 1066 blogger overview PNG without the low
   assert.equal(result.paths.bloggerOverviewChart, outputPath);
   assert.deepEqual(pngSize(outputPath), { width: 2048, height: 1066 });
 });
-
-test("Python renderer writes a 783x420 recent note fluctuation PNG with sample bars and median", (t) => {
-  const tempDir = mkdtempSync(path.join(os.tmpdir(), "magiorix-recent-note-chart-"));
-  t.after(() => rmSync(tempDir, { recursive: true, force: true }));
-  const outputPath = path.join(tempDir, "recent-note.png");
-  const result = JSON.parse(
-    runPython(pythonSource, {
-      charts: [
-        {
-          field: "recentNoteInteractionFluctuationChart",
-          type: "recent-note-interaction-fluctuation",
-          data: {
-            notes: [{ interactionNum: 602 }, { interactionNum: 674 }, { interactionNum: 822 }],
-            interactionMedian: 639,
-          },
-          output: outputPath,
-        },
-      ],
-    }),
-  );
-  assert.deepEqual(result.errors, {});
-  assert.equal(result.paths.recentNoteInteractionFluctuationChart, outputPath);
-  assert.deepEqual(pngSize(outputPath), { width: 783, height: 420 });
-});
-
-test("recent note fluctuation renderer is stable for empty/missing data", (t) => {
-  const tempDir = mkdtempSync(path.join(os.tmpdir(), "magiorix-recent-note-edge-"));
-  t.after(() => rmSync(tempDir, { recursive: true, force: true }));
-  const outputPath = path.join(tempDir, "recent-note-empty.png");
-  const result = JSON.parse(
-    runPython(pythonSource, {
-      charts: [
-        {
-          field: "recentNoteInteractionFluctuationChart",
-          type: "recent-note-interaction-fluctuation",
-          data: { notes: [], interactionMedian: null },
-          output: outputPath,
-        },
-      ],
-    }),
-  );
-  assert.deepEqual(result.errors, {});
-  assert.deepEqual(pngSize(outputPath), { width: 783, height: 420 });
-});
-
-test("recent note fluctuation JS fallback matches the 783x420 contract", () => {
-  const svgMatch = runtimeSource.match(
-    /function pgyRecentNoteFluctuationSvg\(a\) \{[\s\S]*?\r?\n\}/,
-  );
-  assert.ok(svgMatch, "recent note fluctuation SVG fallback must be embedded");
-  const svgFn = new Function(
-    svgMatch[0] + "\nreturn pgyRecentNoteFluctuationSvg;",
-  )();
-  const svg = svgFn({
-    data: {
-      notes: [{ interactionNum: 602 }, { interactionNum: 674 }, { interactionNum: 822 }],
-      interactionMedian: 639,
-    },
-  });
-  assert.match(svg, /width="783" height="420"/);
-  assert.match(svg, /fill="#3A64FF"/);
-  assert.match(svg, /笔记1/);
-  assert.match(svg, /笔记3/);
-  const emptySvg = svgFn({ data: { notes: [], interactionMedian: null } });
-  assert.match(emptySvg, /暂无笔记数据/);
-});
-
-test("recent note fluctuation renderers do not forge missing values and survive huge finite numbers", (t) => {
-  const svgMatch = runtimeSource.match(
-    /function pgyRecentNoteFluctuationSvg\(a\) \{[\s\S]*?\r?\n\}/,
-  );
-  assert.ok(svgMatch, "recent note fluctuation SVG fallback must be embedded");
-  const svgFn = new Function(svgMatch[0] + "\nreturn pgyRecentNoteFluctuationSvg;")();
-  const svg = svgFn({
-    data: {
-      notes: [
-        { interactionNum: null },
-        { interactionNum: "" },
-        { interactionNum: 1e308 },
-      ],
-      interactionMedian: "",
-    },
-  });
-  assert.doesNotMatch(svg, /(?:NaN|Infinity)/, "SVG coordinates and labels must stay finite");
-  assert.equal((svg.match(/<rect[^>]+fill="#3A64FF"/g) || []).length, 1, "null/empty values must not create zero bars");
-  assert.doesNotMatch(svg, /<polyline/, "missing median must not create a zero reference line");
-
-  const tempDir = mkdtempSync(path.join(os.tmpdir(), "magiorix-recent-note-huge-"));
-  t.after(() => rmSync(tempDir, { recursive: true, force: true }));
-  const outputPath = path.join(tempDir, "recent-note-huge.png");
-  const result = JSON.parse(runPython(pythonSource, {
-    charts: [{
-      field: "recentNoteInteractionFluctuationChart",
-      type: "recent-note-interaction-fluctuation",
-      output: outputPath,
-      data: {
-        notes: [{ interactionNum: null }, { interactionNum: "" }, { interactionNum: 1e308 }],
-        interactionMedian: "",
-      },
-    }],
-  }));
-  assert.deepEqual(result.errors, {}, `Python huge-value renderer error: ${JSON.stringify(result.errors)}`);
-  assert.equal(result.paths.recentNoteInteractionFluctuationChart, outputPath);
-  assert.deepEqual(pngSize(outputPath), { width: 783, height: 420 });
-});
-
 test("Python overview avatar uses the same center-crop behavior as the SVG fallback", () => {
   const probeSource = pythonSource.replace(
     /if __name__ == "__main__":\r?\n    main\(\)/,
@@ -733,41 +626,6 @@ test("bundled chart renderer supports the daily note performance chart", (t) => 
   assert.equal(result.paths.dailyNotePerformanceChart, outputPath);
   assert.deepEqual(pngSize(outputPath), { width: 808, height: 378 });
 });
-
-test("bundled chart renderer supports the recent note interaction fluctuation chart", (t) => {
-  const rendererPath = path.join(
-    projectRoot,
-    "runtime",
-    "magiorix-desktop",
-    "resources",
-    "pgy-chart-renderer.exe",
-  );
-  assert.ok(existsSync(rendererPath), "bundled chart renderer must exist");
-  const tempDir = mkdtempSync(path.join(os.tmpdir(), "magiorix-bundled-recent-note-"));
-  t.after(() => rmSync(tempDir, { recursive: true, force: true }));
-  const outputPath = path.join(tempDir, "recent-note.png");
-  const process = spawnSync(rendererPath, [], {
-    input: JSON.stringify({
-      charts: [{
-        field: "recentNoteInteractionFluctuationChart",
-        type: "recent-note-interaction-fluctuation",
-        data: {
-          notes: [{ interactionNum: 602 }, { interactionNum: 674 }, { interactionNum: 822 }],
-          interactionMedian: 639,
-        },
-        output: outputPath,
-      }],
-    }),
-    encoding: "utf8",
-    windowsHide: true,
-  });
-  assert.equal(process.status, 0, process.stderr || process.stdout);
-  const result = JSON.parse(process.stdout.trim().split(/\r?\n/).pop());
-  assert.deepEqual(result.errors, {});
-  assert.equal(result.paths.recentNoteInteractionFluctuationChart, outputPath);
-  assert.deepEqual(pngSize(outputPath), { width: 783, height: 420 });
-});
-
 test("bundled chart renderer supports the blogger overview chart", (t) => {
   const rendererPath = path.join(
     projectRoot,

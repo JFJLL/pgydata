@@ -1288,7 +1288,26 @@ app.get("/api/shumiao/consume-records", authRequired, asyncHandler(async (req, r
      LIMIT ? OFFSET ?`,
     [req.user.id, pageSize, offset],
   );
-  return success(res, { list, total: totalRow.total, page, pageSize });
+  const consumeTypeLabels = {
+    pgy_scrape: "蒲公英采集",
+    starmap_scrape: "星图采集",
+    system_gift: "系统赠送",
+    recharge: "充值",
+  };
+  const records = list.map((row) => {
+    const count = Number(row.count || 0);
+    const balanceAfter = Number(row.balanceAfter || 0);
+    const consumeType = String(row.remark || "").includes("星图") ? "starmap_scrape" : "pgy_scrape";
+    return {
+      ...row,
+      consumeType,
+      consumeTypeText: consumeTypeLabels[consumeType],
+      consumeCount: count,
+      balanceBefore: balanceAfter + count,
+      balanceAfter,
+    };
+  });
+  return success(res, { list: records, total: totalRow.total, page, pageSize });
 }));
 
 app.post("/api/shumiao/recharge", authRequired, asyncHandler(async (req, res) => {
