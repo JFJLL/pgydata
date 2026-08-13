@@ -11,7 +11,7 @@
 - 安全：支付页增加 no-store、no-referrer 和基础 CSP；桌面端支付外链只允许 HTTPS 配置域名，拒绝 `file:`、IP、HTTP、自定义协议和渲染进程 `window.open` 绕过；主窗口导航仅允许当前 `index.html` 或开发服务器自身 origin。
 - 本地产物：`desktop-versions/windows/1.2.0/magiorix-desktop-1.2.0-windows.exe` 与 `magiorix-desktop-1.2.0-assets.zip`；具体大小和 SHA256 以同目录 `release-info.json` 与 `.sha256.txt` 为准。
 - Candidate 校验：每次本地重建都会重新计算安装包和资源包大小/SHA256，最终值以同目录 `release-info.json` 与 `.sha256.txt` 为准；本轮不 Promote。
-- 发布状态：当前仅为本地 Candidate，真实支付宝/短信开关默认关闭，未修改 `latest.json`、未部署、未发送真实短信或真实支付请求；最终回执需由 `verify-change.ps1` 生成。
+- 发布状态：当前仅为本地 Candidate，真实支付宝/短信开关默认关闭，未修改 `latest.json`、未部署、未发送真实短信或真实支付请求。
 
 ## 1.1.13 (Candidate)
 

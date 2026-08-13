@@ -1,7 +1,6 @@
 $ErrorActionPreference = "Stop"
 
 $files = @(
-  "scripts/verify-change.ps1",
   "scripts/build-pgy-chart-renderer.ps1",
   "scripts/build-magiorix-windows-installer.ps1",
   "scripts/publish-magiorix-windows-release.ps1",

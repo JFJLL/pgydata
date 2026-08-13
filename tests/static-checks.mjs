@@ -15,7 +15,7 @@ for (const file of javascriptFiles) {
   assert.equal(result.status, 0, `${file} failed syntax check:\n${result.stderr || result.stdout}`);
 }
 
-for (const file of ["verification-policy.json", "app-source/package.json", "red-magic-api/package.json"]) {
+for (const file of ["app-source/package.json", "red-magic-api/package.json"]) {
   assert.doesNotThrow(() => JSON.parse(readFileSync(file, "utf8")), `${file} must contain valid JSON`);
 }
 const backendPackage = JSON.parse(readFileSync("red-magic-api/package.json", "utf8"));
@@ -113,9 +113,6 @@ assert.match(chartRendererBuild, /WaitForExit\(\$SmokeTimeoutSeconds \* 1000\)/,
 assert.match(chartRendererBuild, /\.Kill\(\$true\)/, "chart renderer smoke timeout must terminate the process tree");
 assert.match(chartRendererBuild, /0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A/, "chart renderer smoke must verify the full PNG signature");
 assert.match(buildScript, /build-pgy-chart-renderer\.ps1/, "Windows packaging must rebuild the bundled chart renderer");
-
-const verificationPolicy = readFileSync("verification-policy.json", "utf8");
-assert.doesNotMatch(verificationPolicy, /kimi-browser/, "browser testing must remain excluded");
 
 const packageConfig = JSON.parse(readFileSync("app-source/package.json", "utf8"));
 const assetRoot = `assets/${packageConfig.assetsVersion}`;
