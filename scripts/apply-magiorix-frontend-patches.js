@@ -225,12 +225,47 @@ replaceOnce(
     '{key:"dailyNotePerformanceChart",label:"日常笔记表现图（图文+视频）"},{key:"dailyNotePicturePerformanceChart",label:"日常笔记表现图（图文）"},{key:"dailyNoteVideoPerformanceChart",label:"日常笔记表现图（视频）"},{key:"bloggerOverviewChart",label:"博主数据概览图"}',
     "add typed daily note field selectors",
 );
-replaceOnce(
+if (!fs.readFileSync(urlValidatorBundle, "utf8").includes('"dailyNotePicturePerformanceChart"')) {
+  replaceOnce(
     urlValidatorBundle,
     'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart","bloggerOverviewChart"])',
     'new Set(["fansProvinceChart","fansCityChart","fansAgeChart","fansGenderChart","fansGrowthTrendChart","dailyNotePerformanceChart","dailyNotePicturePerformanceChart","dailyNoteVideoPerformanceChart","bloggerOverviewChart"])',
     "include typed daily note charts in duration estimate",
-);
+  );
+}
+
+if (!fs.readFileSync(mainBundle, "utf8").includes('field:"fansGenderAgeChart"')) {
+  replaceOnce(
+    mainBundle,
+    '{field:"fansGenderChart",headerName:"粉丝性别分布图",width:320},{field:"fansGrowthTrendChart"',
+    '{field:"fansGenderChart",headerName:"粉丝性别分布图",width:320},{field:"fansGenderAgeChart",headerName:"性别分布+年龄分布",width:320},{field:"fansGrowthTrendChart"',
+    "add combined gender-age export column",
+  );
+}
+
+if (!fs.readFileSync(mainBundle, "utf8").includes('key:"fansGenderAgeChart"')) {
+  replaceOnce(
+    mainBundle,
+    '{group:"粉丝图表",label:"粉丝性别分布图",key:"fansGenderChart"},{group:"粉丝图表",label:"粉丝增长趋势图"',
+    '{group:"粉丝图表",label:"粉丝性别分布图",key:"fansGenderChart"},{group:"粉丝图表",label:"性别分布+年龄分布",key:"fansGenderAgeChart"},{group:"粉丝图表",label:"粉丝增长趋势图"',
+    "add combined gender-age export field",
+  );
+  replaceOnce(
+    mainBundle,
+    '{key:"fansGenderChart",label:"粉丝性别分布图"},{key:"fansGrowthTrendChart"',
+    '{key:"fansGenderChart",label:"粉丝性别分布图"},{key:"fansGenderAgeChart",label:"性别分布+年龄分布"},{key:"fansGrowthTrendChart"',
+    "add combined gender-age field selector",
+  );
+}
+
+if (!fs.readFileSync(urlValidatorBundle, "utf8").includes('"fansGenderAgeChart"')) {
+  replaceOnce(
+    urlValidatorBundle,
+    '"fansGenderChart","fansGrowthTrendChart"',
+    '"fansGenderChart","fansGenderAgeChart","fansGrowthTrendChart"',
+    "include combined gender-age chart in duration estimate",
+  );
+}
 
 replaceOnce(
     mainBundle,

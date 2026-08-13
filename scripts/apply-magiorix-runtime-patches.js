@@ -7,10 +7,16 @@ const projectRoot = process.env.MAGIORIX_PATCH_PROJECT_ROOT
 const mainPath = path.join(projectRoot, "app-source", "dist-electron", "index.js");
 const preloadPath = path.join(projectRoot, "app-source", "dist-electron", "preload.mjs");
 const chartRendererSourcePath = path.join(projectRoot, "tools", "pgy_chart_renderer.py");
+const chinaGeoJsonSourcePath = path.join(projectRoot, "tools", "china-provinces.geojson");
+const chinaGeoJsonTargetPath = path.join(projectRoot, "app-source", "dist-electron", "static", "china-provinces.geojson");
 const dailyNoteSvgSourcePath = path.join(projectRoot, "tools", "pgy_daily_note_svg.js");
 const dailyNoteSvgSource = fs.readFileSync(dailyNoteSvgSourcePath, "utf8").trim();
 const bloggerOverviewSvgSourcePath = path.join(projectRoot, "tools", "pgy_blogger_overview_svg.js");
 const bloggerOverviewSvgSource = fs.readFileSync(bloggerOverviewSvgSourcePath, "utf8").trim();
+const trendSvgSourcePath = path.join(projectRoot, "tools", "pgy_trend_svg.js");
+const trendSvgSource = fs.readFileSync(trendSvgSourcePath, "utf8").trim();
+const overviewIconsSourcePath = path.join(projectRoot, "tools", "overview-icons");
+const overviewIconsTargetPath = path.join(projectRoot, "app-source", "dist-electron", "static", "overview-icons");
 
 function replaceOnce(source, from, to, label) {
   const fromCrLf = from.replace(/\n/g, "\r\n");
@@ -1938,13 +1944,22 @@ main = replaceSection(
   `${dailyNoteSvgSource}\n\n${bloggerOverviewSvgSource}`,
   "pgy chart SVG renderer synchronization",
 );
-
-main = replaceOnce(
+main = replaceSection(
   main,
-  "    payload = json.load(sys.stdin)",
-  '    payload = json.loads(sys.stdin.buffer.read().decode("utf-8"))',
-  "pgy Python chart renderer UTF-8 input",
+  "function pgyTrendChartSvg(a) {",
+  "function pgyDailyNoteFormatInteger(a) {",
+  trendSvgSource,
+  "pgy trend SVG renderer synchronization",
 );
+
+if (main.includes("    payload = json.load(sys.stdin)")) {
+  main = replaceOnce(
+    main,
+    "    payload = json.load(sys.stdin)",
+    '    payload = json.loads(sys.stdin.buffer.read().decode("utf-8"))',
+    "pgy Python chart renderer UTF-8 input",
+  );
+}
 
 main = replaceOnce(
   main,
@@ -2000,12 +2015,12 @@ if (!main.includes("[pgy-chart] 调用内置绘图程序")) {
   );
 }
 
-main = main.replace(
-  `const o = Array.isArray(t) ? t : [];
-    o.length >= 2 && i.push({ field: "fansGrowthTrendChart", type: "trend", rows: o, output: pgyChartFile("trend", a, "trend") });`,
-  `const o = Array.isArray(t) ? t.slice(-120) : [];
-    o.length >= 2 && i.push({ field: "fansGrowthTrendChart", type: "trend", rows: o, output: pgyChartFile("trend", a, "trend") });`,
-);
+for (const sourceRows of [
+  "const o = Array.isArray(t) ? t.slice(-120) : [];",
+  "const o = Array.isArray(t) ? t.slice(-30) : [];",
+]) {
+  main = main.replace(sourceRows, "const o = Array.isArray(t) ? t : [];");
+}
 
 if (!main.includes("粉丝趋势接口使用主进程请求")) {
   main = replaceOnce(
@@ -3005,6 +3020,278 @@ if (!main.includes('if (existingTask) {\n      await pgyCollectionHistory.setSta
       this.sendToRenderer(W.task.error, {`,
     "finalize blocked collection task",
   );
+}
+
+main = replaceSection(
+  main,
+  "const PGY_PYTHON_CHART_SCRIPT = String.raw`",
+  "function pgyChartRendererCandidates()",
+  `const PGY_PYTHON_CHART_SCRIPT = String.raw\`
+${chartRendererSource}
+\`;`,
+  "pgy complete Python chart renderer synchronization",
+);
+
+if (!main.includes("function pgyChinaGeoJsonPath()")) {
+  main = replaceOnce(
+    main,
+    `function pgySpawnChartRenderer(a, e, t) {`,
+    `function pgyChinaGeoJsonPath() {
+  const a = [
+    process.env.PGY_CHINA_GEOJSON_PATH,
+    process.resourcesPath ? Oe(process.resourcesPath, "app.asar", "dist-electron", "static", "china-provinces.geojson") : "",
+    process.resourcesPath ? Oe(process.resourcesPath, "dist-electron", "static", "china-provinces.geojson") : "",
+    Oe(process.cwd(), "app-source", "dist-electron", "static", "china-provinces.geojson"),
+    Oe(process.cwd(), "dist-electron", "static", "china-provinces.geojson")
+  ];
+  return a.find((e) => e && kt(e)) || "";
+}
+function pgyChartRendererEnv() {
+  const a = { ...process.env }, e = pgyChinaGeoJsonPath();
+  return e && (a.PGY_CHINA_GEOJSON_PATH = e), a;
+}
+function pgySpawnChartRenderer(a, e, t) {`,
+    "pgy region GeoJSON resolver",
+  );
+  main = replaceOnce(
+    main,
+    `      stdio: ["pipe", "pipe", "pipe"]
+    }), u = (p) => {`,
+    `      stdio: ["pipe", "pipe", "pipe"],
+      env: pgyChartRendererEnv()
+    }), u = (p) => {`,
+    "pgy bundled renderer GeoJSON environment",
+  );
+  main = replaceOnce(
+    main,
+    `      stdio: ["pipe", "pipe", "pipe"]
+    }), l = (h) => {`,
+    `      stdio: ["pipe", "pipe", "pipe"],
+      env: pgyChartRendererEnv()
+    }), l = (h) => {`,
+    "pgy Python renderer GeoJSON environment",
+  );
+}
+
+if (!main.includes('data: { mode: "province", provinceRows: pgyProvinceRows')) {
+  main = replaceOnce(
+    main,
+    `  const s = {}, i = [];
+  if (pgyHasSelectedField(n, PYG_CHART_FIELDS.province)) {
+    const o = pgyTopPercentRows(e.provinces);
+    o.length && i.push({ field: "fansProvinceChart", type: "bar", title: "粉丝地域分布", rows: o, output: pgyChartFile("province", a, "province") });
+  }
+  if (pgyHasSelectedField(n, PYG_CHART_FIELDS.city)) {
+    const o = pgyTopPercentRows(e.cities);
+    o.length && i.push({ field: "fansCityChart", type: "bar", title: "粉丝城市分布", rows: o, output: pgyChartFile("city", a, "city") });
+  }`,
+    `  const s = {}, i = [];
+  const pgyProvinceRows = pgyTopPercentRows(e.provinces), pgyCityRows = pgyTopPercentRows(e.cities);
+  if (pgyHasSelectedField(n, PYG_CHART_FIELDS.province)) {
+    pgyProvinceRows.length && i.push({ field: "fansProvinceChart", type: "region-distribution", data: { mode: "province", provinceRows: pgyProvinceRows, cityRows: pgyCityRows }, output: pgyChartFile("province", a, "province") });
+  }
+  if (pgyHasSelectedField(n, PYG_CHART_FIELDS.city)) {
+    pgyCityRows.length && i.push({ field: "fansCityChart", type: "region-distribution", data: { mode: "city", provinceRows: pgyProvinceRows, cityRows: pgyCityRows }, output: pgyChartFile("city", a, "city") });
+  }`,
+    "pgy province and city region distribution jobs",
+  );
+}
+
+if (!main.includes('o.type === "region-distribution" ? r = pgyWriteBarChartPng')) {
+  main = replaceOnce(
+    main,
+    `o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "gender"`,
+    `o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "region-distribution" ? r = pgyWriteBarChartPng((o.data == null ? void 0 : o.data.mode) === "city" ? o.data.cityRows ?? [] : o.data.provinceRows ?? [], o.output) : o.type === "gender"`,
+    "pgy region distribution JS fallback",
+  );
+}
+
+if (!main.includes('field: "fansAgeChart", type: "age-distribution"')) {
+  main = replaceOnce(
+    main,
+    `o.length && i.push({ field: "fansAgeChart", type: "bar", title: "粉丝年龄分布", rows: o, output: pgyChartFile("age", a, "age") });`,
+    `o.length && i.push({ field: "fansAgeChart", type: "age-distribution", rows: o, output: pgyChartFile("age", a, "age") });`,
+    "pgy age distribution reference layout job",
+  );
+}
+
+if (!main.includes('o.type === "age-distribution" ? r = pgyWriteBarChartPng')) {
+  main = replaceOnce(
+    main,
+    `o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "region-distribution"`,
+    `o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "age-distribution" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "region-distribution"`,
+    "pgy age distribution JS fallback",
+  );
+}
+
+if (!main.includes('fansGenderAgeChart: ["fansGenderAgeChart"]')) {
+  main = replaceOnce(
+    main,
+    `  fansGenderChart: ["fansGenderChart"],`,
+    `  fansGenderChart: ["fansGenderChart"],
+  fansGenderAgeChart: ["fansGenderAgeChart"],`,
+    "pgy combined gender-age dependency mapping",
+  );
+}
+
+if (
+  !main.includes('"fansGenderChart",\n    "fansGenderAgeChart"') &&
+  !main.includes('"fansGenderChart",\r\n    "fansGenderAgeChart"')
+) {
+  main = replaceOnce(
+    main,
+    `    "fansAgeChart",
+    "fansGenderChart"`,
+    `    "fansAgeChart",
+    "fansGenderChart",
+    "fansGenderAgeChart"`,
+    "pgy combined gender-age fans profile dependency",
+  );
+}
+
+if (!main.includes('genderAge: "fansGenderAgeChart"')) {
+  main = replaceOnce(
+    main,
+    `  age: "fansAgeChart",
+  gender: "fansGenderChart",`,
+    `  age: "fansAgeChart",
+  gender: "fansGenderChart",
+  genderAge: "fansGenderAgeChart",`,
+    "pgy combined gender-age chart field",
+  );
+}
+
+if (!main.includes('field: "fansGenderAgeChart", type: "gender-age-distribution"')) {
+  main = replaceOnce(
+    main,
+    `  if (pgyHasSelectedField(n, PYG_CHART_FIELDS.gender)) {
+    const o = e.gender ?? {};
+    pgyPct(o.female) + pgyPct(o.male) > 0 && i.push({ field: "fansGenderChart", type: "gender", data: o, output: pgyChartFile("gender", a, "gender") });
+  }`,
+    `  if (pgyHasSelectedField(n, PYG_CHART_FIELDS.gender)) {
+    const o = e.gender ?? {};
+    pgyPct(o.female) + pgyPct(o.male) > 0 && i.push({ field: "fansGenderChart", type: "gender", data: o, output: pgyChartFile("gender", a, "gender") });
+  }
+  if (pgyHasSelectedField(n, PYG_CHART_FIELDS.genderAge)) {
+    const o = pgyAgeRows(e.ages), r = e.gender ?? {};
+    o.length && pgyPct(r.female) + pgyPct(r.male) > 0 && i.push({ field: "fansGenderAgeChart", type: "gender-age-distribution", data: { rows: o, gender: r }, output: pgyChartFile("gender-age", a, "gender-age") });
+  }`,
+    "pgy combined gender-age chart job",
+  );
+}
+
+if (!main.includes('o.type === "gender-age-distribution" ? r = pgyWriteBarChartPng')) {
+  main = replaceOnce(
+    main,
+    `o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "trend"`,
+    `o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "gender-age-distribution" ? r = pgyWriteBarChartPng(o.data?.rows ?? [], o.output) : o.type === "trend"`,
+    "pgy combined gender-age JS fallback",
+  );
+}
+
+if (!main.includes('r = pgyWriteSvgPng(pgyTrendChartSvg(o.rows ?? []), o.output)')) {
+  main = replaceOnce(
+    main,
+    'o.type === "trend" ? r = pgyWriteTrendChartPng(o.rows ?? [], o.output)',
+    'o.type === "trend" ? r = pgyWriteSvgPng(pgyTrendChartSvg(o.rows ?? []), o.output)',
+    "pgy trend SVG fallback wiring",
+  );
+}
+
+fs.mkdirSync(path.dirname(chinaGeoJsonTargetPath), { recursive: true });
+fs.copyFileSync(chinaGeoJsonSourcePath, chinaGeoJsonTargetPath);
+
+if (!main.includes("const PGY_OVERVIEW_ICON_FILES = {")) {
+  main = replaceOnce(
+    main,
+    "const PGY_OVERVIEW_SHIELD_PNG = {",
+    `const PGY_OVERVIEW_ICON_FILES = {
+  health: "health.png",
+  healthRisk: "health-risk.png",
+  flyable: "flyable.png",
+  cooperationPrice: "cooperation-price.jpg",
+  location: "location.png",
+  copy: "copy.jpg",
+  genderFemale: "gender-female.png",
+  genderMale: "gender-male.png",
+  growth: "growth.png",
+  favorite: "favorite.png",
+  service: "service.png",
+  organization: "organization.png",
+  notes: "notes.png",
+  invite: "invite.png"
+};
+
+const PGY_OVERVIEW_SHIELD_PNG = {`,
+    "pgy overview icon file mapping",
+  );
+}
+
+if (!main.includes("function pgyLoadOverviewIconImages()")) {
+  main = replaceOnce(
+    main,
+    "async function pgyPrepareOverviewData(a) {",
+    `function pgyLoadOverviewIconImages() {
+  if (typeof PgyNativeImage === "undefined" || typeof Oe !== "function") return {};
+  const roots = [];
+  if (process.resourcesPath) {
+    roots.push(Oe(process.resourcesPath, "app.asar", "dist-electron", "static", "overview-icons"));
+    roots.push(Oe(process.resourcesPath, "app.asar.unpacked", "dist-electron", "static", "overview-icons"));
+    roots.push(Oe(process.resourcesPath, "dist-electron", "static", "overview-icons"));
+  }
+  roots.push(Oe(process.cwd(), "app-source", "dist-electron", "static", "overview-icons"));
+  roots.push(Oe(process.cwd(), "dist-electron", "static", "overview-icons"));
+  const output = {};
+  for (const [key, fileName] of Object.entries(PGY_OVERVIEW_ICON_FILES)) {
+    for (const root of roots) {
+      try {
+        const icon = PgyNativeImage.createFromPath(Oe(root, fileName));
+        if (!icon.isEmpty()) {
+          output[key] = icon.toDataURL();
+          break;
+        }
+      } catch {
+      }
+    }
+  }
+  return output;
+}
+
+async function pgyPrepareOverviewData(a) {`,
+    "pgy overview icon data URL loader",
+  );
+  main = replaceOnce(
+    main,
+    "return e.avatar = await pgyInlineOverviewAvatar(e.avatar), e.nicknameEmojiImages = await pgyInlineOverviewEmojis(e.nickname), e;",
+    "return e.avatar = await pgyInlineOverviewAvatar(e.avatar), e.nicknameEmojiImages = await pgyInlineOverviewEmojis(e.nickname), e.overviewIconImages = pgyLoadOverviewIconImages(), e;",
+    "pgy overview icon data wiring",
+  );
+}
+
+if (!main.includes("s = {}) {") && !main.includes("const source = risk ? s.healthRisk")) {
+  main = replaceOnce(
+    main,
+    `function pgyOverviewShieldSvg(a, e, t) {
+  const n = Number(a) === 2 ? PGY_OVERVIEW_SHIELD_PNG[2] : PGY_OVERVIEW_SHIELD_PNG[0];
+  return \`<image href="\${n}" x="\${e - 11}" y="\${t - 11}" width="22" height="22" preserveAspectRatio="xMidYMid meet"/>\`;
+}`,
+    `function pgyOverviewShieldSvg(a, e, t, s = {}) {
+  const risk = Number(a) !== 2;
+  const source = risk ? s.healthRisk || PGY_OVERVIEW_SHIELD_PNG[0] : s.health || PGY_OVERVIEW_SHIELD_PNG[2];
+  return \`<image href="\${source}" x="\${e}" y="\${t}" width="16" height="16" preserveAspectRatio="xMidYMid meet"/>\`;
+}`,
+    "pgy overview health shield three-state icons",
+  );
+}
+
+if (!fs.existsSync(overviewIconsSourcePath)) {
+  throw new Error(`Missing overview icon assets: ${overviewIconsSourcePath}`);
+}
+fs.mkdirSync(overviewIconsTargetPath, { recursive: true });
+for (const name of fs.readdirSync(overviewIconsSourcePath)) {
+  const source = path.join(overviewIconsSourcePath, name);
+  const target = path.join(overviewIconsTargetPath, name);
+  fs.copyFileSync(source, target);
 }
 
 fs.writeFileSync(mainPath, main);

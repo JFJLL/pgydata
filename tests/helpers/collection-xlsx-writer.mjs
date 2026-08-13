@@ -20,6 +20,7 @@ export const PGY_IMAGE_FIELDS = new Set([
   "fansCityChart",
   "fansAgeChart",
   "fansGenderChart",
+  "fansGenderAgeChart",
   "fansGrowthTrendChart",
   "dailyNotePerformanceChart",
   "dailyNotePicturePerformanceChart",

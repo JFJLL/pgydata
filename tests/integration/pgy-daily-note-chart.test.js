@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const { execFileSync, spawnSync } = require("node:child_process");
 const { createRequire } = require("node:module");
-const { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
@@ -13,7 +13,7 @@ const JSZip = requireFromApp("jszip");
 const XLSX = requireFromApp("xlsx-js-style");
 
 const pythonMatch = runtimeSource.match(
-  /const PGY_PYTHON_CHART_SCRIPT = String\.raw`\r?\n([\s\S]*?)`;\r?\nfunction pgyChartRendererCandidates/,
+  /const PGY_PYTHON_CHART_SCRIPT = String\.raw`\r?\n([\s\S]*?)`;\r?\n(?:\r?\n)?function pgyChartRendererCandidates/,
 );
 assert.ok(pythonMatch, "embedded Python chart renderer must be present");
 const pythonSource = pythonMatch[1];
@@ -45,6 +45,7 @@ function runPython(source, payload) {
       const result = spawnSync(candidate[0], [...candidate.slice(1), scriptPath], {
         input: JSON.stringify(payload),
         encoding: "utf8",
+        env: { ...process.env, PGY_CHINA_GEOJSON_PATH: path.join(projectRoot, "tools", "china-provinces.geojson") },
         windowsHide: true,
         maxBuffer: 64 * 1024 * 1024,
       });
@@ -118,6 +119,9 @@ test("runtime patch upgrades the legacy daily-note layout and is idempotent", (t
   copyFileSync(path.join(projectRoot, "tools", "pgy_chart_renderer.py"), path.join(toolsDir, "pgy_chart_renderer.py"));
   copyFileSync(path.join(projectRoot, "tools", "pgy_daily_note_svg.js"), path.join(toolsDir, "pgy_daily_note_svg.js"));
   copyFileSync(path.join(projectRoot, "tools", "pgy_blogger_overview_svg.js"), path.join(toolsDir, "pgy_blogger_overview_svg.js"));
+  copyFileSync(path.join(projectRoot, "tools", "pgy_trend_svg.js"), path.join(toolsDir, "pgy_trend_svg.js"));
+  copyFileSync(path.join(projectRoot, "tools", "china-provinces.geojson"), path.join(toolsDir, "china-provinces.geojson"));
+  cpSync(path.join(projectRoot, "tools", "overview-icons"), path.join(toolsDir, "overview-icons"), { recursive: true });
 
   const patchScript = path.join(projectRoot, "scripts", "apply-magiorix-runtime-patches.js");
   const env = { ...process.env, MAGIORIX_PATCH_PROJECT_ROOT: tempDir };
@@ -197,6 +201,7 @@ test("blogger overview normalization preserves PGY formatting and missing-value 
     mcn: "六月星河",
     genderText: "-",
     healthLevel: null,
+    healthRisk: false,
     profileSummaryText: "文化艺术",
     travelAreaText: "-",
     categoryTags: [],
@@ -316,14 +321,26 @@ test("blogger overview prefers the web data_summary source over legacy guesses",
   assert.equal(overview.travelAreaText, "福建、广东");
   assert.deepEqual(overview.categoryTags, ["母婴", "露营徒步", "ootd", "氛围感", "plog"]);
 
-  const svg = jsHelpers.pgyBloggerOverviewSvg(overview);
+  assert.equal(overview.healthRisk, false);
+
+  const overviewIconImages = {
+    health: "data:image/png;base64,HEALTH",
+    healthRisk: "data:image/png;base64,RISK",
+    genderFemale: "data:image/png;base64,FEMALE",
+    copy: "data:image/jpeg;base64,COPY",
+    cooperationPrice: "data:image/jpeg;base64,PRICE",
+    notes: "data:image/png;base64,NOTES",
+    service: "data:image/png;base64,SERVICE",
+    growth: "data:image/png;base64,GROWTH",
+  };
+  const svg = jsHelpers.pgyBloggerOverviewSvg({ ...overview, overviewIconImages });
   for (const expected of [
     "数据更新至： 2026-07-29",
     "品效型博主",
     "无机构",
     ">福建、广东</text>",
-    "AAAJgUlEQVR4",
-    'fill="#ff6f91"',
+    "data:image/png;base64,HEALTH",
+    "data:image/png;base64,FEMALE",
     "plog",
     "优于 94.35% 同行",
     "优于 96.3% 同行",
@@ -332,13 +349,25 @@ test("blogger overview prefers the web data_summary source over legacy guesses",
   ]) {
     assert.ok(svg.includes(expected), `overview SVG is missing ${expected}`);
   }
-  assert.ok(svg.includes('width="22" height="22"'), "health shield must render as official 22px icon");
-  const abnormalSvg = jsHelpers.pgyBloggerOverviewSvg({ ...overview, healthLevel: 0 });
-  assert.ok(abnormalSvg.includes("AAAJIUlEQVR4"), "abnormal level must render the official orange shield icon");
-  const normalSvg = jsHelpers.pgyBloggerOverviewSvg({ ...overview, healthLevel: 1 });
-  assert.ok(normalSvg.includes("AAAJIUlEQVR4"), "non-healthy (level 1) must fall back to the official abnormal icon");
-  const noLevelSvg = jsHelpers.pgyBloggerOverviewSvg({ ...overview, healthLevel: null });
-  assert.ok(!noLevelSvg.includes("AAAJgUlEQVR4") && !noLevelSvg.includes("AAAJIUlEQVR4"), "missing level must not render any shield");
+  assert.match(svg, /base64,FEMALE"[^>]+width="16" height="16"/, "gender icon must use the reference 16px size");
+  assert.match(svg, /base64,HEALTH"[^>]+width="16" height="16"/, "healthy icon must use the reference 16px size");
+  assert.match(svg, /base64,NOTES"[^>]+width="24" height="24"/, "section icons must use their native 24px size");
+  assert.match(svg, /base64,PRICE"[^>]+width="16" height="16"/, "price icon must match the smaller reference size");
+  assert.match(svg, /<text x="766" y="400" font-size="24" fill="#262626">笔记数据<\/text>/, "section title must use the lighter reference typography");
+  assert.match(svg, /<text x="252" y="192" font-size="22" fill="#262626">/, "nickname must use the lighter reference typography");
+
+  const shortNameSvg = jsHelpers.pgyBloggerOverviewSvg({ ...overview, nickname: "Q", redId: "a", overviewIconImages });
+  const longNameSvg = jsHelpers.pgyBloggerOverviewSvg({ ...overview, nickname: "Q米夫妇_", redId: "btccco", overviewIconImages });
+  const iconX = (markup, token) => Number(markup.match(new RegExp(`base64,${token}\\" x=\\"([0-9.]+)`))[1]);
+  assert.ok(iconX(longNameSvg, "FEMALE") > iconX(shortNameSvg, "FEMALE"), "nickname icons must follow the measured nickname width");
+  assert.ok(iconX(longNameSvg, "COPY") > iconX(shortNameSvg, "COPY"), "copy icon must follow the measured red ID width");
+
+  const riskSvg = jsHelpers.pgyBloggerOverviewSvg({ ...overview, healthLevel: 1, healthRisk: true, overviewIconImages });
+  assert.ok(riskSvg.includes("data:image/png;base64,RISK"), "risk state must use the supplied risk icon");
+  assert.equal((riskSvg.match(/暂停接单/g) || []).length, 2, "risk state must pause both cooperation prices");
+  assert.ok(!riskSvg.includes("data:image/jpeg;base64,PRICE"), "risk state must hide both cooperation price icons");
+  const noLevelSvg = jsHelpers.pgyBloggerOverviewSvg({ ...overview, healthLevel: null, healthRisk: false, overviewIconImages });
+  assert.ok(!noLevelSvg.includes("base64,HEALTH") && !noLevelSvg.includes("base64,RISK"), "missing level must not render a health icon");
 });
 
 test("typed daily note charts use independent endpoints and visible filter labels", () => {
@@ -393,6 +422,126 @@ test("Python renderer writes 808 by 378 web-layout PNGs for populated and missin
   assert.match(populatedSvg, /fill="#ff2442"/);
   assert.doesNotMatch(populatedSvg, /互动中位数/);
   assert.match(jsHelpers.pgyDailyNotePerformanceSvg(payload.charts[1].data), />-<\/text>/);
+});
+
+test("Python renderer creates province and city region distribution cards", (t) => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "magiorix-region-chart-"));
+  t.after(() => rmSync(tempDir, { recursive: true, force: true }));
+  const provincePath = path.join(tempDir, "province.png");
+  const cityPath = path.join(tempDir, "city.png");
+  const provinceRows = [
+    { name: "广东", value: 14.6 },
+    { name: "海外", value: 14.0 },
+    { name: "北京", value: 9.0 },
+    { name: "上海", value: 9.0 },
+    { name: "浙江", value: 6.3 },
+    { name: "江苏", value: 5.7 },
+    { name: "山东", value: 4.0 },
+  ];
+  const cityRows = [
+    { name: "北京", value: 9.0 },
+    { name: "上海", value: 9.0 },
+    { name: "深圳", value: 5.7 },
+    { name: "广州", value: 3.8 },
+    { name: "杭州", value: 3.4 },
+    { name: "成都", value: 2.8 },
+    { name: "其他", value: 2.0 },
+  ];
+  const result = JSON.parse(runPython(pythonSource, {
+    charts: [
+      { field: "fansProvinceChart", type: "region-distribution", data: { mode: "province", provinceRows, cityRows }, output: provincePath },
+      { field: "fansCityChart", type: "region-distribution", data: { mode: "city", provinceRows, cityRows }, output: cityPath },
+    ],
+  }));
+
+  assert.deepEqual(result.errors, {});
+  assert.equal(result.paths.fansProvinceChart, provincePath);
+  assert.equal(result.paths.fansCityChart, cityPath);
+  assert.deepEqual(pngSize(provincePath), { width: 784, height: 464 });
+  assert.deepEqual(pngSize(cityPath), { width: 784, height: 464 });
+  assert.notDeepEqual(readFileSync(provincePath), readFileSync(cityPath));
+  assert.match(runtimeSource, /type: "region-distribution"/);
+  assert.match(pythonSource, /def save_region_distribution\(chart\):/);
+});
+
+test("Python renderer creates reference-sized age and gender distribution cards", (t) => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "magiorix-demographic-chart-"));
+  t.after(() => rmSync(tempDir, { recursive: true, force: true }));
+  const agePath = path.join(tempDir, "age.png");
+  const genderPath = path.join(tempDir, "gender.png");
+  const combinedPath = path.join(tempDir, "gender-age.png");
+  const ageRows = [
+    { name: "<18", value: 2.3 },
+    { name: "18-24", value: 7.5 },
+    { name: "25-34", value: 30.8 },
+    { name: "35-44", value: 37.1 },
+    { name: ">44", value: 22.4 },
+  ];
+  const gender = { female: 0.4097, male: 0.5902 };
+  const result = JSON.parse(runPython(pythonSource, {
+    charts: [
+      {
+        field: "fansAgeChart",
+        type: "age-distribution",
+        rows: ageRows,
+        output: agePath,
+      },
+      { field: "fansGenderChart", type: "gender", data: gender, output: genderPath },
+      { field: "fansGenderAgeChart", type: "gender-age-distribution", data: { rows: ageRows, gender }, output: combinedPath },
+    ],
+  }));
+
+  assert.deepEqual(result.errors, {});
+  assert.equal(result.paths.fansAgeChart, agePath);
+  assert.equal(result.paths.fansGenderChart, genderPath);
+  assert.equal(result.paths.fansGenderAgeChart, combinedPath);
+  assert.deepEqual(pngSize(agePath), { width: 382, height: 372 });
+  assert.deepEqual(pngSize(genderPath), { width: 379, height: 383 });
+  assert.deepEqual(pngSize(combinedPath), { width: 783, height: 390 });
+  assert.notDeepEqual(readFileSync(agePath), readFileSync(genderPath));
+  assert.match(runtimeSource, /field: "fansAgeChart", type: "age-distribution"/);
+  assert.match(runtimeSource, /field: "fansGenderAgeChart", type: "gender-age-distribution"/);
+  assert.match(pythonSource, /def save_age_distribution\(chart\):/);
+  assert.match(pythonSource, /width, height, scale = 379, 383, 4/);
+  assert.match(pythonSource, /def save_gender_age_distribution\(chart\):/);
+});
+
+test("Python renderer creates a reference-sized marker-free 30-day fan trend card", (t) => {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "magiorix-fans-trend-chart-"));
+  t.after(() => rmSync(tempDir, { recursive: true, force: true }));
+  const output = path.join(tempDir, "fans-trend.png");
+  const unorderedOutput = path.join(tempDir, "fans-trend-unordered.png");
+  const values = [107174, 107172, 107169, 107174, 107190, 107190, 107192, 107193, 107187, 107186, 107176, 107174, 107168, 107164, 107163, 107169, 107174, 107218, 107249, 107270, 107286, 107294, 107292, 107280, 107277, 107286, 107286, 107284, 107276, 107268];
+  const rows = values.map((num, index) => {
+    const date = new Date(Date.UTC(2026, 6, 13 + index));
+    return { dateKey: date.toISOString().slice(0, 10).replace(/-/g, ""), num };
+  });
+  const unorderedRows = [{ dateKey: "20260712", num: 107170 }, ...rows, { ...rows[0] }].reverse();
+  const result = JSON.parse(runPython(pythonSource, {
+    charts: [
+      { field: "fansGrowthTrendChart", type: "trend", rows, output },
+      { field: "fansGrowthTrendChartUnordered", type: "trend", rows: unorderedRows, output: unorderedOutput },
+    ],
+  }));
+
+  assert.deepEqual(result.errors, {});
+  assert.equal(result.paths.fansGrowthTrendChart, output);
+  assert.deepEqual(pngSize(output), { width: 813, height: 419 });
+  assert.deepEqual(readFileSync(unorderedOutput), readFileSync(output), "date sorting, de-duplication and recent-30 selection must preserve every daily bend");
+  const trendSection = pythonSource.slice(pythonSource.indexOf("def save_trend(chart):"), pythonSource.indexOf("def main():"));
+  assert.doesNotMatch(trendSection, /for x, y in points:/, "trend line must not draw point markers");
+  assert.doesNotMatch(trendSection, /x - 4, y - 4, x \+ 4, y \+ 4/, "trend line must not draw point markers");
+  assert.match(trendSection, /for sample in range\(12\)/, "smooth curve must interpolate through every daily value");
+  assert.match(trendSection, /draw\.line\(curve, fill="#3f6eff"/);
+  assert.match(trendSection, /for candidate in \(1, 2, 3, 5, 10\)/, "107163–107294 must use a 30-fan axis step");
+  assert.match(trendSection, /rows = trend_points\(chart\.get\("rows"\)\)\[-30:\]/);
+  assert.match(trendSection, /label_indices = \[0, 6, 12, 18, 24\]/);
+  assert.match(pythonSource, /return sorted\(points_by_date\.values\(\), key=lambda point: point\["date_key"\]\)/);
+  assert.match(runtimeSource, /const o = Array\.isArray\(t\) \? t : \[\];/);
+  assert.match(runtimeSource, /o\.type === "trend" \? r = pgyWriteSvgPng\(pgyTrendChartSvg\(o\.rows \?\? \[\]\), o\.output\)/, "JS fallback must render the refined trend SVG");
+  assert.match(runtimeSource, /粉丝总量/);
+  assert.match(runtimeSource, /粉丝增量/);
+  assert.match(runtimeSource, /近30日/);
 });
 
 test("Python renderer writes a 2048 by 1066 blogger overview PNG without the lower page section", (t) => {
@@ -533,7 +682,7 @@ test("production Excel embedder adds typed daily-note and blogger-overview PNGs 
     "JSZip",
     `${embedSource}; return { pgyEmbedImagesInWorkbook };`,
   )(
-    new Set(["dailyNotePerformanceChart", "dailyNotePicturePerformanceChart", "dailyNoteVideoPerformanceChart", "bloggerOverviewChart"]),
+    new Set(["dailyNotePerformanceChart", "dailyNotePicturePerformanceChart", "dailyNoteVideoPerformanceChart", "bloggerOverviewChart", "fansGenderAgeChart"]),
     existsSync,
     readFileSync,
     writeFileSync,
@@ -546,6 +695,15 @@ test("production Excel embedder adds typed daily-note and blogger-overview PNGs 
   const picturePath = path.join(tempDir, "daily-note-picture.png");
   const videoPath = path.join(tempDir, "daily-note-video.png");
   const overviewPath = path.join(tempDir, "blogger-overview.png");
+  const combinedPath = path.join(tempDir, "gender-age.png");
+  const ageRows = [
+    { name: "<18", value: 2.3 },
+    { name: "18-24", value: 7.5 },
+    { name: "25-34", value: 30.8 },
+    { name: "35-44", value: 37.1 },
+    { name: ">44", value: 22.4 },
+  ];
+  const gender = { female: 0.4097, male: 0.5902 };
   const xlsxPath = path.join(tempDir, "daily-note.xlsx");
   const rendererPath = path.join(
     projectRoot,
@@ -599,11 +757,24 @@ test("production Excel embedder adds typed daily-note and blogger-overview PNGs 
   assert.deepEqual(pngSize(picturePath), { width: 808, height: 378 });
   assert.deepEqual(pngSize(videoPath), { width: 808, height: 378 });
   assert.deepEqual(pngSize(overviewPath), { width: 2048, height: 1066 });
+  const combinedResult = JSON.parse(runPython(pythonSource, {
+    charts: [
+      {
+        field: "fansGenderAgeChart",
+        type: "gender-age-distribution",
+        data: { rows: ageRows, gender },
+        output: combinedPath,
+      },
+    ],
+  }));
+  assert.deepEqual(combinedResult.errors, {});
+  assert.equal(combinedResult.paths.fansGenderAgeChart, combinedPath);
+  assert.deepEqual(pngSize(combinedPath), { width: 783, height: 390 });
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
-    ["日常30天", "", "", ""],
-    ["日常笔记表现图（图文+视频）", "日常笔记表现图（图文）", "日常笔记表现图（视频）", "博主数据概览图"],
-    ["", "", "", ""],
+    ["日常30天", "", "", "", ""],
+    ["日常笔记表现图（图文+视频）", "日常笔记表现图（图文）", "日常笔记表现图（视频）", "博主数据概览图", "性别分布+年龄分布"],
+    ["", "", "", "", ""],
   ]), "Sheet1");
   XLSX.writeFile(workbook, xlsxPath);
 
@@ -614,12 +785,14 @@ test("production Excel embedder adds typed daily-note and blogger-overview PNGs 
       { key: "dailyNotePicturePerformanceChart", label: "日常笔记表现图（图文）" },
       { key: "dailyNoteVideoPerformanceChart", label: "日常笔记表现图（视频）" },
       { key: "bloggerOverviewChart", label: "博主数据概览图" },
+      { key: "fansGenderAgeChart", label: "性别分布+年龄分布" },
     ],
     [{
       dailyNotePerformanceChart: pngPath,
       dailyNotePicturePerformanceChart: picturePath,
       dailyNoteVideoPerformanceChart: videoPath,
       bloggerOverviewChart: overviewPath,
+      fansGenderAgeChart: combinedPath,
     }],
   );
 
@@ -628,6 +801,7 @@ test("production Excel embedder adds typed daily-note and blogger-overview PNGs 
   assert.ok(archive.file("xl/media/pgy_chart_2.png"));
   assert.ok(archive.file("xl/media/pgy_chart_3.png"));
   assert.ok(archive.file("xl/media/pgy_chart_4.png"));
+  assert.ok(archive.file("xl/media/pgy_chart_5.png"));
   const drawing = await archive.file("xl/drawings/drawing1.xml").async("string");
   const anchors = [...drawing.matchAll(
     /<xdr:twoCellAnchor[^>]*><xdr:from><xdr:col>(\d+)<\/xdr:col>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>[\s\S]*?<xdr:cNvPr[^>]*name="([^"]+)"/g,
@@ -637,6 +811,7 @@ test("production Excel embedder adds typed daily-note and blogger-overview PNGs 
     { col: 1, row: 2, name: "日常笔记表现图（图文）-1" },
     { col: 2, row: 2, name: "日常笔记表现图（视频）-1" },
     { col: 3, row: 2, name: "博主数据概览图-1" },
+    { col: 4, row: 2, name: "性别分布+年龄分布-1" },
   ]);
   const sheet = await archive.file("xl/worksheets/sheet1.xml").async("string");
   assert.match(sheet, /<drawing r:id="rId\d+"\/>/);

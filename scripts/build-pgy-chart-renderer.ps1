@@ -11,9 +11,10 @@ $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $sourcePath = Join-Path $projectRoot "tools\pgy_chart_renderer.py"
+$geoJsonPath = Join-Path $projectRoot "tools\china-provinces.geojson"
 $requiredPyInstallerVersion = "6.18.0"
 $requiredPillowVersion = "10.4.0"
-$rendererBuildSchema = "renderer-v2;pyinstaller=$requiredPyInstallerVersion;pillow=$requiredPillowVersion;onefile;console;exclude=numpy"
+$rendererBuildSchema = "renderer-v3;pyinstaller=$requiredPyInstallerVersion;pillow=$requiredPillowVersion;onefile;console;exclude=numpy;china-province-geojson"
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
   $OutputPath = Join-Path $projectRoot "runtime\magiorix-desktop\resources\pgy-chart-renderer.exe"
 }
@@ -47,7 +48,7 @@ function Get-NormalizedText([string]$Path) {
 }
 
 function Get-RendererBuildHash {
-  $hashInput = "$rendererBuildSchema`n--- source ---`n$(Get-NormalizedText $sourcePath)`n--- build ---`n$(Get-NormalizedText $PSCommandPath)"
+  $hashInput = "$rendererBuildSchema`n--- source ---`n$(Get-NormalizedText $sourcePath)`n--- geojson ---`n$(Get-NormalizedText $geoJsonPath)`n--- build ---`n$(Get-NormalizedText $PSCommandPath)"
   $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($hashInput)
   $hash = [System.Security.Cryptography.SHA256]::Create()
   try {
@@ -58,10 +59,33 @@ function Get-RendererBuildHash {
 }
 
 function Invoke-RendererSmokeTest([string]$RendererPath, [string]$WorkRoot) {
+  $regionPngPath = Join-Path $WorkRoot "region-smoke.png"
   $pngPath = Join-Path $WorkRoot "daily-note-smoke.png"
   $overviewPngPath = Join-Path $WorkRoot "blogger-overview-smoke.png"
   $payload = [ordered]@{
     charts = @(
+      [ordered]@{
+        field = "fansProvinceChart"
+        type = "region-distribution"
+        data = [ordered]@{
+          mode = "province"
+          provinceRows = @(
+            [ordered]@{ name = "广东"; value = 14.6 },
+            [ordered]@{ name = "海外"; value = 14.0 },
+            [ordered]@{ name = "北京"; value = 9.0 },
+            [ordered]@{ name = "上海"; value = 9.0 },
+            [ordered]@{ name = "浙江"; value = 6.3 },
+            [ordered]@{ name = "江苏"; value = 5.7 },
+            [ordered]@{ name = "山东"; value = 4.0 }
+          )
+          cityRows = @(
+            [ordered]@{ name = "北京"; value = 9.0 },
+            [ordered]@{ name = "上海"; value = 9.0 },
+            [ordered]@{ name = "深圳"; value = 5.7 }
+          )
+        }
+        output = $regionPngPath
+      },
       [ordered]@{
         field = "dailyNotePerformanceChart"
         type = "daily-note-performance"
@@ -138,6 +162,12 @@ function Invoke-RendererSmokeTest([string]$RendererPath, [string]$WorkRoot) {
 
   $resultLine = @($stdout -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })[-1]
   $result = $resultLine | ConvertFrom-Json
+  if ([string]$result.paths.fansProvinceChart -ne $regionPngPath) {
+    throw "PGY chart renderer did not return fansProvinceChart: $resultLine"
+  }
+  if (-not (Test-Path -LiteralPath $regionPngPath -PathType Leaf)) {
+    throw "PGY chart renderer did not create the region PNG: $regionPngPath"
+  }
   if ([string]$result.paths.dailyNotePerformanceChart -ne $pngPath) {
     throw "PGY chart renderer did not return dailyNotePerformanceChart: $resultLine"
   }
@@ -152,6 +182,7 @@ function Invoke-RendererSmokeTest([string]$RendererPath, [string]$WorkRoot) {
   }
 
   foreach ($expected in @(
+    [ordered]@{ Path = $regionPngPath; Width = 784; Height = 464; Label = "region distribution" },
     [ordered]@{ Path = $pngPath; Width = 808; Height = 378; Label = "daily note" },
     [ordered]@{ Path = $overviewPngPath; Width = 2048; Height = 1066; Label = "blogger overview" }
   )) {
@@ -176,6 +207,9 @@ function Invoke-RendererSmokeTest([string]$RendererPath, [string]$WorkRoot) {
 
 if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
   throw "PGY chart renderer source not found: $sourcePath"
+}
+if (-not (Test-Path -LiteralPath $geoJsonPath -PathType Leaf)) {
+  throw "China province GeoJSON not found: $geoJsonPath"
 }
 
 $buildHash = Get-RendererBuildHash
@@ -229,7 +263,7 @@ run(sys.argv[1:])
 '@
   [System.IO.File]::WriteAllText($bootstrapPath, $bootstrap, [System.Text.UTF8Encoding]::new($false))
   Write-Output "Building PGY chart renderer with: $python"
-  & $python $bootstrapPath --noconfirm --clean --onefile --console --exclude-module numpy --name "pgy-chart-renderer" --distpath $distPath --workpath $workPath --specpath $specPath $sourcePath
+  & $python $bootstrapPath --noconfirm --clean --onefile --console --exclude-module numpy --add-data "$geoJsonPath;." --name "pgy-chart-renderer" --distpath $distPath --workpath $workPath --specpath $specPath $sourcePath
   if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller failed with exit code $LASTEXITCODE"
   }

@@ -176,12 +176,14 @@ test("旧任务无 fields 仍可按实际行 key 导出", async () => {
 
 test("带真实本地 PNG：xl/media 非空、drawing/relationship 存在、单元格不含本地图片路径", async () => {
   const pngPath = writeRealPng("chart-real.png");
-  const rows = [{ ...BLOGGER_ROW, fansProvinceChart: pngPath }];
+  const combinedPngPath = writeRealPng("gender-age-combined-real.png");
+  const rows = [{ ...BLOGGER_ROW, fansProvinceChart: pngPath, fansGenderAgeChart: combinedPngPath }];
   const task = { taskId: "hist-image-1", pluginId: "pgy", taskType: "blogger", fileName: "含图.xlsx", fields: [] };
   const { payload, filePath } = await exportToWorkbook("image.xlsx", task, rows);
 
   assert.equal(payload.mode, "two-row");
   assert.ok(payload.headers.some((h) => h.key === "fansProvinceChart"));
+  assert.ok(payload.headers.some((h) => h.key === "fansGenderAgeChart" && h.label === "性别分布+年龄分布"));
 
   const archive = await inspectArchive(filePath);
   assert.ok(archive.media.length > 0, "xl/media 应包含嵌入图片");
@@ -194,6 +196,7 @@ test("带真实本地 PNG：xl/media 非空、drawing/relationship 存在、单�
   // 任何单元格都不允许出现本地图片路径。
   for (const value of collectStringCells(filePath)) {
     assert.ok(!value.includes(pngPath), `单元格泄漏本地图片路径: ${value}`);
+    assert.ok(!value.includes(combinedPngPath), `单元格泄漏组合图片路径: ${value}`);
     assert.ok(!/chart-real\.png/.test(value), `单元格泄漏图片文件名: ${value}`);
   }
 });

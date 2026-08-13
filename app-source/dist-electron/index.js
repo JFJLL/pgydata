@@ -17835,6 +17835,7 @@ const dm = {
   fansCityChart: ["fansCityChart"],
   fansAgeChart: ["fansAgeChart"],
   fansGenderChart: ["fansGenderChart"],
+  fansGenderAgeChart: ["fansGenderAgeChart"],
   fansGrowthTrendChart: ["fansGrowthTrendChart"],
   dailyNotePerformanceChart: ["dailyNotePerformanceChart"],
   dailyNotePicturePerformanceChart: ["dailyNotePicturePerformanceChart"],
@@ -17948,7 +17949,8 @@ const dm = {
     "fansProvinceChart",
     "fansCityChart",
     "fansAgeChart",
-    "fansGenderChart"
+    "fansGenderChart",
+    "fansGenderAgeChart"
   ],
   fansTrend: ["fansGrowthTrendChart"],
   noteList10: ["avg10VideoRatio", "avg10ReadNum", "avg10LikeNum", "avg10CollectNum"]
@@ -17982,6 +17984,7 @@ const PYG_CHART_FIELDS = {
   city: "fansCityChart",
   age: "fansAgeChart",
   gender: "fansGenderChart",
+  genderAge: "fansGenderAgeChart",
   trend: "fansGrowthTrendChart",
   dailyNotePerformance: "dailyNotePerformanceChart",
   dailyNotePicturePerformance: "dailyNotePicturePerformanceChart",
@@ -18134,6 +18137,7 @@ function pgyWriteTrendChartPng(a, e) {
   });
 }
 const PGY_PYTHON_CHART_SCRIPT = String.raw`
+# -*- coding: utf-8 -*-
 import base64
 import io
 import json
@@ -18145,60 +18149,69 @@ import urllib.request
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-FONT_PATHS = [
+
+FONT_CANDIDATES = [
     r"C:\Windows\Fonts\msyh.ttc",
     r"C:\Windows\Fonts\msyhbd.ttc",
     r"C:\Windows\Fonts\simhei.ttf",
     r"C:\Windows\Fonts\simsun.ttc",
-    r"C:\Windows\Fonts\arial.ttf",
+    r"C:\Windows\Fonts\Deng.ttf",
 ]
 
+
 def load_font(size, bold=False):
-    paths = FONT_PATHS[:]
+    paths = list(FONT_CANDIDATES)
     if bold:
-        paths = [r"C:\Windows\Fonts\msyhbd.ttc"] + paths
-    for path in paths:
-        if os.path.exists(path):
-            try:
-                return ImageFont.truetype(path, size)
-            except Exception:
-                pass
+        paths = [r"C:\Windows\Fonts\msyhbd.ttc", r"C:\Windows\Fonts\simhei.ttf"] + paths
+    for font_path in paths:
+        try:
+            if os.path.exists(font_path):
+                return ImageFont.truetype(font_path, size)
+        except Exception:
+            pass
     return ImageFont.load_default()
+
 
 FONT_TITLE = load_font(24, True)
 FONT_TEXT = load_font(18)
 FONT_SMALL = load_font(15)
 
+REGION_MAP_FILENAME = "china-provinces.geojson"
+REGION_COLORS = ["#3f64f5", "#6f8cf2", "#9fb6ef", "#cad9ef", "#edf3fb"]
+REGION_EMPTY_COLOR = "#f3f7fc"
+_CHINA_FEATURES = None
+
+
 def ensure_dir(path):
-    folder = os.path.dirname(path)
-    if folder:
-        os.makedirs(folder, exist_ok=True)
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
 
-def to_num(value, default=0.0):
+
+def to_num(value):
     try:
-        n = float(value)
-        if math.isfinite(n):
-            return n
+        num = float(value)
     except Exception:
-        pass
-    return default
+        return 0.0
+    if math.isnan(num) or math.isinf(num):
+        return 0.0
+    if 0 < num <= 1:
+        return num * 100
+    return num
 
-def pct(value):
-    n = to_num(value)
-    if -1 <= n <= 1:
-        return n * 100
-    return n
 
 def text_bbox(draw, value, font):
     try:
         return draw.textbbox((0, 0), str(value), font=font)
     except Exception:
-        w, h = draw.textsize(str(value), font=font)
-        return (0, 0, w, h)
+        width, height = draw.textsize(str(value), font=font)
+        return (0, 0, width, height)
+
 
 def text_width(draw, value, font):
     box = text_bbox(draw, value, font)
     return box[2] - box[0]
+
 
 def ellipsize(draw, value, font, max_width):
     value = str(value or "")
@@ -18210,11 +18223,205 @@ def ellipsize(draw, value, font, max_width):
         out = out[:-1]
     return (out + suffix) if out else suffix
 
+
 def rounded_rect(draw, box, radius, fill):
     if hasattr(draw, "rounded_rectangle"):
         draw.rounded_rectangle(box, radius=radius, fill=fill)
     else:
         draw.rectangle(box, fill=fill)
+
+
+def normalize_region_name(value):
+    name = str(value or "").strip().replace("省", "").replace("市", "")
+    aliases = {
+        "内蒙古自治区": "内蒙古",
+        "广西壮族自治区": "广西",
+        "西藏自治区": "西藏",
+        "宁夏回族自治区": "宁夏",
+        "新疆维吾尔自治区": "新疆",
+        "香港特别行政区": "香港",
+        "澳门特别行政区": "澳门",
+    }
+    return aliases.get(name, name.replace("特别行政区", "").replace("自治区", ""))
+
+
+def region_rows(rows, limit=7):
+    cleaned = []
+    for row in rows or []:
+        name = str(row.get("name") or row.get("group") or "").strip()
+        value = to_num(row.get("value", row.get("percent")))
+        if name and value > 0:
+            cleaned.append({"name": name, "value": value})
+    cleaned.sort(key=lambda item: item["value"], reverse=True)
+    return cleaned[:limit]
+
+
+def china_geojson_candidates():
+    candidates = []
+    configured = os.environ.get("PGY_CHINA_GEOJSON_PATH")
+    if configured:
+        candidates.append(configured)
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if bundle_root:
+        candidates.append(os.path.join(bundle_root, REGION_MAP_FILENAME))
+    module_path = globals().get("__file__")
+    if module_path:
+        candidates.append(os.path.join(os.path.dirname(os.path.abspath(module_path)), REGION_MAP_FILENAME))
+    return candidates
+
+
+def load_china_features():
+    global _CHINA_FEATURES
+    if _CHINA_FEATURES is not None:
+        return _CHINA_FEATURES
+    for candidate in china_geojson_candidates():
+        try:
+            if os.path.isfile(candidate):
+                with open(candidate, "r", encoding="utf-8") as source:
+                    payload = json.load(source)
+                features = payload.get("features") or []
+                if features:
+                    _CHINA_FEATURES = features
+                    return _CHINA_FEATURES
+        except Exception:
+            continue
+    raise FileNotFoundError("China province GeoJSON was not found")
+
+
+def iter_geometry_polygons(geometry):
+    if not isinstance(geometry, dict):
+        return
+    geometry_type = geometry.get("type")
+    coordinates = geometry.get("coordinates") or []
+    if geometry_type == "Polygon":
+        yield coordinates
+    elif geometry_type == "MultiPolygon":
+        for polygon in coordinates:
+            yield polygon
+
+
+def region_color(value, values):
+    if value is None or value <= 0 or not values:
+        return REGION_EMPTY_COLOR
+    highest = max(values)
+    lowest = min(values)
+    if highest <= lowest:
+        return REGION_COLORS[0]
+    position = (highest - value) / (highest - lowest)
+    index = min(len(REGION_COLORS) - 1, max(0, int(position * len(REGION_COLORS))))
+    return REGION_COLORS[index]
+
+
+def save_region_distribution(chart):
+    data = chart.get("data") or {}
+    mode = "city" if data.get("mode") == "city" else "province"
+    province_rows = region_rows(data.get("provinceRows"))
+    city_rows = region_rows(data.get("cityRows"))
+    bars = city_rows if mode == "city" else province_rows
+    if not bars:
+        return False
+
+    scale = 2
+    width, height = 784, 464
+    img = Image.new("RGB", (width * scale, height * scale), "white")
+    draw = ImageDraw.Draw(img)
+    title_font = load_font(14 * scale)
+    subtitle_font = load_font(13 * scale)
+    ui_font = load_font(13 * scale)
+    legend_font = load_font(13 * scale)
+
+    def point(x, y):
+        return (int(round(x * scale)), int(round(y * scale)))
+
+    def box(coords):
+        return tuple(int(round(value * scale)) for value in coords)
+
+    def put(x, y, value, font, fill="#262626"):
+        draw.text(point(x, y), str(value), font=font, fill=fill)
+
+    def put_right(x, y, value, font, fill="#5f6b7a"):
+        text = str(value)
+        draw.text((int(round(x * scale)) - text_width(draw, text, font), int(round(y * scale))), text, font=font, fill=fill)
+
+    # Card frame, heading, summary, and segmented province/city state.
+    draw.rounded_rectangle(box((3, 1, 781, 463)), radius=10 * scale, fill="white", outline="#e7e7e7", width=scale)
+    put(18, 22, "地域分布", title_font, "#262626")
+    summary_prefix = "国内最高的三个城市：" if mode == "city" else "国内最高的三个省份："
+    summary_items = [f"{row['name']}（{row['value']:.1f}%）" for row in bars[:3]]
+    summary = summary_prefix + "、".join(summary_items)
+    summary = ellipsize(draw, summary, subtitle_font, 430 * scale)
+    put(18, 50, summary, subtitle_font, "#929292")
+
+    draw.rounded_rectangle(box((466, 57, 591, 91)), radius=5 * scale, fill="#f7f7f7")
+    active_left = 469 if mode == "province" else 529
+    active_right = 527 if mode == "province" else 588
+    draw.rounded_rectangle(box((active_left + 1, 61, active_right + 1, 89)), radius=4 * scale, fill="#ececec")
+    draw.rounded_rectangle(box((active_left, 60, active_right, 88)), radius=4 * scale, fill="white", outline="#e8e8e8", width=scale)
+    put(477, 67, "按省份", ui_font, "#262626" if mode == "province" else "#666666")
+    put(537, 67, "按城市", ui_font, "#262626" if mode == "city" else "#666666")
+
+    # Province choropleth using the same geographic proportions as the source view.
+    province_values = {normalize_region_name(row["name"]): row["value"] for row in province_rows}
+    mapped_values = [value for name, value in province_values.items() if name != "海外"]
+    min_lon, min_lat, max_lon, max_lat = 73.45, 3.35, 135.12, 53.60
+    map_left, map_top, map_right, map_bottom = 61, 96, 374, 433
+
+    def project(coordinate):
+        lon, lat = coordinate[:2]
+        x = map_left + (float(lon) - min_lon) / (max_lon - min_lon) * (map_right - map_left)
+        y = map_top + (max_lat - float(lat)) / (max_lat - min_lat) * (map_bottom - map_top)
+        return point(x, y)
+
+    for feature in load_china_features():
+        properties = feature.get("properties") or {}
+        name = normalize_region_name(properties.get("name"))
+        value = province_values.get(name)
+        fill = "white" if not name else region_color(value, mapped_values)
+        outline = "#d7dfe7"
+        for polygon in iter_geometry_polygons(feature.get("geometry")):
+            if not polygon:
+                continue
+            outer = [project(coordinate) for coordinate in polygon[0] if len(coordinate) >= 2]
+            if len(outer) >= 3:
+                draw.polygon(outer, fill=fill)
+                draw.line(outer + [outer[0]], fill=outline, width=scale, joint="curve")
+            for hole in polygon[1:]:
+                ring = [project(coordinate) for coordinate in hole if len(coordinate) >= 2]
+                if len(ring) >= 3:
+                    draw.polygon(ring, fill="white")
+                    draw.line(ring + [ring[0]], fill=outline, width=scale, joint="curve")
+
+    # Five-level legend.
+    put(21, 282, "高", legend_font, "#333333")
+    for index, color in enumerate(REGION_COLORS):
+        y = 306 + index * 24
+        draw.rounded_rectangle(box((18, y, 38, y + 14)), radius=4 * scale, fill=color)
+    put(21, 426, "低", legend_font, "#555555")
+
+    # Right-side ranked bars, matching the source's compact rhythm and labels.
+    axis_x = 498
+    draw.line((axis_x * scale, 105 * scale, axis_x * scale, 408 * scale), fill="#e6e9ee", width=scale)
+    max_value = max(row["value"] for row in bars)
+    bar_max_width = 204 if mode == "city" else 218
+    for index, row in enumerate(bars[:7]):
+        bar_y = 121 + index * 43
+        label_y = bar_y - 5
+        bar_label = row["name"]
+        if mode == "city" and normalize_region_name(bar_label) in {"其他", "其它", "其他地区"}:
+            bar_label = ""
+        put_right(489, label_y, bar_label, ui_font, "#626262")
+        bar_width = max(2, bar_max_width * row["value"] / max_value)
+        draw.rectangle(box((axis_x, bar_y, axis_x + bar_width, bar_y + 12)), fill="#3f64f5")
+        value_x = min(748, axis_x + bar_width + 5)
+        put(value_x, label_y, f"{row['value']:.1f}%", ui_font, "#536274")
+
+    resampling = getattr(Image, "Resampling", Image)
+    img = img.resize((width, height), getattr(resampling, "LANCZOS"))
+    output = chart.get("output")
+    ensure_dir(output)
+    img.save(output, "PNG", optimize=True)
+    return True
+
 
 def save_bar(chart):
     rows = []
@@ -18255,42 +18462,195 @@ def save_bar(chart):
     img.save(output, "PNG", optimize=True)
     return True
 
-def save_gender(chart):
-    data = chart.get("data") or {}
-    female = pct(data.get("female"))
-    male = pct(data.get("male"))
-    total = female + male
-    if total <= 0:
+
+def clean_age_label(value):
+    label = str(value or "").strip().replace("岁", "")
+    label = label.replace("～", "-").replace("~", "-").replace("—", "-")
+    return label
+
+
+def save_age_distribution(chart):
+    rows = []
+    for row in chart.get("rows") or []:
+        name = clean_age_label(row.get("name") or row.get("group"))
+        value = to_num(row.get("value", row.get("percent")))
+        if name and value > 0:
+            rows.append({"name": name, "value": value})
+    if not rows:
         return False
-    width = height = 520
-    img = Image.new("RGB", (width, height), "white")
+    rows = rows[:5]
+
+    width, height, scale = 382, 372, 4
+    img = Image.new("RGB", (width * scale, height * scale), "white")
     draw = ImageDraw.Draw(img)
-    draw.text((34, 24), "粉丝性别分布", font=FONT_TITLE, fill="#111827")
-    box = (118, 92, 402, 376)
-    female_angle = 360 * female / total
-    draw.pieslice(box, start=-90, end=-90 + female_angle, fill="#2563eb")
-    draw.pieslice(box, start=-90 + female_angle, end=270, fill="#7dd3fc")
-    draw.ellipse((184, 158, 336, 310), fill="white")
-    center = f"{female:.1f}%"
-    draw.text((260 - text_width(draw, center, FONT_TITLE) / 2, 220), center, font=FONT_TITLE, fill="#111827")
-    draw.text((220, 252), "女性占比", font=FONT_SMALL, fill="#64748b")
-    rounded_rect(draw, (98, 424, 120, 446), 4, "#2563eb")
-    draw.text((132, 420), f"女性 {female:.1f}%", font=FONT_TEXT, fill="#334155")
-    rounded_rect(draw, (314, 424, 336, 446), 4, "#7dd3fc")
-    draw.text((348, 420), f"男性 {male:.1f}%", font=FONT_TEXT, fill="#334155")
+    title_font = load_font(14 * scale)
+    body_font = load_font(12 * scale)
+
+    def put(x, y, value, font, fill):
+        draw.text((x * scale, y * scale), str(value), font=font, fill=fill)
+
+    # Header and the single-line dominant-age summary from the reference card.
+    put(15, 18, "年龄分布", title_font, "#262626")
+    dominant = max(rows, key=lambda row: row["value"])
+    put(15, 43, f"{dominant['name']}居多，占比{dominant['value']:.1f}%", body_font, "#8c8c8c")
+
+    axis_x, axis_top, axis_bottom = 55, 82, 343
+    draw.rectangle((axis_x * scale, axis_top * scale, 324 * scale, 134 * scale), fill="#f6f8fc")
+    draw.line((axis_x * scale, axis_top * scale, axis_x * scale, axis_bottom * scale), fill="#e4e6ea", width=scale)
+
+    # The source uses a fixed 0-40% horizontal scale and five 52px rows.
+    plot_width = 269
+    for index, row in enumerate(rows):
+        bar_y = 102 + index * 52
+        label_y = 97 + index * 52
+        label_width = text_width(draw, row["name"], body_font) / scale
+        put(axis_x - 8 - label_width, label_y, row["name"], body_font, "#595959")
+        bar_width = max(2, min(plot_width, plot_width * row["value"] / 40.0))
+        bar_color = "#5c84fc" if index == 0 else "#3a64ff"
+        draw.rectangle((axis_x * scale, bar_y * scale, (axis_x + bar_width) * scale, (bar_y + 12) * scale), fill=bar_color)
+        put(axis_x + bar_width + 5, label_y, f"{row['value']:.1f}%", body_font, "#596579")
+
+    resampling = getattr(Image, "Resampling", Image)
+    img = img.resize((width, height), getattr(resampling, "LANCZOS"))
     output = chart.get("output")
     ensure_dir(output)
     img.save(output, "PNG", optimize=True)
     return True
 
+
+def save_gender(chart):
+    data = chart.get("data") or {}
+    female = to_num(data.get("female"))
+    male = to_num(data.get("male"))
+    total = female + male
+    if total <= 0:
+        return False
+    width, height, scale = 379, 383, 4
+    img = Image.new("RGB", (width * scale, height * scale), "white")
+    draw = ImageDraw.Draw(img)
+    title_font = load_font(14 * scale)
+    body_font = load_font(12 * scale)
+
+    def put(x, y, value, font=body_font, fill="#262626"):
+        draw.text((x * scale, y * scale), str(value), font=font, fill=fill)
+
+    put(15, 19, "性别分布", title_font, "#262626")
+    dominant_label, dominant_value = ("女性", female) if female >= male else ("男性", male)
+    put(15, 44, f"{dominant_label}居多，占比{dominant_value:.1f}%", body_font, "#8c8c8c")
+
+    # 140px outer diameter, 108px inner diameter; the blue female segment
+    # starts at 12 o'clock and follows the clockwise order in the reference.
+    donut_box = (120 * scale, 135 * scale, 260 * scale, 275 * scale)
+    female_angle = 360 * female / total
+    draw.pieslice(donut_box, start=-90, end=-90 + female_angle, fill="#3a64ff")
+    draw.pieslice(donut_box, start=-90 + female_angle, end=270, fill="#91d3ed")
+    draw.ellipse((136 * scale, 151 * scale, 244 * scale, 259 * scale), fill="white")
+
+    # Fixed elbow leaders and outside labels mirror the captured chart state.
+    blue_width = 2 * scale
+    draw.line((255 * scale, 187 * scale, 265 * scale, 182 * scale, 281 * scale, 182 * scale), fill="#3a64ff", width=blue_width, joint="curve")
+    draw.line((121 * scale, 224 * scale, 112 * scale, 227 * scale, 99 * scale, 227 * scale), fill="#91d3ed", width=blue_width, joint="curve")
+    put(286, 174, f"{female:.2f}%")
+    left_text = f"{male:.2f}%"
+    left_x = 92 - text_width(draw, left_text, body_font) / scale
+    put(left_x, 219, left_text)
+
+    # Compact centered legend.
+    draw.ellipse((143 * scale, 314 * scale, 149 * scale, 320 * scale), fill="#3a64ff")
+    put(154, 307, "女性")
+    draw.ellipse((202 * scale, 314 * scale, 208 * scale, 320 * scale), fill="#91d3ed")
+    put(213, 307, "男性")
+
+    resampling = getattr(Image, "Resampling", Image)
+    img = img.resize((width, height), getattr(resampling, "LANCZOS"))
+    output = chart.get("output")
+    ensure_dir(output)
+    img.save(output, "PNG", optimize=True)
+    return True
+
+
+def save_gender_age_distribution(chart):
+    data = chart.get("data") or {}
+    gender = data.get("gender") or {}
+    female = to_num(gender.get("female"))
+    male = to_num(gender.get("male"))
+    total = female + male
+    rows = []
+    for row in data.get("rows") or []:
+        name = clean_age_label(row.get("name") or row.get("group"))
+        value = to_num(row.get("value", row.get("percent")))
+        if name and value > 0:
+            rows.append({"name": name, "value": value})
+    rows = rows[:5]
+    if total <= 0 or not rows:
+        return False
+
+    width, height, scale = 783, 390, 4
+    img = Image.new("RGB", (width * scale, height * scale), "white")
+    draw = ImageDraw.Draw(img)
+    title_font = load_font(14 * scale)
+    body_font = load_font(12 * scale)
+
+    def put(x, y, value, font=body_font, fill="#262626"):
+        draw.text((x * scale, y * scale), str(value), font=font, fill=fill)
+
+    # Two independent cards on the single exported canvas.
+    draw.rounded_rectangle((2 * scale, 1 * scale, 383 * scale, 389 * scale), radius=8 * scale, fill="white", outline="#f0f0f0", width=scale)
+    draw.rounded_rectangle((399 * scale, 1 * scale, 782 * scale, 389 * scale), radius=8 * scale, fill="white", outline="#f0f0f0", width=scale)
+
+    put(18, 22, "性别分布", title_font)
+    dominant_label, dominant_value = ("女性", female) if female >= male else ("男性", male)
+    put(18, 47, f"{dominant_label}居多，占比{dominant_value:.1f}%", fill="#8c8c8c")
+
+    donut_box = (123 * scale, 138 * scale, 263 * scale, 278 * scale)
+    female_angle = 360 * female / total
+    draw.pieslice(donut_box, start=-90, end=-90 + female_angle, fill="#3a64ff")
+    draw.pieslice(donut_box, start=-90 + female_angle, end=270, fill="#91d3ed")
+    draw.ellipse((139 * scale, 154 * scale, 247 * scale, 262 * scale), fill="white")
+    draw.line((258 * scale, 190 * scale, 268 * scale, 185 * scale, 284 * scale, 185 * scale), fill="#3a64ff", width=2 * scale, joint="curve")
+    draw.line((124 * scale, 227 * scale, 115 * scale, 230 * scale, 102 * scale, 230 * scale), fill="#91d3ed", width=2 * scale, joint="curve")
+    put(289, 177, f"{female:.2f}%")
+    male_text = f"{male:.2f}%"
+    put(95 - text_width(draw, male_text, body_font) / scale, 222, male_text)
+    draw.ellipse((146 * scale, 317 * scale, 152 * scale, 323 * scale), fill="#3a64ff")
+    put(157, 310, "女性")
+    draw.ellipse((205 * scale, 317 * scale, 211 * scale, 323 * scale), fill="#91d3ed")
+    put(216, 310, "男性")
+
+    put(415, 22, "年龄分布", title_font)
+    dominant_age = max(rows, key=lambda row: row["value"])
+    put(415, 47, f"{dominant_age['name']}居多，占比{dominant_age['value']:.1f}%", fill="#8c8c8c")
+    axis_x, axis_top, axis_bottom = 454, 96, 349
+    draw.line((axis_x * scale, axis_top * scale, axis_x * scale, axis_bottom * scale), fill="#e4e6ea", width=scale)
+    plot_width = 269
+    for index, row in enumerate(rows):
+        bar_y = 108 + index * 52
+        label_y = 103 + index * 52
+        label_width = text_width(draw, row["name"], body_font) / scale
+        put(axis_x - 7 - label_width, label_y, row["name"], fill="#595959")
+        bar_width = max(2, min(plot_width, plot_width * row["value"] / 40.0))
+        draw.rectangle(((axis_x + 1) * scale, bar_y * scale, (axis_x + 1 + bar_width) * scale, (bar_y + 12) * scale), fill="#3a64ff")
+        put(axis_x + 1 + bar_width + 5, label_y, f"{row['value']:.1f}%", fill="#596579")
+
+    resampling = getattr(Image, "Resampling", Image)
+    img = img.resize((width, height), getattr(resampling, "LANCZOS"))
+    output = chart.get("output")
+    ensure_dir(output)
+    img.save(output, "PNG", optimize=True)
+    return True
+
+
 def trend_points(rows):
-    points = []
+    points_by_date = {}
     for row in rows or []:
         value = to_num(row.get("num", row.get("value")))
         date = str(row.get("dateKey", row.get("date", "")) or "")
-        if math.isfinite(value):
-            points.append({"date": date, "num": value})
-    return points
+        digits = re.sub(r"\D", "", date)
+        date_key = digits[-8:] if len(digits) >= 8 else date
+        if date_key and math.isfinite(value):
+            points_by_date[date_key] = {"date": date, "date_key": date_key, "num": value}
+    return sorted(points_by_date.values(), key=lambda point: point["date_key"])
+
 
 def format_integer(value):
     if value is None or value == "":
@@ -18534,9 +18894,11 @@ def save_blogger_overview(chart):
     font_22 = load_font(22)
     font_24 = load_font(24)
     font_24_bold = load_font(24, True)
+    font_26 = load_font(26)
     font_26_bold = load_font(26, True)
     font_27 = load_font(27)
     font_27_bold = load_font(27, True)
+    font_28 = load_font(28)
     font_28_bold = load_font(28, True)
     font_31_bold = load_font(31, True)
     font_32_bold = load_font(32, True)
@@ -18565,14 +18927,33 @@ def save_blogger_overview(chart):
             output = ellipsize(draw, output, font, max_width)
         draw.text((x, y), output, font=font, fill=fill)
 
+    icon_images = data.get("overviewIconImages") if isinstance(data.get("overviewIconImages"), dict) else {}
+
+    def overview_icon(key, size, tint=None):
+        icon = load_inline_image(icon_images.get(key), size)
+        if icon is None:
+            return None
+        if tint is not None:
+            alpha = icon.getchannel("A")
+            icon = Image.new("RGBA", icon.size, tint)
+            icon.putalpha(alpha)
+        return icon
+
+    def paste_overview_icon(key, x, y, size, tint=None):
+        icon = overview_icon(key, size, tint)
+        if icon is None:
+            return False
+        img.paste(icon, (int(x), int(y)), icon)
+        return True
+
     # Static PGY page chrome.
     box((96, 20, 616, 118), 14)
     box((126, 42, 340, 90), 5, "white", "#eeeeee")
     box((340, 42, 586, 90), 5, "#f6f6f6")
-    put(188, 52, "笔记主页", font_24_bold)
+    put(188, 52, "笔记主页", font_24)
     put(424, 52, "直播主页", font_24, "#666666")
     box((650, 20, 1948, 94), 14)
-    put(712, 41, "数据概览", font_26_bold)
+    put(712, 41, "数据概览", font_24)
     put(856, 41, "笔记数据", font_24, "#777777")
     put(996, 41, "粉丝分析", font_24, "#777777")
     line(700, 92, 826, 92, "#c73549", 2)
@@ -18585,40 +18966,43 @@ def save_blogger_overview(chart):
     avatar = load_overview_avatar(data.get("avatar"), 104)
     if avatar:
         img.paste(avatar, (126, 164), avatar)
-    nickname_text = ellipsize(draw, value("nickname"), font_24_bold, 278)
-    icon_x = draw_nickname_with_emoji(img, draw, nickname_text, 252, 168, font_24_bold, data.get("nicknameEmojiImages")) + 16
+    nickname_text = ellipsize(draw, value("nickname"), font_22, 278)
+    icon_x = draw_nickname_with_emoji(img, draw, nickname_text, 252, 170, font_22, data.get("nicknameEmojiImages")) + 8
     gender = value("genderText")
     if gender in ("女", "男"):
-        person_color = "#ff6f91" if gender == "女" else "#4d7ed8"
-        person_background = "#fff0f4" if gender == "女" else "#e9f1ff"
-        draw.ellipse((icon_x - 12, 173, icon_x + 12, 197), fill=person_background)
-        draw.ellipse((icon_x - 4, 176, icon_x + 4, 184), fill=person_color)
-        draw.pieslice((icon_x - 7, 185, icon_x + 7, 199), 180, 360, fill=person_color)
-        icon_x += 36
+        gender_key = "genderFemale" if gender == "女" else "genderMale"
+        paste_overview_icon(gender_key, icon_x, 177, 16)
+        icon_x += 24
     health_level = data.get("healthLevel")
+    health_risk = data.get("healthRisk") is True or (
+        isinstance(health_level, (int, float)) and int(health_level) != 2
+    )
     if isinstance(health_level, (int, float)):
-        shield_b64 = PGY_OVERVIEW_SHIELD_PNG.get(2 if int(health_level) == 2 else 0)
-        shield_icon = load_inline_image("data:image/png;base64," + shield_b64, 22)
+        health_key = "healthRisk" if health_risk else "health"
+        shield_icon = overview_icon(health_key, 16)
+        if shield_icon is None:
+            shield_b64 = PGY_OVERVIEW_SHIELD_PNG.get(0 if health_risk else 2)
+            shield_icon = load_inline_image("data:image/png;base64," + shield_b64, 16)
         if shield_icon is not None:
-            img.paste(shield_icon, (int(icon_x - 11), 173), shield_icon)
+            img.paste(shield_icon, (int(icon_x), 177), shield_icon)
     put(252, 216, "小红书号：", font_19, "#999999")
-    put(354, 216, value("redId"), font_20, "#2878ff", 165)
-    draw.rectangle((530, 222, 541, 234), outline="#999999")
-    draw.rectangle((526, 226, 537, 238), outline="#999999")
+    red_id_text = ellipsize(draw, value("redId"), font_20, 165)
+    put(354, 216, red_id_text, font_20, "#2878ff")
+    copy_icon_x = min(520, 354 + text_width(draw, red_id_text, font_20) + 6)
+    paste_overview_icon("copy", copy_icon_x, 222, 14)
     summary_text = value("profileSummaryText")
     has_summary = summary_text != "-"
     if has_summary:
         put(252, 257, summary_text, font_18, "#999999", 210)
     info_y = 289 if has_summary else 258
-    put(252, info_y, f"● {value('location')}", font_18, "#999999", 150)
-    draw.rectangle((420, info_y + 4, 432, info_y + 18), outline="#777777", width=2)
-    line(424, info_y + 7, 424, info_y + 15, "#777777")
-    line(428, info_y + 7, 428, info_y + 15, "#777777")
+    paste_overview_icon("location", 252, info_y + 3, 14)
+    put(274, info_y, value("location"), font_18, "#999999", 112)
+    paste_overview_icon("organization", 420, info_y + 3, 14)
     put(440, info_y, value("mcn"), font_18, "#5273b4", 130)
     travel_area = value("travelAreaText")
     has_travel = travel_area != "-"
     if has_travel:
-        draw.polygon([(252, info_y + 48), (272, info_y + 36), (262, info_y + 52)], fill="#b9bec7")
+        paste_overview_icon("flyable", 248, info_y + 22, 28)
         put(280, info_y + 32, travel_area, font_18, "#595959", 200)
     tag_y = info_y + (65 if has_travel else 35)
     tags = data.get("categoryTags") if isinstance(data.get("categoryTags"), list) else []
@@ -18638,26 +19022,26 @@ def save_blogger_overview(chart):
     line(126, 500, 586, 500, "#f1f1f1")
     box((126, 530, 336, 586), 6, "#f7f7f7")
     box((352, 530, 586, 586), 6, "#f23b49")
-    put(190, 545, "☆ 收藏", font_22)
-    draw.ellipse((406, 548, 420, 562), outline="white", width=2)
-    draw.ellipse((416, 548, 430, 562), outline="white", width=2)
+    paste_overview_icon("favorite", 188, 550, 16)
+    put(216, 545, "收藏", font_22)
+    paste_overview_icon("invite", 410, 550, 16)
     put(442, 545, "邀约", font_22, "white")
 
     box((96, 650, 616, 1040), 14)
-    put(126, 676, "合作报价", font_28_bold)
+    put(126, 676, "合作报价", font_28)
     for y, label, key in [
         (736, "图文笔记一口价", "picturePriceText"),
         (882, "视频笔记一口价", "videoPriceText"),
     ]:
         box((126, y, 586, y + 126), 5, "white", "#e8e8e8")
         put(158, y + 26, label, font_22, "#595959")
-        put(158, y + 70, value(key), font_27)
-        draw.ellipse((538, y + 48, 566, y + 76), outline="#d73c51", width=3)
-        put(545, y + 47, "+", font_22, "#d73c51")
+        put(158, y + 70, "暂停接单" if health_risk else value(key), font_22)
+        if not health_risk:
+            paste_overview_icon("cooperationPrice", 544, y + 54, 16)
 
     # Overview content column.
     box((650, 112, 1948, 1040), 14)
-    put(700, 142, "数据概览", font_28_bold)
+    put(700, 142, "数据概览", font_28)
     line(650, 212, 1948, 212, "#eeeeee")
     box((700, 240, 1898, 318), 9, "#f7f7f7")
     summary = [
@@ -18673,10 +19057,8 @@ def save_blogger_overview(chart):
         line(x, 257, x, 302, "#dddddd")
 
     box((700, 344, 1898, 636), 9, "white", "#e8e8e8")
-    box((726, 372, 760, 406), 8, "#fff0e7")
-    for y in (381, 388, 395):
-        line(736, y, 750, y, "#e8753a", 2)
-    put(778, 371, "笔记数据", font_27_bold)
+    paste_overview_icon("notes", 726, 377, 24)
+    put(766, 374, "笔记数据", font_24)
     box((726, 430, 838, 478), 6, "#fff0f1")
     put(748, 439, "按规模", font_21, "#d43d51")
     box((850, 430, 950, 478), 6, "#f7f7f7")
@@ -18693,18 +19075,17 @@ def save_blogger_overview(chart):
     for x, label, value_key, peer_key in metrics:
         put(x, 505, label, font_21, "#666666")
         dashed(x, 535, x + 114)
-        put(x, 548, value(value_key), font_31_bold, "#111111")
+        put(x, 552, value(value_key), font_27_bold, "#111111")
         put(x, 585, value(peer_key), font_19, "#777777")
     line(1078, 506, 1078, 608)
     line(1500, 506, 1500, 608)
 
     box((700, 662, 1274, 902), 9, "white", "#e8e8e8")
-    box((726, 690, 760, 724), 8, "#e8f4ff")
-    put(738, 696, "◇", font_19, "#4a91d8")
-    put(778, 689, "服务表现", font_27_bold)
+    paste_overview_icon("service", 726, 695, 24)
+    put(766, 692, "服务表现", font_24)
     put(726, 755, "近7天活跃天数", font_21, "#666666")
     dashed(726, 786, 862)
-    put(726, 800, value("activeDaysText"), font_31_bold, "#111111")
+    put(726, 804, value("activeDaysText"), font_27_bold, "#111111")
     active_label = value("activeLabelText")
     if active_label != "-":
         active_width = text_width(draw, active_label, font_18) + 20
@@ -18713,7 +19094,7 @@ def save_blogger_overview(chart):
     line(986, 758, 986, 866)
     put(1020, 755, "邀约48小时回复率", font_21, "#666666")
     dashed(1020, 786, 1180)
-    put(1020, 800, value("replyRateText"), font_31_bold, "#111111")
+    put(1020, 804, value("replyRateText"), font_27_bold, "#111111")
     reply_label = value("replyLabelText")
     if reply_label != "-":
         reply_width = text_width(draw, reply_label, font_18) + 20
@@ -18721,16 +19102,11 @@ def save_blogger_overview(chart):
         put(1030, 850, reply_label, font_18, "#5273b4")
 
     box((1300, 662, 1898, 902), 9, "white", "#e8e8e8")
-    box((1326, 690, 1360, 724), 8, "#e8f7f4")
-    line(1335, 713, 1335, 701, "#58aa9b", 2)
-    line(1335, 713, 1351, 713, "#58aa9b", 2)
-    line(1338, 709, 1343, 704, "#58aa9b", 2)
-    line(1343, 704, 1348, 707, "#58aa9b", 2)
-    line(1348, 707, 1353, 698, "#58aa9b", 2)
-    put(1378, 689, "成长表现", font_27_bold)
+    paste_overview_icon("growth", 1326, 695, 24)
+    put(1366, 692, "成长表现", font_24)
     put(1326, 755, "粉丝量变化幅度", font_21, "#666666")
     dashed(1326, 786, 1464)
-    put(1326, 800, value("fansGrowthText"), font_31_bold, "#111111")
+    put(1326, 804, value("fansGrowthText"), font_27_bold, "#111111")
     put(1326, 846, value("fansGrowthPeerText"), font_19, "#777777")
 
     output = chart.get("output")
@@ -18738,51 +19114,138 @@ def save_blogger_overview(chart):
     img.save(output, "PNG", optimize=True)
     return True
 
+
 def save_trend(chart):
-    rows = trend_points(chart.get("rows"))
+    rows = trend_points(chart.get("rows"))[-30:]
     if len(rows) < 2:
         return False
-    width, height = 800, 430
-    left, right, top, bottom = 78, 34, 74, 58
-    plot_w = width - left - right
-    plot_h = height - top - bottom
+
+    width, height, scale = 813, 419, 4
+    img = Image.new("RGB", (width * scale, height * scale), "white")
+    draw = ImageDraw.Draw(img)
+    title_font = load_font(16 * scale)
+    ui_font = load_font(13 * scale)
+    axis_font = load_font(13 * scale)
+    info_font = load_font(8 * scale)
+
+    def put(x, y, value, font=ui_font, fill="#262626", anchor=None):
+        draw.text((x * scale, y * scale), str(value), font=font, fill=fill, anchor=anchor)
+
+    def web_box(box, radius, fill, outline=None, line_width=1):
+        scaled = tuple(round(value * scale) for value in box)
+        if hasattr(draw, "rounded_rectangle"):
+            draw.rounded_rectangle(
+                scaled,
+                radius=radius * scale,
+                fill=fill,
+                outline=outline,
+                width=line_width * scale,
+            )
+        else:
+            draw.rectangle(scaled, fill=fill, outline=outline, width=line_width * scale)
+
+    # Fixed PGY web header and filters.
+    web_box((25, 17, 29, 31), 2, "#ff2442")
+    put(35, 15, "粉丝趋势", title_font)
+    web_box((25, 60, 197, 92), 5, "#f7f7f7")
+    web_box((29, 64, 109, 88), 4, "white", outline="#eeeeee")
+    put(36, 69, "粉丝总量")
+    put(120, 69, "粉丝增量", fill="#666666")
+    for center_x in (95, 179):
+        draw.ellipse(
+            ((center_x - 5) * scale, 71 * scale, (center_x + 5) * scale, 81 * scale),
+            outline="#999999",
+            width=scale,
+        )
+        put(center_x, 76.4, "i", info_font, "#777777", anchor="mm")
+    web_box((684, 60, 804, 92), 5, "#f7f7f7")
+    put(695, 69, "近30日")
+    draw.line((780 * scale, 73 * scale, 784 * scale, 77 * scale, 788 * scale, 73 * scale), fill="#888888", width=scale)
+
+    axis_left, axis_right = 75, 785
+    plot_left, plot_right = 87, 772
+    plot_top, plot_bottom = 122, 382
+    plot_height = plot_bottom - plot_top
     values = [row["num"] for row in rows]
     min_v = min(values)
     max_v = max(values)
-    span = max(max_v - min_v, 1)
-    img = Image.new("RGB", (width, height), "white")
-    draw = ImageDraw.Draw(img)
-    draw.text((34, 24), "粉丝增长趋势", font=FONT_TITLE, fill="#111827")
-    for i in range(5):
-        y = top + plot_h * i / 4
-        draw.line((left, y, width - right, y), fill="#e5e7eb", width=1)
-        label_v = max_v - span * i / 4
-        label = f"{label_v/10000:.1f}w" if abs(label_v) >= 10000 else str(int(round(label_v)))
-        draw.text((left - 12 - text_width(draw, label, FONT_SMALL), y - 8), label, font=FONT_SMALL, fill="#64748b")
-    def x_at(i):
-        return left + plot_w * i / (len(rows) - 1)
-    def y_at(v):
-        return top + (max_v - v) / span * plot_h
-    pts = [(x_at(i), y_at(row["num"])) for i, row in enumerate(rows)]
-    for a, b in zip(pts, pts[1:]):
-        draw.line((a[0], a[1], b[0], b[1]), fill="#2563eb", width=4)
-    for x, y in pts:
-        draw.ellipse((x - 4, y - 4, x + 4, y + 4), fill="#2563eb")
-    step = max(1, len(rows) // 6)
-    for i, row in enumerate(rows):
-        if i % step == 0 or i == len(rows) - 1:
-            label = row["date"]
-            if len(label) >= 8 and label.isdigit():
-                label = label[4:6] + "/" + label[6:8]
-            x = x_at(i)
-            draw.text((x - text_width(draw, label, FONT_SMALL) / 2, height - 38), label, font=FONT_SMALL, fill="#64748b")
+
+    raw_step = max((max_v - min_v) / 5.0, 1.0)
+    magnitude = 10 ** math.floor(math.log10(raw_step))
+    step = 10 * magnitude
+    for candidate in (1, 2, 3, 5, 10):
+        candidate_step = candidate * magnitude
+        if candidate_step >= raw_step:
+            step = candidate_step
+            break
+    axis_max = math.ceil(max_v / step) * step
+    axis_min = axis_max - 5 * step
+    while min_v < axis_min:
+        axis_max += step
+        axis_min = axis_max - 5 * step
+
+    for index in range(5):
+        y = plot_top + index * 52
+        for dash_x in range(axis_left, axis_right, 6):
+            draw.line(
+                (dash_x * scale, y * scale, min(dash_x + 4, axis_right) * scale, y * scale),
+                fill="#e8e8e8",
+                width=scale,
+            )
+        label_value = axis_max - index * step
+        label = f"{label_value / 10000:.2f}w" if abs(label_value) >= 10000 else str(int(round(label_value)))
+        put(axis_left - 2, y, label, axis_font, "#666666", anchor="rm")
+    draw.line((axis_left * scale, plot_bottom * scale, axis_right * scale, plot_bottom * scale), fill="#cccccc", width=scale)
+
+    def x_at(index):
+        return plot_left + (plot_right - plot_left) * index / (len(rows) - 1)
+
+    def y_at(value):
+        return plot_bottom - (value - axis_min) / (axis_max - axis_min) * plot_height
+
+    points = [(x_at(index), y_at(row["num"])) for index, row in enumerate(rows)]
+    # Smooth through every daily point. This changes only the segment shape; no day is sampled out.
+    curve = []
+    for index in range(len(points) - 1):
+        p0 = points[max(0, index - 1)]
+        p1 = points[index]
+        p2 = points[index + 1]
+        p3 = points[min(len(points) - 1, index + 2)]
+        for sample in range(12):
+            t = sample / 12.0
+            t2 = t * t
+            t3 = t2 * t
+            x = 0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3)
+            y = 0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3)
+            curve.append((round(x * scale), round(y * scale)))
+    curve.append((round(points[-1][0] * scale), round(points[-1][1] * scale)))
+    draw.line(curve, fill="#3f6eff", width=2 * scale, joint="curve")
+
+    def date_label(value):
+        digits = re.sub(r"\D", "", str(value or ""))
+        if len(digits) >= 8:
+            return f"{digits[-4:-2]}/{digits[-2:]}"
+        match = re.search(r"(\d{1,2})\D+(\d{1,2})$", str(value or ""))
+        return f"{int(match.group(1)):02d}/{int(match.group(2)):02d}" if match else str(value or "")
+
+    if len(rows) >= 25:
+        label_indices = [0, 6, 12, 18, 24]
+    else:
+        label_indices = sorted({round(index * (len(rows) - 1) / 4) for index in range(5)})
+    for index in label_indices:
+        put(x_at(index), 397, date_label(rows[index]["date"]), axis_font, "#666666", anchor="ms")
+
+    resampling = getattr(Image, "Resampling", Image)
+    img = img.resize((width, height), getattr(resampling, "LANCZOS"))
     output = chart.get("output")
     ensure_dir(output)
     img.save(output, "PNG", optimize=True)
     return True
 
+
 def main():
-    payload = json.loads(sys.stdin.buffer.read().decode("utf-8"))
+    raw = sys.stdin.buffer.read()
+    payload = json.loads(raw.decode("utf-8"))
     paths = {}
     errors = {}
     for chart in payload.get("charts") or []:
@@ -18792,8 +19255,14 @@ def main():
             ok = False
             if chart_type == "bar":
                 ok = save_bar(chart)
+            elif chart_type == "age-distribution":
+                ok = save_age_distribution(chart)
+            elif chart_type == "region-distribution":
+                ok = save_region_distribution(chart)
             elif chart_type == "gender":
                 ok = save_gender(chart)
+            elif chart_type == "gender-age-distribution":
+                ok = save_gender_age_distribution(chart)
             elif chart_type == "trend":
                 ok = save_trend(chart)
             elif chart_type == "daily-note-performance":
@@ -18805,11 +19274,15 @@ def main():
         except Exception as exc:
             if field:
                 errors[field] = str(exc)
-    print(json.dumps({"ok": True, "paths": paths, "errors": errors}, ensure_ascii=False))
+    output = json.dumps({"ok": True, "paths": paths, "errors": errors}, ensure_ascii=False)
+    sys.stdout.buffer.write((output + "\n").encode("utf-8"))
+
 
 if __name__ == "__main__":
     main()
+
 `;
+
 function pgyChartRendererCandidates() {
   const a = [];
   for (const e of [process.env.PGY_CHART_RENDERER, process.env.PGY_RENDERER_EXE])
@@ -18827,12 +19300,27 @@ function pgyPythonCandidates() {
     e && a.push({ cmd: e, args: [] });
   return a.push({ cmd: "python", args: [] }, { cmd: "py", args: ["-3"] }), a;
 }
+function pgyChinaGeoJsonPath() {
+  const a = [
+    process.env.PGY_CHINA_GEOJSON_PATH,
+    process.resourcesPath ? Oe(process.resourcesPath, "app.asar", "dist-electron", "static", "china-provinces.geojson") : "",
+    process.resourcesPath ? Oe(process.resourcesPath, "dist-electron", "static", "china-provinces.geojson") : "",
+    Oe(process.cwd(), "app-source", "dist-electron", "static", "china-provinces.geojson"),
+    Oe(process.cwd(), "dist-electron", "static", "china-provinces.geojson")
+  ];
+  return a.find((e) => e && kt(e)) || "";
+}
+function pgyChartRendererEnv() {
+  const a = { ...process.env }, e = pgyChinaGeoJsonPath();
+  return e && (a.PGY_CHINA_GEOJSON_PATH = e), a;
+}
 function pgySpawnChartRenderer(a, e, t) {
   return new Promise((n, s) => {
     let i = "", o = "", r = !1;
     const c = Tr(a, [], {
       windowsHide: !0,
-      stdio: ["pipe", "pipe", "pipe"]
+      stdio: ["pipe", "pipe", "pipe"],
+      env: pgyChartRendererEnv()
     }), u = (p) => {
       r || (r = !0, clearTimeout(l), p ? s(p) : n(i));
     }, l = setTimeout(() => {
@@ -18856,7 +19344,8 @@ function pgySpawnPythonChart(a, e, t, n) {
     let o = "", r = "", c = !1;
     const u = Tr(a, [...e, "-c", PGY_PYTHON_CHART_SCRIPT], {
       windowsHide: !0,
-      stdio: ["pipe", "pipe", "pipe"]
+      stdio: ["pipe", "pipe", "pipe"],
+      env: pgyChartRendererEnv()
     }), l = (h) => {
       c || (c = !0, clearTimeout(p), h ? i(h) : s(o));
     }, p = setTimeout(() => {
@@ -18938,17 +19427,51 @@ function pgyGenderChartSvg(a) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="520" height="520" viewBox="0 0 520 520"><rect width="100%" height="100%" fill="white"/><path d="M ${i} ${o} m 0 -${r} a ${r} ${r} 0 1 1 0 ${r * 2} a ${r} ${r} 0 1 1 0 -${r * 2}" fill="#87cefa"/><path d="${v}" fill="#3b7ddd"/><circle cx="${i}" cy="${o}" r="76" fill="white"/><text x="260" y="254" text-anchor="middle" font-size="22" font-weight="700" fill="#111827">性别分布</text><text x="260" y="282" text-anchor="middle" font-size="18" fill="#64748b">女性 ${e.toFixed(2)}% / 男性 ${t.toFixed(2)}%</text><rect x="98" y="444" width="18" height="18" fill="#3b7ddd"/><text x="126" y="459" font-size="18" fill="#334155">女性 ${e.toFixed(2)}%</text><rect x="310" y="444" width="18" height="18" fill="#87cefa"/><text x="338" y="459" font-size="18" fill="#334155">男性 ${t.toFixed(2)}%</text></svg>`;
 }
 function pgyTrendChartSvg(a) {
-  const e = Array.isArray(a) ? a.map((t) => ({
-    date: String(t.dateKey ?? t.date ?? ""),
-    num: Number(t.num ?? t.value ?? 0)
-  })).filter((t) => t.date && Number.isFinite(t.num)) : [];
-  if (e.length < 2) return "";
-  const t = 760, n = 420, s = 70, i = 28, o = 44, r = 58, c = Math.min(...e.map((b) => b.num)), u = Math.max(...e.map((b) => b.num)), l = u === c ? 1 : u - c, p = (b) => s + b / (e.length - 1) * (t - s - i), h = (b) => n - r - (b - c) / l * (n - o - r), m = e.map((b, S) => `${p(S).toFixed(1)},${h(b.num).toFixed(1)}`).join(" "), f = Array.from({ length: 5 }, (_, b) => c + l * b / 4), g = f.map((b) => {
-    const S = h(b);
-    return `<line x1="${s}" y1="${S}" x2="${t - i}" y2="${S}" stroke="#e5e7eb" stroke-dasharray="4 4"/><text x="${s - 10}" y="${S + 5}" text-anchor="end" font-size="14" fill="#64748b">${b >= 1e4 ? (b / 1e4).toFixed(2) + "w" : Math.round(b)}</text>`;
-  }).join(""), v = e.map((b, S) => S % 5 === 0 || S === e.length - 1 ? `<text x="${p(S)}" y="${n - 24}" text-anchor="middle" font-size="13" fill="#64748b">${pgyChartEscape(String(b.date).slice(4, 6) + "/" + String(b.date).slice(6, 8))}</text>` : "").join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${t}" height="${n}" viewBox="0 0 ${t} ${n}"><rect width="100%" height="100%" fill="white"/><text x="${s}" y="26" font-size="20" font-weight="700" fill="#111827">粉丝增长趋势</text>${g}<polyline fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="${m}"/>${v}</svg>`;
+  const byDate = new Map((Array.isArray(a) ? a : []).map((row) => ({
+    date: String(row.dateKey ?? row.date ?? ""),
+    num: Number(row.num ?? row.value ?? 0),
+  })).filter((row) => row.date && Number.isFinite(row.num)).map((row) => {
+    const digits = row.date.replace(/\D/g, "");
+    return [digits.length >= 8 ? digits.slice(-8) : row.date, row];
+  }));
+  const rows = Array.from(byDate.entries()).sort(([left], [right]) => left.localeCompare(right)).map(([, row]) => row).slice(-30);
+  if (rows.length < 2) return "";
+
+  const width = 813, height = 419;
+  const axisLeft = 75, axisRight = 785, plotLeft = 87, plotRight = 772, plotTop = 122, plotBottom = 382;
+  const values = rows.map((row) => row.num);
+  const min = Math.min(...values), max = Math.max(...values);
+  const rawStep = Math.max((max - min) / 5, 1);
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const step = [1, 2, 3, 5, 10].map((value) => value * magnitude).find((value) => value >= rawStep) ?? 10 * magnitude;
+  let axisMax = Math.ceil(max / step) * step;
+  let axisMin = axisMax - 5 * step;
+  while (min < axisMin) { axisMax += step; axisMin = axisMax - 5 * step; }
+  const xAt = (index) => plotLeft + (plotRight - plotLeft) * index / (rows.length - 1);
+  const yAt = (value) => plotBottom - (value - axisMin) / (axisMax - axisMin) * (plotBottom - plotTop);
+  const points = rows.map((row, index) => [xAt(index), yAt(row.num)]);
+  let path = `M ${points[0][0].toFixed(1)} ${points[0][1].toFixed(1)}`;
+  for (let index = 0; index < points.length - 1; index++) {
+    const p0 = points[Math.max(0, index - 1)], p1 = points[index], p2 = points[index + 1], p3 = points[Math.min(points.length - 1, index + 2)];
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    path += ` C ${c1[0].toFixed(1)} ${c1[1].toFixed(1)} ${c2[0].toFixed(1)} ${c2[1].toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  const grid = Array.from({ length: 5 }, (_, index) => {
+    const y = plotTop + index * 52;
+    const value = axisMax - index * step;
+    const label = Math.abs(value) >= 10000 ? `${(value / 10000).toFixed(2)}w` : String(Math.round(value));
+    return `<line x1="${axisLeft}" y1="${y}" x2="${axisRight}" y2="${y}" stroke="#e8e8e8" stroke-dasharray="4 2"/><text x="59" y="${y + 5}" text-anchor="end" font-size="13" fill="#666">${label}</text>`;
+  }).join("");
+  const dateLabel = (value) => {
+    const digits = String(value ?? "").replace(/\D/g, "");
+    return digits.length >= 8 ? `${digits.slice(-4, -2)}/${digits.slice(-2)}` : String(value ?? "");
+  };
+  const indices = rows.length >= 25 ? [0, 6, 12, 18, 24] : Array.from(new Set(Array.from({ length: 5 }, (_, index) => Math.round(index * (rows.length - 1) / 4))));
+  const dates = indices.map((index) => `<text x="${xAt(index).toFixed(1)}" y="400" text-anchor="middle" font-size="13" fill="#666">${pgyChartEscape(dateLabel(rows[index].date))}</text>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="white"/><g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,Arial,sans-serif"><rect x="25" y="17" width="4" height="14" rx="2" fill="#ff2442"/><text x="35" y="29" font-size="16" fill="#262626">粉丝趋势</text><rect x="25" y="60" width="172" height="32" rx="5" fill="#f7f7f7"/><rect x="29" y="64" width="80" height="24" rx="4" fill="white" stroke="#eee"/><text x="36" y="81" font-size="13" fill="#262626">粉丝总量</text><circle cx="95" cy="76" r="5" fill="none" stroke="#999"/><text x="95" y="79" text-anchor="middle" font-size="8" fill="#777">i</text><text x="120" y="81" font-size="13" fill="#666">粉丝增量</text><circle cx="179" cy="76" r="5" fill="none" stroke="#999"/><text x="179" y="79" text-anchor="middle" font-size="8" fill="#777">i</text><rect x="684" y="60" width="120" height="32" rx="5" fill="#f7f7f7"/><text x="695" y="81" font-size="13" fill="#262626">近30日</text><path d="M780 73l4 4 4-4" fill="none" stroke="#888"/>${grid}<line x1="${axisLeft}" y1="${plotBottom}" x2="${axisRight}" y2="${plotBottom}" stroke="#ccc"/><path d="${path}" fill="none" stroke="#3f6eff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>${dates}</g></svg>`;
 }
+
 function pgyDailyNoteFormatInteger(a) {
   if (a == null || a === "") return "-";
   const e = Number(a);
@@ -19146,6 +19669,7 @@ function pgyBuildBloggerOverviewData(a) {
   const _ = d.isActive === true ? "活跃" : pgyOverviewPickAny(o, ["activeLabel", "activeStatus", "activityLabel", "servicePerformance.activeLabel"]);
   const k = d.easyConnect === true ? "好联系" : pgyOverviewPickAny(o, ["replyLabel", "replyStatus", "contactLabel", "servicePerformance.replyLabel"]);
   const level = pgyOverviewNumber(pgyOverviewPick(t, ["currentLevel.level", "currentLevel"]));
+  const normalizedLevel = level == null || level < 0 ? null : Math.round(level);
   const noteCount = pgyOverviewPick(d, ["noteNumber"]) ?? pgyOverviewPick(s, ["noteNumber", "noteCount"]);
   const genderLabel = pgyOverviewLabel(pgyOverviewPick(t, ["gender", "sex"]));
   return {
@@ -19158,7 +19682,8 @@ function pgyBuildBloggerOverviewData(a) {
       return D === "-" ? "无机构" : D;
     })(),
     genderText: genderLabel === "女" || genderLabel === "男" ? genderLabel : "-",
-    healthLevel: level == null || level < 0 ? null : Math.round(level),
+    healthLevel: normalizedLevel,
+    healthRisk: normalizedLevel != null && normalizedLevel !== 2,
     profileSummaryText: personaTags.join("、") || "-",
     travelAreaText: pgyOverviewList(pgyOverviewPick(t, ["travelAreaList", "travelAreas"])).join("、") || "-",
     categoryTags: u.slice(0, 6),
@@ -19194,9 +19719,10 @@ const PGY_OVERVIEW_SHIELD_PNG = {
   0: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFgAAABYCAYAAABxlTA0AAAJIUlEQVR4AeydwW70RBLHqzP5nmER0mqdw0or7R5WKyEtJ748CZMLiBucSUggSNwQXBDiksCLTG5w+U4IOCZIXHgCDsTT/P/d9sTj2O3qnvbEkWy5x+7u6ur2z+XqsjPjHMi8jEpgBjwqXpEZ8Ax4ZAIjq382FmwvpLCnB+f2bLEcmUlW9ZMHXIOVcnErxlzg6K8A2SJdsQ75Sa+TBUx4tNgG2DbIJepWTqZdM6H8JAE7aA8WG8JV0KphzbeuTUjyieomBdieHr4kLEKL5DFZ0JMA7NzB2WIlxq4AtkBKXQueHJ4knqxUJTnbPSngDVi6A5GXkm8peLIA+sknwicB7MAi5MIkdQumOcFCnUjjYzMRss9G+d529wqYB+kmI1qsD7liD/RGLLTEtYI1I7wrF08ScewN8I5g78SaY3NZHptP1x/LojwC4xukmNWBhtvYa8QxOmBONjwoSbPYOxA8Adgj8+n9Bijs8Q5lx6xDogw26vUB9B7uCkcDjAu5ANgVJxsceoEUs8Ji7QUgHiFd9zV0dYvyuHIb8aBFeFcIiz4cbR7IDtjymcHZ4ip5AoOPBThYLFxBH9lGubNm7zZq0I1a1W5BI4AxjBJxZAPswD5EBvEPZDxY43ysisu2UAP0kUDXdq0qN0rEkQXwjhPYDSetVLBtdFugRXrdi3QvsGZoyBhx7AQYl9USySZPYHVkcCGx/lOGFmDiRHjCkwfZzQSJfc3qQOPY4J8PzjUN+mSSAFvvZ1dQeoUUuxLmo8ggVolWvgK9a8TBY9V2uSWXBBgTGMHGzrx39I1uArssYy/drUGnZNDvNay5ngh5kmPU+IdQMS0q2WjAuGx4NuPgYtLBAaojg2psmw2umNftR4efw9e/con7F/L6RkC546w5PeLwYaeyr1osCjDgLtGwEy7KH68ebHJkQIX24sV/ccW8gvV/AF//P5es/YBlro5CkakBOjbioCWTgbrHKMDQ+jaSZs0XGZTrL9Dha0jt9TXxde1ydX4LtD7iiJr01IBxmRYY+ZD1ws9WzwwyRAb2VP6JPt9C6lvfqmT66lXlDvRleQIfrXnGUfD2X6UYQmrAuCSH4F57P/vwzAD6d1vt4d8GFWhkBpV4gQp0PRH6wq5PY2lsXTWPyvSArf3Ho9aNAsA9aWSf9W5109MfaQywaB68HrAxobMWG8g3xzDV/X7AYRZbx6MHvNVszmgJzIC1pBLlZsCJ4LTNZsBaUolyM+BEcNpmM+AQqQx1M+AMEEMqZsAhOhnqZsAZIIZUzIBDdDLUzYAzQAypmAGH6GSomwFngBhSMQMO0clQNwPOADGkYgYcopOhTg/Y2v4H0BkGMkEVoT8wqIerBxxWmWUwrovn8BFhbDPg/hOaxWj0gI35tX8sIjF/yg7p2ao7MH9s5bsyGpmudoEyeyFhuAMspLHoAVuzdx9sLv98hbH+jtS3/l7J9NWnlZeLoa8oqPXqAR/eDwBeh74goh7QY0HY0+PCqiRUV4mMsVmU6r+iqwEb/02dfsgRf8qOOWZzuf4aDuhdtPkNqV6xb9/1dXVR1m3QWCoWqg7VgCtt/YBFsl1W0loA8htzWf5dpPwPE/dZ1hLLmQ0dS9RXb+MAWxu6NKK+s5VCw1zKT0wpbbVtqm+QFr3yESEadcQBPlx/y0a9ydjz3rrnUxH+BukQg9ZxRgGufE/YiodCnNYAJpgNuQepGKiHHQXYaR1wE3J/ELYAp2SaH5V7CA0uyv9SUTzgoUvEmCUVP9MUdnHWhF1kx0F7wB0VfUXGh2thN8EfJPYpSCi3H774vz1dXNuzg19c4j7KElT1NrF+zP2Tm8h18/fSolyiATu91nzstn0fsGJ7muf3vzjw9+Rg/b0Ygesx/xJB4j7KXJ3svljOG0M/Vk+wXo4sDbC/qwtasWSIKOzZizfEmK840M6EOifTWRlRWC6uBqTvUqyXOpMAOzcxZMUi0b/I4YC20/qd7XxXTiPT1c6XWf9Kg2DkINYkf3s/CTCHVp3RkBVT7NxdftxLSvaN4WYamW4t1djOu2s3pTfVsW4KYnaSAbtOFuXQmS2kXPCHi0484WOtaKOR6VbjXUPRXVmVDl+plWD3ZifA3lXADrp116UFLsMhH1fLtrbm+1ZBR1Yj87gZxsQTH3YNiZFDs7edADtFPi4echVLzPhDl6JTt/1R4knadsnjnEZmuxXg8oQPwfW/1t9uGp3bGbCz4mFXIYgGLmIh48HOjyKC8Ayf3evblUx3bUcp4PJGiKmjtlG0w8TW0JLnBc0Osh10FQLI0ZaMR5PfyX35b7T9Uoz84JP5kmWuTvRLBZfWG26EY9llYmsq39mCa2Xux3sYWJ3v2RaCgD7akj+Tn80n9++bT8o3fcI+ynr66Cyu+hyGK4KoYR2+kRL9kg2w61Lnj8VB5ouTZMzlQTcsd8U+H0p6925wVfDlHb0CsRVZATtX4f1x6C8f9RiXOPBbOJaiLsi9pW70sYLeoQkNIsJJLStcwZIVMPT556V8l5mIBrKLk6vLV3Iu7lkIX+EoooIrmSY1aS3ZAVN/Zcm0Bh1k+uWzxYoWx/a7JOpwVmssLVej6o5wc01q7Q5HAcxOIiGzyUve9e1iza6t3mrZJ93C0Vhw2cFogKl8A3k4uqA4U8HJCBaofp2Ws1g8y0Uby7ZUokyc0PgCDqV4mtiogDkkB5nRhR4ymz2ARrQBeEvLZ7asQeI+fezGYuFiUByz8uUhdGExbZJkRwfMURGyMk6meDMVyCyRruA+bgGayXIfz5tXkRYLNW7lO9uGHlI5wRwfewFcD9RB9u/+1Ux+dbPmlsCb+Zh9TmbHiHOj/3AZ00lbdq+A2TmtWRjGxbkMNk1P6AtgR53M+ga3d8AcCCE3rHlMi8r3ejEOPCE9CeB6nA40X6clQp849MizbqbZwh1YvuD5mH1oGowlkxlw2jBx+fpZ3fvndIuGK4D74Vuz4Q7yPbBJOyrfahKA/VDE3WYD9gkhCWGJDFk1J8sbyqKde4XjU1ustJZJAa7HRkj00YB2jGQ8cMO49YQwcWvrylFHa/X/mUCmuUwScBuVB37PO69rB77xHwnaslPLPwvAU4MWM54ZcAytBNkZcAK0mCZ/AQAA//9v6fURAAAABklEQVQDAKaset66u+ccAAAAAElFTkSuQmCC"
 };
 
-function pgyOverviewShieldSvg(a, e, t) {
-  const n = Number(a) === 2 ? PGY_OVERVIEW_SHIELD_PNG[2] : PGY_OVERVIEW_SHIELD_PNG[0];
-  return `<image href="${n}" x="${e - 11}" y="${t - 11}" width="22" height="22" preserveAspectRatio="xMidYMid meet"/>`;
+function pgyOverviewShieldSvg(a, e, t, s = {}) {
+  const risk = Number(a) !== 2;
+  const source = risk ? s.healthRisk || PGY_OVERVIEW_SHIELD_PNG[0] : s.health || PGY_OVERVIEW_SHIELD_PNG[2];
+  return `<image href="${source}" x="${e}" y="${t}" width="16" height="16" preserveAspectRatio="xMidYMid meet"/>`;
 }
 
 function pgyOverviewNicknameSvg(a, e, t, n, s) {
@@ -19204,13 +19730,13 @@ function pgyOverviewNicknameSvg(a, e, t, n, s) {
   let o = "", r = e, c = 0;
   for (const u of String(a ?? "-").matchAll(i)) {
     const l = String(a).slice(c, u.index);
-    l && (o += `<text x="${r}" y="${t}" font-size="${n}" font-weight="600" fill="#262626">${pgyChartEscape(l)}</text>`, r += pgyOverviewTextWidth(l, n));
+    l && (o += `<text x="${r}" y="${t}" font-size="${n}" fill="#262626">${pgyChartEscape(l)}</text>`, r += pgyOverviewTextWidth(l, n));
     const p = u[0], h = s == null ? void 0 : s[p];
-    h ? o += `<image href="${pgyChartEscape(h)}" x="${r}" y="${t - n + 2}" width="${n}" height="${n}" preserveAspectRatio="xMidYMid meet"/>` : o += `<text x="${r}" y="${t}" font-size="${n}" font-weight="600" fill="#262626">${pgyChartEscape(p)}</text>`;
+    h ? o += `<image href="${pgyChartEscape(h)}" x="${r}" y="${t - n + 2}" width="${n}" height="${n}" preserveAspectRatio="xMidYMid meet"/>` : o += `<text x="${r}" y="${t}" font-size="${n}" fill="#262626">${pgyChartEscape(p)}</text>`;
     r += n, c = u.index + p.length;
   }
   const u = String(a ?? "-").slice(c);
-  return u && (o += `<text x="${r}" y="${t}" font-size="${n}" font-weight="600" fill="#262626">${pgyChartEscape(u)}</text>`), o;
+  return u && (o += `<text x="${r}" y="${t}" font-size="${n}" fill="#262626">${pgyChartEscape(u)}</text>`), o;
 }
 
 function pgyOverviewWarn(a) {
@@ -19249,23 +19775,76 @@ async function pgyInlineOverviewEmojis(a) {
   return t;
 }
 
+const PGY_OVERVIEW_ICON_FILES = {
+  health: "health.png",
+  healthRisk: "health-risk.png",
+  flyable: "flyable.png",
+  cooperationPrice: "cooperation-price.jpg",
+  location: "location.png",
+  copy: "copy.jpg",
+  genderFemale: "gender-female.png",
+  genderMale: "gender-male.png",
+  growth: "growth.png",
+  favorite: "favorite.png",
+  service: "service.png",
+  organization: "organization.png",
+  notes: "notes.png",
+  invite: "invite.png"
+};
+
+function pgyLoadOverviewIconImages() {
+  if (typeof PgyNativeImage === "undefined" || typeof Oe !== "function") return {};
+  const roots = [];
+  if (process.resourcesPath) {
+    roots.push(Oe(process.resourcesPath, "app.asar", "dist-electron", "static", "overview-icons"));
+    roots.push(Oe(process.resourcesPath, "app.asar.unpacked", "dist-electron", "static", "overview-icons"));
+    roots.push(Oe(process.resourcesPath, "dist-electron", "static", "overview-icons"));
+  }
+  roots.push(Oe(process.cwd(), "app-source", "dist-electron", "static", "overview-icons"));
+  roots.push(Oe(process.cwd(), "dist-electron", "static", "overview-icons"));
+  const output = {};
+  for (const [key, fileName] of Object.entries(PGY_OVERVIEW_ICON_FILES)) {
+    for (const root of roots) {
+      try {
+        const icon = PgyNativeImage.createFromPath(Oe(root, fileName));
+        if (!icon.isEmpty()) {
+          output[key] = icon.toDataURL();
+          break;
+        }
+      } catch {
+      }
+    }
+  }
+  return output;
+}
+
 async function pgyPrepareOverviewData(a) {
   const e = { ...(a ?? {}) };
-  return e.avatar = await pgyInlineOverviewAvatar(e.avatar), e.nicknameEmojiImages = await pgyInlineOverviewEmojis(e.nickname), e;
+  return e.avatar = await pgyInlineOverviewAvatar(e.avatar), e.nicknameEmojiImages = await pgyInlineOverviewEmojis(e.nickname), e.overviewIconImages = pgyLoadOverviewIconImages(), e;
 }
 
 function pgyBloggerOverviewSvg(a) {
   const e = a ?? {}, t = (n) => pgyChartEscape(n == null || n === "" ? "-" : String(n));
-  const nickname = pgyOverviewFitText(e.nickname, 24, 278);
-  const nicknameMarkup = pgyOverviewNicknameSvg(nickname, 252, 194, 24, e.nicknameEmojiImages);
-  let iconX = 252 + Math.ceil(pgyOverviewTextWidth(nickname, 24)) + 16;
+  const overviewIcons = e.overviewIconImages && typeof e.overviewIconImages === "object" ? e.overviewIconImages : {};
+  const overviewIcon = (key, x, y, width, height, extra = "") => overviewIcons[key]
+    ? `<image href="${t(overviewIcons[key])}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid meet" ${extra}/>`
+    : "";
+  const nickname = pgyOverviewFitText(e.nickname, 22, 278);
+  const nicknameMarkup = pgyOverviewNicknameSvg(nickname, 252, 192, 22, e.nicknameEmojiImages);
+  let iconX = 252 + Math.ceil(pgyOverviewTextWidth(nickname, 22)) + 8;
   let profileIcons = "";
   if (e.genderText === "女" || e.genderText === "男") {
-    const female = e.genderText === "女", personColor = female ? "#ff6f91" : "#4d7ed8", personBackground = female ? "#fff0f4" : "#e9f1ff";
-    profileIcons += `<circle cx="${iconX}" cy="185" r="12" fill="${personBackground}"/><circle cx="${iconX}" cy="181" r="4.2" fill="${personColor}"/><path d="M${iconX - 6} 192c1.2-5 10.8-5 12 0" fill="${personColor}"/>`;
-    iconX += 36;
+    profileIcons += overviewIcon(e.genderText === "女" ? "genderFemale" : "genderMale", iconX, 177, 16, 16);
+    iconX += 24;
   }
-  if (e.healthLevel != null) profileIcons += pgyOverviewShieldSvg(e.healthLevel, iconX, 184);
+  if (e.healthLevel != null) profileIcons += pgyOverviewShieldSvg(e.healthLevel, iconX, 177, overviewIcons);
+  const redId = pgyOverviewFitText(e.redId, 20, 165);
+  const copyIconX = Math.min(520, 354 + Math.ceil(pgyOverviewTextWidth(redId, 20)) + 6);
+  const healthRisk = e.healthRisk === true || (e.healthLevel != null && Number.isFinite(Number(e.healthLevel)) && Number(e.healthLevel) !== 2);
+  const picturePriceText = healthRisk ? "暂停接单" : e.picturePriceText;
+  const videoPriceText = healthRisk ? "暂停接单" : e.videoPriceText;
+  const picturePriceIcon = healthRisk ? "" : overviewIcon("cooperationPrice", 544, 790, 16, 16);
+  const videoPriceIcon = healthRisk ? "" : overviewIcon("cooperationPrice", 544, 936, 16, 16);
   const hasSummary = e.profileSummaryText && e.profileSummaryText !== "-";
   const summaryRow = hasSummary
     ? `<text x="252" y="275" font-size="18" fill="#999">${t(pgyOverviewFitText(e.profileSummaryText, 18, 210))}</text>`
@@ -19273,7 +19852,7 @@ function pgyBloggerOverviewSvg(a) {
   const infoY = hasSummary ? 307 : 276;
   const hasTravel = e.travelAreaText && e.travelAreaText !== "-";
   const travelRow = hasTravel
-    ? `<path d="M252 ${infoY + 30} L272 ${infoY + 18} L262 ${infoY + 34} Z" fill="#b9bec7"/><text x="280" y="${infoY + 32}" font-size="18" fill="#595959">${t(pgyOverviewFitText(e.travelAreaText, 18, 200))}</text>`
+    ? `${overviewIcon("flyable", 248, infoY + 11, 28, 28)}<text x="280" y="${infoY + 32}" font-size="18" fill="#595959">${t(pgyOverviewFitText(e.travelAreaText, 18, 200))}</text>`
     : "";
   const tags = Array.isArray(e.categoryTags) ? e.categoryTags.slice(0, 6) : [];
   const tagY = infoY + (hasTravel ? 47 : 17);
@@ -19297,42 +19876,45 @@ function pgyBloggerOverviewSvg(a) {
 <defs><clipPath id="avatarClip"><circle cx="178" cy="216" r="52"/></clipPath></defs>
 <rect width="2048" height="1066" fill="#f7f7f9"/>
 <g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,Arial,sans-serif">
-<rect x="96" y="20" width="520" height="98" rx="14" fill="#fff"/><rect x="126" y="42" width="214" height="48" rx="5" fill="#fff" stroke="#eee"/><rect x="340" y="42" width="246" height="48" rx="5" fill="#f6f6f6"/><text x="188" y="75" font-size="24" font-weight="600" fill="#262626">笔记主页</text><text x="424" y="75" font-size="24" fill="#666">直播主页</text>
-<rect x="650" y="20" width="1298" height="74" rx="14" fill="#fff"/><text x="712" y="67" font-size="26" font-weight="700" fill="#262626">数据概览</text><text x="856" y="67" font-size="24" fill="#777">笔记数据</text><text x="996" y="67" font-size="24" fill="#777">粉丝分析</text><line x1="700" y1="92" x2="826" y2="92" stroke="#c73549" stroke-width="2"/><text x="1632" y="66" font-size="21" fill="#aaa">数据更新至： ${t(e.updatedAtText)}</text>
+<rect x="96" y="20" width="520" height="98" rx="14" fill="#fff"/><rect x="126" y="42" width="214" height="48" rx="5" fill="#fff" stroke="#eee"/><rect x="340" y="42" width="246" height="48" rx="5" fill="#f6f6f6"/><text x="188" y="75" font-size="24" fill="#262626">笔记主页</text><text x="424" y="75" font-size="24" fill="#666">直播主页</text>
+<rect x="650" y="20" width="1298" height="74" rx="14" fill="#fff"/><text x="712" y="67" font-size="24" fill="#262626">数据概览</text><text x="856" y="67" font-size="24" fill="#777">笔记数据</text><text x="996" y="67" font-size="24" fill="#777">粉丝分析</text><line x1="700" y1="92" x2="826" y2="92" stroke="#c73549" stroke-width="2"/><text x="1632" y="66" font-size="21" fill="#aaa">数据更新至： ${t(e.updatedAtText)}</text>
 <rect x="96" y="120" width="520" height="500" rx="14" fill="#fff"/><circle cx="178" cy="216" r="52" fill="#e8edf4"/><text x="164" y="229" font-size="34" font-weight="700" fill="#6d87a8">${o}</text>${r}${nicknameMarkup}${profileIcons}
-<text x="252" y="236" font-size="19" fill="#999">小红书号：</text><text x="354" y="236" font-size="20" fill="#2878ff">${t(e.redId)}</text><rect x="530" y="222" width="11" height="12" rx="1" fill="none" stroke="#999"/><rect x="526" y="226" width="11" height="12" rx="1" fill="none" stroke="#999"/>${summaryRow}<text x="252" y="${infoY}" font-size="18" fill="#999">● ${t(pgyOverviewFitText(e.location, 18, 132))}</text><rect x="420" y="${infoY - 14}" width="12" height="14" fill="none" stroke="#777" stroke-width="2"/><line x1="424" y1="${infoY - 11}" x2="424" y2="${infoY - 3}" stroke="#777"/><line x1="428" y1="${infoY - 11}" x2="428" y2="${infoY - 3}" stroke="#777"/><text x="440" y="${infoY}" font-size="18" fill="#5273b4">${t(pgyOverviewFitText(e.mcn, 18, 105))}</text>${travelRow}${tagSvg}
+<text x="252" y="236" font-size="19" fill="#999">小红书号：</text><text x="354" y="236" font-size="20" fill="#2878ff">${t(redId)}</text>${overviewIcon("copy", copyIconX, 222, 14, 14)}${summaryRow}${overviewIcon("location", 252, infoY - 14, 14, 14)}<text x="274" y="${infoY}" font-size="18" fill="#999">${t(pgyOverviewFitText(e.location, 18, 112))}</text>${overviewIcon("organization", 420, infoY - 14, 14, 14)}<text x="440" y="${infoY}" font-size="18" fill="#5273b4">${t(pgyOverviewFitText(e.mcn, 18, 105))}</text>${travelRow}${tagSvg}
 <text x="198" y="423" font-size="22" fill="#262626">粉丝数</text><text x="402" y="423" font-size="22" fill="#262626">获赞与收藏</text><text x="192" y="468" font-size="32" font-weight="700" fill="#262626">${t(e.fansText)}</text><text x="402" y="468" font-size="32" font-weight="700" fill="#262626">${t(e.likeCollectText)}</text><line x1="126" y1="500" x2="586" y2="500" stroke="#f1f1f1"/>
-<rect x="126" y="530" width="210" height="56" rx="6" fill="#f7f7f7"/><rect x="352" y="530" width="234" height="56" rx="6" fill="#f23b49"/><text x="190" y="567" font-size="22" fill="#333">☆ 收藏</text><circle cx="413" cy="558" r="7" fill="none" stroke="#fff" stroke-width="2"/><circle cx="423" cy="558" r="7" fill="none" stroke="#fff" stroke-width="2"/><text x="442" y="567" font-size="22" fill="#fff">邀约</text>
-<rect x="96" y="650" width="520" height="390" rx="14" fill="#fff"/><text x="126" y="708" font-size="28" font-weight="600" fill="#262626">合作报价</text><rect x="126" y="736" width="460" height="126" rx="5" fill="#fff" stroke="#e8e8e8"/><text x="158" y="786" font-size="22" fill="#595959">图文笔记一口价</text><text x="158" y="832" font-size="27" fill="#262626">${t(e.picturePriceText)}</text><circle cx="552" cy="798" r="14" fill="none" stroke="#d73c51" stroke-width="3"/><text x="545" y="805" font-size="22" fill="#d73c51">+</text><rect x="126" y="882" width="460" height="126" rx="5" fill="#fff" stroke="#e8e8e8"/><text x="158" y="932" font-size="22" fill="#595959">视频笔记一口价</text><text x="158" y="978" font-size="27" fill="#262626">${t(e.videoPriceText)}</text><circle cx="552" cy="944" r="14" fill="none" stroke="#d73c51" stroke-width="3"/><text x="545" y="951" font-size="22" fill="#d73c51">+</text>
-<rect x="650" y="112" width="1298" height="928" rx="14" fill="#fff"/><text x="700" y="174" font-size="28" font-weight="700" fill="#262626">数据概览</text><line x1="650" y1="212" x2="1948" y2="212" stroke="#eee"/>
+<rect x="126" y="530" width="210" height="56" rx="6" fill="#f7f7f7"/><rect x="352" y="530" width="234" height="56" rx="6" fill="#f23b49"/>${overviewIcon("favorite", 188, 550, 16, 16)}<text x="216" y="567" font-size="22" fill="#333">收藏</text>${overviewIcon("invite", 410, 550, 16, 16)}<text x="442" y="567" font-size="22" fill="#fff">邀约</text>
+<rect x="96" y="650" width="520" height="390" rx="14" fill="#fff"/><text x="126" y="708" font-size="28" fill="#262626">合作报价</text><rect x="126" y="736" width="460" height="126" rx="5" fill="#fff" stroke="#e8e8e8"/><text x="158" y="786" font-size="22" fill="#595959">图文笔记一口价</text><text x="158" y="832" font-size="22" fill="#262626">${t(picturePriceText)}</text>${picturePriceIcon}<rect x="126" y="882" width="460" height="126" rx="5" fill="#fff" stroke="#e8e8e8"/><text x="158" y="932" font-size="22" fill="#595959">视频笔记一口价</text><text x="158" y="978" font-size="22" fill="#262626">${t(videoPriceText)}</text>${videoPriceIcon}
+<rect x="650" y="112" width="1298" height="928" rx="14" fill="#fff"/><text x="700" y="174" font-size="28" fill="#262626">数据概览</text><line x1="650" y1="212" x2="1948" y2="212" stroke="#eee"/>
 <rect x="700" y="240" width="1198" height="78" rx="9" fill="#f7f7f7"/><text x="720" y="288" font-size="21" fill="#999">博主优势</text><text x="820" y="288" font-size="22" font-weight="600" fill="#262626">${t(pgyOverviewEllipsize(e.advantageText, 10))}</text><line x1="948" y1="257" x2="948" y2="302" stroke="#ddd"/><text x="972" y="288" font-size="21" fill="#999">发布笔记</text><text x="1068" y="288" font-size="22" font-weight="600" fill="#262626">${t(e.publishedNotesText)}</text><line x1="1166" y1="257" x2="1166" y2="302" stroke="#ddd"/><text x="1190" y="288" font-size="21" fill="#999">内容类目</text><text x="1294" y="288" font-size="22" font-weight="600" fill="#262626">${t(pgyOverviewEllipsize(e.contentCategoriesText, 18))}</text><line x1="1582" y1="257" x2="1582" y2="302" stroke="#ddd"/><text x="1606" y="288" font-size="21" fill="#999">合作行业</text><text x="1710" y="288" font-size="22" font-weight="600" fill="#262626">${t(pgyOverviewEllipsize(e.cooperationIndustryText, 10))}</text>
-<rect x="700" y="344" width="1198" height="292" rx="9" fill="#fff" stroke="#e8e8e8"/><rect x="726" y="372" width="34" height="34" rx="8" fill="#fff0e7"/><line x1="736" y1="382" x2="750" y2="382" stroke="#e8753a" stroke-width="2"/><line x1="736" y1="389" x2="750" y2="389" stroke="#e8753a" stroke-width="2"/><line x1="736" y1="396" x2="750" y2="396" stroke="#e8753a" stroke-width="2"/><text x="778" y="400" font-size="27" font-weight="600" fill="#262626">笔记数据</text><rect x="726" y="430" width="112" height="48" rx="6" fill="#fff0f1"/><text x="748" y="462" font-size="21" font-weight="600" fill="#d43d51">按规模</text><rect x="850" y="430" width="100" height="48" rx="6" fill="#f7f7f7"/><text x="872" y="462" font-size="21" fill="#555">按成本</text><rect x="1658" y="430" width="218" height="48" rx="6" fill="#f7f7f7"/><rect x="1664" y="436" width="112" height="36" rx="5" fill="#fff" stroke="#eee"/><text x="1680" y="461" font-size="20" fill="#262626">日常笔记</text><text x="1788" y="461" font-size="20" fill="#777">合作笔记</text>
-<text x="726" y="528" font-size="21" fill="#666">曝光中位数</text><line x1="726" y1="535" x2="840" y2="535" stroke="#999" stroke-dasharray="5 5"/><text x="726" y="574" font-size="31" font-weight="700" fill="#111">${t(e.exposureText)}</text><text x="726" y="608" font-size="19" fill="#777">${t(e.exposurePeerText)}</text><line x1="1078" y1="506" x2="1078" y2="608" stroke="#ddd"/><text x="1110" y="528" font-size="21" fill="#666">阅读中位数</text><line x1="1110" y1="535" x2="1224" y2="535" stroke="#999" stroke-dasharray="5 5"/><text x="1110" y="574" font-size="31" font-weight="700" fill="#111">${t(e.readText)}</text><text x="1110" y="608" font-size="19" fill="#777">${t(e.readPeerText)}</text><line x1="1500" y1="506" x2="1500" y2="608" stroke="#ddd"/><text x="1532" y="528" font-size="21" fill="#666">互动中位数</text><line x1="1532" y1="535" x2="1646" y2="535" stroke="#999" stroke-dasharray="5 5"/><text x="1532" y="574" font-size="31" font-weight="700" fill="#111">${t(e.interactionText)}</text><text x="1532" y="608" font-size="19" fill="#777">${t(e.interactionPeerText)}</text>
-<rect x="700" y="662" width="574" height="240" rx="9" fill="#fff" stroke="#e8e8e8"/><rect x="726" y="690" width="34" height="34" rx="8" fill="#e8f4ff"/><text x="738" y="715" font-size="19" fill="#4a91d8">◇</text><text x="778" y="716" font-size="27" font-weight="600" fill="#262626">服务表现</text><text x="726" y="778" font-size="21" fill="#666">近7天活跃天数</text><line x1="726" y1="786" x2="862" y2="786" stroke="#999" stroke-dasharray="5 5"/><text x="726" y="826" font-size="31" font-weight="700" fill="#111">${t(e.activeDaysText)}</text>${activeBadge}<line x1="986" y1="758" x2="986" y2="866" stroke="#ddd"/><text x="1020" y="778" font-size="21" fill="#666">邀约48小时回复率</text><line x1="1020" y1="786" x2="1180" y2="786" stroke="#999" stroke-dasharray="5 5"/><text x="1020" y="826" font-size="31" font-weight="700" fill="#111">${t(e.replyRateText)}</text>${replyBadge}
-<rect x="1300" y="662" width="598" height="240" rx="9" fill="#fff" stroke="#e8e8e8"/><rect x="1326" y="690" width="34" height="34" rx="8" fill="#e8f7f4"/><line x1="1335" y1="713" x2="1335" y2="701" stroke="#58aa9b" stroke-width="2"/><line x1="1335" y1="713" x2="1351" y2="713" stroke="#58aa9b" stroke-width="2"/><polyline points="1338,709 1343,704 1348,707 1353,698" fill="none" stroke="#58aa9b" stroke-width="2"/><text x="1378" y="716" font-size="27" font-weight="600" fill="#262626">成长表现</text><text x="1326" y="778" font-size="21" fill="#666">粉丝量变化幅度</text><line x1="1326" y1="786" x2="1464" y2="786" stroke="#999" stroke-dasharray="5 5"/><text x="1326" y="826" font-size="31" font-weight="700" fill="#111">${t(e.fansGrowthText)}</text><text x="1326" y="868" font-size="19" fill="#777">${t(e.fansGrowthPeerText)}</text>
+<rect x="700" y="344" width="1198" height="292" rx="9" fill="#fff" stroke="#e8e8e8"/>${overviewIcon("notes", 726, 377, 24, 24)}<text x="766" y="400" font-size="24" fill="#262626">笔记数据</text><rect x="726" y="430" width="112" height="48" rx="6" fill="#fff0f1"/><text x="748" y="462" font-size="21" fill="#d43d51">按规模</text><rect x="850" y="430" width="100" height="48" rx="6" fill="#f7f7f7"/><text x="872" y="462" font-size="21" fill="#555">按成本</text><rect x="1658" y="430" width="218" height="48" rx="6" fill="#f7f7f7"/><rect x="1664" y="436" width="112" height="36" rx="5" fill="#fff" stroke="#eee"/><text x="1680" y="461" font-size="20" fill="#262626">日常笔记</text><text x="1788" y="461" font-size="20" fill="#777">合作笔记</text>
+<text x="726" y="528" font-size="21" fill="#666">曝光中位数</text><line x1="726" y1="535" x2="840" y2="535" stroke="#999" stroke-dasharray="5 5"/><text x="726" y="574" font-size="27" font-weight="700" fill="#111">${t(e.exposureText)}</text><text x="726" y="608" font-size="19" fill="#777">${t(e.exposurePeerText)}</text><line x1="1078" y1="506" x2="1078" y2="608" stroke="#ddd"/><text x="1110" y="528" font-size="21" fill="#666">阅读中位数</text><line x1="1110" y1="535" x2="1224" y2="535" stroke="#999" stroke-dasharray="5 5"/><text x="1110" y="574" font-size="27" font-weight="700" fill="#111">${t(e.readText)}</text><text x="1110" y="608" font-size="19" fill="#777">${t(e.readPeerText)}</text><line x1="1500" y1="506" x2="1500" y2="608" stroke="#ddd"/><text x="1532" y="528" font-size="21" fill="#666">互动中位数</text><line x1="1532" y1="535" x2="1646" y2="535" stroke="#999" stroke-dasharray="5 5"/><text x="1532" y="574" font-size="27" font-weight="700" fill="#111">${t(e.interactionText)}</text><text x="1532" y="608" font-size="19" fill="#777">${t(e.interactionPeerText)}</text>
+<rect x="700" y="662" width="574" height="240" rx="9" fill="#fff" stroke="#e8e8e8"/>${overviewIcon("service", 726, 695, 24, 24)}<text x="766" y="716" font-size="24" fill="#262626">服务表现</text><text x="726" y="778" font-size="21" fill="#666">近7天活跃天数</text><line x1="726" y1="786" x2="862" y2="786" stroke="#999" stroke-dasharray="5 5"/><text x="726" y="826" font-size="27" font-weight="700" fill="#111">${t(e.activeDaysText)}</text>${activeBadge}<line x1="986" y1="758" x2="986" y2="866" stroke="#ddd"/><text x="1020" y="778" font-size="21" fill="#666">邀约48小时回复率</text><line x1="1020" y1="786" x2="1180" y2="786" stroke="#999" stroke-dasharray="5 5"/><text x="1020" y="826" font-size="27" font-weight="700" fill="#111">${t(e.replyRateText)}</text>${replyBadge}
+<rect x="1300" y="662" width="598" height="240" rx="9" fill="#fff" stroke="#e8e8e8"/>${overviewIcon("growth", 1326, 695, 24, 24)}<text x="1366" y="716" font-size="24" fill="#262626">成长表现</text><text x="1326" y="778" font-size="21" fill="#666">粉丝量变化幅度</text><line x1="1326" y1="786" x2="1464" y2="786" stroke="#999" stroke-dasharray="5 5"/><text x="1326" y="826" font-size="27" font-weight="700" fill="#111">${t(e.fansGrowthText)}</text><text x="1326" y="868" font-size="19" fill="#777">${t(e.fansGrowthPeerText)}</text>
 </g></svg>`;
 }
 
 async function buildPgyBloggerChartFields(a, e, t, n, d, B, P, V) {
   const s = {}, i = [];
+  const pgyProvinceRows = pgyTopPercentRows(e.provinces), pgyCityRows = pgyTopPercentRows(e.cities);
   if (pgyHasSelectedField(n, PYG_CHART_FIELDS.province)) {
-    const o = pgyTopPercentRows(e.provinces);
-    o.length && i.push({ field: "fansProvinceChart", type: "bar", title: "粉丝地域分布", rows: o, output: pgyChartFile("province", a, "province") });
+    pgyProvinceRows.length && i.push({ field: "fansProvinceChart", type: "region-distribution", data: { mode: "province", provinceRows: pgyProvinceRows, cityRows: pgyCityRows }, output: pgyChartFile("province", a, "province") });
   }
   if (pgyHasSelectedField(n, PYG_CHART_FIELDS.city)) {
-    const o = pgyTopPercentRows(e.cities);
-    o.length && i.push({ field: "fansCityChart", type: "bar", title: "粉丝城市分布", rows: o, output: pgyChartFile("city", a, "city") });
+    pgyCityRows.length && i.push({ field: "fansCityChart", type: "region-distribution", data: { mode: "city", provinceRows: pgyProvinceRows, cityRows: pgyCityRows }, output: pgyChartFile("city", a, "city") });
   }
   if (pgyHasSelectedField(n, PYG_CHART_FIELDS.age)) {
     const o = pgyAgeRows(e.ages);
-    o.length && i.push({ field: "fansAgeChart", type: "bar", title: "粉丝年龄分布", rows: o, output: pgyChartFile("age", a, "age") });
+    o.length && i.push({ field: "fansAgeChart", type: "age-distribution", rows: o, output: pgyChartFile("age", a, "age") });
   }
   if (pgyHasSelectedField(n, PYG_CHART_FIELDS.gender)) {
     const o = e.gender ?? {};
     pgyPct(o.female) + pgyPct(o.male) > 0 && i.push({ field: "fansGenderChart", type: "gender", data: o, output: pgyChartFile("gender", a, "gender") });
   }
+  if (pgyHasSelectedField(n, PYG_CHART_FIELDS.genderAge)) {
+    const o = pgyAgeRows(e.ages), r = e.gender ?? {};
+    o.length && pgyPct(r.female) + pgyPct(r.male) > 0 && i.push({ field: "fansGenderAgeChart", type: "gender-age-distribution", data: { rows: o, gender: r }, output: pgyChartFile("gender-age", a, "gender-age") });
+  }
   if (pgyHasSelectedField(n, PYG_CHART_FIELDS.trend)) {
-    const o = Array.isArray(t) ? t.slice(-120) : [];
+    const o = Array.isArray(t) ? t : [];
     o.length >= 2 && i.push({ field: "fansGrowthTrendChart", type: "trend", rows: o, output: pgyChartFile("trend", a, "trend") });
   }
   pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePerformance) && i.push({ field: "dailyNotePerformanceChart", type: "daily-note-performance", data: { ...(d ?? {}), pgyNoteTypeLabel: "图文+视频" }, output: pgyChartFile("daily-note", a, "daily-note-performance") });
@@ -19351,7 +19933,7 @@ async function buildPgyBloggerChartFields(a, e, t, n, d, B, P, V) {
   for (const o of i)
     if (!s[o.field]) {
       let r = "";
-      o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "trend" ? r = pgyWriteTrendChartPng(o.rows ?? [], o.output) : o.type === "daily-note-performance" ? r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output) : o.type === "blogger-overview" && (r = pgyWriteSvgPng(pgyBloggerOverviewSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);
+      o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "age-distribution" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "region-distribution" ? r = pgyWriteBarChartPng((o.data == null ? void 0 : o.data.mode) === "city" ? o.data.cityRows ?? [] : o.data.provinceRows ?? [], o.output) : o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "gender-age-distribution" ? r = pgyWriteBarChartPng(o.data?.rows ?? [], o.output) : o.type === "trend" ? r = pgyWriteSvgPng(pgyTrendChartSvg(o.rows ?? []), o.output) : o.type === "daily-note-performance" ? r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output) : o.type === "blogger-overview" && (r = pgyWriteSvgPng(pgyBloggerOverviewSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);
     }
   if (Object.keys(s).length)
     j.info(`[pgy-chart] 已生成 ${Object.keys(s).length}/${i.length} 张图表`);
