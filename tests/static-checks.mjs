@@ -34,7 +34,7 @@ const backendPackage = JSON.parse(readFileSync("red-magic-api/package.json", "ut
 const backendLock = JSON.parse(readFileSync("red-magic-api/package-lock.json", "utf8"));
 const backendServer = readFileSync("red-magic-api/server.js", "utf8");
 const envExample = readFileSync("red-magic-api/.env.example", "utf8");
-assert.match(backendServer, /ADMIN_PASSWORD\.length < 16/, "admin password must have a minimum length");
+assert.match(backendServer, /管理后台尚未配置 ADMIN_PASSWORD/, "invalid admin configuration must disable only admin login");
 assert.match(backendServer, /ADMIN_PASSWORD_PLACEHOLDERS/, "public admin password placeholders must be rejected");
 assert.match(backendServer, /createHmac\("sha256", LOG_IP_HASH_SECRET\)/, "request IP redaction must use a keyed HMAC");
 assert.match(backendServer, /AUTH_FAILURE_MESSAGE/, "password authentication failures must not enumerate accounts");

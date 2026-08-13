@@ -140,6 +140,10 @@ test("payment external links stay behind the main-process HTTPS allowlist", () =
   assert.match(main, /支付地址不安全或不受支持/);
   assert.match(main, /function pgyOpenPaymentWindow/);
   assert.match(main, /支付宝支付 - magiorix/);
+  assert.match(main, /windowOptions\.parent = parent/);
+  assert.match(main, /windowOptions\.modal = true/);
+  assert.match(main, /width: 900, height: 720/);
+  assert.match(main, /pgyOpenPaymentWindow\(s, a\(\)\)/);
   assert.match(main, /url\.hostname\.endsWith\("\.alipay\.com"\)/);
   assert.match(main, /nodeIntegration: false, contextIsolation: true, sandbox: true/);
   assert.match(preload, /openExternal:e=>r\.ipcRenderer\.invoke/);
@@ -150,6 +154,9 @@ test("payment external links stay behind the main-process HTTPS allowlist", () =
   assert.match(rechargeSource, /await window\.bridge\?\.system\?\.shell\?\.openExternal/);
   assert.match(rechargeSource, /支付宝支付窗口已打开/);
   assert.doesNotMatch(rechargeSource, /openSafeExternal/);
+  const recordsSource = fs.readFileSync(path.join(projectRoot, "assets", "1.3.3", "assets", "index-DHMLmlYD.js"), "utf8");
+  assert.doesNotMatch(recordsSource, /t\.amountYuan\.toFixed\(2\)/);
+  assert.match(recordsSource, /Number\.isFinite\(Number\(t\.amountYuan\)\)/);
   const first = spawnSync(process.execPath, [runtimePatchScript], { cwd: projectRoot, encoding: "utf8" });
   assert.equal(first.status, 0, first.stderr || first.stdout);
   const second = spawnSync(process.execPath, [runtimePatchScript], { cwd: projectRoot, encoding: "utf8" });

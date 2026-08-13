@@ -163,6 +163,11 @@ test("Alipay order, notify and settlement are single-channel and idempotent", as
     assert.equal(order.channel, "alipay");
     assert.equal(order.amountCents, 1000);
     assert.equal(order.totalCount, 50);
+    const pendingRecords = await requestJson(context.baseUrl, "/api/shumiao/recharge-records?page=1&pageSize=10", { headers });
+    assert.equal(pendingRecords.body.code, 200, JSON.stringify(pendingRecords.body));
+    assert.equal(pendingRecords.body.data.list[0].id, order.orderNo);
+    assert.equal(pendingRecords.body.data.list[0].amountYuan, 10);
+    assert.equal(pendingRecords.body.data.list[0].statusText, "待支付");
     const payUrl = new URL(order.payUrl);
     assert.equal(payUrl.origin, context.baseUrl);
     assert.match(payUrl.pathname, /^\/pay\/[A-Za-z0-9_-]{40,64}$/);

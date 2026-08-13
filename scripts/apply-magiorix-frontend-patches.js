@@ -82,6 +82,7 @@ function removeIfExists(filePath) {
 
 const mainBundle = path.join(assetsDir, "index-B09sHfUO.js");
 const pointsRechargeBundle = path.join(assetsDir, "index-C0Ke2Ul0.js");
+const rechargeRecordsBundle = path.join(assetsDir, "index-DHMLmlYD.js");
 const dateTimePickerBundle = path.join(assetsDir, "index-CB4FiGU9.js");
 const exportTemplateBundle = path.join(assetsDir, "index-CiEqCfGB.js");
 const exportFieldSelectorBundle = path.join(assetsDir, "index-IS4kgrUy.js");
@@ -1015,6 +1016,13 @@ if (verifiedPointsRechargeSource === pointsRechargeSource) {
   throw new Error("Missing recharge payment open confirmation patch target");
 }
 fs.writeFileSync(pointsRechargeBundle, verifiedPointsRechargeSource);
+
+replaceOnce(
+  rechargeRecordsBundle,
+  "t.amountYuan.toFixed(2)",
+  "(Number.isFinite(Number(t.amountYuan))?Number(t.amountYuan):Number(t.amountCents||0)/100||Number(t.amount||0)).toFixed(2)",
+  "recharge records amount compatibility",
+);
 
 replaceAllIfExists(path.join(assetsRoot, "index.html"), legacyChineseName, "magiorix");
 

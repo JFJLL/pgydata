@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const { requestJson, withServer } = require("./api-test-helpers");
 
 const apiRoot = path.resolve(__dirname, "..");
 
@@ -49,4 +50,15 @@ test("server keeps client APIs available when the management password is not con
     }
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
+});
+
+test("management login accepts a configured password shorter than 16 characters", async () => {
+  await withServer({}, { ADMIN_PASSWORD: "short-pass" }, async (context) => {
+    const result = await requestJson(context.baseUrl, "/api/admin/login", {
+      method: "POST",
+      body: { username: "admin", password: "short-pass" },
+    });
+    assert.equal(result.body.code, 200, JSON.stringify(result.body));
+    assert.ok(result.body.data.token);
+  });
 });

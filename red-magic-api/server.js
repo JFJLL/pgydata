@@ -627,7 +627,6 @@ function trustProxyValue() {
 function isAdminPasswordConfigured() {
   return Boolean(
     ADMIN_PASSWORD
-    && ADMIN_PASSWORD.length >= 16
     && !ADMIN_PASSWORD_PLACEHOLDERS.has(ADMIN_PASSWORD.toLowerCase()),
   );
 }
@@ -1112,16 +1111,23 @@ function createPaymentToken() {
 
 function paymentOrderView(row) {
   if (!row) return null;
+  const status = Number(row.status ?? 0);
+  const amount = Number(row.amount || 0);
+  const amountCents = Number(row.amountCents ?? row.amount_cents ?? 0);
+  const orderNo = row.orderNo || row.order_no;
   return {
-    orderNo: row.orderNo || row.order_no,
+    id: orderNo,
+    orderNo,
     packageId: row.packageId || row.package_id,
-    amount: Number(row.amount || 0),
-    amountCents: Number(row.amountCents ?? row.amount_cents ?? 0),
+    amount,
+    amountCents,
+    amountYuan: Number.isFinite(amountCents) && amountCents > 0 ? amountCents / 100 : amount,
     baseCount: Number(row.baseCount ?? row.base_count ?? 0),
     giftCount: Number(row.giftCount ?? row.gift_count ?? 0),
     totalCount: Number(row.totalCount ?? row.total_count ?? 0),
     channel: row.channel || "alipay",
-    status: Number(row.status ?? 0),
+    status,
+    statusText: status === ORDER_STATUS.CREDITED ? "已到账" : status === ORDER_STATUS.CLOSED ? "已关闭" : "待支付",
     platformTransactionId: row.platformTransactionId || row.platform_transaction_id || null,
     paidAt: row.paidAt || row.paid_at || null,
     creditedAt: row.creditedAt || row.credited_at || null,
@@ -1267,7 +1273,7 @@ app.get("/api/shumiao/recharge-records", authRequired, asyncHandler(async (req, 
      LIMIT ? OFFSET ?`,
     [req.user.id, pageSize, offset],
   );
-  return success(res, { list, total: totalRow.total, page, pageSize });
+  return success(res, { list: list.map(paymentOrderView), total: totalRow.total, page, pageSize });
 }));
 
 app.get("/api/shumiao/consume-records", authRequired, asyncHandler(async (req, res) => {
