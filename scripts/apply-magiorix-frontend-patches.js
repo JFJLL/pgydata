@@ -1244,6 +1244,31 @@ replaceAllIfExists(
   'Number(a.balanceAfter??0).toLocaleString()',
 );
 
+// ===== Auth 会话三处修复：请求风暴 / 超时踢登录 / 续期不同步 =====
+// 1) 初始化 effect 依赖不再包含 userInfo 对象，避免「刷新资料 -> 新对象 -> 再刷新」的请求风暴；
+//    初始化失败（如网络超时）只记录日志并保留登录态；确认 401 统一由拦截器 Ml() 退出。
+replaceOnce(
+  mainBundle,
+  '}catch(E){console.error("Init auth failed:",E),n(),f(),Ee.system.auth.setLoginState(!1),typeof window<"u"&&(window.location.hash="#/sign-in")}else Ee.system.auth.setLoginState(!1);C(!1)})()},[t,l,y]);',
+  '}catch(E){console.error("Init auth failed:",E)}else Ee.system.auth.setLoginState(!1);C(!1)})()},[t,y]);',
+  "auth init effect: stop user-object refresh loop, keep session on network errors",
+);
+// 2) refreshProfile 失败（超时、断网等）只记录日志，不再清 token/用户；确认 401 由拦截器 Ml() 处理。
+replaceOnce(
+  mainBundle,
+  '}catch(S){console.error("Failed to refresh profile:",S),n(),f()}},[t,i,d,c,u,n,f])',
+  '}catch(S){console.error("Failed to refresh profile:",S)}},[t,i,d,c,u,n,f])',
+  "refreshProfile: keep session on non-401 failures",
+);
+// 3) 服务端下发 x-new-token 时同步 Zustand 内存（setToken 触发持久化，
+//    并通过 AuthProvider 的 [t] effect 把新 token 同步到 Electron 主进程调度器）。
+replaceOnce(
+  mainBundle,
+  'if(a)try{const n=localStorage.getItem("auth-storage");if(n){const l=JSON.parse(n);l.state.token=a,localStorage.setItem("auth-storage",JSON.stringify(l))}}catch(n){console.error("Failed to update token:",n)}',
+  'if(a){try{const n=localStorage.getItem("auth-storage");if(n){const l=JSON.parse(n);l.state.token=a,localStorage.setItem("auth-storage",JSON.stringify(l))}}catch(n){console.error("Failed to update token:",n)}Zt.getState().setToken(a)}',
+  "x-new-token: sync rotated token into Zustand and main process",
+);
+
 // 统一 mainBundle 行尾为 CRLF（Windows 构建产物惯例），避免混合 EOL 导致
 // integrity-manifest 哈希在 fresh checkout（autocrlf）下不可复现；幂等：重复运行结果一致。
 const normalizedMainBundle = fs
