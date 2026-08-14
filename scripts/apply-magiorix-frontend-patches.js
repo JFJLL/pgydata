@@ -1033,7 +1033,9 @@ for (const entry of fs.readdirSync(assetsDir)) {
   replaceAllIfExists(filePath, legacyExeName, "magiorix");
   replaceAllIfExists(filePath, legacyVersion, assetVersion);
   if (sourceAssetVersion && sourceAssetVersion !== assetVersion) {
-    replaceAllIfExists(filePath, sourceAssetVersion, assetVersion);
+    // 必须带引号匹配：无引号的全局替换会把 bundle 内形如 1.3.3XX 的 SVG 路径坐标
+    // 一并改写（历史版本图标坐标逐版漂移即由此产生），带引号只命中版本字符串字面量。
+    replaceAllIfExists(filePath, `"${sourceAssetVersion}"`, `"${assetVersion}"`);
   }
   replaceAllIfExists(filePath, "薯苗", "积分");
   replaceAllIfExists(filePath, "树苗", "积分");
