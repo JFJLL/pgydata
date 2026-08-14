@@ -39,7 +39,8 @@ import * as Da from "node-cron";
 const Fe = {
   shell: {
     openExternal: "system:shell:open-external",
-    openSafeExternal: "system:shell:open-safe-external"
+    openSafeExternal: "system:shell:open-safe-external",
+    closePayment: "system:shell:close-payment"
   },
   window: {
     minimize: "system:window:minimize",
@@ -284,13 +285,32 @@ function pgyIsPaymentWindowUrl(value) {
   }
 }
 const pgyPaymentLog = Y("Payment");
+let pgyPaymentWindow = null;
+function pgyClosePaymentWindow() {
+  if (!pgyPaymentWindow || pgyPaymentWindow.isDestroyed()) {
+    pgyPaymentWindow = null;
+    return;
+  }
+  const parent = pgyPaymentWindow.getParentWindow();
+  pgyPaymentWindow.close();
+  pgyPaymentWindow = null;
+  if (parent && !parent.isDestroyed()) {
+    parent.show();
+    parent.focus();
+  }
+}
 async function pgyOpenPaymentWindow(value, parentWindow) {
   const target = pgyResolveExternal(value, pgyPaymentExternalOrigins);
   if (!target) throw new Error("支付地址不安全或不受支持");
   const parent = parentWindow && !parentWindow.isDestroyed() ? parentWindow : null;
-  const windowOptions = { width: 900, height: 720, minWidth: 760, minHeight: 620, show: false, title: "支付宝支付 - magiorix", autoHideMenuBar: true, backgroundColor: "#ffffff", webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true } };
+  pgyClosePaymentWindow();
+  const windowOptions = { width: 900, height: 720, minWidth: 760, minHeight: 620, show: false, skipTaskbar: true, title: "支付宝支付 - magiorix", autoHideMenuBar: true, backgroundColor: "#ffffff", webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true } };
   if (parent) { windowOptions.parent = parent; windowOptions.modal = true; }
   const paymentWindow = new Dt(windowOptions);
+  pgyPaymentWindow = paymentWindow;
+  paymentWindow.once("closed", () => {
+    if (pgyPaymentWindow === paymentWindow) pgyPaymentWindow = null;
+  });
   pgyPaymentLog.info("正在创建应用内支付宝支付弹窗");
   paymentWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   const blockUnexpectedNavigation = (event, url) => { if (!pgyIsPaymentWindowUrl(url)) event.preventDefault(); };
@@ -312,6 +332,8 @@ const Wr = (a) => {
     const s = pgyResolveExternal(n, pgyPaymentExternalOrigins);
     if (!s) throw new Error("支付地址不安全或不受支持");
     return await pgyOpenPaymentWindow(s, a());
+  }), F.on(Fe.shell.closePayment, () => {
+    pgyClosePaymentWindow();
   }), F.on(Fe.shell.openSafeExternal, (t, n) => {
     const s = pgyResolveExternal(n, pgySafeExternalOrigins);
     if (s) void Ji.openExternal(s);
@@ -349,7 +371,7 @@ const Wr = (a) => {
       s.setResizable(!0), s.setMinimumSize(tn, nn), s.setSize(m.width, m.height), h && h.x !== void 0 && h.y !== void 0 ? s.setPosition(h.x, h.y) : s.setPosition(
         Math.round(p - m.width / 2),
         Math.round(d - m.height / 2)
-      );
+      ), s.isMaximized() || s.maximize();
     } else
       s.setResizable(!0), s.setMinimumSize(725, 486), s.setSize(900, 640), s.setPosition(Math.round(p - 900 / 2), Math.round(d - 640 / 2));
     s.isMinimized() || s.isVisible() || s.show();
@@ -17943,6 +17965,7 @@ const dm = {
     "videoFullViewRate30",
     "picture3sViewRate30",
     "mEngagementNum30",
+    "recentNoteInteractionMedian",
     "impMedian30",
     "likeMedian",
     "collectMedian",
@@ -20544,7 +20567,8 @@ class hm {
       interactionRate30: o.interactionRate + "%",
       videoFullViewRate30: o.videoFullViewRate + "%",
       picture3sViewRate30: o.picture3sViewRate + "%",
-      mEngagementNum30: o.interactionMedian,
+      mEngagementNum30: o.mEngagementNum,
+      recentNoteInteractionMedian: o.interactionMedian,
       impMedian30: o.impMedian || "无",
       likeMedian: o.likeMedian || "无",
       collectMedian: o.collectMedian || "无",

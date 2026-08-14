@@ -98,6 +98,20 @@ const NOTEBOOK_ROW = {
   likeNum: 10,
 };
 
+test("蒲公英博主字段：近期笔记波动中位数独立位于合作90天之后", () => {
+  const schema = resolveCollectionExportHeaders("pgy", "blogger");
+  const dailyMedian = schema.find((header) => header.key === "mEngagementNum30");
+  const business90End = schema.findIndex((header) => header.key === "impMedianBusiness90");
+  const recentMedian = schema.findIndex((header) => header.key === "recentNoteInteractionMedian");
+  assert.equal(dailyMedian?.group, "日常30天");
+  assert.equal(recentMedian, business90End + 1);
+  assert.deepEqual(schema[recentMedian], {
+    group: "近期笔记波动",
+    label: "中位数",
+    key: "recentNoteInteractionMedian",
+  });
+});
+
 test("蒲公英博主历史任务导出：中文两行表头、字段顺序与正常导出一致", async () => {
   const rows = [BLOGGER_ROW, { ...BLOGGER_ROW, nickname: "测试博主2", fansCount: 678 }];
   const task = { taskId: "hist-blogger-1", pluginId: "pgy", taskType: "blogger", fileName: "博主.xlsx", fields: [] };

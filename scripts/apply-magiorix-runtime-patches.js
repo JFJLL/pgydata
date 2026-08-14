@@ -80,7 +80,24 @@ main = main.replace(' : o.type === "recent-note-interaction-fluctuation" ? r = p
 main = main.replace(/            elif chart_type == "recent-note-interaction-fluctuation":\r?\n                ok = save_recent_note_fluctuation\(chart\)\r?\n/g, "");
 main = removeSectionIfExists(main, "def save_recent_note_fluctuation(chart):", "def main():");
 main = removeSectionIfExists(main, "// 近期笔记波动图（互动量）JS/SVG 兜底", "async function buildPgyBloggerChartFields");
-main = replaceAllIfExists(main, "mEngagementNum30: o.mEngagementNum,", "mEngagementNum30: o.interactionMedian,");
+main = replaceAllIfExists(
+  main,
+  "mEngagementNum30: o.interactionMedian,",
+  "mEngagementNum30: o.mEngagementNum,\n      recentNoteInteractionMedian: o.interactionMedian,",
+);
+if (!main.includes("recentNoteInteractionMedian: o.interactionMedian")) {
+  main = replaceOnce(
+    main,
+    "mEngagementNum30: o.mEngagementNum,",
+    "mEngagementNum30: o.mEngagementNum,\n      recentNoteInteractionMedian: o.interactionMedian,",
+    "separate recent-note interaction median field",
+  );
+}
+main = replaceAllIfExists(
+  main,
+  '    "mEngagementNum30",\n    "impMedian30",',
+  '    "mEngagementNum30",\n    "recentNoteInteractionMedian",\n    "impMedian30",',
+);
 let preload = fs.readFileSync(preloadPath, "utf8");
 
 main = main.split("薯苗").join("积分");
@@ -239,6 +256,15 @@ const Wr = (a) => {
   );
 }
 
+if (!main.includes('closePayment: "system:shell:close-payment"')) {
+  main = replaceOnce(
+    main,
+    'openSafeExternal: "system:shell:open-safe-external"',
+    'openSafeExternal: "system:shell:open-safe-external",\n    closePayment: "system:shell:close-payment"',
+    "payment close IPC channel",
+  );
+}
+
 main = replaceAllIfExists(
   main,
   `const Wr = (a) => {
@@ -354,6 +380,62 @@ const Wr = (a) => {`,
   );
 }
 
+if (!main.includes("let pgyPaymentWindow = null")) {
+  main = replaceOnce(
+    main,
+    `const pgyPaymentLog = Y("Payment");
+async function pgyOpenPaymentWindow`,
+    `const pgyPaymentLog = Y("Payment");
+let pgyPaymentWindow = null;
+function pgyClosePaymentWindow() {
+  if (!pgyPaymentWindow || pgyPaymentWindow.isDestroyed()) {
+    pgyPaymentWindow = null;
+    return;
+  }
+  const parent = pgyPaymentWindow.getParentWindow();
+  pgyPaymentWindow.close();
+  pgyPaymentWindow = null;
+  if (parent && !parent.isDestroyed()) {
+    parent.show();
+    parent.focus();
+  }
+}
+async function pgyOpenPaymentWindow`,
+    "single embedded payment window lifecycle",
+  );
+}
+main = replaceAllIfExists(
+  main,
+  '  const windowOptions = { width: 900, height: 720, minWidth: 760, minHeight: 620, show: false, title:',
+  '  pgyClosePaymentWindow();\n  const windowOptions = { width: 900, height: 720, minWidth: 760, minHeight: 620, show: false, skipTaskbar: true, title:',
+);
+if (!main.includes('paymentWindow.once("closed"')) {
+  main = replaceOnce(
+    main,
+    `  const paymentWindow = new Dt(windowOptions);
+  pgyPaymentLog.info`,
+    `  const paymentWindow = new Dt(windowOptions);
+  pgyPaymentWindow = paymentWindow;
+  paymentWindow.once("closed", () => {
+    if (pgyPaymentWindow === paymentWindow) pgyPaymentWindow = null;
+  });
+  pgyPaymentLog.info`,
+    "track embedded payment window",
+  );
+}
+if (!main.includes("F.on(Fe.shell.closePayment")) {
+  main = replaceOnce(
+    main,
+    `    return await pgyOpenPaymentWindow(s, a());
+  }), F.on(Fe.shell.openSafeExternal`,
+    `    return await pgyOpenPaymentWindow(s, a());
+  }), F.on(Fe.shell.closePayment, () => {
+    pgyClosePaymentWindow();
+  }), F.on(Fe.shell.openSafeExternal`,
+    "close embedded payment window IPC",
+  );
+}
+
 main = replaceAllIfExists(
   main,
   `    await Ji.openExternal(s);
@@ -414,11 +496,24 @@ main = replaceAllIfExists(
       Ee.info(\`发现新版本 ${'${e.version}'}，后台下载中...\`);`,
 );
 
-preload = replaceOnce(
-  preload,
-  'shell:{openExternal:"system:shell:open-external"}',
-  'shell:{openExternal:"system:shell:open-external",openSafeExternal:"system:shell:open-safe-external"}',
-  "safe external preload channel",
+if (!preload.includes('closePayment:"system:shell:close-payment"')) {
+  preload = replaceAllIfExists(
+    preload,
+    'openSafeExternal:"system:shell:open-safe-external"',
+    'openSafeExternal:"system:shell:open-safe-external",closePayment:"system:shell:close-payment"',
+  );
+  if (!preload.includes('closePayment:"system:shell:close-payment"')) {
+    preload = replaceOnce(
+      preload,
+      'shell:{openExternal:"system:shell:open-external"}',
+      'shell:{openExternal:"system:shell:open-external",openSafeExternal:"system:shell:open-safe-external",closePayment:"system:shell:close-payment"}',
+      "safe external and payment-close preload channels",
+    );
+  }
+}
+preload = preload.replace(
+  /(?:,closePayment:"system:shell:close-payment")+/g,
+  ',closePayment:"system:shell:close-payment"',
 );
 preload = replaceOnce(
   preload,
@@ -443,6 +538,11 @@ preload = replaceAllIfExists(
   preload,
   'openExternal:e=>{r.ipcRenderer.send(i.shell.openExternal,e)}',
   'openExternal:e=>r.ipcRenderer.invoke(i.shell.openExternal,e)',
+);
+preload = replaceAllIfExists(
+  preload,
+  'openSafeExternal:e=>{r.ipcRenderer.send(i.shell.openSafeExternal,e)}}',
+  'openSafeExternal:e=>{r.ipcRenderer.send(i.shell.openSafeExternal,e)},closePayment:()=>{r.ipcRenderer.send(i.shell.closePayment)}}',
 );
 
 if (!main.includes("pgyIsMainWindowNavigationAllowed")) {
@@ -2511,6 +2611,17 @@ ye.on("window-all-closed", () => {`,
     "single desktop instance end",
   );
 }
+main = replaceAllIfExists(
+  main,
+  `        Math.round(p - m.width / 2),
+        Math.round(d - m.height / 2)
+      );
+    } else`,
+  `        Math.round(p - m.width / 2),
+        Math.round(d - m.height / 2)
+      ), s.isMaximized() || s.maximize();
+    } else`,
+);
 
 main = replaceAllIfExists(
   main,

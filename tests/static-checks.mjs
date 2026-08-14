@@ -172,7 +172,8 @@ assert.doesNotMatch(
 assert.match(runtimePatch, /daily-note-performance/, "runtime patch must route the daily note chart renderer");
 assert.match(runtimePatch, /replaceSection/, "runtime patch must migrate an existing daily note renderer section");
 assert.match(runtimePatch, /pgy_daily_note_svg\.js/, "runtime patch must load the maintained daily note SVG source");
-assert.match(runtimePatch, /mEngagementNum30: o\.interactionMedian/, "daily-30 interaction median must use interactionMedian");
+assert.match(runtimePatch, /mEngagementNum30: o\.mEngagementNum/, "daily-30 interaction median must keep the original mEngagementNum");
+assert.match(runtimePatch, /recentNoteInteractionMedian: o\.interactionMedian/, "recent-note fluctuation median must use a separate field");
 // Phase 4 可复现构建（fresh reviewer H1/H2）：runtime 补丁必须自带
 // redactLocalPathText import 与 pgy-kol 批量主进程/preload 接线步骤，
 // 干净重建不得产生未定义引用或静默丢失批量功能。

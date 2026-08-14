@@ -152,6 +152,7 @@ test("Alipay order, notify and settlement are single-channel and idempotent", as
       [50000, 2500, 300, 2800],
       [100000, 5000, 1000, 6000],
     ]);
+    assert.deepEqual(packages.body.data.map((item) => item.shumiaoCount), [50, 500, 2500, 5000]);
 
     const created = await requestJson(context.baseUrl, "/api/shumiao/recharge", {
       method: "POST",
@@ -162,7 +163,9 @@ test("Alipay order, notify and settlement are single-channel and idempotent", as
     const order = created.body.data;
     assert.equal(order.channel, "alipay");
     assert.equal(order.amountCents, 1000);
+    assert.equal(order.amount, 1000);
     assert.equal(order.totalCount, 50);
+    assert.equal(order.codeUrl, order.payUrl);
     const pendingRecords = await requestJson(context.baseUrl, "/api/shumiao/recharge-records?page=1&pageSize=10", { headers });
     assert.equal(pendingRecords.body.code, 200, JSON.stringify(pendingRecords.body));
     assert.equal(pendingRecords.body.data.list[0].id, order.orderNo);

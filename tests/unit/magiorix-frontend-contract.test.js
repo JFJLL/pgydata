@@ -66,6 +66,10 @@ test("1.3.3 frontend bundle is branded and uses the safe dashboard contract", ()
   assert.match(source, /magiorix\.login\.method/);
   assert.doesNotMatch(source, /\/api\/statistics\/admin-dashboard/);
   assert.match(source, /\/api\/statistics\/dashboard/);
+  assert.match(source, /function Q0\(\)\{const e=se\(\),t=r1\(\),r=Te\(\),a=no\(e\.breakpoints\.down\("md"\)\)/);
+  assert.doesNotMatch(source, /function Q0\(\)\{[^\n]*breakpoints\.down\("lg"\)/);
+  assert.match(source, /field:"recentNoteInteractionMedian",headerName:"近期笔记波动中位数"/);
+  assert.match(source, /groupKey:"recent-note-fluctuation",groupLabel:"近期笔记波动"/);
 
   const dashboardStart = source.indexOf("function R5(){");
   const dashboardEnd = source.indexOf("function P5(", dashboardStart);
@@ -87,6 +91,7 @@ test("1.3.3 points recharge bundle exposes the Alipay-only contract", () => {
   for (const label of ["积分充值", "立即充值", "支付宝", "payUrl", "/query"]) {
     assert.match(source, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing ${label}`);
   }
+  assert.match(source, /const tick=async\(\)=>\{if\(stopped\)return;/);
   for (const forbidden of ["微信", "薯苗", "树苗", "佣金", "邀请返利", "活动"]) {
     assert.doesNotMatch(source, new RegExp(forbidden), `forbidden recharge text: ${forbidden}`);
   }
@@ -142,6 +147,9 @@ test("payment external links stay behind the main-process HTTPS allowlist", () =
   assert.match(main, /支付宝支付 - magiorix/);
   assert.match(main, /windowOptions\.parent = parent/);
   assert.match(main, /windowOptions\.modal = true/);
+  assert.match(main, /skipTaskbar: true/);
+  assert.match(main, /F\.on\(Fe\.shell\.closePayment/);
+  assert.match(main, /s\.isMaximized\(\) \|\| s\.maximize\(\)/);
   assert.match(main, /width: 900, height: 720/);
   assert.match(main, /pgyOpenPaymentWindow\(s, a\(\)\)/);
   assert.match(main, /url\.hostname\.endsWith\("\.alipay\.com"\)/);
@@ -149,14 +157,19 @@ test("payment external links stay behind the main-process HTTPS allowlist", () =
   assert.match(preload, /openExternal:e=>r\.ipcRenderer\.invoke/);
   assert.doesNotMatch(main, /树苗|薯苗/);
   assert.match(preload, /openSafeExternal/);
+  assert.match(preload, /closePayment/);
   const rechargeSource = fs.readFileSync(rechargeBundle, "utf8");
   assert.match(rechargeSource, /shell\?\.openExternal/);
   assert.match(rechargeSource, /await window\.bridge\?\.system\?\.shell\?\.openExternal/);
   assert.match(rechargeSource, /支付宝支付窗口已打开/);
+  assert.match(rechargeSource, /closePayment\?\.\(\)/);
   assert.doesNotMatch(rechargeSource, /openSafeExternal/);
   const recordsSource = fs.readFileSync(path.join(projectRoot, "assets", "1.3.3", "assets", "index-DHMLmlYD.js"), "utf8");
   assert.doesNotMatch(recordsSource, /t\.amountYuan\.toFixed\(2\)/);
   assert.match(recordsSource, /Number\.isFinite\(Number\(t\.amountYuan\)\)/);
+  const consumeSource = fs.readFileSync(path.join(projectRoot, "assets", "1.3.3", "assets", "index-CgHBiVER.js"), "utf8");
+  assert.match(consumeSource, /a\.consumeCount\?\?a\.count\?\?0/);
+  assert.doesNotMatch(consumeSource, /\?\?[^;,)]+\|\|/);
   const first = spawnSync(process.execPath, [runtimePatchScript], { cwd: projectRoot, encoding: "utf8" });
   assert.equal(first.status, 0, first.stderr || first.stdout);
   const second = spawnSync(process.execPath, [runtimePatchScript], { cwd: projectRoot, encoding: "utf8" });

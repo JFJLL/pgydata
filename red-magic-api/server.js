@@ -1153,7 +1153,8 @@ app.get("/api/shumiao/balance", authRequired, asyncHandler(async (req, res) => {
 app.get("/api/shumiao/packages", authRequired, asyncHandler(async (req, res) => {
   const rows = await dbAll(
     `SELECT id, id AS packageId, title, amount, amount_cents AS amountCents,
-            base_count AS baseCount, gift_count AS giftCount, total_count AS totalCount
+            base_count AS baseCount, base_count AS shumiaoCount,
+            gift_count AS giftCount, total_count AS totalCount
      FROM shumiao_packages
      WHERE enabled = 1
      ORDER BY sort_order ASC, amount ASC`,
@@ -1354,9 +1355,13 @@ app.post("/api/shumiao/recharge", authRequired, asyncHandler(async (req, res) =>
     );
   });
 
+  const payUrl = `${BASE_URL}/pay/${paymentToken}`;
   return success(res, {
     orderNo,
-    payUrl: `${BASE_URL}/pay/${paymentToken}`,
+    payUrl,
+    // 兼容仍在使用 1.1.x 前端资源的客户端：旧页面用 codeUrl 生成二维码。
+    codeUrl: payUrl,
+    amount: Number(pkg.amount_cents),
     amountCents: Number(pkg.amount_cents),
     totalCount: Number(pkg.total_count),
     channel: "alipay",
