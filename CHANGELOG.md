@@ -2,6 +2,16 @@
 
 本文件保存版本历史、发布记录、安装包路径与校验信息，不放长期维护规则。
 
+## 1.3.4 (Candidate)
+
+- 修复：登录初始化不再因用户对象变化触发递归刷新，消除个人资料请求风暴（不再出现单次运行上万条失败请求）。
+- 修复：个人资料请求超时/断网时只保留日志与登录态，不再清空 token 踢回登录页；仅确认的 401（服务端响应或主进程通知）才退出登录。
+- 修复：服务端通过 `x-new-token` 续期时，新 token 同步写入 Zustand 内存并通知 Electron 主进程调度器，避免旧 token 持续 401。
+- 修复：前端补丁的版本替换改为只匹配带引号的版本字符串，避免把 bundle 内 SVG 图标路径坐标一并改写。
+- 本地安装包：`desktop-versions/windows/1.3.4/magiorix-desktop-1.3.4-windows.exe`（SHA256：`9644EAD686C6B0884BF0A32471123374FAF28DAE52941ACB0369D27D505EFA09`）。
+- 本地资源包：`desktop-versions/windows/1.3.4/magiorix-desktop-1.3.4-assets.zip`（SHA256：`AB64326735431A0564F03708B48BA0EECCD2D565EFAE7340C2ABDDA1CAA2B434`）。
+- 发布状态：已生成本地不可变版本 manifest（`public/releases/windows/1.3.4.json`）；尚未修改 `latest.json`、未部署。
+
 ## 1.3.3 (Candidate)
 
 - 修复：支付宝支付改为单任务栏入口的模态子窗口，支付成功后自动关闭并回到主窗口；窗口仅允许支付服务与支付宝域名跳转。
