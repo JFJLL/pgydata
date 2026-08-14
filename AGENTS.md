@@ -56,6 +56,7 @@
 - `red-magic-api/public/releases/windows/<version>.json` 和 `latest.json` 属于发布状态与用户成果，不得当作构建残留删除、覆盖或回退。
 - 已存在版本 manifest 时，构建脚本拒绝同版本重建是不可变发布保护；不得删除 manifest 来绕过。若需改变产物，升级 patch 版本。
 - manifest、`latest.json`、本地产物或线上文件发生冲突时，先停止并向用户确认发布阶段和文件归属；不得为了让验证通过而擅自改变发布状态。
+- 每次推送包含 Git LFS 大文件的提交（如 `runtime/magiorix-desktop/resources/app.asar`、`magiorix.exe`、`pgy-chart-renderer.exe`）后，应执行 `git lfs prune`（必要时加 `git gc --prune=now`）清理本地历史 LFS 对象缓存，避免 `.git` 体积无限堆积；被清理对象在远程仓库仍有备份，可随时按需拉取，不影响历史完整性。
 
 ## 安全红线
 
