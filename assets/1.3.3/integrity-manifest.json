@@ -49,8 +49,8 @@
     },
     {
       "path": "assets/index-B09sHfUO.js",
-      "size": 687010,
-      "sha256": "e067be8af1ad1e81fbcb3b4741d5ad99681b453d5c80760bc532124f7bcfacfd"
+      "size": 696392,
+      "sha256": "aced705d541243ab860228c9d52d7889e549bd83893e5cd8a5f60d97ae03110b"
     },
     {
       "path": "assets/index-b5Geql4X.js",
@@ -109,8 +109,8 @@
     },
     {
       "path": "assets/index-CgHBiVER.js",
-      "size": 3773,
-      "sha256": "188d518ee05118214d0094ca101386650803667c7b36cf8e9dbfc8f2c23fb2b4"
+      "size": 5393,
+      "sha256": "e232b53f5476cdcdc5ab34a408a065045159b64944da509240808295ab1117fd"
     },
     {
       "path": "assets/index-CiEqCfGB.js",
@@ -299,8 +299,8 @@
     },
     {
       "path": "magiorix-ops-assistant.js",
-      "size": 43528,
-      "sha256": "20e0c5008cf61da0d599aaff153c66a0669c4512e400cc19aa0cb5d5318779bb"
+      "size": 43943,
+      "sha256": "125eddec49adc394d7d75122eca0346679718b2b878b40111effdd5cd00bdfb4"
     }
   ]
 }

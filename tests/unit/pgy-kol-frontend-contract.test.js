@@ -410,7 +410,7 @@ test("formal submit reads the complete current draft and builds one normalized f
     fansNumberUpper: 50000,
     fansAge: "18-24",
     fansGender: "女",
-    fansLocation: location,
+    fansLocation: [location],
     fansMaritalStatus: "已婚",
     fansConsumptionLevel: "高",
     fansChildAgeInfo: [{ value: "1-3岁", label: "1-3岁" }],
@@ -1811,14 +1811,11 @@ test("collect flow reuses the shared ExportFieldSelector: the imitation dialog i
   );
   assert.match(pageSource, /startBatchWithColumns\(ids\)/, "the shared selector submit must start the batch with the chosen keys");
   assert.match(pageSource, /searchCoordinator\.startBatch\(ids\)/, "batch start must delegate the complete selected schema keys to the coordinator");
-  assert.match(
-    pageSource,
-    /magiorix:ops-assistant:show-task/,
-    "提交后必须通过 show-task 事件打开/聚焦采集助手的当前任务视图",
-  );
+  assert.doesNotMatch(pageSource, /magiorix:ops-assistant:show-task/, "找博主任务不得再打开采集助手");
+  assert.match(pageSource, /setBatchTask\(\{ id: tid,/, "提交后必须在找博主页建立进度卡状态");
   assert.ok(!pageSource.includes("pgyKolExportColumnIds"), "the collect path must not filter keys through the table column registry");
   assert.ok(!pageSource.includes("exportableColumns"), "the collect path must not derive fields from the table registry");
-  assert.ok(!pageSource.includes("batchExport"), "导出统一在采集助手完成，找博主页面不再提供导出");
+  assert.ok(pageSource.includes("historyApi.exportTask(batchTask.id)"), "完成后必须复用持久任务导出接口");
   assert.ok(!pageSource.includes("PgyKolBatchPanel") && !pageSource.includes("PgyKolTaskHistory"), "页面不得再渲染自建任务面板/历史");
 });
 
@@ -2260,10 +2257,10 @@ test("restart restore and one-click clear persistence", () => {
   );
 });
 
-test("icon beautification: menu, page header, and search button use the registered solar magnifier", () => {
+test("icon beautification: menu and page header use the refined registered user-search icon", () => {
   assert.ok(
-    pageSource.includes('{name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"solar:magnifer-bold-duotone"}'),
-    "menu item must carry the registered solar magnifier icon",
+    pageSource.includes('{name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"solar:user-search-bold-duotone"}'),
+    "menu item must carry the refined user-search icon",
   );
   assert.ok(!pageSource.includes('icon: "mdi:account-search"'), "unregistered mdi icon must be gone from the menu");
   assert.ok(pageSource.includes("solar:magnifer-bold-duotone"), "page header must use the solar magnifier");
@@ -2361,7 +2358,7 @@ test("Phase 5 page source maps completeness and error copy", () => {
   );
 });
 
-test("Phase 5 page source only starts tasks; controls/exports live in the assistant", () => {
+test("Phase 5 page starts tasks and keeps progress/export on the 找博主 page", () => {
   assert.match(pageSource, /bridge\.getColumns\(\)/, "page must load the column registry for the result table");
   assert.match(pageSource, /api\.batchStart\(\{filterState:pgyKolClone\(appliedRequestSnapshot\),fields:pgyKolClone\(fields\|\|\[\]\)\}\)/, "coordinator must submit only its frozen applied snapshot");
   assert.match(
@@ -2373,13 +2370,17 @@ test("Phase 5 page source only starts tasks; controls/exports live in the assist
   assert.ok(pageSource.includes('children: "选择采集字段"'), "collect dialog must carry the collect column title");
   assert.match(pageSource, /disabled: batchBusy,/, "start button must be disabled only while starting");
   for (const method of ["batchGet", "batchList", "batchPause", "batchResume", "batchCancel", "batchExport", "onBatchEvent", "previewPayload"]) {
-    assert.ok(!pageSource.includes("bridge." + method + "("), "page must not call bridge." + method + "（由采集助手接管）");
+    assert.ok(!pageSource.includes("bridge." + method + "("), "page must not expose internal checkpoint method bridge." + method);
   }
+  assert.match(pageSource, /historyApi\.exportTask\(batchTask\.id\)/, "download must use the existing persistent history exporter");
+  assert.match(pageSource, /downloadBusyRef\.current/, "download must synchronously guard repeated clicks");
 });
 
-test("找博主页面不再订阅批量事件（进度由采集助手统一驱动）", () => {
+test("找博主页面订阅同一 scraper task 事件，而不是内部批量检查点事件", () => {
   assert.ok(!pageSource.includes("onBatchEvent"), "page must not subscribe to pgy-kol batch events");
-  assert.ok(!pageSource.includes("scraper.task.onProgress"), "page must not subscribe to scraper task progress");
+  for (const event of ["onProgress", "onItemResult", "onPaused", "onComplete", "onError"]) {
+    assert.ok(pageSource.includes('listen("' + event + '"'), "page must subscribe to scraper task " + event);
+  }
 });
 
 test("Phase 5 preview boundary keeps a limited DOM and shows persisted counts", () => {
@@ -2388,9 +2389,10 @@ test("Phase 5 preview boundary keeps a limited DOM and shows persisted counts", 
   assert.match(pageSource, /quarantinedFields/, "unknown-field isolation chips must be kept");
 });
 
-test("找博主页面移除自建任务进度卡（阶段一/阶段二/任务进度全部删除）", () => {
+test("找博主页面复用蒲公英任务事件并渲染单一进度卡", () => {
   assert.ok(!pageSource.includes("PgyKolBatchPanel"), "自建进度卡组件必须删除");
-  assert.ok(!pageSource.includes("任务进度"), "任务进度文案必须删除");
+  assert.ok(pageSource.includes("function PgyKolSearchTaskCard(p)"), "页面必须有薄展示层进度卡");
+  for (const label of ["采集进度", "已用时间：", "成功：", "下载采集结果"]) assert.ok(pageSource.includes(label), "进度卡缺少：" + label);
   assert.ok(!pageSource.includes("阶段一") && !pageSource.includes("阶段二"), "不得出现阶段一/阶段二文案");
   assert.ok(!pageSource.includes("taskDetailRef"), "任务详情滚动定位必须删除");
   assert.ok(!pageSource.includes("resumePlan"), "预算继续 UI 必须删除（内部 checkpoint 不再对用户展示）");
@@ -2403,20 +2405,17 @@ test("Phase 4.1：budget-exhausted 显示预算/已消费/允许范围与输入�
   assert.ok(!pageSource.includes("resumePlan"), "页面不得提供继续/预算 UI");
 });
 
-test("找博主页面移除自建任务历史（历史统一在采集助手）", () => {
+test("找博主页面不重复实现任务历史", () => {
   assert.ok(!pageSource.includes("PgyKolTaskHistory"), "自建任务历史组件必须删除");
   assert.ok(!pageSource.includes("任务历史"), "任务历史文案必须删除");
   assert.ok(!pageSource.includes("暂无采集任务"), "历史空态文案必须删除");
 });
 
-test("采集助手接入：单任务进度卡（进度条/current/total/已用/成功/失败/暂停/继续/取消/完成下载）", () => {
+test("采集助手保留普通采集任务，并排除找博主 search-batch 任务", () => {
   const assistant = fs.readFileSync(path.join(projectRoot, "assets", "1.3.3", "magiorix-ops-assistant.js"), "utf8");
   const source = fs.readFileSync(path.join(projectRoot, "scripts", "magiorix-ops-assistant.js"), "utf8");
   assert.equal(assistant, source, "资产内采集助手必须与源文件一致（补丁脚本拷贝）");
-  // 页面提交后自动打开/聚焦助手当前任务视图。
-  assert.ok(assistant.includes("magiorix:ops-assistant:show-task"), "助手必须监听 show-task 事件");
-  assert.ok(assistant.includes('state.activeTab = "current";') && assistant.includes("state.open = true;"), "show-task 必须打开并聚焦当前任务 tab");
-  // 进度卡与蒲公英博主采集一致：进度条、current/total、已用时间、成功/失败。
+  // 普通蒲公英/星图任务仍保留原助手能力。
   assert.ok(assistant.includes("正在准备采集"), "准备列表阶段显示 正在准备采集（不叫阶段一）");
   // 边发现边采集：发现进度（已发现 X / 预计 N）随 progress 事件合并并渲染。
   assert.ok(assistant.includes("item.discovered = event.discovered"), "助手必须合并发现进度 discovered");
@@ -2435,10 +2434,10 @@ test("采集助手接入：单任务进度卡（进度条/current/total/已用/�
   // 事件接线：onPaused 驱动暂停状态；inputType 随事件传递（识别 search-batch）。
   assert.ok(assistant.includes("task.onPaused((event) => {"), "助手必须订阅 paused 事件");
   assert.ok(assistant.includes("if (event.inputType) item.inputType = event.inputType;"), "助手必须从事件读取 inputType");
-  // search-batch 单一身份：禁止重跑失败项（避免第二条用户任务）。
+  // search-batch 只在找博主页展示：事件和历史都必须从助手排除。
+  assert.ok(assistant.includes('if (event?.inputType === "search-batch") return;'), "助手事件必须忽略 search-batch");
+  assert.ok(assistant.includes('.filter((record) => record?.inputType !== "search-batch")'), "助手历史必须忽略 search-batch");
   assert.ok(assistant.includes('if (source.inputType === "search-batch") return;'), "search-batch 禁止重跑失败项");
-  // 历史导出：search-batch 未完成禁用。
-  assert.ok(assistant.includes('item.inputType === "search-batch" && item.status !== "completed" ? "disabled"'), "历史导出按钮对未完成 search-batch 禁用");
   // 主进程事件携带 inputType（采集助手识别来源）。
   const main = fs.readFileSync(path.join(projectRoot, "app-source", "dist-electron", "index.js"), "utf8");
   assert.ok(main.includes("inputType: l.inputType"), "详情任务事件必须携带 inputType");

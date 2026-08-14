@@ -407,6 +407,7 @@
     initializePersistentHistory();
 
     task.onProgress((event) => {
+      if (event?.inputType === "search-batch") return;
       const item = getTask(event.taskId);
       if (event.inputType) item.inputType = event.inputType;
       item.current = event.current ?? item.current;
@@ -421,11 +422,13 @@
       render();
     });
     task.onPaused((event) => {
+      if (event?.inputType === "search-batch" || event?.taskId?.startsWith("pgykol-detail-")) return;
       const item = getTask(event.taskId);
       item.paused = !!event.paused;
       render();
     });
     task.onItemResult((event) => {
+      if (event?.inputType === "search-batch") return;
       const item = getTask(event.taskId);
       if (event.inputType) item.inputType = event.inputType;
       const url = item.payload?.urls?.[event.index] || "";
@@ -440,6 +443,7 @@
       render();
     });
     task.onComplete((event) => {
+      if (event?.inputType === "search-batch") return;
       const item = getTask(event.taskId);
       item.completed = true;
       const status = event.status || (event.cancelled ? "cancelled" : "completed");
@@ -448,6 +452,7 @@
       render();
     });
     task.onError((event) => {
+      if (event?.inputType === "search-batch" || event?.taskId?.startsWith("pgykol-detail-")) return;
       const category = classifyFailure(event);
       log("error", `任务启动失败：${category.label}`, event.message || "");
       render();
@@ -478,7 +483,7 @@
     if (!window.bridge?.scraper?.history?.list) return;
     try {
       const records = await window.bridge.scraper.history.list();
-      state.history = (Array.isArray(records) ? records : []).map((record) => ({
+      state.history = (Array.isArray(records) ? records : []).filter((record) => record?.inputType !== "search-batch").map((record) => ({
         ...record,
         id: record.taskId,
         inputType: record.inputType || "",

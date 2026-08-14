@@ -114,12 +114,16 @@ test("frontend patch script is repeatable for the 1.3.3 asset copy", () => {
   assert.notEqual(before, "", "bundle hash must be present");
 });
 
-test("server exposes only the three points-center menu entries", () => {
+test("points routes remain available while the left sidebar hides the points-center group", () => {
   const server = fs.readFileSync(path.join(projectRoot, "red-magic-api", "server.js"), "utf8");
   const mainBundle = fs.readFileSync(path.join(projectRoot, "assets", "1.3.3", "assets", "index-B09sHfUO.js"), "utf8");
+  const consumeBundle = fs.readFileSync(path.join(projectRoot, "assets", "1.3.3", "assets", "index-CgHBiVER.js"), "utf8");
   assert.match(server, /name: "积分充值"/);
   assert.match(server, /name: "充值记录"/);
   assert.match(server, /name: "消耗记录"/);
+  assert.match(mainBundle, /t\.filter\(r=>r\.id!=="points"\)\.map/, "sidebar must hide the points-center group");
+  assert.match(mainBundle, /"\.\.\/pages\/shumiao\/recharge\/index\.tsx"/, "top recharge navigation must retain its route");
+  assert.match(consumeBundle, /solar:receipt-text-bold-duotone/, "consume records heading must carry its styled icon");
   assert.doesNotMatch(server, /path: "\/shumiao\/commission"/);
   assert.doesNotMatch(mainBundle, /pages\/shumiao\/commission/);
 });

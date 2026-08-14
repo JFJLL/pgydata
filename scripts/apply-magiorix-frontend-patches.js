@@ -919,6 +919,12 @@ replaceOnce(
   'display:{xs:"block",md:"none"}',
   "align the temporary sidebar drawer with the desktop breakpoint",
 );
+replaceOnce(
+  mainBundle,
+  'children:t.map(r=>o.jsx(cr,{item:r,level:0},r.id))',
+  'children:t.filter(r=>r.id!=="points").map(r=>o.jsx(cr,{item:r,level:0},r.id))',
+  "hide points center from the left sidebar while retaining its routes",
+);
 
 replaceAnyOnce(
   mainBundle,
@@ -1192,6 +1198,12 @@ replaceAllIfExists(
   consumeRecordsBundle,
   'Math.abs(Number(a.consumeCount??a.count||0)).toLocaleString()',
   'Math.abs(Number(a.consumeCount??a.count??0)).toLocaleString()',
+);
+replaceOnce(
+  consumeRecordsBundle,
+  'e.jsx(t,{variant:"h5",sx:{fontWeight:600},children:"消耗记录"})',
+  'e.jsxs(l,{sx:{display:"flex",alignItems:"center",gap:1},children:[e.jsx(u,{icon:"solar:receipt-text-bold-duotone",width:26,height:26,style:{color:"#ff2442"}}),e.jsx(t,{variant:"h5",sx:{fontWeight:600},children:"消耗记录"})]})',
+  "add a styled icon to the consume records heading",
 );
 replaceAllIfExists(
   consumeRecordsBundle,

@@ -1,6 +1,6 @@
 function pgyKolDevEnabled(){return true}
 
-function pgyKolWithLocalMenu(e){if(!pgyKolDevEnabled()||!Array.isArray(e))return e;for(var i=0;i<e.length;i++){if(e[i]&&e[i].path==="/pgy-kol-search")return e}return e.concat([{name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"solar:magnifer-bold-duotone"}])}
+function pgyKolWithLocalMenu(e){if(!pgyKolDevEnabled()||!Array.isArray(e))return e;for(var i=0;i<e.length;i++){if(e[i]&&e[i].path==="/pgy-kol-search")return e}return e.concat([{name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"solar:user-search-bold-duotone"}])}
 
 function pgyKolNodeKey(n){if(n&&n.uniqueKey)return n.uniqueKey;var v=n&&n.value!==undefined?String(n.value):"",p=n&&n.fullPath?n.fullPath:n&&n.label||"";return v+":"+p}
 
@@ -21,7 +21,7 @@ function pgyKolDefaultFilter(){return {searchType:1,keyword:"",marketTarget:null
 function pgyKolToFilterState(f){var out={};if(f.searchType===0||f.searchType===1)out.searchType=f.searchType;if(f.keyword)out.keyword=f.keyword;if(f.marketTarget)out.marketTarget=f.marketTarget;if(f.personalTags&&f.personalTags.length)out.personalTags=f.personalTags.map(pgyKolOptValue);var featureTags=[];if(f.featureTags&&f.featureTags.length)featureTags=featureTags.concat(f.featureTags.map(pgyKolOptValue));if(f.contentSceneLabel&&f.contentSceneLabel.length)featureTags=featureTags.concat(f.contentSceneLabel.map(pgyKolOptValue));if(featureTags.length)out.featureTags=featureTags.filter(function(v,i,a){return a.indexOf(v)===i});if(f.gender)out.gender=f.gender;if(f.location)out.location=[f.location];if(f.signed)out.signed=f.signed;if(f.audience20&&f.audience20.length)out.top20CrowdsLabel=f.audience20;if(f.automotive&&f.automotive.length)out.industrySpecificCrowdsMotorDom=f.automotive;if(f.consumeBehavior&&f.consumeBehavior.length)out.kolInfoConsumBehaviorLabel=f.consumeBehavior;if(f.contentTheme&&f.contentTheme.length)out.contentThemeLabel=f.contentTheme;if(f.fansNumberLower!==""){var lo=Number(f.fansNumberLower);if(Number.isFinite(lo)&&Number.isInteger(lo)&&lo>=0)out.fansNumberLower=lo}if(f.fansNumberUpper!==""){var hi=Number(f.fansNumberUpper);if(Number.isFinite(hi)&&Number.isInteger(hi)&&hi>=0){out.fansNumberUpper=hi;if(out.fansNumberLower===undefined)out.fansNumberLower=0}}else if(out.fansNumberLower!==undefined)out.fansNumberUpper="UNBOUNDED";if(f.fansAge)out.fansAge=f.fansAge;if(f.fansGender)out.fansGender=f.fansGender;if(f.fansLocation)out.fansLocation=f.fansLocation;if(f.fansMaritalStatus)out.fansMaritalStatus=f.fansMaritalStatus;if(f.fansConsumptionLevel)out.fansConsumptionLevel=f.fansConsumptionLevel;if(f.fansChildAgeInfo&&f.fansChildAgeInfo.length)out.fansChildAgeInfo=f.fansChildAgeInfo;if(f.fansDevicePrice&&f.fansDevicePrice.length)out.fansDevicePrice=f.fansDevicePrice;if(f.fansDeviceBrand&&f.fansDeviceBrand.length)out.fansDeviceBrand=f.fansDeviceBrand;if(f.accumCommonImpMedinNum30d)out.accumCommonImpMedinNum30d=f.accumCommonImpMedinNum30d.value;if(f.readMidNor30)out.readMidNor30=f.readMidNor30.value;if(f.interMidNor30)out.interMidNor30=f.interMidNor30.value;if(f.thousandLikePercent30)out.thousandLikePercent30=f.thousandLikePercent30.value;if(f.noteType)out.noteType=f.noteType;if(f.notePriceLower!==""){var npl=Number(f.notePriceLower);if(Number.isFinite(npl)&&npl>=0)out.notePriceLower=npl}if(f.notePriceUpper!==""){var npu=Number(f.notePriceUpper);if(Number.isFinite(npu)&&npu>=0){out.notePriceUpper=npu;if(out.notePriceLower===undefined)out.notePriceLower=0}}else if(out.notePriceLower!==undefined)out.notePriceUpper="UNBOUNDED";if(f.videoPriceLower!==""){var vpl=Number(f.videoPriceLower);if(Number.isFinite(vpl)&&vpl>=0)out.videoPriceLower=vpl}if(f.videoPriceUpper!==""){var vpu=Number(f.videoPriceUpper);if(Number.isFinite(vpu)&&vpu>=0){out.videoPriceUpper=vpu;if(out.videoPriceLower===undefined)out.videoPriceLower=0}}else if(out.videoPriceLower!==undefined)out.videoPriceUpper="UNBOUNDED";if(f.progressOrderCnt!==""){var poc=Number(f.progressOrderCnt);if(Number.isFinite(poc)&&poc>=0)out.progressOrderCnt=poc}if(f.tradeReportBrandIdSet&&f.tradeReportBrandIdSet.length)out.tradeReportBrandIdSet=f.tradeReportBrandIdSet;if(f.activityCodes&&f.activityCodes.length)out.activityCodes=f.activityCodes;if(f.excludeLowActive)out.excludeLowActive=true;if(f.fansNumUp===true)out.fansNumUp=1;var hasBrands=f.brands&&f.brands.length>0;if(hasBrands&&f.excludedTradeReportBrand)out.excludedTradeReportBrand=true;if(hasBrands&&f.excludedTradeInviteReportBrand)out.excludedTradeInviteReportBrand=true;if(f.contentTag&&f.contentTag.length){var p51ct=f.contentTag.filter(function(t){return t!=="全部"});if(p51ct.length)out.contentTag=p51ct}if(f.coopCredit)out.inviteReply48hNumRatio=f.coopCredit.value;if(f.coopImpMedin)out.accumCoopImpMedinNum30d=f.coopImpMedin.value;if(f.coopReadMid)out.readMidCoop30=f.coopReadMid.value;if(f.coopInterMid)out.interMidCoop30=f.coopInterMid.value;if(f.coopOverflowMid)out.mCpuv30d=f.coopOverflowMid.value;if(f.estimatePicReadCost)out.estimatePicReadPrice=f.estimatePicReadCost.value;if(f.estimateVideoReadCost)out.estimateVideoReadPrice=f.estimateVideoReadCost.value;if(f.estimatePicEngageCost)out.estimatePictureEngageCost=f.estimatePicEngageCost.value;if(f.estimateVideoEngageCost)out.estimateVideoEngageCost=f.estimateVideoEngageCost.value;if(f.estimatePictureCpm)out.estimatePictureCpm=f.estimatePictureCpm.value;if(f.estimateVideoCpm)out.estimateVideoCpm=f.estimateVideoCpm.value;if(f.overflowCost)out.estimateCpuv30d=f.overflowCost.value;if(f.liveCount30d&&f.liveCount30d.length)out["filterList.kliveCnt30d"]=f.liveCount30d.map(function(n){return n.value});if(f.avgLiveViewer&&f.avgLiveViewer.length)out["filterList.avgLiveViewerNum"]=f.avgLiveViewer.map(function(n){return n.value});if(f.avgLiveGmv&&f.avgLiveGmv.length)out["filterList.avgAgmv90d"]=f.avgLiveGmv.map(function(n){return n.value});if(f.noteCategory&&f.noteCategory.length)out.contentSceneLabel=f.noteCategory;if(f.inStar===true)out.inStar=1;if(f.newHighQuality===true)out.newHighQuality=1;if(f.filterIntention===true)out.filterIntention=true;if(f.isHighQualityFlag===true)out["flagList.isHighQuality"]=true;if(f.hasBuyerCoopAuthFlag===true)out["flagList.hasBuyerCoopAuth"]=true;if(f.firstIndustry)out.firstIndustry=f.firstIndustry;if(f.secondIndustry)out.secondIndustry=f.secondIndustry;return out}
 
 var pgyKolBaseToFilterState=pgyKolToFilterState;
-pgyKolToFilterState=function(f){var out=pgyKolBaseToFilterState(f);delete out.progressOrderCnt;if(f.progressOrderCnt&&Array.isArray(f.progressOrderCnt.value))out.progressOrderCnt=f.progressOrderCnt.value.slice();if(f.tradeType&&f.tradeType!=="不限")out.tradeType=f.tradeType;if(f.tradeReportBrandIdSet&&f.tradeReportBrandIdSet.length&&f.excludedTradeReportBrandId===true)out.excludedTradeReportBrandId=true;return out};
+pgyKolToFilterState=function(f){var out=pgyKolBaseToFilterState(f);delete out.progressOrderCnt;if(f.progressOrderCnt&&Array.isArray(f.progressOrderCnt.value))out.progressOrderCnt=f.progressOrderCnt.value.slice();if(f.tradeType&&f.tradeType!=="不限")out.tradeType=f.tradeType;if(f.tradeReportBrandIdSet&&f.tradeReportBrandIdSet.length&&f.excludedTradeReportBrandId===true)out.excludedTradeReportBrandId=true;if(f.fansLocation)out.fansLocation=[f.fansLocation];return out};
 
 function pgyKolClone(value){if(value===undefined)return undefined;return JSON.parse(JSON.stringify(value))}
 
@@ -1339,6 +1339,47 @@ function PgyKolSharedFieldSelector(p) {
   return o.jsx(pgyKolFieldSelectorModule, { open: p.open, platform: cfg.platform, schema: cfg.schema, title: "选择采集字段", warningText: "勾选字段过多会显著增加采集时间，且可能触发平台风控。建议按需勾选。", onClose: p.onClose, onSubmit: p.onSubmit });
 }
 
+function pgyKolTaskElapsed(startedAt) {
+  var seconds = startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0;
+  return seconds < 60 ? seconds + "秒" : Math.floor(seconds / 60) + "分" + (seconds % 60) + "秒";
+}
+
+function PgyKolSearchTaskCard(p) {
+  var task = p.task;
+  if (!task) return null;
+  var completed = task.status === "completed";
+  var stopped = ["failed", "cancelled", "interrupted", "auth_expired"].indexOf(task.status) >= 0;
+  var total = Number(task.total || task.estimateTotal || 0);
+  var current = Number(task.current || 0);
+  var percent = completed ? 100 : total > 0 ? Math.max(0, Math.min(100, Math.round(current / total * 100))) : 0;
+  var progressText = total > 0 ? current + "/" + total : task.discovered ? "已发现 " + task.discovered : "正在准备采集";
+  var statusText = completed ? "已完成" : stopped ? "已停止" : task.paused ? "已暂停" : "采集中";
+  return o.jsxs(x, {
+    sx: { mt: 1.5, mb: 1.5, p: 2.5, border: "2px solid", borderColor: completed ? "#00c46a" : stopped ? "#ef5350" : "#31b86b", borderRadius: 2, bgcolor: "#fff", boxShadow: "0 8px 24px rgba(15,23,42,.06)" },
+    children: [
+      o.jsxs(x, { sx: { display: "flex", alignItems: "center", gap: 1.25 }, children: [
+        o.jsx(B, { icon: "solar:file-text-bold-duotone", width: 24, height: 24, style: { color: "#536471" } }),
+        o.jsx(w, { sx: { fontSize: 15, fontWeight: 600 }, children: task.fileName || "找博主采集结果.xlsx" }),
+        o.jsx(f1, { size: "small", color: completed ? "success" : stopped ? "error" : task.paused ? "warning" : "success", icon: o.jsx(B, { icon: completed ? "solar:check-circle-bold" : stopped ? "solar:danger-circle-bold" : task.paused ? "solar:pause-circle-bold" : "svg-spinners:pulse-3", width: 16 }), label: statusText, sx: { ml: "auto", fontWeight: 700 } }),
+        o.jsx(te, { size: "small", "aria-label": "关闭采集进度", onClick: p.onClose, sx: { color: "text.secondary" }, children: o.jsx(B, { icon: "solar:close-circle-bold", width: 20, height: 20 }) }),
+      ] }),
+      o.jsxs(x, { sx: { display: "flex", alignItems: "center", mt: 2, mb: .75 }, children: [
+        o.jsx(w, { sx: { fontSize: 14, color: "text.secondary" }, children: "采集进度" }),
+        o.jsx(w, { sx: { ml: "auto", fontSize: 14, fontWeight: 700, color: completed ? "#00b862" : "#31a765" }, children: percent + "%" }),
+      ] }),
+      o.jsx(x, { sx: { height: 10, borderRadius: 99, overflow: "hidden", bgcolor: "#e8f5ed" }, children: o.jsx(x, { sx: { height: "100%", width: percent + "%", minWidth: !completed && !stopped ? 8 : 0, borderRadius: 99, background: "linear-gradient(90deg,#63c779,#31a65b)", transition: "width .35s ease" } }) }),
+      o.jsxs(x, { sx: { display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap", mt: 2, color: "text.secondary" }, children: [
+        o.jsxs(x, { sx: { display: "flex", alignItems: "center", gap: .75 }, children: [o.jsx(B, { icon: "solar:chart-square-bold-duotone", width: 20 }), o.jsx(w, { sx: { fontSize: 14 }, children: "进度：" }), o.jsx(w, { sx: { fontSize: 14, fontWeight: 700, color: "text.primary" }, children: progressText })] }),
+        o.jsxs(x, { sx: { display: "flex", alignItems: "center", gap: .75 }, children: [o.jsx(B, { icon: "solar:clock-circle-bold-duotone", width: 20 }), o.jsx(w, { sx: { fontSize: 14 }, children: "已用时间：" }), o.jsx(w, { sx: { fontSize: 14, fontWeight: 700, color: "text.primary" }, children: pgyKolTaskElapsed(task.startedAt) })] }),
+        o.jsxs(x, { sx: { display: "flex", alignItems: "center", gap: .75 }, children: [o.jsx(B, { icon: "solar:check-circle-bold-duotone", width: 20 }), o.jsx(w, { sx: { fontSize: 14 }, children: "成功：" }), o.jsx(w, { sx: { fontSize: 14, fontWeight: 700, color: "#00b862" }, children: Number(task.success || 0) })] }),
+      ] }),
+      completed && Number(task.success || 0) > 0 ? o.jsx($, { variant: "contained", color: "success", onClick: p.onDownload, disabled: p.downloadBusy, startIcon: p.downloadBusy ? o.jsx(de, { size: 17, color: "inherit" }) : o.jsx(B, { icon: "solar:download-minimalistic-bold-duotone", width: 19 }), sx: { mt: 2, px: 2.25, borderRadius: 99, fontWeight: 700, boxShadow: "0 8px 20px rgba(0,196,106,.18)" }, children: p.downloadBusy ? "正在下载..." : "下载采集结果" }) : null,
+      p.downloadNotice ? o.jsx(oe, { severity: p.downloadNotice.severity || "info", sx: { mt: 1.5 }, onClose: p.onClearNotice, children: p.downloadNotice.message }) : null,
+      task.message ? o.jsx(oe, { severity: stopped ? "error" : "info", sx: { mt: 1.5 }, children: task.message }) : null,
+    ],
+  });
+}
+
 /* ============ Phase 5.2：找博主页面 ============ */
 function PgyKolSearchPage() {
   var st = m.useState("idle"), status = st[0], setStatus = st[1];
@@ -1363,6 +1404,11 @@ function PgyKolSearchPage() {
   var khint = m.useState(false), keywordHint = khint[0], setKeywordHint = khint[1];
   var bzy = m.useState(false), batchBusy = bzy[0], setBatchBusy = bzy[1];
   var ber = m.useState(null), batchError = ber[0], setBatchError = ber[1];
+  var bst = m.useState(null), batchTask = bst[0], setBatchTask = bst[1];
+  var dbs = m.useState(false), downloadBusy = dbs[0], setDownloadBusy = dbs[1];
+  var dns = m.useState(null), downloadNotice = dns[0], setDownloadNotice = dns[1];
+  var batchTaskIdRef = m.useRef("");
+  var downloadBusyRef = m.useRef(false);
   var snt = m.useState(null), searchNotice = snt[0], setSearchNotice = snt[1];
   var cvw = m.useState({ appliedFilter: null, appliedRequestKey: null, isDirty: true }), coordinatorView = cvw[0], setCoordinatorView = cvw[1];
   var coordinatorRef = m.useRef(null);
@@ -1385,6 +1431,27 @@ function PgyKolSearchPage() {
   }
   var searchCoordinator = coordinatorRef.current;
   function setFilter(next) { return searchCoordinator.editDraft(next); }
+
+  function downloadBatchTask() {
+    if (!batchTask || !batchTask.id || downloadBusyRef.current) return;
+    var historyApi = window.bridge && window.bridge.scraper && window.bridge.scraper.history;
+    if (!historyApi || typeof historyApi.exportTask !== "function") {
+      setDownloadNotice({ severity: "error", message: "当前环境不支持下载采集结果" });
+      return;
+    }
+    downloadBusyRef.current = true;
+    setDownloadBusy(true);
+    setDownloadNotice({ severity: "info", message: "正在生成 Excel，请稍候…" });
+    Promise.resolve(historyApi.exportTask(batchTask.id)).then(function (result) {
+      if (result && result.success === false) throw new Error(result.message || "下载失败");
+      setDownloadNotice({ severity: "success", message: result && result.filePath ? "采集结果已保存到：" + result.filePath : "采集结果已下载" });
+    }).catch(function (err) {
+      setDownloadNotice({ severity: "error", message: err && err.message || "下载失败，请稍后重试" });
+    }).then(function () {
+      downloadBusyRef.current = false;
+      setDownloadBusy(false);
+    });
+  }
 
   /* 路由级宽内容标记：只在找博主页存在时由外层收起重复二级导航，
    * 全局平台主导航不在本组件的职责范围内。 */
@@ -1449,6 +1516,41 @@ function PgyKolSearchPage() {
       }
       document.documentElement.classList.remove("magiorix-pgy-kol-wide");
     };
+  }, []);
+
+  /* 找博主任务直接复用蒲公英博主采集的 scraper 事件；页面只负责展示，
+   * 不再把 search-batch 任务交给采集助手渲染。 */
+  m.useEffect(function () {
+    var taskApi = window.bridge && window.bridge.scraper && window.bridge.scraper.task;
+    if (!taskApi) return;
+    var cleanups = [];
+    function listen(name, handler) {
+      if (typeof taskApi[name] !== "function") return;
+      var off = taskApi[name](handler);
+      if (typeof off === "function") cleanups.push(off);
+    }
+    function current(event) { return !!event && !!batchTaskIdRef.current && event.taskId === batchTaskIdRef.current; }
+    listen("onProgress", function (event) {
+      if (!current(event)) return;
+      setBatchTask(function (prev) { return Object.assign({}, prev || {}, { current: event.current != null ? event.current : prev && prev.current || 0, total: event.total != null ? event.total : prev && prev.total || 0, discovered: event.discovered != null ? event.discovered : prev && prev.discovered || 0, estimateTotal: event.estimateTotal != null ? event.estimateTotal : prev && prev.estimateTotal || 0, paused: false, status: "running" }); });
+    });
+    listen("onItemResult", function (event) {
+      if (!current(event)) return;
+      setBatchTask(function (prev) { var success = Number(prev && prev.success || 0), failed = Number(prev && prev.failed || 0); if (event.status === "success") success += 1; else failed += 1; return Object.assign({}, prev || {}, { success: success, failed: failed }); });
+    });
+    listen("onPaused", function (event) {
+      if (!current(event)) return;
+      setBatchTask(function (prev) { return Object.assign({}, prev || {}, { paused: !!event.paused, status: event.paused ? "paused" : "running" }); });
+    });
+    listen("onComplete", function (event) {
+      if (!current(event)) return;
+      setBatchTask(function (prev) { var total = event.total != null ? Number(event.total) : Number(prev && prev.total || 0); return Object.assign({}, prev || {}, { current: event.current != null ? Number(event.current) : total, total: total, success: event.successCount != null ? Number(event.successCount) : Number(prev && prev.success || 0), failed: event.errorCount != null ? Number(event.errorCount) : Number(prev && prev.failed || 0), paused: false, status: event.status || (event.cancelled ? "cancelled" : "completed") }); });
+    });
+    listen("onError", function (event) {
+      if (!current(event)) return;
+      setBatchTask(function (prev) { return Object.assign({}, prev || {}, { status: "failed", message: event.message || "采集失败，请稍后重试" }); });
+    });
+    return function () { cleanups.forEach(function (off) { try { off(); } catch (e) {} }); };
   }, []);
 
   /* 配置加载：地域/行业特色画像/二十大人群/内容题材/预估消费行为/笔记类目/行业/热门活动，
@@ -1664,8 +1766,9 @@ function PgyKolSearchPage() {
       if (res && res.ok) {
         var tid = res.data && res.data.taskId;
         if (tid) {
-          // 唯一用户任务：打开/聚焦采集助手当前任务视图（同一任务 ID）。
-          window.dispatchEvent(new CustomEvent("magiorix:ops-assistant:show-task", { detail: { taskId: tid } }));
+          batchTaskIdRef.current = tid;
+          setDownloadNotice(null);
+          setBatchTask({ id: tid, fileName: "找博主采集结果.xlsx", current: 0, total: 0, discovered: 0, estimateTotal: 0, success: 0, failed: 0, status: "running", paused: false, startedAt: Date.now() });
         }
       } else {
         setBatchError(res && res.error || { code: "unknown", message: "采集启动失败" });
@@ -1862,7 +1965,7 @@ function PgyKolSearchPage() {
           children: [
             o.jsx(x, {
               sx: { width: 28, height: 28, borderRadius: 0.5, background: "linear-gradient(135deg,#FF6C40,#FF3030)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0 },
-              children: o.jsx(B, { icon: "solar:magnifer-bold-duotone", width: 18, height: 18 }),
+              children: o.jsx(B, { icon: "solar:user-search-bold-duotone", width: 19, height: 19 }),
             }),
             o.jsx(w, { variant: "h4", fontWeight: "bold", children: "找博主" }),
             o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)", ml: 1 }, children: "蒲公英博主原生筛选与采集。" }),
@@ -2166,6 +2269,7 @@ function PgyKolSearchPage() {
           ],
         }),
         batchError ? o.jsx(oe, { severity: "error", sx: { mt: 1 }, children: pgyKolBatchErrorMessage(batchError) }) : null,
+        o.jsx(PgyKolSearchTaskCard, { task: batchTask, downloadBusy: downloadBusy, downloadNotice: downloadNotice, onDownload: downloadBatchTask, onClearNotice: function () { setDownloadNotice(null); }, onClose: function () { batchTaskIdRef.current = ""; setBatchTask(null); setDownloadNotice(null); } }),
 
         /* 弹窗 */
         o.jsx(PgyKolSharedFieldSelector, { open: collectOpen, onClose: function () { setCollectOpen(false); }, onSubmit: function (ids) { setCollectOpen(false); startBatchWithColumns(ids); } }),
