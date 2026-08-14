@@ -919,11 +919,22 @@ replaceOnce(
   'display:{xs:"block",md:"none"}',
   "align the temporary sidebar drawer with the desktop breakpoint",
 );
+replaceAllIfExists(
+  mainBundle,
+  'children:t.filter(r=>r.id!=="points").map(r=>o.jsx(cr,{item:r,level:0},r.id))',
+  'children:t.map(r=>o.jsx(cr,{item:r,level:0},r.id))',
+);
 replaceOnce(
   mainBundle,
-  'children:t.map(r=>o.jsx(cr,{item:r,level:0},r.id))',
-  'children:t.filter(r=>r.id!=="points").map(r=>o.jsx(cr,{item:r,level:0},r.id))',
-  "hide points center from the left sidebar while retaining its routes",
+  'children:[t.map(n=>o.jsx(Cs,{item:n,isActive:n.id===r,onSelect:a},n.id))',
+  'children:[t.filter(n=>n.id!=="points").map(n=>o.jsx(Cs,{item:n,isActive:n.id===r,onSelect:a},n.id))',
+  "hide points center from the primary left rail while retaining its routes and secondary menu",
+);
+replaceOnce(
+  mainBundle,
+  'children:s.map(h=>o.jsx(cr,{item:h,level:0},h.id))',
+  'children:s.filter(h=>h.id!=="points").map(h=>o.jsx(cr,{item:h,level:0},h.id))',
+  "hide points center from the temporary navigation drawer",
 );
 
 replaceAnyOnce(
@@ -1199,12 +1210,19 @@ replaceAllIfExists(
   'Math.abs(Number(a.consumeCount??a.count||0)).toLocaleString()',
   'Math.abs(Number(a.consumeCount??a.count??0)).toLocaleString()',
 );
-replaceOnce(
-  consumeRecordsBundle,
-  'e.jsx(t,{variant:"h5",sx:{fontWeight:600},children:"消耗记录"})',
-  'e.jsxs(l,{sx:{display:"flex",alignItems:"center",gap:1},children:[e.jsx(u,{icon:"solar:receipt-text-bold-duotone",width:26,height:26,style:{color:"#ff2442"}}),e.jsx(t,{variant:"h5",sx:{fontWeight:600},children:"消耗记录"})]})',
-  "add a styled icon to the consume records heading",
-);
+{
+  const source = fs.readFileSync(consumeRecordsBundle, "utf8");
+  const headingStartMarker = 'return e.jsxs(l,{sx:{p:3},children:[e.jsxs(l,{sx:{display:"flex",alignItems:"center",justifyContent:"space-between",mb:3},children:[';
+  const filterStartMarker = ',e.jsxs(S,{size:"small",sx:{minWidth:150},children:';
+  const headingStart = source.indexOf(headingStartMarker);
+  const contentStart = headingStart < 0 ? -1 : headingStart + headingStartMarker.length;
+  const contentEnd = contentStart < 0 ? -1 : source.indexOf(filterStartMarker, contentStart);
+  if (headingStart < 0 || contentEnd < 0) {
+    throw new Error("Missing frontend patch target: normalize the consume records heading icon");
+  }
+  const heading = 'e.jsxs(l,{sx:{display:"flex",alignItems:"center",gap:1},children:[e.jsx(u,{icon:"solar:bill-list-bold-duotone",width:26,height:26,style:{color:"#ff2442"}}),e.jsx(t,{variant:"h5",sx:{fontWeight:600},children:"消耗记录"})]})';
+  fs.writeFileSync(consumeRecordsBundle, source.slice(0, contentStart) + heading + source.slice(contentEnd));
+}
 replaceAllIfExists(
   consumeRecordsBundle,
   'a.balanceBefore.toLocaleString()',

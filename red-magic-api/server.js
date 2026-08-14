@@ -486,7 +486,7 @@ function getDefaultClientMenus() {
         {
           id: "points-consume-records",
           name: "消耗记录",
-          icon: "solar:receipt-text-bold-duotone",
+          icon: "solar:bill-list-bold-duotone",
           path: "/shumiao/consume-records",
           component: "pages/shumiao/consume-records/index.tsx",
         },

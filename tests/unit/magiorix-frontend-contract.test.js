@@ -121,9 +121,13 @@ test("points routes remain available while the left sidebar hides the points-cen
   assert.match(server, /name: "积分充值"/);
   assert.match(server, /name: "充值记录"/);
   assert.match(server, /name: "消耗记录"/);
-  assert.match(mainBundle, /t\.filter\(r=>r\.id!=="points"\)\.map/, "sidebar must hide the points-center group");
+  assert.match(mainBundle, /children:\[t\.filter\(n=>n\.id!=="points"\)\.map\(n=>o\.jsx\(Cs,/, "primary left rail must hide the points-center group");
+  assert.match(mainBundle, /children:t\.map\(r=>o\.jsx\(cr,/, "points child routes must remain in the secondary menu");
   assert.match(mainBundle, /"\.\.\/pages\/shumiao\/recharge\/index\.tsx"/, "top recharge navigation must retain its route");
-  assert.match(consumeBundle, /solar:receipt-text-bold-duotone/, "consume records heading must carry its styled icon");
+  assert.match(server, /icon: "solar:bill-list-bold-duotone"[\s\S]*path: "\/shumiao\/consume-records"/, "consume records menu must carry a valid bill icon");
+  assert.match(consumeBundle, /solar:bill-list-bold-duotone/, "consume records heading must carry its styled icon");
+  assert.equal((consumeBundle.match(/solar:bill-list-bold-duotone/g) || []).length, 1, "consume records heading icon must stay idempotent");
+  assert.doesNotMatch(consumeBundle, /solar:receipt-text-bold-duotone/, "invalid legacy consume-records icon must be removed");
   assert.doesNotMatch(server, /path: "\/shumiao\/commission"/);
   assert.doesNotMatch(mainBundle, /pages\/shumiao\/commission/);
 });

@@ -1,6 +1,6 @@
 function pgyKolDevEnabled(){return true}
 
-function pgyKolWithLocalMenu(e){if(!pgyKolDevEnabled()||!Array.isArray(e))return e;for(var i=0;i<e.length;i++){if(e[i]&&e[i].path==="/pgy-kol-search")return e}return e.concat([{name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"solar:user-search-bold-duotone"}])}
+function pgyKolWithLocalMenu(e){if(!pgyKolDevEnabled()||!Array.isArray(e))return e;var found=false;function visit(list){for(var i=0;i<list.length;i++){var item=list[i];if(!item)continue;if(item.path==="/pgy-kol-search"){item.id=item.id||"pgy-kol-search";item.icon="solar:users-group-rounded-bold-duotone";found=true}if(item.path==="/shumiao/consume-records")item.icon="solar:bill-list-bold-duotone";if(Array.isArray(item.children))visit(item.children)}}visit(e);if(found)return e;return e.concat([{id:"pgy-kol-search",name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"solar:users-group-rounded-bold-duotone"}])}
 
 function pgyKolNodeKey(n){if(n&&n.uniqueKey)return n.uniqueKey;var v=n&&n.value!==undefined?String(n.value):"",p=n&&n.fullPath?n.fullPath:n&&n.label||"";return v+":"+p}
 
@@ -1518,8 +1518,8 @@ function PgyKolSearchPage() {
     };
   }, []);
 
-  /* 找博主任务直接复用蒲公英博主采集的 scraper 事件；页面只负责展示，
-   * 不再把 search-batch 任务交给采集助手渲染。 */
+  /* 找博主任务直接复用蒲公英博主采集的 scraper 事件：页面显示进度卡，
+   * 采集助手同时保留当前任务、历史记录与下载能力。 */
   m.useEffect(function () {
     var taskApi = window.bridge && window.bridge.scraper && window.bridge.scraper.task;
     if (!taskApi) return;
@@ -1769,6 +1769,7 @@ function PgyKolSearchPage() {
           batchTaskIdRef.current = tid;
           setDownloadNotice(null);
           setBatchTask({ id: tid, fileName: "找博主采集结果.xlsx", current: 0, total: 0, discovered: 0, estimateTotal: 0, success: 0, failed: 0, status: "running", paused: false, startedAt: Date.now() });
+          window.dispatchEvent(new CustomEvent("magiorix:ops-assistant:show-task", { detail: { taskId: tid, open: false } }));
         }
       } else {
         setBatchError(res && res.error || { code: "unknown", message: "采集启动失败" });
@@ -1965,7 +1966,7 @@ function PgyKolSearchPage() {
           children: [
             o.jsx(x, {
               sx: { width: 28, height: 28, borderRadius: 0.5, background: "linear-gradient(135deg,#FF6C40,#FF3030)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0 },
-              children: o.jsx(B, { icon: "solar:user-search-bold-duotone", width: 19, height: 19 }),
+              children: o.jsx(B, { icon: "solar:users-group-rounded-bold-duotone", width: 19, height: 19 }),
             }),
             o.jsx(w, { variant: "h4", fontWeight: "bold", children: "找博主" }),
             o.jsx(w, { sx: { fontSize: 13, color: "rgba(0,0,0,.45)", ml: 1 }, children: "蒲公英博主原生筛选与采集。" }),

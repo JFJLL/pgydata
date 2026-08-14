@@ -1811,7 +1811,8 @@ test("collect flow reuses the shared ExportFieldSelector: the imitation dialog i
   );
   assert.match(pageSource, /startBatchWithColumns\(ids\)/, "the shared selector submit must start the batch with the chosen keys");
   assert.match(pageSource, /searchCoordinator\.startBatch\(ids\)/, "batch start must delegate the complete selected schema keys to the coordinator");
-  assert.doesNotMatch(pageSource, /magiorix:ops-assistant:show-task/, "找博主任务不得再打开采集助手");
+  assert.match(pageSource, /magiorix:ops-assistant:show-task/, "找博主任务必须登记到采集助手");
+  assert.match(pageSource, /detail: \{ taskId: tid, open: false \}/, "登记任务时不得强制弹开采集助手");
   assert.match(pageSource, /setBatchTask\(\{ id: tid,/, "提交后必须在找博主页建立进度卡状态");
   assert.ok(!pageSource.includes("pgyKolExportColumnIds"), "the collect path must not filter keys through the table column registry");
   assert.ok(!pageSource.includes("exportableColumns"), "the collect path must not derive fields from the table registry");
@@ -2257,13 +2258,17 @@ test("restart restore and one-click clear persistence", () => {
   );
 });
 
-test("icon beautification: menu and page header use the refined registered user-search icon", () => {
+test("icon beautification: menu and page header use an icon that exists in the bundled Solar set", () => {
+  const solarIcons = JSON.parse(fs.readFileSync(path.join(projectRoot, "app-source", "node_modules", "@iconify-json", "solar", "icons.json"), "utf8")).icons;
+  assert.ok(solarIcons["users-group-rounded-bold-duotone"], "find-bloggers icon must exist in the bundled Solar set");
+  assert.ok(solarIcons["bill-list-bold-duotone"], "consume-records icon must exist in the bundled Solar set");
   assert.ok(
-    pageSource.includes('{name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"solar:user-search-bold-duotone"}'),
-    "menu item must carry the refined user-search icon",
+    pageSource.includes('icon:"solar:users-group-rounded-bold-duotone"'),
+    "menu item must carry the bundled users-group icon",
   );
   assert.ok(!pageSource.includes('icon: "mdi:account-search"'), "unregistered mdi icon must be gone from the menu");
-  assert.ok(pageSource.includes("solar:magnifer-bold-duotone"), "page header must use the solar magnifier");
+  assert.ok(pageSource.includes('icon: "solar:users-group-rounded-bold-duotone"'), "page header must use the same bundled users-group icon");
+  assert.ok(pageSource.includes('item.icon="solar:bill-list-bold-duotone"'), "client menu normalization must repair the consume-records icon from older servers");
   assert.ok(
     pageSource.includes('background: "linear-gradient(135deg,#FF6C40,#FF3030)"'),
     "page header must use the Magiorix orange-red gradient",
@@ -2411,7 +2416,7 @@ test("找博主页面不重复实现任务历史", () => {
   assert.ok(!pageSource.includes("暂无采集任务"), "历史空态文案必须删除");
 });
 
-test("采集助手保留普通采集任务，并排除找博主 search-batch 任务", () => {
+test("采集助手对找博主提供与普通采集一致的当前任务、历史和下载能力", () => {
   const assistant = fs.readFileSync(path.join(projectRoot, "assets", "1.3.3", "magiorix-ops-assistant.js"), "utf8");
   const source = fs.readFileSync(path.join(projectRoot, "scripts", "magiorix-ops-assistant.js"), "utf8");
   assert.equal(assistant, source, "资产内采集助手必须与源文件一致（补丁脚本拷贝）");
@@ -2434,9 +2439,12 @@ test("采集助手保留普通采集任务，并排除找博主 search-batch 任
   // 事件接线：onPaused 驱动暂停状态；inputType 随事件传递（识别 search-batch）。
   assert.ok(assistant.includes("task.onPaused((event) => {"), "助手必须订阅 paused 事件");
   assert.ok(assistant.includes("if (event.inputType) item.inputType = event.inputType;"), "助手必须从事件读取 inputType");
-  // search-batch 只在找博主页展示：事件和历史都必须从助手排除。
-  assert.ok(assistant.includes('if (event?.inputType === "search-batch") return;'), "助手事件必须忽略 search-batch");
-  assert.ok(assistant.includes('.filter((record) => record?.inputType !== "search-batch")'), "助手历史必须忽略 search-batch");
+  // search-batch 同时进入助手的当前任务与持久历史，但不允许生成新的“重跑失败项”任务。
+  assert.ok(!assistant.includes('if (event?.inputType === "search-batch") return;'), "助手事件不得忽略 search-batch");
+  assert.ok(!assistant.includes('record?.inputType !== "search-batch"'), "助手历史不得过滤 search-batch");
+  assert.ok(assistant.includes("window.bridge.scraper.history.list()"), "助手历史必须读取持久任务记录");
+  assert.ok(assistant.includes("window.bridge.scraper.history.exportTask(taskId)"), "助手历史下载必须复用持久任务导出");
+  assert.ok(assistant.includes("event.detail.open !== false"), "页面登记找博主任务时必须允许保持助手收起");
   assert.ok(assistant.includes('if (source.inputType === "search-batch") return;'), "search-batch 禁止重跑失败项");
   // 主进程事件携带 inputType（采集助手识别来源）。
   const main = fs.readFileSync(path.join(projectRoot, "app-source", "dist-electron", "index.js"), "utf8");
