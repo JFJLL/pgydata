@@ -166,6 +166,8 @@ test("Alipay order, notify and settlement are single-channel and idempotent", as
     assert.equal(order.amount, 1000);
     assert.equal(order.totalCount, 50);
     assert.equal(order.codeUrl, order.payUrl);
+    assert.ok(order.qrCode, "支付宝预下单应返回二维码");
+    assert.match(order.qrCode, /^alipay-test:\/\/qrcode\//);
     const pendingRecords = await requestJson(context.baseUrl, "/api/shumiao/recharge-records?page=1&pageSize=10", { headers });
     assert.equal(pendingRecords.body.code, 200, JSON.stringify(pendingRecords.body));
     assert.equal(pendingRecords.body.data.list[0].id, order.orderNo);

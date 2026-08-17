@@ -96,3 +96,54 @@ test("20 concurrent consumes and repeated payment notifications remain serialize
     assert.equal(finalRecords.body.data.total, 21);
   });
 });
+
+test("consume records aggregate one row per task submission like the admin backend", async () => {
+  await withServer({}, {
+    ALIPAY_TEST_MERCHANT_ID: "test-merchant",
+    ALIPAY_TEST_APP_ID: "test-app",
+  }, async (context) => {
+    const user = await register(context, "13800000401");
+    const headers = authHeaders(user.token);
+    const order = await requestJson(context.baseUrl, "/api/shumiao/recharge", {
+      method: "POST",
+      headers,
+      body: { packageId: "pkg_10" },
+    });
+    assert.equal(order.body.code, 200, JSON.stringify(order.body));
+    await requestForm(
+      context.baseUrl,
+      "/api/shumiao/alipay/notify",
+      notifyFields(order.body.data.orderNo),
+    );
+
+    // 同一任务提交 3 条明细（每条 1 积分），应聚合为 1 条流水；再提交另一个任务 2 条。
+    for (const [taskId, itemIndex] of [["task-a", 1], ["task-a", 2], ["task-a", 3], ["task-b", 1], ["task-b", 2]]) {
+      const consume = await requestJson(context.baseUrl, "/api/shumiao/consume", {
+        method: "POST",
+        headers,
+        body: { count: 1, taskId, itemIndex, remark: "aggregation-test" },
+      });
+      assert.equal(consume.body.code, 200, JSON.stringify(consume.body));
+    }
+
+    const records = await requestJson(context.baseUrl, "/api/shumiao/consume-records?pageSize=100", { headers });
+    assert.equal(records.body.code, 200, JSON.stringify(records.body));
+    assert.equal(records.body.data.total, 2, "两个任务应聚合为两条流水");
+    const rows = records.body.data.list;
+    assert.deepEqual(rows.map((row) => row.consumeCount), [2, 3], "任务聚合后的消耗应为明细之和");
+    assert.deepEqual(rows.map((row) => row.itemCount), [2, 3]);
+    assert.ok(rows.every((row) => row.balanceBefore === row.balanceAfter + row.consumeCount));
+
+    // 无任务标识的历史记录仍按条展示。
+    const legacy = await requestJson(context.baseUrl, "/api/shumiao/consume", {
+      method: "POST",
+      headers,
+      body: { count: 5, remark: "legacy-consume" },
+    });
+    assert.equal(legacy.body.code, 200, JSON.stringify(legacy.body));
+    const afterLegacy = await requestJson(context.baseUrl, "/api/shumiao/consume-records?pageSize=100", { headers });
+    assert.equal(afterLegacy.body.data.total, 3);
+    const legacyRow = afterLegacy.body.data.list.find((row) => row.consumeCount === 5);
+    assert.ok(legacyRow, "无任务标识的消耗应单独成条");
+  });
+});

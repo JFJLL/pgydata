@@ -1359,14 +1359,48 @@ app.get("/api/shumiao/recharge-records", authRequired, asyncHandler(async (req, 
 app.get("/api/shumiao/consume-records", authRequired, asyncHandler(async (req, res) => {
   const { page, pageSize } = parsePageParams(req.query);
   const offset = (page - 1) * pageSize;
-  const totalRow = await dbGet("SELECT COUNT(*) AS total FROM consume_records WHERE user_id = ?", [req.user.id]);
+  // 与管理后台一致：一次提交任务（同一 task_id）聚合为一条流水，无任务标识的历史记录按条展示。
+  const totalRow = await dbGet(
+    `SELECT COUNT(*) AS total FROM (
+       SELECT task_id FROM consume_records
+       WHERE user_id = ? AND task_id IS NOT NULL AND item_index IS NOT NULL
+       GROUP BY task_id
+       UNION ALL
+       SELECT NULL AS task_id FROM consume_records
+       WHERE user_id = ? AND (task_id IS NULL OR item_index IS NULL)
+     )`,
+    [req.user.id, req.user.id],
+  );
   const list = await dbAll(
-    `SELECT id, count, balance_after AS balanceAfter, remark, created_at AS createdAt
-     FROM consume_records
-     WHERE user_id = ?
-     ORDER BY created_at DESC
+    `WITH task_groups AS (
+       SELECT task_id, COUNT(*) AS itemCount, SUM(count) AS totalCount,
+              MIN(created_at) AS startedAt, MAX(created_at) AS finishedAt, MAX(id) AS lastRecordId
+       FROM consume_records
+       WHERE user_id = ? AND task_id IS NOT NULL AND item_index IS NOT NULL
+       GROUP BY task_id
+     ),
+     task_rows AS (
+       SELECT r.id, r.balance_after AS balanceAfter, r.remark, r.created_at AS createdAt,
+              g.totalCount, g.itemCount
+       FROM task_groups g
+       JOIN consume_records r ON r.id = g.lastRecordId
+     ),
+     legacy_rows AS (
+       SELECT id, balance_after AS balanceAfter, remark, created_at AS createdAt,
+              count AS totalCount, 1 AS itemCount
+       FROM consume_records
+       WHERE user_id = ? AND (task_id IS NULL OR item_index IS NULL)
+     ),
+     all_rows AS (
+       SELECT * FROM task_rows
+       UNION ALL
+       SELECT * FROM legacy_rows
+     )
+     SELECT id, totalCount AS consumeCount, itemCount, balanceAfter, remark, createdAt
+     FROM all_rows
+     ORDER BY createdAt DESC
      LIMIT ? OFFSET ?`,
-    [req.user.id, pageSize, offset],
+    [req.user.id, req.user.id, pageSize, offset],
   );
   const consumeTypeLabels = {
     pgy_scrape: "蒲公英采集",
@@ -1375,16 +1409,20 @@ app.get("/api/shumiao/consume-records", authRequired, asyncHandler(async (req, r
     recharge: "充值",
   };
   const records = list.map((row) => {
-    const count = Number(row.count || 0);
+    const count = Number(row.consumeCount || 0);
     const balanceAfter = Number(row.balanceAfter || 0);
     const consumeType = String(row.remark || "").includes("星图") ? "starmap_scrape" : "pgy_scrape";
     return {
-      ...row,
-      consumeType,
-      consumeTypeText: consumeTypeLabels[consumeType],
+      id: row.id,
+      count,
       consumeCount: count,
+      itemCount: Number(row.itemCount || 1),
       balanceBefore: balanceAfter + count,
       balanceAfter,
+      remark: row.remark,
+      createdAt: row.createdAt,
+      consumeType,
+      consumeTypeText: consumeTypeLabels[consumeType],
     };
   });
   return success(res, { list: records, total: totalRow.total, page, pageSize });
@@ -1456,6 +1494,7 @@ app.post("/api/shumiao/recharge", authRequired, asyncHandler(async (req, res) =>
   const isWxpay = channel === "wxpay";
   let payUrl = `${BASE_URL}/pay/${paymentToken}`;
   let codeUrl = payUrl;
+  let qrCode = "";
   if (isWxpay) {
     const description = `积分充值 ${Number(pkg.total_count)} 积分`;
     try {
@@ -1466,6 +1505,7 @@ app.post("/api/shumiao/recharge", authRequired, asyncHandler(async (req, res) =>
         notifyUrl: wxpayGateway.config.notifyUrl,
       });
       payUrl = codeUrl;
+      qrCode = codeUrl;
     } catch (error) {
       logWarn("wxpay_create_order_failed", {
         ...requestLogInfo(req),
@@ -1475,12 +1515,31 @@ app.post("/api/shumiao/recharge", authRequired, asyncHandler(async (req, res) =>
       await withMutation(() => setQueryStatus({ db: database, orderNo, status: "ERROR:QRCODE_FAILED", close: true }));
       return fail(res, 502, "微信支付下单失败，请稍后重试");
     }
+  } else {
+    try {
+      qrCode = await alipayGateway.createQrCode({
+        orderNo,
+        amountCents: Number(pkg.amount_cents),
+        subject: `积分充值 ${Number(pkg.total_count)} 积分`,
+        expiresAt,
+      });
+    } catch (error) {
+      logWarn("alipay_create_order_failed", {
+        ...requestLogInfo(req),
+        orderNo,
+        error: error.message,
+      });
+      await withMutation(() => setQueryStatus({ db: database, orderNo, status: "ERROR:QRCODE_FAILED", close: true }));
+      return fail(res, 502, "支付宝下单失败，请稍后重试");
+    }
   }
   return success(res, {
     orderNo,
     payUrl,
     // 兼容仍在使用 1.1.x 前端资源的客户端：旧页面用 codeUrl 生成二维码。
     codeUrl,
+    // 客户端弹窗渲染用：微信为 weixin:// 二维码内容，支付宝为预下单二维码图片地址。
+    qrCode,
     amount: Number(pkg.amount_cents),
     amountCents: Number(pkg.amount_cents),
     totalCount: Number(pkg.total_count),

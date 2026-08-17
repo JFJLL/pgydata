@@ -6,9 +6,13 @@
 
 - 新增：充值页支持选择支付方式（支付宝 / 微信支付），选定套餐后可在两种方式间切换；微信支付使用 V3 NATIVE 扫码模式，客户端直接渲染 `weixin://` 二维码，支付成功后自动确认到账。
 - 新增：服务端接入微信支付（`lib/wxpay-gateway.js`），下单、回调验签解密、主动查询与对账均按渠道隔离；`POST /api/shumiao/recharge` 新增 `channel` 参数（`alipay` 默认 / `wxpay`），`POST /api/shumiao/wxpay/notify` 接收微信回调并原子入账，支付宝与微信的交易号互不复用。
-- 配置：新增 `WXPAY_ENABLED`、`WXPAY_APP_ID`、`WXPAY_MCH_ID`、`WXPAY_SERIAL_NO`、`WXPAY_PRIVATE_KEY_PATH`、`WXPAY_API_V3_KEY`、`WXPAY_PUBLIC_KEY_PATH`、`WXPAY_PUBLIC_KEY_ID`、`WXPAY_NOTIFY_URL` 环境变量，说明见 `red-magic-api/README.md`。
-- 本地资源包：`red-magic-api/public/assets/desktop/1.3.5/assets.zip`（SHA256：`a234dfe1fb62828b0e24c1c3bb3e4c58abfb62562f5b93db2037ecb3679ff1da`）。
-- 发布状态：当前仅为本地 Candidate；尚未修改 `latest.json`、未部署。桌面安装包仍为 1.3.4（本次变更全部通过资源包 1.3.5 下发，安装包 1.3.5 待下次构建发布）。
+- 重构：支付改为软件内弹窗（不再调系统浏览器）——支付宝改用预下单（`alipay.trade.precreate`）返回二维码、微信沿用 `weixin://` 二维码，下单成功后弹出自定义支付弹窗（订单号 / 金额 / 二维码 / 已完成支付按钮，3 秒轮询订单状态），样式与软件整体一致；`POST /api/shumiao/recharge` 新增 `qrCode` 返回字段。
+- 调整：用户端消耗记录改为与管理后台一致——同一提交任务（`task_id`）聚合为一条流水（明细数合计、显示任务结束余额），无任务标识的历史记录仍按条展示。
+- 配置：新增 `WXPAY_ENABLED`、`WXPAY_APP_ID`、`WXPAY_MCH_ID`、`WXPAY_SERIAL_NO`、`WXPAY_PRIVATE_KEY_PATH`、`WXPAY_API_V3_KEY`、`WXPAY_PUBLIC_KEY_PATH`、`WXPAY_PUBLIC_KEY_ID`、`WXPAY_NOTIFY_URL` 环境变量，说明见 `red-magic-api/README.md`；`.env.example` 已同步。
+- 测试：新增消耗记录按任务聚合、支付宝预下单返回二维码断言；测试环境隔离本地 `.env` 的真实支付配置。
+- 本地资源包：`red-magic-api/public/assets/desktop/1.3.5/assets.zip`（SHA256：`a3dbd892185baa6bf579f15cb83546cc1e7ecb45be27a40902bbc3f4da8b45ea`）。
+- 本地安装包：`desktop-versions/windows/1.3.5/magiorix-desktop-1.3.5-windows.exe`（SHA256：`5C54B765ECF8918CD7FBEE253489301CDF3D55059035012D542D244114DBC4E0`）。
+- 发布状态：当前仅为本地 Candidate；尚未修改 `latest.json`、未部署。
 
 ## 1.3.4 (Candidate)
 

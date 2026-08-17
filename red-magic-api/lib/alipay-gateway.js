@@ -109,6 +109,33 @@ function createAlipayGateway({ config = configFromEnv(), sdk } = {}) {
         returnUrl: config.returnUrl,
       });
     },
+    async createQrCode({ orderNo, amountCents, subject, expiresAt }) {
+      if (testMode) {
+        return `alipay-test://qrcode/${String(orderNo).replace(/[<>]/g, "")}`;
+      }
+      assertRealConfig(config);
+      if (typeof client.exec !== "function") throw new Error("支付宝 SDK 不支持 exec");
+      const result = await client.exec("alipay.trade.precreate", {
+        bizContent: {
+          out_trade_no: orderNo,
+          total_amount: (Number(amountCents) / 100).toFixed(2),
+          subject,
+          timeout_express: `${Math.max(1, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 60000))}m`,
+        },
+        notifyUrl: config.notifyUrl,
+      });
+      const response = result?.alipay_trade_precreate_response
+        || result?.response
+        || result?.body
+        || result
+        || {};
+      const qrCode = String(pick(response, "qr_code", "qrCode")).trim();
+      if (!qrCode) {
+        const reason = String(pick(response, "sub_msg", "subMsg", "msg") || "未知错误");
+        throw new Error(`支付宝预下单失败：${reason}`);
+      }
+      return qrCode;
+    },
     async verifyNotification(params) {
       if (testMode) return params?.sign === "test-signature";
       assertRealConfig(config);

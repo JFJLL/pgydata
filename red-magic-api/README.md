@@ -116,7 +116,9 @@ logs/server-YYYY-MM-DD.log
 
 启动时会在事务中执行版本迁移、保留历史数据，并初始化四档积分套餐。生产环境必须显式设置 `ADMIN_PASSWORD` 和 `SMS_SECRET`；支付宝、微信支付、短信和对账开关默认关闭。
 
-充值接口 `POST /api/shumiao/recharge` 通过 `channel` 字段选择支付方式（`alipay` 默认 / `wxpay`），微信支付使用 V3 NATIVE 扫码模式：下单返回 `codeUrl`（`weixin://` 二维码内容），客户端渲染二维码；支付结果由 `POST /api/shumiao/wxpay/notify` 回调入账。微信支付需要商户号、API 证书私钥、APIv3 密钥和微信支付平台公钥，`WXPAY_NOTIFY_URL` 必须为公网 HTTPS 地址。
+充值接口 `POST /api/shumiao/recharge` 通过 `channel` 字段选择支付方式（`alipay` 默认 / `wxpay`）。支付宝使用预下单（`alipay.trade.precreate`）返回二维码，微信支付使用 V3 NATIVE 扫码模式；下单返回 `codeUrl`（支付宝为 `payUrl` 兼容值、微信为 `weixin://` 二维码内容）与 `qrCode`（客户端弹窗直接渲染：支付宝为二维码图片地址、微信为 `weixin://` 内容），客户端在软件内弹窗展示二维码并轮询订单状态，不再跳转浏览器。支付结果由 `POST /api/shumiao/alipay/notify`、`POST /api/shumiao/wxpay/notify` 回调入账。微信支付需要商户号、API 证书私钥、APIv3 密钥和微信支付平台公钥，`WXPAY_NOTIFY_URL` 必须为公网 HTTPS 地址。
+
+用户端消耗记录接口 `GET /api/shumiao/consume-records` 与管理后台一致：同一提交任务（`task_id`）聚合为一条流水（`consumeCount` 为明细合计、`itemCount` 为明细条数、`balanceAfter` 取任务结束时的余额），无任务标识的历史记录仍按条展示。
 
 ## 管理后台
 
