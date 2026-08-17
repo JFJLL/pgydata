@@ -10,8 +10,9 @@
 - 调整：用户端消耗记录改为与管理后台一致——同一提交任务（`task_id`）聚合为一条流水（明细数合计、显示任务结束余额），无任务标识的历史记录仍按条展示。
 - 配置：新增 `WXPAY_ENABLED`、`WXPAY_APP_ID`、`WXPAY_MCH_ID`、`WXPAY_SERIAL_NO`、`WXPAY_PRIVATE_KEY_PATH`、`WXPAY_API_V3_KEY`、`WXPAY_PUBLIC_KEY_PATH`、`WXPAY_PUBLIC_KEY_ID`、`WXPAY_NOTIFY_URL` 环境变量，说明见 `red-magic-api/README.md`；`.env.example` 已同步。
 - 测试：新增消耗记录按任务聚合、支付宝预下单返回二维码断言；测试环境隔离本地 `.env` 的真实支付配置。
-- 本地资源包：`red-magic-api/public/assets/desktop/1.3.5/assets.zip`（SHA256：`a3dbd892185baa6bf579f15cb83546cc1e7ecb45be27a40902bbc3f4da8b45ea`）。
-- 本地安装包：`desktop-versions/windows/1.3.5/magiorix-desktop-1.3.5-windows.exe`（SHA256：`5C54B765ECF8918CD7FBEE253489301CDF3D55059035012D542D244114DBC4E0`）。
+- 修复：安装包在复制文件前除等待 `magiorix.exe` 退出外，还会等待并兜底强制结束残留的辅助进程（`pgy-chart-renderer.exe`、`elevate.exe`），避免其句柄锁住安装目录文件导致“复制主程序失败”/“无法打开要写入的文件”。
+- 本地资源包：`red-magic-api/public/assets/desktop/1.3.5/assets.zip`（SHA256：`585dba39e62cd7ee2a353bccd41cf7677678f4dc422e0945cbd0df9d6f434d8e`）。
+- 本地安装包：`desktop-versions/windows/1.3.5/magiorix-desktop-1.3.5-windows.exe`（SHA256：`87D1B549CC20D88893E34D9562799F1D3844B5A36ABD583A30179650D0317316`）。
 - 发布状态：当前仅为本地 Candidate；尚未修改 `latest.json`、未部署。
 
 ## 1.3.4 (Candidate)

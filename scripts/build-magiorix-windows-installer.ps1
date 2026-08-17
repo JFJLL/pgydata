@@ -412,6 +412,7 @@ Function .onInit
   Push "等待旧版 magiorix 进程退出"
   Call Log
   Call WaitForMagiorix
+  Call StopHelperProcesses
 FunctionEnd
 
 Function Log
@@ -440,6 +441,35 @@ Function WaitForMagiorix
   magiorix_stopped:
     Push "旧版 magiorix 进程已退出"
     Call Log
+FunctionEnd
+
+Function StopHelperProcesses
+  ; 内置绘图程序与提权助手都是短暂的辅助进程，安装前先等待其退出，
+  ; 等待无果时强制结束，避免残留句柄锁住安装目录中的文件导致复制失败。
+  StrCpy `$4 "pgy-chart-renderer.exe"
+  Call WaitThenKillProcess
+  StrCpy `$4 "elevate.exe"
+  Call WaitThenKillProcess
+FunctionEnd
+
+Function WaitThenKillProcess
+  StrCpy `$2 0
+  wait_then_kill:
+    nsExec::ExecToStack '"`$SYSDIR\tasklist.exe" /NH /FO CSV /FI "IMAGENAME eq `$4"'
+    Pop `$0
+    Pop `$1
+    `${StrStr} `$3 `$1 "`$4"
+    StrCmp `$3 "" helper_stopped
+    Sleep 500
+    IntOp `$2 `$2 + 1
+    IntCmp `$2 30 helper_force_kill wait_then_kill helper_force_kill
+  helper_force_kill:
+    nsExec::ExecToStack '"`$SYSDIR\taskkill.exe" /IM "`$4" /F'
+    Pop `$0
+    Pop `$1
+    Push "已强制结束残留辅助进程：`$4"
+    Call Log
+  helper_stopped:
 FunctionEnd
 
 Function FailInstall
