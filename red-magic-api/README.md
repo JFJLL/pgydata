@@ -87,6 +87,15 @@ ALIPAY_PRIVATE_KEY_PATH=
 ALIPAY_PUBLIC_KEY_PATH=
 ALIPAY_NOTIFY_URL=https://magiorix.red-magic.cn/api/shumiao/alipay/notify
 ALIPAY_RETURN_URL=https://magiorix.red-magic.cn/pay/return
+WXPAY_ENABLED=0
+WXPAY_APP_ID=
+WXPAY_MCH_ID=
+WXPAY_SERIAL_NO=
+WXPAY_PRIVATE_KEY_PATH=
+WXPAY_API_V3_KEY=
+WXPAY_PUBLIC_KEY_PATH=
+WXPAY_PUBLIC_KEY_ID=
+WXPAY_NOTIFY_URL=https://magiorix.red-magic.cn/api/shumiao/wxpay/notify
 RECONCILIATION_ENABLED=0
 LOG_DIR=./logs
 ```
@@ -105,7 +114,9 @@ logs/server-YYYY-MM-DD.log
 
 日志会记录启动、请求错误、管理员登录和积分调整等排查信息，不会主动记录密码或登录 token。
 
-启动时会在事务中执行版本迁移、保留历史数据，并初始化四档积分套餐。生产环境必须显式设置 `ADMIN_PASSWORD` 和 `SMS_SECRET`；支付宝、短信和对账开关默认关闭。
+启动时会在事务中执行版本迁移、保留历史数据，并初始化四档积分套餐。生产环境必须显式设置 `ADMIN_PASSWORD` 和 `SMS_SECRET`；支付宝、微信支付、短信和对账开关默认关闭。
+
+充值接口 `POST /api/shumiao/recharge` 通过 `channel` 字段选择支付方式（`alipay` 默认 / `wxpay`），微信支付使用 V3 NATIVE 扫码模式：下单返回 `codeUrl`（`weixin://` 二维码内容），客户端渲染二维码；支付结果由 `POST /api/shumiao/wxpay/notify` 回调入账。微信支付需要商户号、API 证书私钥、APIv3 密钥和微信支付平台公钥，`WXPAY_NOTIFY_URL` 必须为公网 HTTPS 地址。
 
 ## 管理后台
 

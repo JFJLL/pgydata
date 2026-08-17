@@ -7,7 +7,8 @@ function fakeDb(rows) {
   return {
     async all(sql, params) {
       if (!sql.includes("FROM recharge_orders")) return [];
-      return rows.filter((row) => Number(row.status) === 0).slice(0, Number(params?.[1] || 20));
+      const limit = Number(params?.[params.length - 1] || 20);
+      return rows.filter((row) => Number(row.status) === 0).slice(0, limit);
     },
     async get(sql, params) {
       if (sql.includes("FROM recharge_orders")) {
@@ -20,7 +21,7 @@ function fakeDb(rows) {
         || rows.find((item) => item.orderNo === params[5] || item.order_no === params[5]);
       if (!row) return { changes: 0 };
       if (sql.includes("SET last_query_at")) {
-        const [nowIso, expiryNow, expiryQueryAt, orderNo, requiredStatus, cutoffIso] = params;
+        const [nowIso, expiryNow, expiryQueryAt, orderNo, requiredStatus, channel, cutoffIso] = params;
         if (row.orderNo !== orderNo || Number(row.status) !== Number(requiredStatus)) return { changes: 0 };
         if (row.lastQueryAt && row.lastQueryAt > cutoffIso) return { changes: 0 };
         if (sql.includes("OR expiry_query_at IS NULL") && row.expires_at && row.expires_at <= expiryNow && row.expiry_query_at) {

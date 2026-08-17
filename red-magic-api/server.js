@@ -11,6 +11,7 @@ const { loadReleaseManifest, normalizeSha256 } = require("./lib/release-manifest
 const { runMigrations } = require("./lib/database-migrations");
 const { createSmsService, SmsServiceError } = require("./lib/sms-service");
 const { createAlipayGateway, isSuccessfulTradeStatus, normalizeNotification } = require("./lib/alipay-gateway");
+const { createWxpayGateway, normalizeNotification: normalizeWxpayNotification } = require("./lib/wxpay-gateway");
 const { ORDER_STATUS, SettlementError, settleRechargeOrder } = require("./lib/recharge-settlement");
 const {
   claimPendingOrder,
@@ -606,16 +607,29 @@ const smsEnabled = process.env.NODE_ENV === "test"
   ? process.env.SMS_TEST_MODE === "1"
   : process.env.SMS_ENABLED === "1";
 
-const paymentEnabled = process.env.NODE_ENV === "test"
+const alipayEnabled = process.env.NODE_ENV === "test"
   ? process.env.PAYMENT_TEST_MODE === "1"
   : process.env.ALIPAY_ENABLED === "1";
-const alipayGateway = paymentEnabled
+const wxpayEnabled = process.env.NODE_ENV === "test"
+  ? process.env.PAYMENT_TEST_MODE === "1" && process.env.WXPAY_TEST_MODE === "1"
+  : process.env.WXPAY_ENABLED === "1";
+const paymentEnabled = alipayEnabled || wxpayEnabled;
+const alipayGateway = alipayEnabled
   ? createAlipayGateway()
   : {
     config: { appId: "", merchantId: "" },
     async createPagePay() { throw new Error("支付宝支付功能未开启"); },
     async verifyNotification() { return false; },
     async queryTrade() { throw new Error("支付宝查询功能未开启"); },
+  };
+const wxpayGateway = wxpayEnabled
+  ? createWxpayGateway()
+  : {
+    config: { appId: "", mchId: "" },
+    async createQrCode() { throw new Error("微信支付功能未开启"); },
+    async verifyNotify() { return false; },
+    async decryptNotifyResource() { throw new Error("微信支付功能未开启"); },
+    async queryOrder() { throw new Error("微信支付查询功能未开启"); },
   };
 
 function trustProxyValue() {
@@ -632,6 +646,9 @@ function isAdminPasswordConfigured() {
 }
 
 app.set("trust proxy", trustProxyValue());
+// WeChat Pay signs the exact raw request body, so the notify endpoint must
+// capture it as a Buffer before the JSON parser runs for every other route.
+app.use("/api/shumiao/wxpay/notify", express.raw({ type: "*/*", limit: "1mb" }));
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
@@ -700,7 +717,10 @@ app.get("/pay/:paymentToken", asyncHandler(async (req, res) => {
   if (order.expires_at && new Date(order.expires_at).getTime() <= Date.now()) {
     return res.status(410).send("订单已过期，请返回客户端重新创建订单");
   }
-  if (!paymentEnabled) return res.status(503).send("支付宝支付暂未开启");
+  if (String(order.channel || "alipay") !== "alipay") {
+    return res.type("html").status(400).send("<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>支付结果</title></head><body><main><h1>请在客户端完成支付</h1><p>该订单使用微信支付，请返回客户端扫描二维码完成付款。</p></main></body></html>");
+  }
+  if (!alipayEnabled) return res.status(503).send("支付宝支付暂未开启");
   const page = await alipayGateway.createPagePay({
     orderNo: order.order_no,
     amountCents: Number(order.amount_cents),
@@ -712,7 +732,7 @@ app.get("/pay/:paymentToken", asyncHandler(async (req, res) => {
 }));
 
 app.post("/api/shumiao/alipay/notify", asyncHandler(async (req, res) => {
-  if (!paymentEnabled) return res.status(503).send("failure");
+  if (!alipayEnabled) return res.status(503).send("failure");
   const verified = await alipayGateway.verifyNotification(req.body || {});
   if (!verified) return res.status(400).send("failure");
   const notification = normalizeNotification(req.body || {});
@@ -742,6 +762,65 @@ app.post("/api/shumiao/alipay/notify", asyncHandler(async (req, res) => {
     return res.send("success");
   } catch (error) {
     if (error instanceof SettlementError) return res.status(400).send("failure");
+    throw error;
+  }
+}));
+
+app.post("/api/shumiao/wxpay/notify", asyncHandler(async (req, res) => {
+  if (!wxpayEnabled) {
+    return res.status(503).json({ code: "FAIL", message: "微信支付暂未开启" });
+  }
+  const rawBody = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : String(req.body || "");
+  const verified = await wxpayGateway.verifyNotify({ headers: req.headers, rawBody });
+  if (!verified) {
+    logWarn("wxpay_notify_bad_signature", { ...requestLogInfo(req) });
+    return res.status(400).json({ code: "FAIL", message: "签名验证失败" });
+  }
+  let payload;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch (error) {
+    return res.status(400).json({ code: "FAIL", message: "通知体格式错误" });
+  }
+  if (!payload?.resource) {
+    return res.status(400).json({ code: "FAIL", message: "缺少加密资源" });
+  }
+  let decrypted;
+  try {
+    decrypted = wxpayGateway.decryptNotifyResource(payload.resource);
+  } catch (error) {
+    logWarn("wxpay_notify_decrypt_failed", { ...requestLogInfo(req), error: error.message });
+    return res.status(400).json({ code: "FAIL", message: "资源解密失败" });
+  }
+  const notification = normalizeWxpayNotification(decrypted);
+  const status = notification.tradeStatus;
+  if (!isSuccessfulTradeStatus(status)) {
+    if (status === "TRADE_CLOSED" && notification.outTradeNo) {
+      await withMutation(() => setQueryStatus({ db: database, orderNo: notification.outTradeNo, status, close: true }));
+    }
+    return res.status(200).json({ code: "SUCCESS", message: "成功" });
+  }
+  const amountFen = Number(decrypted?.amount?.total ?? 0);
+  if (!Number.isSafeInteger(amountFen) || amountFen <= 0 || !notification.tradeNo || !notification.outTradeNo
+    || !notification.sellerId || !notification.appId) {
+    return res.status(400).json({ code: "FAIL", message: "交易信息不完整" });
+  }
+  try {
+    await settleRechargeOrder({
+      db: database,
+      withTransaction,
+      source: "wxpay-notify",
+      orderNo: notification.outTradeNo,
+      channel: "wxpay",
+      amountCents: amountFen,
+      merchantId: notification.sellerId,
+      appId: notification.appId,
+      transactionId: notification.tradeNo,
+      paidAt: notification.gmtPayment,
+    });
+    return res.status(200).json({ code: "SUCCESS", message: "成功" });
+  } catch (error) {
+    if (error instanceof SettlementError) return res.status(400).json({ code: "FAIL", message: error.message });
     throw error;
   }
 }));
@@ -1312,19 +1391,38 @@ app.get("/api/shumiao/consume-records", authRequired, asyncHandler(async (req, r
 }));
 
 app.post("/api/shumiao/recharge", authRequired, asyncHandler(async (req, res) => {
-  if (!paymentEnabled) return fail(res, 503, "支付宝支付暂未开启，请稍后再试");
+  const channel = String(req.body.channel || "alipay").trim().toLowerCase();
+  if (channel !== "alipay" && channel !== "wxpay") return fail(res, 400, "不支持的支付方式");
+  const channelEnabled = channel === "wxpay" ? wxpayEnabled : alipayEnabled;
+  if (!channelEnabled) {
+    return fail(res, 503, channel === "wxpay" ? "微信支付暂未开启，请稍后再试" : "支付宝支付暂未开启，请稍后再试");
+  }
   const packageId = String(req.body.packageId || "");
   const pkg = await dbGet("SELECT * FROM shumiao_packages WHERE id = ? AND enabled = 1", [packageId]);
   if (!pkg) return fail(res, 400, "套餐不存在");
 
+  const gateway = channel === "wxpay" ? wxpayGateway : alipayGateway;
   const orderNo = `RM${Date.now()}${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
   const paymentToken = createPaymentToken();
   const paymentTokenHash = hashPaymentToken(paymentToken);
   const createdAt = nowIso();
   const expiresAt = new Date(Date.now() + Number(process.env.PAYMENT_ORDER_TTL_MS || 30 * 60 * 1000)).toISOString();
-  const merchantId = String(alipayGateway.config.merchantId || process.env.ALIPAY_SELLER_ID || (process.env.NODE_ENV === "test" ? "test-merchant" : "")).trim();
-  const appId = String(alipayGateway.config.appId || process.env.ALIPAY_APP_ID || (process.env.NODE_ENV === "test" ? "test-app" : "")).trim();
-  if (!merchantId || !appId) return fail(res, 503, "支付宝支付配置未完成，请联系管理员");
+  const merchantId = String(
+    gateway.config.mchId
+    || gateway.config.merchantId
+    || process.env.WXPAY_MCH_ID
+    || process.env.ALIPAY_SELLER_ID
+    || (process.env.NODE_ENV === "test" ? (channel === "wxpay" ? "test-wxpay-mch" : "test-merchant") : ""),
+  ).trim();
+  const appId = String(
+    gateway.config.appId
+    || process.env.WXPAY_APP_ID
+    || process.env.ALIPAY_APP_ID
+    || (process.env.NODE_ENV === "test" ? (channel === "wxpay" ? "test-wxpay-app" : "test-app") : ""),
+  ).trim();
+  if (!merchantId || !appId) {
+    return fail(res, 503, channel === "wxpay" ? "微信支付配置未完成，请联系管理员" : "支付宝支付配置未完成，请联系管理员");
+  }
   await withTransaction(async (tx) => {
     await tx.run(
       `INSERT INTO recharge_orders
@@ -1343,7 +1441,7 @@ app.post("/api/shumiao/recharge", authRequired, asyncHandler(async (req, res) =>
         Number(pkg.total_count),
         "redacted",
         ORDER_STATUS.PENDING,
-        "alipay",
+        channel,
         paymentTokenHash,
         expiresAt,
         merchantId,
@@ -1355,16 +1453,38 @@ app.post("/api/shumiao/recharge", authRequired, asyncHandler(async (req, res) =>
     );
   });
 
-  const payUrl = `${BASE_URL}/pay/${paymentToken}`;
+  const isWxpay = channel === "wxpay";
+  let payUrl = `${BASE_URL}/pay/${paymentToken}`;
+  let codeUrl = payUrl;
+  if (isWxpay) {
+    const description = `积分充值 ${Number(pkg.total_count)} 积分`;
+    try {
+      codeUrl = await wxpayGateway.createQrCode({
+        orderNo,
+        amountCents: Number(pkg.amount_cents),
+        description,
+        notifyUrl: wxpayGateway.config.notifyUrl,
+      });
+      payUrl = codeUrl;
+    } catch (error) {
+      logWarn("wxpay_create_order_failed", {
+        ...requestLogInfo(req),
+        orderNo,
+        error: error.message,
+      });
+      await withMutation(() => setQueryStatus({ db: database, orderNo, status: "ERROR:QRCODE_FAILED", close: true }));
+      return fail(res, 502, "微信支付下单失败，请稍后重试");
+    }
+  }
   return success(res, {
     orderNo,
     payUrl,
     // 兼容仍在使用 1.1.x 前端资源的客户端：旧页面用 codeUrl 生成二维码。
-    codeUrl: payUrl,
+    codeUrl,
     amount: Number(pkg.amount_cents),
     amountCents: Number(pkg.amount_cents),
     totalCount: Number(pkg.total_count),
-    channel: "alipay",
+    channel,
     status: ORDER_STATUS.PENDING,
     expiresAt,
   });
@@ -1388,10 +1508,15 @@ app.get("/api/shumiao/order/:orderNo", authRequired, asyncHandler(async (req, re
 }));
 
 app.post("/api/shumiao/order/:orderNo/query", authRequired, asyncHandler(async (req, res) => {
-  if (!paymentEnabled) return fail(res, 503, "支付宝查询暂未开启，请稍后再试");
   const orderNo = String(req.params.orderNo || "").trim();
   const existing = await dbGet("SELECT * FROM recharge_orders WHERE user_id = ? AND order_no = ?", [req.user.id, orderNo]);
   if (!existing) return fail(res, 404, "订单不存在");
+  const channel = String(existing.channel || "alipay").trim().toLowerCase();
+  const channelEnabled = channel === "wxpay" ? wxpayEnabled : alipayEnabled;
+  if (!channelEnabled) {
+    return fail(res, 503, channel === "wxpay" ? "微信支付查询暂未开启，请稍后再试" : "支付宝查询暂未开启，请稍后再试");
+  }
+  const gateway = channel === "wxpay" ? wxpayGateway : alipayGateway;
   if (Number(existing.status) !== ORDER_STATUS.PENDING) return success(res, paymentOrderView(existing));
   if (isManualReviewOrder(existing)) {
     return success(res, paymentOrderView(existing), "订单已进入人工复核，请联系客服");
@@ -1403,6 +1528,7 @@ app.post("/api/shumiao/order/:orderNo/query", authRequired, asyncHandler(async (
     now: new Date(),
     minIntervalMs: 15000,
     allowExpiredRetry: true,
+    channel,
   }));
   if (!claim) {
     const latest = await dbGet("SELECT * FROM recharge_orders WHERE user_id = ? AND order_no = ?", [req.user.id, orderNo]);
@@ -1410,18 +1536,26 @@ app.post("/api/shumiao/order/:orderNo/query", authRequired, asyncHandler(async (
   }
 
   try {
-    const response = await alipayGateway.queryTrade({ orderNo });
-    if (response?.outTradeNo && response.outTradeNo !== orderNo) throw new Error("支付宝查询返回了其他订单");
+    const response = channel === "wxpay"
+      ? await gateway.queryOrder({ orderNo })
+      : await gateway.queryTrade({ orderNo });
+    if (response?.outTradeNo && response.outTradeNo !== orderNo) {
+      throw new Error(channel === "wxpay" ? "微信支付查询返回了其他订单" : "支付宝查询返回了其他订单");
+    }
     const status = String(response?.tradeStatus || "NOT_FOUND").trim().toUpperCase();
     if (isSuccessfulTradeStatus(status)) {
-      const amountCents = centsFromAmount(response.totalAmount);
-      if (!amountCents || !response.tradeNo || response.outTradeNo !== orderNo) throw new Error("支付宝查询成功但交易信息不完整");
+      const amountCents = channel === "wxpay"
+        ? Number(response.amountFen)
+        : centsFromAmount(response.totalAmount);
+      if (!Number.isSafeInteger(amountCents) || amountCents <= 0 || !response.tradeNo || response.outTradeNo !== orderNo) {
+        throw new Error("支付查询成功但交易信息不完整");
+      }
       await settleRechargeOrder({
         db: database,
         withTransaction,
-        source: "alipay-query",
+        source: channel === "wxpay" ? "wxpay-query" : "alipay-query",
         orderNo,
-        channel: "alipay",
+        channel,
         amountCents,
         merchantId: response.sellerId,
         appId: response.appId,
@@ -2164,14 +2298,31 @@ app.use((err, req, res, next) => {
 
 async function runReconciliation() {
   if (!paymentEnabled || process.env.RECONCILIATION_ENABLED !== "1") return [];
-  return reconcileOnce({
-    db: database,
-    gateway: alipayGateway,
-    withMutation,
-    settle: (input) => settleRechargeOrder({ db: database, withTransaction, ...input }),
-    batchSize: 20,
-    minIntervalMs: 15000,
-  });
+  const settle = (input) => settleRechargeOrder({ db: database, withTransaction, ...input });
+  const results = [];
+  if (alipayEnabled) {
+    results.push(...await reconcileOnce({
+      db: database,
+      gateway: alipayGateway,
+      withMutation,
+      settle,
+      batchSize: 20,
+      minIntervalMs: 15000,
+      channel: "alipay",
+    }));
+  }
+  if (wxpayEnabled) {
+    results.push(...await reconcileOnce({
+      db: database,
+      gateway: wxpayGateway,
+      withMutation,
+      settle,
+      batchSize: 20,
+      minIntervalMs: 15000,
+      channel: "wxpay",
+    }));
+  }
+  return results;
 }
 
 initDb()

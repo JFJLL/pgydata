@@ -34,6 +34,7 @@ async function claimPendingOrder({
   now = new Date(),
   minIntervalMs = 15000,
   allowExpiredRetry = false,
+  channel = "alipay",
 } = {}) {
   const current = asDate(now);
   const nowIso = current.toISOString();
@@ -41,7 +42,7 @@ async function claimPendingOrder({
   const expiryGuard = allowExpiredRetry
     ? ""
     : "\n       AND (expires_at IS NULL OR expires_at > ? OR expiry_query_at IS NULL)";
-  const params = [nowIso, nowIso, nowIso, orderNo, ORDER_STATUS.PENDING, cutoffIso];
+  const params = [nowIso, nowIso, nowIso, orderNo, ORDER_STATUS.PENDING, channel, cutoffIso];
   if (!allowExpiredRetry) params.push(nowIso);
   const result = await db.run(
     `UPDATE recharge_orders
@@ -53,7 +54,7 @@ async function claimPendingOrder({
          END
       WHERE order_no = ?
        AND status = ?
-       AND channel = 'alipay'
+       AND channel = ?
        AND (last_query_status IS NULL OR last_query_status NOT LIKE 'MANUAL_REVIEW:%')
        AND (last_query_at IS NULL OR last_query_at <= ?)
        ${expiryGuard}`,
@@ -92,6 +93,7 @@ async function reconcileOnce({
   batchSize = 20,
   minIntervalMs = 15000,
   maxAgeMs = 24 * 60 * 60 * 1000,
+  channel = "alipay",
 } = {}) {
   const current = asDate(now);
   const oldest = new Date(current.getTime() - maxAgeMs).toISOString();
@@ -100,10 +102,10 @@ async function reconcileOnce({
     `SELECT order_no, created_at, expires_at, expiry_query_at
      FROM recharge_orders
      WHERE status = ?
-       AND channel = 'alipay'
+       AND channel = ?
        AND (last_query_status IS NULL OR last_query_status NOT LIKE 'MANUAL_REVIEW:%')
      ORDER BY created_at ASC LIMIT ?`,
-    [ORDER_STATUS.PENDING, batchSize],
+    [ORDER_STATUS.PENDING, channel, batchSize],
   );
   const results = [];
   for (const candidate of candidates) {
@@ -125,7 +127,7 @@ async function reconcileOnce({
       }
       continue;
     }
-    const order = await mutate(() => claimPendingOrder({ db, orderNo: candidate.order_no, now: current, minIntervalMs }));
+    const order = await mutate(() => claimPendingOrder({ db, orderNo: candidate.order_no, now: current, minIntervalMs, channel }));
     if (!order) continue;
     const stale = String(order.created_at || "") < oldest;
     const expired = isExpired(order, current);
@@ -143,7 +145,7 @@ async function reconcileOnce({
         const settled = await settle({
           source: "reconciliation",
           orderNo: order.order_no,
-          channel: "alipay",
+          channel,
           amountCents,
           merchantId: response.sellerId,
           appId: response.appId,

@@ -2,6 +2,14 @@
 
 本文件保存版本历史、发布记录、安装包路径与校验信息，不放长期维护规则。
 
+## 1.3.5 (Candidate)
+
+- 新增：充值页支持选择支付方式（支付宝 / 微信支付），选定套餐后可在两种方式间切换；微信支付使用 V3 NATIVE 扫码模式，客户端直接渲染 `weixin://` 二维码，支付成功后自动确认到账。
+- 新增：服务端接入微信支付（`lib/wxpay-gateway.js`），下单、回调验签解密、主动查询与对账均按渠道隔离；`POST /api/shumiao/recharge` 新增 `channel` 参数（`alipay` 默认 / `wxpay`），`POST /api/shumiao/wxpay/notify` 接收微信回调并原子入账，支付宝与微信的交易号互不复用。
+- 配置：新增 `WXPAY_ENABLED`、`WXPAY_APP_ID`、`WXPAY_MCH_ID`、`WXPAY_SERIAL_NO`、`WXPAY_PRIVATE_KEY_PATH`、`WXPAY_API_V3_KEY`、`WXPAY_PUBLIC_KEY_PATH`、`WXPAY_PUBLIC_KEY_ID`、`WXPAY_NOTIFY_URL` 环境变量，说明见 `red-magic-api/README.md`。
+- 本地资源包：`red-magic-api/public/assets/desktop/1.3.5/assets.zip`（SHA256：`a234dfe1fb62828b0e24c1c3bb3e4c58abfb62562f5b93db2037ecb3679ff1da`）。
+- 发布状态：当前仅为本地 Candidate；尚未修改 `latest.json`、未部署。桌面安装包仍为 1.3.4（本次变更全部通过资源包 1.3.5 下发，安装包 1.3.5 待下次构建发布）。
+
 ## 1.3.4 (Candidate)
 
 - 修复：登录初始化不再因用户对象变化触发递归刷新，消除个人资料请求风暴（不再出现单次运行上万条失败请求）。

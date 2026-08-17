@@ -53,11 +53,15 @@ async function settleRechargeOrder({
   const normalizedTransactionId = requiredText(transactionId, "平台交易号");
   const normalizedAmountCents = parseCents(amountCents);
   if (!normalizedAmountCents) throw new SettlementError("invalid_payment", "支付金额无效");
-  if (normalizedChannel !== "alipay") throw new SettlementError("invalid_payment", "仅支持支付宝支付");
+  if (normalizedChannel !== "alipay" && normalizedChannel !== "wxpay") {
+    throw new SettlementError("invalid_payment", "不支持的支付渠道");
+  }
   const normalizedMerchantId = optionalText(merchantId);
   const normalizedAppId = optionalText(appId);
   const sourceName = String(source || "unknown").slice(0, 64);
-  const canUseLocalMerchantBoundary = sourceName === "alipay-query" || sourceName === "reconciliation";
+  const canUseLocalMerchantBoundary = sourceName === "alipay-query"
+    || sourceName === "wxpay-query"
+    || sourceName === "reconciliation";
   if ((!normalizedMerchantId || !normalizedAppId) && !canUseLocalMerchantBoundary) {
     throw new SettlementError("invalid_payment", "支付商户信息不完整");
   }
