@@ -216,7 +216,8 @@ const pgySafeExternalOrigins = new Set([
   "https://v.douyin.com",
   "https://www.iesdouyin.com",
   "https://www.xingtu.cn",
-  "https://xingtu.cn"
+  "https://xingtu.cn",
+  "https://magiorix.red-magic.cn"
 ]);
 function pgyResolveExternal(value, allowedOrigins) {
   try {

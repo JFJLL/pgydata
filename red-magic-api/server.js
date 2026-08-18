@@ -465,34 +465,6 @@ function getDefaultClientMenus() {
         },
       ],
     },
-    {
-      id: "points",
-      name: "积分中心",
-      icon: "solar:wallet-money-bold-duotone",
-      children: [
-        {
-          id: "points-recharge",
-          name: "积分充值",
-          icon: "solar:card-send-bold-duotone",
-          path: "/shumiao/recharge",
-          component: "pages/shumiao/recharge/index.tsx",
-        },
-        {
-          id: "points-recharge-records",
-          name: "充值记录",
-          icon: "solar:history-bold-duotone",
-          path: "/shumiao/recharge-records",
-          component: "pages/shumiao/recharge-records/index.tsx",
-        },
-        {
-          id: "points-consume-records",
-          name: "消耗记录",
-          icon: "solar:bill-list-bold-duotone",
-          path: "/shumiao/consume-records",
-          component: "pages/shumiao/consume-records/index.tsx",
-        },
-      ],
-    },
   ];
 }
 
@@ -693,6 +665,11 @@ app.get("/admin", (req, res) => {
   return res.sendFile(path.join(__dirname, "public", "admin", "index.html"));
 });
 app.use("/admin", express.static(path.join(__dirname, "public", "admin")));
+app.get("/recharge", (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  return res.sendFile(path.join(__dirname, "public", "recharge", "index.html"));
+});
+app.use("/recharge", express.static(path.join(__dirname, "public", "recharge")));
 
 function setPaymentHeaders(res) {
   res.setHeader("Cache-Control", "no-store");
@@ -700,9 +677,111 @@ function setPaymentHeaders(res) {
   res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; form-action https://*.alipay.com https://*.alipayobjects.com; base-uri 'none'; object-src 'none'; frame-ancestors 'none'");
 }
 
+function paymentResultPageHtml() {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>支付结果 - magiorix</title>
+<style>
+  :root{--brand:#d84444;--text:#120f10;--muted:#6b7280;--bg:#faf7f5;--card:#fff;--green:#16a34a;--amber:#b45309}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Inter","Microsoft YaHei","PingFang SC",Arial,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;align-items:center;justify-content:center}
+  main{width:100%;max-width:420px;margin:24px;padding:32px;background:var(--card);border:1px solid #eee8e6;border-radius:16px;box-shadow:0 12px 32px rgba(18,15,16,.06);text-align:center}
+  .brand{font-size:14px;font-weight:700;letter-spacing:.4px;margin-bottom:22px}
+  .brand b{color:var(--brand)}
+  h1{font-size:20px;margin:0 0 8px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 20px;line-height:1.6}
+  .status{margin:20px 0;font-size:14px;min-height:20px;line-height:1.6}
+  .status.paid{color:var(--green);font-weight:700}
+  .status.pending{color:var(--amber)}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle;background:#f59e0b}
+  .dot.green{background:var(--green)}
+  button{width:100%;padding:12px 16px;border:0;border-radius:10px;background:var(--brand);color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+  button.secondary{background:#fff;color:var(--text);border:1px solid #eee8e6;margin-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">Σ.<b>magiorix</b></div>
+  <h1>支付结果</h1>
+  <p class="sub">正在与支付平台确认订单状态，请稍候…</p>
+  <div id="status" class="status pending"><span class="dot"></span>支付结果确认中…</div>
+  <button id="recordsBtn" style="display:none">查看充值记录</button>
+  <button id="centerBtn" class="secondary" style="display:none">返回充值中心</button>
+</main>
+<script>
+(function(){
+  var orderNo = new URLSearchParams(location.search).get("out_trade_no") || "";
+  var center = location.origin + "/recharge";
+  var records = center + "#/records/recharge";
+  function readToken(){
+    try{
+      var raw = localStorage.getItem("magiorix-recharge-auth");
+      if(!raw) return "";
+      var parsed = JSON.parse(raw);
+      return parsed && parsed.token ? String(parsed.token) : "";
+    }catch(e){ return ""; }
+  }
+  var statusEl = document.getElementById("status");
+  var recordsBtn = document.getElementById("recordsBtn");
+  var centerBtn = document.getElementById("centerBtn");
+  function setStatus(text, paid){
+    statusEl.className = "status " + (paid ? "paid" : "pending");
+    statusEl.innerHTML = '<span class="dot' + (paid ? " green" : "") + '"></span>' + String(text).replace(/[<>&"]/g, function(ch){
+      return { "<": "&lt;", ">": "&gt;", "&": "&amp;", "\"": "&quot;" }[ch];
+    });
+    centerBtn.style.display = "block";
+  }
+  function showPaid(){
+    setStatus("支付成功，积分已到账", true);
+    recordsBtn.style.display = "block";
+  }
+  recordsBtn.addEventListener("click", function(){ location.href = records; });
+  centerBtn.addEventListener("click", function(){ location.href = center; });
+  if(!orderNo){ setStatus("缺少订单号，请返回充值中心查看订单状态", false); return; }
+  var token = readToken();
+  if(!token){ setStatus("未登录，请返回充值中心查看订单状态", false); return; }
+  var startedAt = Date.now();
+  var queryAt = 0;
+  var attempts = 0;
+  function tick(){
+    attempts += 1;
+    var url = "/api/shumiao/order/" + encodeURIComponent(orderNo);
+    fetch(url, { headers: { satoken: token } })
+      .then(function(res){ return res.json().catch(function(){ return {}; }); })
+      .then(function(payload){
+        if(!payload || payload.code !== 200) throw new Error(payload.message || "查询失败");
+        var order = payload.data || {};
+        if(Number(order.status) === 1){ showPaid(); return; }
+        if(Number(order.status) === 2){ setStatus("订单已关闭", false); return; }
+        if(String(order.lastQueryStatus || "").indexOf("MANUAL_REVIEW:") === 0){
+          setStatus("订单已进入人工复核，请联系客服", false); return;
+        }
+        if(Date.now() - startedAt >= 15000 && Date.now() - queryAt >= 15000){
+          queryAt = Date.now();
+          fetch(url + "/query", { method: "POST", headers: { satoken: token } }).catch(function(){});
+        }
+      })
+      .catch(function(){})
+      .then(function(){
+        if(attempts >= 60){ setStatus("支付结果暂未确认，请返回充值中心刷新订单", false); return; }
+        setTimeout(tick, 3000);
+      });
+  }
+  tick();
+})();
+</script>
+</body>
+</html>`;
+}
+
 app.get("/pay/return", (req, res) => {
   setPaymentHeaders(res);
-  return res.type("html").send("<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>支付结果</title></head><body><main><h1>结果确认中</h1><p>请返回客户端刷新订单状态。</p></main></body></html>");
+  // 结果页需要轮询同源 API，放开 connect-src 到同源；其余保持与支付页一致的严格 CSP。
+  res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action https://*.alipay.com https://*.alipayobjects.com; base-uri 'none'; object-src 'none'; frame-ancestors 'none'");
+  return res.type("html").send(paymentResultPageHtml());
 });
 
 app.get("/pay/:paymentToken", asyncHandler(async (req, res) => {
@@ -1635,6 +1714,82 @@ app.post("/api/shumiao/order/:orderNo/query", authRequired, asyncHandler(async (
     await withMutation(() => setQueryStatus({ db: database, orderNo, status: "ERROR:QUERY_FAILED" }));
     const latest = await dbGet("SELECT * FROM recharge_orders WHERE user_id = ? AND order_no = ?", [req.user.id, orderNo]);
     return success(res, paymentOrderView(latest), "支付结果暂未确认，请稍后刷新订单");
+  }
+}));
+
+// 关闭订单：安全优先，先查网关状态——已支付才入账、确定未支付才关闭、状态未知绝不关闭。
+// 返回 200 + order + 标志位（closed / paidOnClose / queryInProgress），前端按 message 与标志位展示。
+app.post("/api/shumiao/order/:orderNo/close", authRequired, asyncHandler(async (req, res) => {
+  const orderNo = String(req.params.orderNo || "").trim();
+  const existing = await dbGet("SELECT * FROM recharge_orders WHERE user_id = ? AND order_no = ?", [req.user.id, orderNo]);
+  if (!existing) return fail(res, 404, "订单不存在");
+
+  if (Number(existing.status) !== ORDER_STATUS.PENDING) {
+    return success(res, { order: paymentOrderView(existing) }, "订单已处理，无需关闭");
+  }
+  if (isManualReviewOrder(existing)) {
+    return success(res, { order: paymentOrderView(existing) }, "订单已进入人工复核，请联系客服");
+  }
+
+  const channel = String(existing.channel || "alipay").trim().toLowerCase();
+  const channelEnabled = channel === "wxpay" ? wxpayEnabled : alipayEnabled;
+  if (!channelEnabled) {
+    return fail(res, 503, channel === "wxpay" ? "微信支付关闭暂不可用，请稍后再试" : "支付宝关闭暂不可用，请稍后再试");
+  }
+  const gateway = channel === "wxpay" ? wxpayGateway : alipayGateway;
+
+  const claim = await withMutation(() => claimPendingOrder({
+    db: database,
+    orderNo,
+    now: new Date(),
+    minIntervalMs: 15000,
+    allowExpiredRetry: true,
+    channel,
+  }));
+  if (!claim) {
+    const latest = await dbGet("SELECT * FROM recharge_orders WHERE user_id = ? AND order_no = ?", [req.user.id, orderNo]);
+    return success(res, { ...paymentOrderView(latest), queryInProgress: true }, "查询请求已排队，请稍后刷新");
+  }
+
+  try {
+    const response = channel === "wxpay"
+      ? await gateway.queryOrder({ orderNo })
+      : await gateway.queryTrade({ orderNo });
+    if (response?.outTradeNo && response.outTradeNo !== orderNo) {
+      throw new Error(channel === "wxpay" ? "微信支付查询返回了其他订单" : "支付宝查询返回了其他订单");
+    }
+    const status = String(response?.tradeStatus || "NOT_FOUND").trim().toUpperCase();
+    if (isSuccessfulTradeStatus(status)) {
+      const amountCents = channel === "wxpay"
+        ? Number(response.amountFen)
+        : centsFromAmount(response.totalAmount);
+      if (!Number.isSafeInteger(amountCents) || amountCents <= 0 || !response.tradeNo) {
+        throw new Error("支付查询成功但交易信息不完整");
+      }
+      await settleRechargeOrder({
+        db: database,
+        withTransaction,
+        source: channel === "wxpay" ? "wxpay-close" : "alipay-close",
+        orderNo,
+        channel,
+        amountCents,
+        merchantId: response.sellerId,
+        appId: response.appId,
+        transactionId: response.tradeNo,
+        paidAt: response.gmtPayment,
+      });
+      const latest = await dbGet("SELECT * FROM recharge_orders WHERE user_id = ? AND order_no = ?", [req.user.id, orderNo]);
+      return success(res, { order: paymentOrderView(latest), paidOnClose: true }, "订单已支付，积分已到账");
+    }
+    // 用户主动取消：网关确认未支付（WAIT_BUYER_PAY / USERPAYING / TRADE_CLOSED / 不存在等）即关闭。
+    // 若关闭后买家仍完成付款，平台通知/查询仍会按已验证成功入账（见 settleRechargeOrder 幂等守卫）。
+    await withMutation(() => setQueryStatus({ db: database, orderNo, status, close: true }));
+    const latest = await dbGet("SELECT * FROM recharge_orders WHERE user_id = ? AND order_no = ?", [req.user.id, orderNo]);
+    return success(res, { order: paymentOrderView(latest), closed: true }, "订单已关闭");
+  } catch {
+    await withMutation(() => setQueryStatus({ db: database, orderNo, status: "ERROR:QUERY_FAILED" }));
+    const latest = await dbGet("SELECT * FROM recharge_orders WHERE user_id = ? AND order_no = ?", [req.user.id, orderNo]);
+    return success(res, { order: paymentOrderView(latest) }, "支付状态暂未确认，请稍后重试");
   }
 }));
 

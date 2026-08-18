@@ -10,9 +10,13 @@
 - 调整：用户端消耗记录改为与管理后台一致——同一提交任务（`task_id`）聚合为一条流水（明细数合计、显示任务结束余额），无任务标识的历史记录仍按条展示。
 - 配置：新增 `WXPAY_ENABLED`、`WXPAY_APP_ID`、`WXPAY_MCH_ID`、`WXPAY_SERIAL_NO`、`WXPAY_PRIVATE_KEY_PATH`、`WXPAY_API_V3_KEY`、`WXPAY_PUBLIC_KEY_PATH`、`WXPAY_PUBLIC_KEY_ID`、`WXPAY_NOTIFY_URL` 环境变量，说明见 `red-magic-api/README.md`；`.env.example` 已同步。
 - 测试：新增消耗记录按任务聚合、支付宝预下单返回二维码断言；测试环境隔离本地 `.env` 的真实支付配置。
+- 重构：充值/支付与桌面端解耦，新增独立网页充值中心（`red-magic-api/public/recharge/`，纯 HTML/CSS/JS 无构建）——登录/注册/忘记密码（注册无验证码，忘记密码走短信验证码）+ 扫码充值三步入流程（确认页 → 支付页 248px 二维码 + 3 秒轮询 → 详情页）+ 充值/消耗记录分页，桌面端仅保留头部「余额 + 充值按钮」，点击改在系统浏览器打开 `https://magiorix.red-magic.cn/recharge`。
+- 新增：服务端新增关闭订单接口 `POST /api/shumiao/order/:orderNo/close`（先查网关状态：已支付才入账、未支付才关闭、网关异常不关闭），支持网页端「待支付订单拦截 + 取消」；`GET /pay/return` 由占位页升级为可轮询支付结果页（读 `out_trade_no` + 同源 `satoken` 轮询，成功跳充值记录/失败返回充值中心）。
+- 调整：桌面端左侧栏移除整个「积分中心」分组（`getDefaultClientMenus()` 不再下发 points 菜单），余额不足提示改为引导去网页充值；运行时 `pgySafeExternalOrigins` 白名单加入 `https://magiorix.red-magic.cn` 使 `openSafeExternal` 可打开充值中心。
+- 测试：新增 `test/recharge-center.test.js`（`/recharge` 静态页、`/pay/return` 结果页、关闭订单 closed/paidOnClose/幂等/404/网关异常/微信关闭）；`npm test` 全绿。
 - 修复：安装包在复制文件前除等待 `magiorix.exe` 退出外，还会等待并兜底强制结束残留的辅助进程（`pgy-chart-renderer.exe`、`elevate.exe`），避免其句柄锁住安装目录文件导致“复制主程序失败”/“无法打开要写入的文件”。
-- 本地资源包：`red-magic-api/public/assets/desktop/1.3.5/assets.zip`（SHA256：`585dba39e62cd7ee2a353bccd41cf7677678f4dc422e0945cbd0df9d6f434d8e`）。
-- 本地安装包：`desktop-versions/windows/1.3.5/magiorix-desktop-1.3.5-windows.exe`（SHA256：`87D1B549CC20D88893E34D9562799F1D3844B5A36ABD583A30179650D0317316`）。
+- 本地资源包：`red-magic-api/public/assets/desktop/1.3.5/assets.zip`（SHA256：`030dcda2dc4b9eb82a45a2bd38d62593caf5052cc31653977c52c0016242b95b`）。
+- 本地安装包：`desktop-versions/windows/1.3.5/magiorix-desktop-1.3.5-windows.exe`（SHA256：`5e4fd13d027d95008913636207925a1ba6c50ef0a74439f5e9d58fca3c988d25`）。
 - 发布状态：当前仅为本地 Candidate；尚未修改 `latest.json`、未部署。
 
 ## 1.3.4 (Candidate)
