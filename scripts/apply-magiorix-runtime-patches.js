@@ -4017,6 +4017,46 @@ for (const name of fs.readdirSync(overviewIconsSourcePath)) {
   fs.copyFileSync(source, target);
 }
 
+// 防卡死：内置绘图失败后，JS 兜底不再同步渲染 SVG 类图表（nativeImage 栅格化可能
+// 无限期阻塞主进程事件循环，导致任务永远停在采集中），只对像素类图表逐张 try/catch
+// 并输出进度日志；同时 exe 超时错误附带已捕获的 stderr，便于下次定位真实根因。
+main = replaceOnce(
+  main,
+  '      u(new Error(`chart renderer timeout after ${t}ms`));',
+  '      u(new Error(`chart renderer timeout after ${t}ms${o ? `; stderr: ${o.slice(0, 1200)}` : ""}`));',
+  "pgy chart renderer timeout error includes stderr",
+);
+main = replaceOnce(
+  main,
+  '      o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "age-distribution" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "region-distribution" ? r = pgyWriteBarChartPng((o.data == null ? void 0 : o.data.mode) === "city" ? o.data.cityRows ?? [] : o.data.provinceRows ?? [], o.output) : o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "gender-age-distribution" ? r = pgyWriteBarChartPng(o.data?.rows ?? [], o.output) : o.type === "trend" ? r = pgyWriteSvgPng(pgyTrendChartSvg(o.rows ?? []), o.output) : o.type === "daily-note-performance" ? r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output) : o.type === "blogger-overview" && (r = pgyWriteSvgPng(pgyBloggerOverviewSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);',
+  '      try {\n        if (o.type === "trend" || o.type === "daily-note-performance" || o.type === "blogger-overview") {\n          j.warn(`[pgy-chart] 跳过 JS 兜底 SVG 渲染，避免阻塞主进程: field=${o.field}, type=${o.type}`);\n        } else {\n          o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "age-distribution" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "region-distribution" ? r = pgyWriteBarChartPng((o.data == null ? void 0 : o.data.mode) === "city" ? o.data.cityRows ?? [] : o.data.provinceRows ?? [], o.output) : o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "gender-age-distribution" ? r = pgyWriteBarChartPng(o.data?.rows ?? [], o.output) : o.type === "trend" ? r = pgyWriteSvgPng(pgyTrendChartSvg(o.rows ?? []), o.output) : o.type === "daily-note-performance" ? r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output) : o.type === "blogger-overview" && (r = pgyWriteSvgPng(pgyBloggerOverviewSvg(o.data ?? {}), o.output));\n        }\n      } catch (err) {\n        j.warn(`[pgy-chart] JS 兜底渲染失败: field=${o.field}, type=${o.type}, error=${err instanceof Error ? err.message : String(err)}`);\n      }\n      r && (s[o.field] = r);\n      j.info(`[pgy-chart] JS 兜底进度: ${Object.keys(s).length}/${i.length}, field=${o.field}, ok=${Boolean(r)}`);',
+  "pgy JS fallback anti-freeze",
+);
+
+// Python 兜底不再用 `python -c <内嵌脚本>`（Windows 命令行超长必然 ENAMETOOLONG）：
+// 把内嵌绘图脚本写入临时文件再 `python <tempfile>` 执行，让 exe 失败后仍能出图。
+main = replaceOnce(
+  main,
+  '  return new Promise((s, i) => {\n    let o = "", r = "", c = !1;\n    const u = Tr(a, [...e, "-c", PGY_PYTHON_CHART_SCRIPT], {',
+  '  return new Promise((s, i) => {\n    let o = "", r = "", c = !1, z = "";\n    try {\n      const q = process.env.TEMP || process.env.TMP || ".";\n      z = Oe(q, `magiorix-pychart-${Date.now()}-${Math.random().toString(36).slice(2)}.py`);\n      Zi(z, PGY_PYTHON_CHART_SCRIPT);\n    } catch (q) {\n      i(q);\n      return;\n    }\n    const u = Tr(a, [...e, z], {',
+  "pgy python fallback writes chart script to temp file",
+);
+main = replaceOnce(
+  main,
+  '    }), u.on("close", (h) => {\n      h === 0 ? l(null) : l(new Error(`python exit ${h}: ${r.slice(0, 1200)}`));\n    }), u.stdin.end(t);',
+  '    }), u.on("close", (h) => {\n      try {\n        Rr(z);\n      } catch {\n      }\n      h === 0 ? l(null) : l(new Error(`python exit ${h}: ${r.slice(0, 1200)}`));\n    }), u.stdin.end(t);',
+  "pgy python fallback cleans up temp chart script",
+);
+
+// 限制发给渲染器的趋势数据量：按日期键去重后只保留最近 1000 个日期（绘图只取最近 30
+// 点），避免超大响应让 exe / Python 兜底在去重排序上卡到超时。
+main = replaceOnce(
+  main,
+  '  if (pgyHasSelectedField(n, PYG_CHART_FIELDS.trend)) {\n    const o = Array.isArray(t) ? t : [];\n    o.length >= 2 && i.push({ field: "fansGrowthTrendChart", type: "trend", rows: o, output: pgyChartFile("trend", a, "trend") });\n  }',
+  '  if (pgyHasSelectedField(n, PYG_CHART_FIELDS.trend)) {\n    const o = Array.isArray(t) ? t : [];\n    if (o.length >= 2) {\n      const u = new Map();\n      for (const row of o) {\n        const date = String(row == null ? void 0 : row.dateKey ?? row.date ?? "");\n        const digits = date.replace(/\\D/g, "");\n        const k = digits.length >= 8 ? digits.slice(-8) : date;\n        k && u.set(k, row);\n      }\n      const rows = Array.from(u.entries()).sort((a2, b2) => a2[0].localeCompare(b2[0])).map(([, row]) => row).slice(-1000);\n      rows.length >= 2 && i.push({ field: "fansGrowthTrendChart", type: "trend", rows, output: pgyChartFile("trend", a, "trend") });\n    }\n  }',
+  "pgy trend rows bounded before renderer",
+);
+
 fs.writeFileSync(mainPath, main);
 fs.writeFileSync(preloadPath, preload);
 console.log("Applied magiorix runtime patches.");

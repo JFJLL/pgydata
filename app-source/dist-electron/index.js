@@ -19409,7 +19409,7 @@ function pgySpawnChartRenderer(a, e, t) {
         c.kill();
       } catch {
       }
-      u(new Error(`chart renderer timeout after ${t}ms`));
+      u(new Error(`chart renderer timeout after ${t}ms${o ? `; stderr: ${o.slice(0, 1200)}` : ""}`));
     }, t);
     c.on("error", (p) => u(p)), c.stdout.on("data", (p) => {
       i += p.toString("utf8");
@@ -19422,8 +19422,16 @@ function pgySpawnChartRenderer(a, e, t) {
 }
 function pgySpawnPythonChart(a, e, t, n) {
   return new Promise((s, i) => {
-    let o = "", r = "", c = !1;
-    const u = Tr(a, [...e, "-c", PGY_PYTHON_CHART_SCRIPT], {
+    let o = "", r = "", c = !1, z = "";
+    try {
+      const q = process.env.TEMP || process.env.TMP || ".";
+      z = Oe(q, `magiorix-pychart-${Date.now()}-${Math.random().toString(36).slice(2)}.py`);
+      Zi(z, PGY_PYTHON_CHART_SCRIPT);
+    } catch (q) {
+      i(q);
+      return;
+    }
+    const u = Tr(a, [...e, z], {
       windowsHide: !0,
       stdio: ["pipe", "pipe", "pipe"],
       env: pgyChartRendererEnv()
@@ -19441,6 +19449,10 @@ function pgySpawnPythonChart(a, e, t, n) {
     }), u.stderr.on("data", (h) => {
       r += h.toString("utf8");
     }), u.on("close", (h) => {
+      try {
+        Rr(z);
+      } catch {
+      }
       h === 0 ? l(null) : l(new Error(`python exit ${h}: ${r.slice(0, 1200)}`));
     }), u.stdin.end(t);
   });
@@ -20009,7 +20021,17 @@ async function buildPgyBloggerChartFields(a, e, t, n, d, B, P, V) {
   }
   if (pgyHasSelectedField(n, PYG_CHART_FIELDS.trend)) {
     const o = Array.isArray(t) ? t : [];
-    o.length >= 2 && i.push({ field: "fansGrowthTrendChart", type: "trend", rows: o, output: pgyChartFile("trend", a, "trend") });
+    if (o.length >= 2) {
+      const u = new Map();
+      for (const row of o) {
+        const date = String(row == null ? void 0 : row.dateKey ?? row.date ?? "");
+        const digits = date.replace(/\D/g, "");
+        const k = digits.length >= 8 ? digits.slice(-8) : date;
+        k && u.set(k, row);
+      }
+      const rows = Array.from(u.entries()).sort((a2, b2) => a2[0].localeCompare(b2[0])).map(([, row]) => row).slice(-1000);
+      rows.length >= 2 && i.push({ field: "fansGrowthTrendChart", type: "trend", rows, output: pgyChartFile("trend", a, "trend") });
+    }
   }
   pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePerformance) && i.push({ field: "dailyNotePerformanceChart", type: "daily-note-performance", data: { ...(d ?? {}), pgyNoteTypeLabel: "图文+视频" }, output: pgyChartFile("daily-note", a, "daily-note-performance") });
   pgyHasSelectedField(n, PYG_CHART_FIELDS.dailyNotePicturePerformance) && i.push({ field: "dailyNotePicturePerformanceChart", type: "daily-note-performance", data: { ...(P ?? {}), pgyNoteTypeLabel: "图文" }, output: pgyChartFile("daily-note", a, "daily-note-picture-performance") });
@@ -20027,7 +20049,17 @@ async function buildPgyBloggerChartFields(a, e, t, n, d, B, P, V) {
   for (const o of i)
     if (!s[o.field]) {
       let r = "";
-      o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "age-distribution" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "region-distribution" ? r = pgyWriteBarChartPng((o.data == null ? void 0 : o.data.mode) === "city" ? o.data.cityRows ?? [] : o.data.provinceRows ?? [], o.output) : o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "gender-age-distribution" ? r = pgyWriteBarChartPng(o.data?.rows ?? [], o.output) : o.type === "trend" ? r = pgyWriteSvgPng(pgyTrendChartSvg(o.rows ?? []), o.output) : o.type === "daily-note-performance" ? r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output) : o.type === "blogger-overview" && (r = pgyWriteSvgPng(pgyBloggerOverviewSvg(o.data ?? {}), o.output)), r && (s[o.field] = r);
+      try {
+        if (o.type === "trend" || o.type === "daily-note-performance" || o.type === "blogger-overview") {
+          j.warn(`[pgy-chart] 跳过 JS 兜底 SVG 渲染，避免阻塞主进程: field=${o.field}, type=${o.type}`);
+        } else {
+          o.type === "bar" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "age-distribution" ? r = pgyWriteBarChartPng(o.rows ?? [], o.output) : o.type === "region-distribution" ? r = pgyWriteBarChartPng((o.data == null ? void 0 : o.data.mode) === "city" ? o.data.cityRows ?? [] : o.data.provinceRows ?? [], o.output) : o.type === "gender" ? r = pgyWriteGenderChartPng(o.data ?? {}, o.output) : o.type === "gender-age-distribution" ? r = pgyWriteBarChartPng(o.data?.rows ?? [], o.output) : o.type === "trend" ? r = pgyWriteSvgPng(pgyTrendChartSvg(o.rows ?? []), o.output) : o.type === "daily-note-performance" ? r = pgyWriteSvgPng(pgyDailyNotePerformanceSvg(o.data ?? {}), o.output) : o.type === "blogger-overview" && (r = pgyWriteSvgPng(pgyBloggerOverviewSvg(o.data ?? {}), o.output));
+        }
+      } catch (err) {
+        j.warn(`[pgy-chart] JS 兜底渲染失败: field=${o.field}, type=${o.type}, error=${err instanceof Error ? err.message : String(err)}`);
+      }
+      r && (s[o.field] = r);
+      j.info(`[pgy-chart] JS 兜底进度: ${Object.keys(s).length}/${i.length}, field=${o.field}, ok=${Boolean(r)}`);
     }
   if (Object.keys(s).length)
     j.info(`[pgy-chart] 已生成 ${Object.keys(s).length}/${i.length} 张图表`);
