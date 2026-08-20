@@ -102,8 +102,8 @@ test("pgy-kol sources and fixtures stay desensitized and brand-free", () => {
 
 test("version stays at 1.3.3 with approved password registration when SMS is disabled", () => {
   const desktop = JSON.parse(read("app-source/package.json"));
-  assert.equal(desktop.version, "1.4.1");
-  assert.equal(desktop.assetsVersion, "1.4.1");
+  assert.equal(desktop.version, "1.4.2");
+  assert.equal(desktop.assetsVersion, "1.4.2");
 });
 
 test("Phase 4：批量任务 IPC 通道、preload bridge 与主进程接线", () => {

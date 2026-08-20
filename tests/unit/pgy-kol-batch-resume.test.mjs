@@ -63,7 +63,7 @@ function shortPageTransport(pageNums, { total = 1000 } = {}) {
   };
 }
 
-async function makeService({ transport, taskBaseDir }) {
+async function makeService({ transport, taskBaseDir, detail }) {
   return createPgyKolService({
     transport,
     getHeaders: () => ({}),
@@ -71,6 +71,7 @@ async function makeService({ transport, taskBaseDir }) {
     sessionProvider: () => ({ kind: "fake-session" }),
     baseDir: taskBaseDir,
     taskBaseDir,
+    detail,
   });
 }
 
@@ -113,13 +114,18 @@ async function waitForRequests(pageNums, minCount, timeoutMs = 5000) {
 test("budget-exhausted → incomplete/cannot-prove（非 completed），数据仍可导出", async () => {
   const pageNums = [];
   const taskBaseDir = tmpDir("be-status");
-  const service = await makeService({ transport: pageTransport(pageNums), taskBaseDir });
-  const { taskId } = await service.batchStart({
+  const service = await makeService({
+    transport: pageTransport(pageNums),
+    taskBaseDir,
+    detail: { create: async () => {}, getTask: async () => ({ inputType: "search-batch", status: "running", total: 10, discoveryClosed: false }) },
+  });
+  const { taskId, checkpointTaskId } = await service.batchStart({
     filterState: {},
     fields: ["nickname", "fansCount"],
     budgets: { queryBudget: 2 },
+    detailMode: true,
   });
-  const task = await waitForStatus(service, taskId, ["incomplete"]);
+  const task = await waitForStatus(service, checkpointTaskId || taskId, ["incomplete"]);
   assert.equal(task.completeness, "cannot-prove");
   assert.equal(task.summary.stopReason, "budget-exhausted");
   assert.deepEqual(pageNums, [1, 2], "预算 2 → 只抓 2 页");
@@ -128,8 +134,8 @@ test("budget-exhausted → incomplete/cannot-prove（非 completed），数据�
   // 两阶段任务（fields）：阶段一 incomplete 时导出被明确拒绝——最终导出
   // 走详情阶段结果，绝不回退到搜索列表行。
   await assert.rejects(
-    () => service.batchExport({ taskId }),
-    (err) => err.kind === "details-not-ready",
+    () => service.batchExport({ taskId: checkpointTaskId || taskId }),
+    (err) => err.kind === "details-not-ready" || err.kind === "task-not-complete",
     "fields 任务在详情采集开始前不得导出搜索列表行",
   );
 

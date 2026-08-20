@@ -457,8 +457,6 @@ test("formal submit reads the complete current draft and builds one normalized f
     "flagList.hasBuyerCoopAuth": true,
     firstIndustry: "美妆",
     secondIndustry: "彩妆",
-    column: "comprehensiverank",
-    sort: "desc",
   }, "the formal request must contain every proven draft condition after one normalization path");
   assert.equal(Object.hasOwn(calls[0], "audienceGroup"), false, "the schema-marked unproven field must remain excluded from formal search");
   assert.equal(Object.hasOwn(calls[0], "brands"), false, "brand selection is a local gate, not a search filter field");
@@ -756,7 +754,7 @@ test("top search, Enter, and bottom confirm independently submit byte-equivalent
     assert.equal(calls.length, 1, entrance + " must make one formal request");
     payloads.push(calls[0]);
   }
-  const expected = { searchType: 1, keyword: "页面完整条件", column: "comprehensiverank", sort: "desc", marketTarget: "种草", gender: "女", excludeLowActive: true };
+  const expected = { searchType: 1, keyword: "页面完整条件", marketTarget: "种草", gender: "女", excludeLowActive: true };
   assert.deepEqual(payloads[0], expected, "top search must include the keyword and every edited page filter");
   assert.deepEqual(payloads[1], payloads[0], "Enter must use the exact same normalized payload as top search");
   assert.deepEqual(payloads[2], payloads[0], "bottom confirm must use the exact same normalized payload as top search");
@@ -798,9 +796,9 @@ test("one-click exclude cannot submit brand-gated exclusions without a cooperati
     return Promise.resolve(successResult());
   });
   let tree = harness.renderer.render();
-  const oneClick = findVnodes(tree, (node) => node.props && node.props.children === "一键剔除" && typeof node.props.onClick === "function")[0];
+  const oneClick = findVnodes(tree, (node) => node.props && (node.props.children === "一键剔除" || node.props.label === "一键剔除") && (typeof node.props.onClick === "function" || typeof node.props.onLabelClick === "function"))[0];
   assert.ok(oneClick, "one-click exclude must render");
-  oneClick.props.onClick();
+  (oneClick.props.onClick || oneClick.props.onLabelClick)();
   tree = harness.renderer.render();
   findVnodes(tree, (node) => node.props && node.props.children === "搜索")[0].props.onClick();
   await new Promise(setImmediate);
@@ -1491,9 +1489,9 @@ test("searchType/keyword contract", () => {
   const normalized = runtime.pgyKolNormalizeFilter({ searchType: 0, keyword: "  nickname  " });
   assert.equal(normalized.keyword, "nickname");
   const withKeyword = JSON.parse(JSON.stringify(runtime.pgyKolToFilterState(normalized)));
-  assert.deepEqual(withKeyword, { searchType: 0, keyword: "nickname", column: "comprehensiverank", sort: "desc" });
+  assert.deepEqual(withKeyword, { searchType: 0, keyword: "nickname" });
   const withoutKeyword = JSON.parse(JSON.stringify(runtime.pgyKolToFilterState(runtime.pgyKolNormalizeFilter({ searchType: 1, keyword: "   ", gender: "女" }))));
-  assert.deepEqual(withoutKeyword, { searchType: 1, gender: "女", column: "comprehensiverank", sort: "desc" });
+  assert.deepEqual(withoutKeyword, { searchType: 1, gender: "女" });
 });
 
 test("five compact matrix sections exist", () => {
@@ -2177,7 +2175,7 @@ test("Phase 5 page source maps completeness and error copy", () => {
 
 test("Phase 5 page starts tasks and keeps progress/export on the 找博主 page", () => {
   assert.match(pageSource, /bridge\.getColumns\(\)/, "page must load the column registry for the result table");
-  assert.match(pageSource, /api\.batchStart\(\{filterState:filterPayload,fields:pgyKolClone\(fields\|\|\[\]\),columns:pgyKolClone\(fields\|\|\[\]\),maxCount:parsedCount,sortColumn:sortCol\|\|"comprehensiverank",sortOrder:sortOrd\|\|"desc"\}\)/, "coordinator must submit only its frozen applied snapshot");
+  assert.match(pageSource, /api\.batchStart\(\{filterState:pgyKolClone\(appliedRequestSnapshot\),fields:pgyKolClone\(fields\|\|\[\]\),columns:pgyKolClone\(fields\|\|\[\]\),maxCount:parsedCount,sortColumn:sortCol\|\|"comprehensiverank",sortOrder:sortOrd\|\|"desc"\}\)/, "coordinator must submit only its frozen applied snapshot");
   assert.match(
     pageSource,
     /searchCoordinator\.startBatch\(ids, maxLimit, sortCol, sortOrd\)/,

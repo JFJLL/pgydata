@@ -183,40 +183,51 @@ function New-IntegrityManifest([string]$AssetsDir) {
   if (-not (Test-Path -LiteralPath $AssetsDir)) {
     throw "Assets directory not found: $AssetsDir"
   }
+  Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "generate-integrity-manifest.js"), $AssetsDir, $assetsVersion) -WorkingDirectory $projectRoot
+  return (Join-Path $AssetsDir "integrity-manifest.json")
+}
 
-  $files = Get-ChildItem -LiteralPath $AssetsDir -Recurse -File |
-    Where-Object {
-      $relative = [System.IO.Path]::GetRelativePath($AssetsDir, $_.FullName).Replace('\', '/')
-      $_.Extension -in @(".html", ".js", ".css") -and $relative -ne "integrity-manifest.json"
-    } |
-    Sort-Object FullName
+function Invoke-AuthenticodeSign([string]$FilePath) {
+  $pfxPath = $env:MAGIORIX_CODESIGN_PFX_PATH
+  $pfxPassword = $env:MAGIORIX_CODESIGN_PFX_PASSWORD
+  $certSubject = $env:MAGIORIX_CODESIGN_SUBJECT
+  $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue
 
-  $entries = foreach ($file in $files) {
-    [ordered]@{
-      path = [System.IO.Path]::GetRelativePath($AssetsDir, $file.FullName).Replace('\', '/')
-      size = $file.Length
-      sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+  if (-not $signtool) {
+    $sdkPatterns = @(
+      "C:\Program Files (x86)\Windows Kits\10\bin\x64\signtool.exe",
+      "C:\Program Files (x86)\Windows Kits\10\bin\10.0.*\x64\signtool.exe",
+      "C:\Program Files (x86)\Windows Kits\10\App Certification Kit\signtool.exe"
+    )
+    foreach ($pattern in $sdkPatterns) {
+      $match = Resolve-Path $pattern -ErrorAction SilentlyContinue | Select-Object -First 1
+      if ($match) { $signtool = $match.Path; break }
     }
   }
 
-  $manifest = [ordered]@{
-    version = $assetsVersion
-    algorithm = "sha256"
-    files = @($entries)
-  }
-
-  $manifestPath = Join-Path $AssetsDir "integrity-manifest.json"
-  $manifestJson = $manifest | ConvertTo-Json -Depth 6
-  $currentManifest = if (Test-Path -LiteralPath $manifestPath) {
-    Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8
+  if (-not [string]::IsNullOrWhiteSpace($pfxPath) -and (Test-Path -LiteralPath $pfxPath) -and $signtool) {
+    Write-Output "Signing with PFX: $FilePath"
+    $sigArgs = @("sign", "/f", $pfxPath, "/fd", "SHA256", "/tr", "http://timestamp.digicert.com", "/td", "SHA256")
+    if (-not [string]::IsNullOrWhiteSpace($pfxPassword)) {
+      $sigArgs += @("/p", $pfxPassword)
+    }
+    $sigArgs += $FilePath
+    Invoke-CheckedProcess -FilePath $signtool -Arguments $sigArgs -WorkingDirectory $projectRoot
+    Invoke-CheckedProcess -FilePath $signtool -Arguments @("verify", "/pa", "/v", $FilePath) -WorkingDirectory $projectRoot
+    return "signed-pfx"
+  } elseif (-not [string]::IsNullOrWhiteSpace($certSubject) -and $signtool) {
+    Write-Output "Signing with Certificate Subject: $FilePath"
+    $sigArgs = @("sign", "/n", $certSubject, "/fd", "SHA256", "/tr", "http://timestamp.digicert.com", "/td", "SHA256", $FilePath)
+    Invoke-CheckedProcess -FilePath $signtool -Arguments $sigArgs -WorkingDirectory $projectRoot
+    Invoke-CheckedProcess -FilePath $signtool -Arguments @("verify", "/pa", "/v", $FilePath) -WorkingDirectory $projectRoot
+    return "signed-subject"
   } else {
-    $null
+    if ($env:MAGIORIX_REQUIRE_CODESIGN -eq "true") {
+      throw "Authenticode signing certificate is required for release build but not configured."
+    }
+    Write-Output "No Authenticode signing certificate found; building unsigned local candidate: $FilePath"
+    return "unsigned-local"
   }
-  $currentNormalized = if ($null -eq $currentManifest) { "" } else { $currentManifest.Trim() }
-  if ($currentNormalized -ne $manifestJson.Trim()) {
-    Set-Content -LiteralPath $manifestPath -Value $manifestJson -Encoding UTF8
-  }
-  return $manifestPath
 }
 
 function New-AssetsZip([string]$AssetsDir, [string]$ZipPath) {
@@ -382,7 +393,26 @@ if ($sourceAsarHash -ne $payloadAsarHash) {
 }
 Write-Output "Verified installer payload app.asar SHA256: $payloadAsarHash"
 
+Write-Output "Applying Electron Fuses to payload executable..."
+Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "apply-electron-fuses.js"), (Join-Path $payloadAppDir $installedExeName)) -WorkingDirectory $projectRoot
+# Fuses are applied to the payload executable that gets packaged and distributed
+
 Set-ExeBrand -ExePath (Join-Path $payloadAppDir $installedExeName) -IconPath (Join-Path $payloadAppDir "resources\$appIconResource")
+
+$codesignStatus = "unsigned-local"
+Write-Output "Signing payload binaries..."
+$binariesToSign = @(
+  (Join-Path $payloadAppDir $installedExeName),
+  (Join-Path $payloadAppDir "resources\pgy-chart-renderer.exe"),
+  (Join-Path $payloadAppDir "resources\elevate.exe")
+)
+$binariesToSign += (Get-ChildItem -LiteralPath $payloadAppDir -Filter *.dll | ForEach-Object { $_.FullName })
+foreach ($bin in $binariesToSign) {
+  if (Test-Path -LiteralPath $bin) {
+    $status = Invoke-AuthenticodeSign -FilePath $bin
+    if ($status -ne "unsigned-local") { $codesignStatus = $status }
+  }
+}
 
 New-Item -ItemType Directory -Force -Path (Join-Path $payloadAppDir "locales") | Out-Null
 foreach ($file in @("zh-CN.pak", "en-US.pak")) {
@@ -698,6 +728,8 @@ Invoke-CheckedProcess -FilePath $makensis -Arguments @("/INPUTCHARSET", "UTF8", 
 if (-not (Test-Path -LiteralPath $setupExe)) {
   throw "Setup exe was not created: $setupExe"
 }
+Write-Output "Signing setup installer..."
+$installerSignStatus = Invoke-AuthenticodeSign -FilePath $setupExe
 
 $setupItem = Get-Item -LiteralPath $setupExe
 $setupHash = (Get-FileHash -LiteralPath $setupExe -Algorithm SHA256).Hash

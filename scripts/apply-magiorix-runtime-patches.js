@@ -17,6 +17,11 @@ const trendSvgSourcePath = path.join(projectRoot, "tools", "pgy_trend_svg.js");
 const trendSvgSource = fs.readFileSync(trendSvgSourcePath, "utf8").trim();
 const overviewIconsSourcePath = path.join(projectRoot, "tools", "overview-icons");
 const overviewIconsTargetPath = path.join(projectRoot, "app-source", "dist-electron", "static", "overview-icons");
+const splashPreloadSourcePath = path.join(projectRoot, "app-source", "electron-main", "splash-preload.mjs");
+const splashPreloadTargetPath = path.join(projectRoot, "app-source", "dist-electron", "splash-preload.mjs");
+if (fs.existsSync(splashPreloadSourcePath)) {
+  fs.copyFileSync(splashPreloadSourcePath, splashPreloadTargetPath);
+}
 
 function replaceOnce(source, from, to, label) {
   // 行尾无关：源码与模板统一按 LF 比较，输出统一为 LF。
@@ -4338,6 +4343,109 @@ main = replaceOnce(
   '  if (pgyHasSelectedField(n, PYG_CHART_FIELDS.trend)) {\n    const o = Array.isArray(t) ? t : [];\n    o.length >= 2 && i.push({ field: "fansGrowthTrendChart", type: "trend", rows: o, output: pgyChartFile("trend", a, "trend") });\n  }',
   '  if (pgyHasSelectedField(n, PYG_CHART_FIELDS.trend)) {\n    const o = Array.isArray(t) ? t : [];\n    if (o.length >= 2) {\n      const u = new Map();\n      for (const row of o) {\n        const date = String(row == null ? void 0 : row.dateKey ?? row.date ?? "");\n        const digits = date.replace(/\\D/g, "");\n        const k = digits.length >= 8 ? digits.slice(-8) : date;\n        k && u.set(k, row);\n      }\n      const rows = Array.from(u.entries()).sort((a2, b2) => a2[0].localeCompare(b2[0])).map(([, row]) => row).slice(-1000);\n      rows.length >= 2 && i.push({ field: "fansGrowthTrendChart", type: "trend", rows, output: pgyChartFile("trend", a, "trend") });\n    }\n  }',
   "pgy trend rows bounded before renderer",
+);
+
+// ==================== 1.4.2 安全加固：窗口沙箱、启动页隔离、DevTools 与 IPC 门禁 ====================
+
+main = replaceAllIfExists(
+  main,
+  `      webPreferences: {
+        nodeIntegration: !0,
+        contextIsolation: !1
+      }`,
+  `      webPreferences: {
+        preload: Oe(Gr, "splash-preload.mjs"),
+        nodeIntegration: !1,
+        contextIsolation: !0,
+        sandbox: !0,
+        webSecurity: !0,
+        allowRunningInsecureContent: !1
+      }`,
+);
+
+main = replaceAllIfExists(
+  main,
+  `    webPreferences: {
+      preload: Oe(yr, "preload.mjs"),
+      nodeIntegration: !1,
+      contextIsolation: !0,
+      webSecurity: !0
+    }`,
+  `    webPreferences: {
+      preload: Oe(yr, "preload.mjs"),
+      nodeIntegration: !1,
+      contextIsolation: !0,
+      sandbox: !0,
+      webSecurity: !0,
+      allowRunningInsecureContent: !1
+    }`,
+);
+
+main = replaceAllIfExists(
+  main,
+  `      webPreferences: {
+        nodeIntegration: !1,
+        sandbox: !0,
+        ...t.partition ? { partition: t.partition } : {}
+      }`,
+  `      webPreferences: {
+        nodeIntegration: !1,
+        contextIsolation: !0,
+        sandbox: !0,
+        webSecurity: !0,
+        allowRunningInsecureContent: !1,
+        ...t.partition ? { partition: t.partition } : {}
+      }`,
+);
+
+main = replaceAllIfExists(
+  main,
+  `    return o.webContents.setAudioMuted(!0), n && this.applyFingerprint(o, n, t.partition), o.webContents.loadURL(t.url), this.windows.set(e, o), o.on("closed", () => {`,
+  `    return o.webContents.setAudioMuted(!0), o.webContents.setWindowOpenHandler(() => ({ action: "deny" })), n && this.applyFingerprint(o, n, t.partition), o.webContents.loadURL(t.url), this.windows.set(e, o), o.on("closed", () => {`,
+);
+
+const securityInjections = fs.readFileSync(path.join(__dirname, "security-runtime-injections.js"), "utf8");
+
+if (!main.includes("pgyValidateIpcSender")) {
+  main = replaceOnce(
+    main,
+    "const Wr = (a) => {",
+    securityInjections + String.fromCharCode(10) + "const Wr = (a) => {",
+    "IPC sender validator and security handlers",
+  );
+}
+
+main = replaceAllIfExists(
+  main,
+  `function pgyVerifyAssets(a) {
+  const e = Oe(a, "integrity-manifest.json");
+  if (!kt(e))
+    throw new Error("资源被修改或损坏：缺少完整性校验文件 integrity-manifest.json");
+  let t;
+  try {
+    t = JSON.parse(Qi(e, "utf-8"));
+  } catch (n) {
+    throw new Error(\`资源被修改或损坏：完整性校验文件无法读取（\${pgyAssetErrorMessage(n)}）\`);
+  }
+  const n = Array.isArray(t.files) ? t.files : [];`,
+  `function pgyVerifyAssets(a) {
+  const e = Oe(a, "integrity-manifest.json");
+  if (!kt(e))
+    throw new Error("资源被修改或损坏：缺少完整性校验文件 integrity-manifest.json");
+  let t;
+  try {
+    t = JSON.parse(Qi(e, "utf-8"));
+  } catch (n) {
+    throw new Error(\`资源被修改或损坏：完整性校验文件无法读取（\${pgyAssetErrorMessage(n)}）\`);
+  }
+  if (t && t.signature) {
+    const isSigValid = pgyVerifyManifestSignature(t);
+    if (!isSigValid) {
+      throw new Error("资源被修改或损坏：完整性清单数字签名校验失败");
+    }
+  }
+  const payload = t && t.signedPayload ? t.signedPayload : t;
+  const n = Array.isArray(payload.files) ? payload.files : Array.isArray(t.files) ? t.files : [];`,
 );
 
 if (main !== originalMain) fs.writeFileSync(mainPath, main);

@@ -1,81 +1,52 @@
 const fs = require("fs");
 const path = require("path");
+const asar = require("@electron/asar");
 
-function align4(n) {
-  return (4 - (n % 4)) % 4;
-}
+function collectAllEntries(srcDir) {
+  const filenames = [];
+  const metadata = {};
+  const activeRealDirectories = new Set();
 
-function writeUInt32(value) {
-  const buffer = Buffer.alloc(4);
-  buffer.writeUInt32LE(value, 0);
-  return buffer;
-}
-
-function pickleString(value) {
-  const bytes = Buffer.from(value, "utf8");
-  const payload = Buffer.concat([
-    writeUInt32(bytes.length),
-    bytes,
-    Buffer.from([0]),
-    Buffer.alloc(align4(4 + bytes.length + 1)),
-  ]);
-  return Buffer.concat([writeUInt32(payload.length), payload]);
-}
-
-function createHeader(rootDir) {
-  const fileList = [];
-  const activeDirectories = new Set();
-  let offset = 0;
-
-  function walk(dir) {
-    const realDir = fs.realpathSync(dir);
-    if (activeDirectories.has(realDir)) {
-      throw new Error(`Refusing to follow a cyclic directory link: ${dir}`);
+  function walk(apparentDir) {
+    const realDir = fs.realpathSync(apparentDir);
+    if (activeRealDirectories.has(realDir)) {
+      throw new Error("Refusing to follow a cyclic directory link: " + apparentDir);
     }
-    activeDirectories.add(realDir);
-    const entries = fs.readdirSync(dir, { withFileTypes: true })
+    activeRealDirectories.add(realDir);
+
+    const entries = fs.readdirSync(apparentDir, { withFileTypes: true })
       .filter((entry) => !entry.name.startsWith(".git"))
       .sort((a, b) => a.name.localeCompare(b.name, "en"));
-    const files = {};
 
     for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      // fs.statSync follows directory links. This matters for worktrees where
-      // node_modules is commonly linked to a shared dependency directory.
-      const stat = fs.statSync(fullPath);
+      const apparentFullPath = path.join(apparentDir, entry.name);
+      const stat = fs.statSync(apparentFullPath);
+      filenames.push(apparentFullPath);
       if (stat.isDirectory()) {
-        files[entry.name] = { files: walk(fullPath) };
+        metadata[apparentFullPath] = { type: "directory", stat };
+        walk(apparentFullPath);
       } else if (stat.isFile()) {
-        const item = {
-          size: stat.size,
-          offset: String(offset),
-        };
-        files[entry.name] = item;
-        fileList.push({ path: fullPath, size: stat.size });
-        offset += stat.size;
+        metadata[apparentFullPath] = { type: "file", stat };
       }
     }
 
-    activeDirectories.delete(realDir);
-    return files;
+    activeRealDirectories.delete(realDir);
   }
 
-  return {
-    header: { files: walk(rootDir) },
-    fileList,
-  };
+  walk(srcDir);
+  return { filenames, metadata };
 }
 
-function assertRequiredEntries(header, requiredEntries) {
+function assertRequiredEntries(destAsar, requiredEntries) {
   for (const entryPath of requiredEntries) {
-    const parts = entryPath.replaceAll("\\", "/").split("/").filter(Boolean);
-    let current = header.files;
-    for (const part of parts) {
-      if (!current || !Object.hasOwn(current, part)) {
-        throw new Error(`Required ASAR entry is missing: ${entryPath}`);
+    const normalized = path.normalize(entryPath);
+    try {
+      const stat = asar.statFile(destAsar, normalized);
+      if (!stat || typeof stat.size !== "number") {
+        throw new Error("Required ASAR entry has invalid stat: " + entryPath);
       }
-      const item = current[part];
-      current = item.files;
+    } catch (err) {
+      throw new Error("Required ASAR entry is missing: " + entryPath + " (" + err.message + ")");
     }
   }
 }
@@ -89,7 +60,7 @@ if (!rootDir || !outFile) {
 const requiredEntries = [];
 for (let index = 0; index < args.length; index += 1) {
   if (args[index] !== "--require" || !args[index + 1]) {
-    console.error(`Unexpected argument: ${args[index]}`);
+    console.error("Unexpected argument: " + args[index]);
     process.exit(2);
   }
   requiredEntries.push(args[index + 1]);
@@ -99,29 +70,11 @@ for (let index = 0; index < args.length; index += 1) {
 async function run() {
   const source = path.resolve(rootDir);
   const target = path.resolve(outFile);
-  const { header, fileList } = createHeader(source);
-  assertRequiredEntries(header, requiredEntries);
-  const headerPickle = pickleString(JSON.stringify(header));
-  const sizePickle = Buffer.concat([writeUInt32(4), writeUInt32(headerPickle.length)]);
-
+  const { filenames, metadata } = collectAllEntries(source);
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  const out = fs.createWriteStream(target);
-  out.write(sizePickle);
-  out.write(headerPickle);
-
-  for (const file of fileList) {
-    await new Promise((resolve, reject) => {
-      const input = fs.createReadStream(file.path);
-      input.on("error", reject);
-      input.on("end", resolve);
-      input.pipe(out, { end: false });
-    });
-  }
-
-  await new Promise((resolve, reject) => {
-    out.end(resolve);
-    out.on("error", reject);
-  });
+  await asar.createPackageFromFiles(source, target, filenames, metadata, {});
+  assertRequiredEntries(target, requiredEntries);
+  console.log("Successfully packed ASAR with @electron/asar:", target, "entries:", filenames.length);
 }
 
 run().catch((error) => {

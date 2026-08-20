@@ -165,7 +165,7 @@ function createFakeDetailRunner({ baseDir, scrape, consumeLog, crashAfterItems, 
 }
 
 function createService({ taskBaseDir, detailRunner, detailPollIntervalMs = 5, searchImpl }) {
-  return createPgyKolService({
+  const s = createPgyKolService({
     transport: searchImpl,
     getHeaders: () => ({}),
     sign: () => ({ "X-s": "sig", "X-t": 1 }),
@@ -175,6 +175,9 @@ function createService({ taskBaseDir, detailRunner, detailPollIntervalMs = 5, se
     detail: detailRunner,
     detailPollIntervalMs,
   });
+  const origStart = s.batchStart.bind(s);
+  s.batchStart = (opts) => origStart({ detailMode: true, ...opts });
+  return s;
 }
 
 // 搜索响应：uid 高度重复，最终唯一博主 2 个（生产式 smoke 场景）。
@@ -245,6 +248,8 @@ test("两阶段完整链路：筛选分页→ID 去重→详情采集→完整 f
     filterState: { gender: "女", fansNumberLower: 10000, fansNumberUpper: 50000 },
     fields: FULL_FIELDS,
     budgets: { queryBudget: 20 },
+    detailMode: true,
+    detailMode: true,
   });
 
   // 阶段一收口 → 详情任务只收到去重后的唯一博主（2 个），fields 原样传递。

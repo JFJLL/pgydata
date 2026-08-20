@@ -332,6 +332,78 @@ async function pgyOpenPaymentWindow(value, parentWindow) {
     throw new Error("支付窗口加载失败：" + pgyAssetErrorMessage(error));
   }
 }
+const TRUSTED_RELEASE_PUBLIC_KEYS = {
+  "magiorix-release-2026-v1": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAMaMnU+xxOv30CKGTxMe6SPK9ay4eN6DgTh0l/xmLwko=\n-----END PUBLIC KEY-----\n",
+};
+
+function pgyCanonicalJson(obj) {
+  if (obj === null || typeof obj !== "object") return JSON.stringify(obj);
+  if (Array.isArray(obj)) return "[" + obj.map(pgyCanonicalJson).join(",") + "]";
+  const keys = Object.keys(obj).sort();
+  return "{" + keys.map((k) => JSON.stringify(k) + ":" + pgyCanonicalJson(obj[k])).join(",") + "}";
+}
+
+function pgyVerifyManifestSignature(manifest) {
+  if (!manifest || typeof manifest !== "object") return false;
+  const { keyId, signature, signedPayload } = manifest;
+  if (!keyId || !signature || !signedPayload) return false;
+  const pubKey = TRUSTED_RELEASE_PUBLIC_KEYS[keyId];
+  if (!pubKey) return false;
+  const canonical = pgyCanonicalJson(signedPayload);
+  try {
+    return no.verify(null, Buffer.from(canonical, "utf8"), pubKey, Buffer.from(signature, "hex"));
+  } catch {
+    return false;
+  }
+}
+
+function pgyValidateIpcSender(event, options = {}) {
+  if (!event || !event.sender) {
+    throw new Error("IPC access denied: missing event.sender");
+  }
+  const webContents = event.sender;
+  if (typeof webContents.isDestroyed === "function" && webContents.isDestroyed()) {
+    throw new Error("IPC access denied: sender webContents is destroyed");
+  }
+  const bw = Dt.fromWebContents(webContents);
+  if (!bw || bw.isDestroyed()) {
+    throw new Error("IPC access denied: window is destroyed or unavailable");
+  }
+  if (options.allowedWindow && bw !== options.allowedWindow) {
+    throw new Error("IPC access denied: sender is not the authorized window");
+  }
+  const frame = event.senderFrame;
+  if (!frame) {
+    throw new Error("IPC access denied: missing senderFrame");
+  }
+  if (frame.parent !== null && frame.parent !== undefined) {
+    throw new Error("IPC access denied: sub-frame IPC invocation is prohibited");
+  }
+  const frameUrl = frame.url;
+  if (!frameUrl || typeof frameUrl !== "string") {
+    throw new Error("IPC access denied: missing frame URL");
+  }
+  if (!pgyIsMainWindowNavigationAllowed(frameUrl, Oe(Ae.getCurrentAssetsPath() || "", "index.html"))) {
+    throw new Error("IPC access denied: unauthorized frame URL: " + frameUrl);
+  }
+  return true;
+}
+
+Pn.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+  callback(false);
+});
+
+ye.on("browser-window-created", (event, window) => {
+  if (ye.isPackaged || !Xt) {
+    window.webContents.on("before-input-event", (inputEvent, input) => {
+      if (input.key === "F12" || (input.control && input.shift && input.key.toLowerCase() === "i")) {
+        inputEvent.preventDefault();
+      }
+    });
+  }
+});
+
+
 const Wr = (a) => {
   F.handle(Fe.shell.openExternal, async (t, n) => {
     const s = pgyResolveExternal(n, pgyPaymentExternalOrigins);
@@ -426,8 +498,12 @@ function Jr() {
       // 等 HTML 加载完成再显示，避免白屏闪烁
       backgroundColor: "#00000000",
       webPreferences: {
-        nodeIntegration: !0,
-        contextIsolation: !1
+        preload: Oe(Gr, "splash-preload.mjs"),
+        nodeIntegration: !1,
+        contextIsolation: !0,
+        sandbox: !0,
+        webSecurity: !0,
+        allowRunningInsecureContent: !1
       }
     }), ee.once("ready-to-show", () => {
       a(ee);
@@ -501,7 +577,14 @@ function pgyVerifyAssets(a) {
   } catch (n) {
     throw new Error(`资源被修改或损坏：完整性校验文件无法读取（${pgyAssetErrorMessage(n)}）`);
   }
-  const n = Array.isArray(t.files) ? t.files : [];
+  if (t && t.signature) {
+    const isSigValid = pgyVerifyManifestSignature(t);
+    if (!isSigValid) {
+      throw new Error("资源被修改或损坏：完整性清单数字签名校验失败");
+    }
+  }
+  const payload = t && t.signedPayload ? t.signedPayload : t;
+  const n = Array.isArray(payload.files) ? payload.files : Array.isArray(t.files) ? t.files : [];
   if (n.length === 0)
     throw new Error("资源被修改或损坏：完整性校验文件为空");
   for (const s of n) {
@@ -16127,11 +16210,14 @@ class _t {
       show: t.show ?? !1,
       webPreferences: {
         nodeIntegration: !1,
+        contextIsolation: !0,
         sandbox: !0,
+        webSecurity: !0,
+        allowRunningInsecureContent: !1,
         ...t.partition ? { partition: t.partition } : {}
       }
     });
-    return o.webContents.setAudioMuted(!0), n && this.applyFingerprint(o, n, t.partition), o.webContents.loadURL(t.url), this.windows.set(e, o), o.on("closed", () => {
+    return o.webContents.setAudioMuted(!0), o.webContents.setWindowOpenHandler(() => ({ action: "deny" })), n && this.applyFingerprint(o, n, t.partition), o.webContents.loadURL(t.url), this.windows.set(e, o), o.on("closed", () => {
       this.windows.delete(e);
     }), o;
   }
@@ -25473,7 +25559,9 @@ function Ga(a) {
       preload: Oe(yr, "preload.mjs"),
       nodeIntegration: !1,
       contextIsolation: !0,
-      webSecurity: !0
+      sandbox: !0,
+      webSecurity: !0,
+      allowRunningInsecureContent: !1
     }
   }), Hr(Z), Z.webContents.setWindowOpenHandler(() => ({ action: "deny" })), Z.webContents.on("will-navigate", (t, n) => {
     if (!pgyIsMainWindowNavigationAllowed(n, Oe(a, "index.html"))) t.preventDefault();

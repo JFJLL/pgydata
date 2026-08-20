@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
   <title>magiorix Desktop</title>
   <style>
     * {
@@ -148,7 +149,7 @@
   </div>
 
   <script>
-    const { ipcRenderer } = require('electron');
+    const bridge = window.splashBridge;
 
     const progressArea = document.getElementById('progressArea');
     const statusEl = document.getElementById('status');
@@ -169,43 +170,39 @@
       errorTextEl.textContent = message;
     }
 
-    // 监听状态更新
-    ipcRenderer.on('splash:status', (event, message) => {
-      statusEl.textContent = message;
-    });
+    if (bridge) {
+      bridge.onStatus((message) => {
+        statusEl.textContent = message;
+      });
 
-    // 监听进度更新
-    ipcRenderer.on('splash:progress', (event, progress) => {
-      const percent = Math.round(progress);
-      progressEl.style.width = `${percent}%`;
-      progressTextEl.textContent = `${percent}%`;
-    });
+      bridge.onProgress((progress) => {
+        const percent = Math.round(progress);
+        progressEl.style.width = percent + '%';
+        progressTextEl.textContent = percent + '%';
+      });
 
-    // 监听错误
-    ipcRenderer.on('splash:error', (event, message) => {
-      showError(message);
-    });
+      bridge.onError((message) => {
+        showError(message);
+      });
 
-    // 重试
-    retryBtn.addEventListener('click', () => {
-      showProgress();
-      statusEl.textContent = '正在重试...';
-      progressEl.style.width = '0%';
-      progressTextEl.textContent = '0%';
-      ipcRenderer.send('splash:retry');
-    });
+      retryBtn.addEventListener('click', () => {
+        showProgress();
+        statusEl.textContent = '正在重试...';
+        progressEl.style.width = '0%';
+        progressTextEl.textContent = '0%';
+        bridge.retry();
+      });
 
-    // 监听完成
-    ipcRenderer.on('splash:complete', () => {
-      statusEl.textContent = '启动完成';
-      progressEl.style.width = '100%';
-      progressTextEl.textContent = '100%';
-    });
+      bridge.onComplete(() => {
+        statusEl.textContent = '启动完成';
+        progressEl.style.width = '100%';
+        progressTextEl.textContent = '100%';
+      });
 
-    // 通知主进程启动页已准备好
-    window.addEventListener('DOMContentLoaded', () => {
-      ipcRenderer.send('splash:ready');
-    });
+      window.addEventListener('DOMContentLoaded', () => {
+        bridge.ready();
+      });
+    }
   </script>
 </body>
 </html>

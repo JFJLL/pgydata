@@ -1,6 +1,19 @@
+Exit code: 0
+Wall time: 0.8 seconds
+Output:
 # CHANGELOG
 
 本文件保存版本历史、发布记录、安装包路径与校验信息，不放长期维护规则。
+
+## 1.4.2 (Candidate)
+
+- 升级：桌面端版本、前端资源版本与服务端版本同步升级至 `1.4.2`。
+- 安全：全面加固 Electron 运行环境与窗口安全配置，启动页禁用 NodeIntegration 并引入独立极简 Preload；所有窗口默认开启 ContextIsolation、Sandbox 与 WebSecurity；移除未受控权限请求。
+- 安全：建立统一 IPC Sender / Frame 校验门禁，严密拦截跨窗口调用、子 Frame (iframe) 伪造调用及非白名单 Origin/URL。
+- 安全：引入官方 `@electron/asar` 打包并启用 Electron Fuses（禁用 RunAsNode、NODE_OPTIONS、CLI Inspect，强制 ASAR 嵌入式完整性校验与 OnlyLoadAppFromAsar）。
+- 安全：升级资源与更新清单完整性体系，引入 Ed25519 规范化 Canonical JSON 数字签名与非对称密钥轮换机制。
+- 构建：调整 Windows 构建工序，确立 Fuses 写入、版本元数据注入、Ed25519 清单签名、Authenticode 二进制代码签名与安装包签名的标准化安全流水线。
+- 许可：项目自有许可证更新为 `UNLICENSED` 并增加商业软件版权保护说明，严格保留第三方开源许可证。
 
 ## 1.4.1 (Candidate)
 
