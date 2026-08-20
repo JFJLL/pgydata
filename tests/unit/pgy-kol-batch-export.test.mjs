@@ -87,6 +87,24 @@ async function writeWorkbook(name, payload) {
   return filePath;
 }
 
+test("批量导出：按持久化的粉丝数降序重排详情结果", () => {
+  const payload = buildPgyKolBatchExportPayload(
+    {
+      taskId: "pgykol-sort-export",
+      columns: ["nickname", "fansNum"],
+      sortColumn: "fansNum",
+      sortOrder: "desc",
+    },
+    [
+      { uid: "u1", fields: { nickname: "甲", fansNum: 100 } },
+      { uid: "u2", fields: { nickname: "乙", fansNum: 900 } },
+      { uid: "u3", fields: { nickname: "丙", fansNum: 300 } },
+    ],
+  );
+  assert.deepEqual(payload.data.map((row) => row.nickname), ["乙", "丙", "甲"]);
+  assert.deepEqual(payload.data.map((row) => row.fansNum), [900, 300, 100]);
+});
+
 test("全量 500 行导出：真实 xlsx、中文两行表头、列顺序=用户选择、money 格式化", async (t) => {
   const storeDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pgy-kol-batch-export-store-"));
   t.after(() => fs.rmSync(storeDir, { recursive: true, force: true }));

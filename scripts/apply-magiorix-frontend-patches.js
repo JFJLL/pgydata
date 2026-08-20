@@ -508,6 +508,48 @@ replaceOnce(
   "template dropdown callback props",
 );
 
+if (!fs.readFileSync(mainBundle, "utf8").includes('key:"coverImage",label:"封面图"')) {
+  replaceOnce(
+    mainBundle,
+    '{key:"title",label:"笔记标题",defaultSelected:!0},{key:"content",label:"笔记内容"}]},{groupKey:"notebook-metrics"',
+    '{key:"title",label:"笔记标题",defaultSelected:!0},{key:"content",label:"笔记内容"},{key:"coverImage",label:"封面图"},{key:"noteImages",label:"笔记图"}]},{groupKey:"notebook-metrics"',
+    "add coverImage and noteImages to pgy notebook schema",
+  );
+}
+
+if (!fs.readFileSync(mainBundle, "utf8").includes('field:"coverImage",headerName:"封面图"')) {
+  replaceOnce(
+    mainBundle,
+    '{field:"title",headerName:"笔记标题",width:150},{field:"content",headerName:"笔记内容",width:200}',
+    '{field:"title",headerName:"笔记标题",width:150},{field:"content",headerName:"笔记内容",width:200},{field:"coverImage",headerName:"封面图",width:120},{field:"noteImages",headerName:"笔记图",width:120}',
+    "add coverImage and noteImages columns to pgy notebook headers",
+  );
+}
+
+if (!fs.readFileSync(exportFieldSelectorBundle, "utf8").includes("disableEnforceFocus:!0,disableRestoreFocus:!0")) {
+  replaceOnce(
+    exportFieldSelectorBundle,
+    'const[S,f]=c.useState(n),[m,o]=c.useState(!1);c.useEffect(()=>{t&&(f(n),o(!1))},[t,n]);',
+    'const[S,f]=c.useState(n),[m,o]=c.useState(!1),bRef=c.useRef(!1);c.useEffect(()=>{!bRef.current&&t&&(f(n),o(!1)),bRef.current=t},[t,n]);',
+    "prevent reset on re-render in template name modal",
+  );
+  replaceOnce(
+    exportFieldSelectorBundle,
+    'return e.jsxs($,{open:t,onClose:h,maxWidth:"xs",fullWidth:!0,children:[',
+    'return e.jsxs($,{open:t,onClose:h,maxWidth:"xs",fullWidth:!0,disableEnforceFocus:!0,disableRestoreFocus:!0,children:[',
+    "disable enforce focus on template name modal",
+  );
+}
+
+if (!fs.readFileSync(exportFieldSelectorBundle, "utf8").includes('maxWidth:"md",fullWidth:!0,disableEnforceFocus:!0')) {
+  replaceOnce(
+    exportFieldSelectorBundle,
+    'e.jsxs($,{open:r,onClose:u,maxWidth:"md",fullWidth:!0,children:[',
+    'e.jsxs($,{open:r,onClose:u,maxWidth:"md",fullWidth:!0,disableEnforceFocus:!0,children:[',
+    "disable enforce focus on export field selector dialog",
+  );
+}
+
 removeIfExists(path.join(assetsDir, directChunk));
 removeIfExists(path.join(assetsDir, directTemplate));
 
@@ -1055,7 +1097,7 @@ replaceOnce(
 replaceOnce(
   mainBundle,
   'const n=l=>{l.stopPropagation(),e("/shumiao/recharge")}',
-  'const n=l=>{l.stopPropagation(),window.bridge?.system?.shell?.openSafeExternal?.("https://magiorix.red-magic.cn/recharge")}',
+  'const n=l=>{l.stopPropagation(),window.bridge?.system?.shell?.openSafeExternal?.("http://127.0.0.1:3050/recharge")}',
   "header recharge opens browser",
 );
 

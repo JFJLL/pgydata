@@ -248,6 +248,40 @@ test("service.searchFirstPage：pageNum/pageSize 与 builder 同口径——null
   }
 });
 
+test("一键剔除：必须作为常规剔除行的左侧文字项与官网筛选行对齐", () => {
+  const source = fs.readFileSync(new URL("../../scripts/pgy-kol-phase52-page-source.js", import.meta.url), "utf8");
+  assert.match(source, /title: "常规剔除"[\s\S]{0,300}children: o\.jsx\(PgyKolMatrixRow, \{/);
+  assert.match(source, /label: "一键剔除",[\s\S]{0,120}onLabelClick: oneClickExclude/);
+  assert.match(source, /cursor: p\.onLabelClick \? "pointer" : "default"/);
+  assert.doesNotMatch(source, /children: "一键剔除" \}\),\n\s+o\.jsx\(PgyKolCheck/);
+});
+
+test("找博主任务卡：完成事件必须写入结束时间并停止计时", () => {
+  const source = fs.readFileSync(new URL("../../scripts/pgy-kol-phase52-page-source.js", import.meta.url), "utf8");
+  assert.match(source, /pgyKolTaskElapsed\(task\.startedAt, task\.finishedAt\)/);
+  assert.match(source, /finishedAt: Date\.now\(\)/);
+});
+
+test("service.searchFirstPage：旧前端混入控制项或 userId 导出字段时不污染筛选查询", async (t) => {
+  const { service, calls, disposeIpc } = createHarness({ t, transportImpl: async () => cappedSearchResponse });
+  try {
+    const result = await service.searchFirstPage({
+      filterState: { gender: "女", column: "fansNum", sort: "asc", maxCount: 10, columns: ["fansNum"], userId: "export-only-uid" },
+    });
+    assert.equal(result.total, 5000);
+    const v2Body = JSON.parse(calls.at(-1).body);
+    assert.equal(v2Body.gender, "女");
+    assert.equal(v2Body.column, "comprehensiverank", "查询默认排序必须由主进程基础 payload 提供");
+    assert.equal(v2Body.sort, "desc");
+    assert.notEqual(v2Body.column, "fansNum");
+    assert.equal(v2Body.maxCount, undefined);
+    assert.equal(v2Body.columns, undefined);
+    assert.equal(v2Body.userId, undefined, "博主 UID 导出字段不得进入搜索 payload");
+  } finally {
+    disposeIpc();
+  }
+});
+
 test("unknown filter fields fail explicitly instead of being sent", async (t) => {
   const { ipcMain, calls, disposeIpc } = createHarness({ t, transportImpl: async () => cappedSearchResponse });
   try {
@@ -850,11 +884,11 @@ test("batch-start/list/get/export：两页任务完成、完整性与全量导�
     assert.equal(list.ok, true);
     assert.ok(list.data.some((item) => item.taskId === start.data.taskId));
 
-    // 两阶段任务（fields）：详情采集开始前导出被明确拒绝——最终导出必须
-    // 走详情阶段结果，绝不回退到搜索列表行。
+    // 默认开始采集复用已完成的筛选列表：字段只决定 Excel 列，不能再被误判为
+    // 尚未进入详情阶段；此处应立即按搜索列表行导出。
     const exported = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchExport)({}, { taskId: start.data.taskId });
-    assert.equal(exported.ok, false);
-    assert.equal(exported.error.code, "details-not-ready");
+    assert.equal(exported.ok, true);
+    assert.equal(exported.data.data.length, 35, "快速列表导出必须包含全部已完成分页结果");
 
     // legacy 任务（无 fields）保持旧契约：按任务 columns 全量导出搜索列表行。
     const legacyTaskId = "pgykol-legacy-export-1";
@@ -1003,6 +1037,39 @@ test("batchStart 快照规范化：Payload 形态值不二次序列化，节点�
       `快照泄漏本地路径: ${task2.filterState.gender}`,
     );
     assert.ok(!task2.filterState.gender.includes("token=abc"), `快照泄漏敏感形态文本: ${task2.filterState.gender}`);
+  } finally {
+    disposeIpc();
+  }
+});
+
+test("batchStart：排序依据只进入分页 payload，粉丝数映射为官网 fansCount", async (t) => {
+  const bodies = [];
+  const { ipcMain, service, disposeIpc } = createBatchHarness({
+    t,
+    transportImpl: async (opts) => {
+      bodies.push(JSON.parse(opts.body));
+      return jsonResponse({ code: 0, data: { kols: [], total: 0 }, msg: "" });
+    },
+  });
+  try {
+    const start = await ipcMain.handlers.get(PGY_KOL_IPC_CHANNELS.batchStart)({}, {
+      filterState: { gender: "女" },
+      fields: ["nickname", "fansNum"],
+      maxCount: 1,
+      sortColumn: "fansNum",
+      sortOrder: "desc",
+    });
+    assert.equal(start.ok, true);
+    await waitForTaskStatus(service, start.data.taskId, ["completed"]);
+    const pageBody = bodies.find((body) => body.pageNum === 1);
+    assert.ok(pageBody, "排序任务必须发出分页请求");
+    assert.equal(pageBody.column, "fansCount");
+    assert.equal(pageBody.sort, "desc");
+    const task = await service.batchGet({ taskId: start.data.taskId });
+    assert.equal(task.maxCount, 1);
+    assert.equal(task.sortColumn, "fansNum");
+    assert.equal(task.sortOrder, "desc");
+    assert.equal(task.filterState.column, "fansCount");
   } finally {
     disposeIpc();
   }

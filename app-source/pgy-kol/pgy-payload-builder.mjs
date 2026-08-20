@@ -61,11 +61,27 @@ export const BASE_PAYLOAD = Object.freeze({
 export const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 
+// 官方排序字段名称映射（前端/注册表规范键 → 官网 v2 接口接收的 column 键名）
+export const SORT_COLUMN_MAP = Object.freeze({
+  fansNum: "fansCount",
+  fansCount: "fansCount",
+  readMidNor30: "clickNum",
+  clickNum: "clickNum",
+  clickMidNum: "clickNum",
+  interMidNor30: "mEngagementNum",
+  mEngagementNum: "mEngagementNum",
+  interMidNum: "mEngagementNum",
+  fansRiseNum: "fans30GrowthRate",
+  fans30GrowthRate: "fans30GrowthRate",
+});
+
 // Phase 5 特殊键：不经过 FIELD_REGISTRY，由 builder 直接处理。
 // - searchType：0=搜昵称，1=搜笔记（官网契约；缺省沿用 BASE_PAYLOAD 的 1）。
 // - keyword：搜索关键词（搜笔记/搜昵称）；空串/纯空白视为未提供。
 // - trackId：搜索上下文（track 接口返回后进入 /v2 的同一 payload）。
-export const PAYLOAD_SPECIAL_KEYS = Object.freeze(["searchType", "keyword", "trackId"]);
+// - userId：历史前端可能把“博主 UID”导出字段混入 filterState；它不是搜索
+//   条件，必须在此边界丢弃，绝不可作为未声明字段发送到官网接口。
+export const PAYLOAD_SPECIAL_KEYS = Object.freeze(["searchType", "keyword", "trackId", "column", "sort", "maxCount", "columns", "userId"]);
 
 const KEYWORD_MAX_LENGTH = 200;
 
@@ -166,6 +182,18 @@ export class PgyPayloadBuilder {
       }
       if (keyword.length > 0) {
         payload.keyword = keyword;
+      }
+    }
+    if (Object.hasOwn(filterState, "column")) {
+      const col = typeof filterState.column === "string" ? filterState.column.trim() : "";
+      if (col.length > 0) {
+        payload.column = SORT_COLUMN_MAP[col] || col;
+      }
+    }
+    if (Object.hasOwn(filterState, "sort")) {
+      const sortOrder = filterState.sort;
+      if (sortOrder === "desc" || sortOrder === "asc") {
+        payload.sort = sortOrder;
       }
     }
     // brandUserId 是特殊键：只在显式提供非空字符串时写入，绝不默认写入。

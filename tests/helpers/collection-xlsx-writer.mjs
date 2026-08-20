@@ -26,7 +26,13 @@ export const PGY_IMAGE_FIELDS = new Set([
   "dailyNotePicturePerformanceChart",
   "dailyNoteVideoPerformanceChart",
   "bloggerOverviewChart",
+  "coverImage",
+  "noteImages",
 ]);
+
+export function isPgyImageKey(key) {
+  return typeof key === "string" && (PGY_IMAGE_FIELDS.has(key) || key.startsWith("noteImage_"));
+}
 
 const headerStyle = {
   fill: { fgColor: { rgb: "E8D5F5" } },
@@ -130,7 +136,7 @@ function styleSingleRowSheet(sheet) {
 
 // 对应 bundle 内 pgyDataWithoutImageText()。
 function dataWithoutImageText(headers, rows) {
-  const imageKeys = new Set(headers.filter((header) => header && PGY_IMAGE_FIELDS.has(header.key)).map((header) => header.key));
+  const imageKeys = new Set(headers.filter((header) => header && isPgyImageKey(header.key)).map((header) => header.key));
   if (imageKeys.size === 0) return rows;
   return rows.map((row) => {
     const next = { ...row };
@@ -199,10 +205,10 @@ function buildTwoRowSheet(headers, rows) {
   const widths = sampleDataWidths(rows, keys);
   sheet["!rows"] = matrix.map((cells, row) => {
     if (row < 2) return { hpx: 28 };
-    return headers.some((header, col) => PGY_IMAGE_FIELDS.has(header.key) && cells[col] && cells[col] !== "-") ? { hpx: 112 } : { hpx: 22 };
+    return headers.some((header, col) => isPgyImageKey(header.key) && cells[col] && cells[col] !== "-") ? { hpx: 112 } : { hpx: 22 };
   });
   sheet["!cols"] = headers.map((header, col) => {
-    if (PGY_IMAGE_FIELDS.has(header.key)) return { wch: 24 };
+    if (isPgyImageKey(header.key)) return { wch: 24 };
     return { wch: columnWidth(displayWidth(header.label), widths[col]) };
   });
   return sheet;
@@ -221,6 +227,12 @@ function nextRelId(relsXml) {
 function addContentTypes(xml) {
   if (!xml.includes('Extension="png"')) {
     xml = xml.replace("</Types>", '<Default Extension="png" ContentType="image/png"/></Types>');
+  }
+  if (!xml.includes('Extension="jpeg"')) {
+    xml = xml.replace("</Types>", '<Default Extension="jpeg" ContentType="image/jpeg"/></Types>');
+  }
+  if (!xml.includes('Extension="jpg"')) {
+    xml = xml.replace("</Types>", '<Default Extension="jpg" ContentType="image/jpeg"/></Types>');
   }
   if (!xml.includes("/xl/drawings/drawing1.xml")) {
     xml = xml.replace("</Types>", '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
@@ -270,7 +282,7 @@ async function embedImagesInWorkbook(filePath, headers, rows) {
   const anchors = [];
   for (let col = 0; col < headers.length; col += 1) {
     const header = headers[col];
-    if (!PGY_IMAGE_FIELDS.has(header.key)) continue;
+    if (!isPgyImageKey(header.key)) continue;
     for (let row = 0; row < rows.length; row += 1) {
       const value = rows[row][header.key];
       if (typeof value === "string" && value && fs.existsSync(value)) {
@@ -281,7 +293,9 @@ async function embedImagesInWorkbook(filePath, headers, rows) {
   if (anchors.length === 0) return;
   const zip = await JSZip.loadAsync(fs.readFileSync(filePath));
   anchors.forEach((anchor, index) => {
-    anchor.media = `pgy_chart_${index + 1}.png`;
+    const ext = path.extname(anchor.path).replace(".", "").toLowerCase() || "png";
+    const mediaExt = ext === "jpg" ? "jpeg" : ext;
+    anchor.media = `pgy_img_${index + 1}.${mediaExt}`;
     zip.file(`xl/media/${anchor.media}`, fs.readFileSync(anchor.path));
   });
   const sheetXml = await zip.file("xl/worksheets/sheet1.xml").async("string");
@@ -297,17 +311,82 @@ async function embedImagesInWorkbook(filePath, headers, rows) {
   fs.writeFileSync(filePath, await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
 }
 
+export function expandNotebookImageHeaders(headers, rows) {
+  const sourceHeaders = Array.isArray(headers) ? headers.filter(Boolean) : [];
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  const hasCoverHeader = sourceHeaders.some((h) => h.key === "coverImage");
+  const hasNoteHeader = sourceHeaders.some((h) => h.key === "noteImages" || h.key === "noteImage_1");
+  const hasCoverData = sourceRows.some((r) => r && typeof r.coverImage === "string" && r.coverImage.length > 0);
+  const hasNoteData = sourceRows.some((r) => r && (Array.isArray(r.noteImages) || r.noteImage_1));
+  const includeCover = hasCoverHeader || hasCoverData;
+  const includeNotes = hasNoteHeader || hasNoteData;
+
+  let maxCount = 0;
+  for (const r of sourceRows) {
+    if (r && Array.isArray(r.noteImages)) {
+      maxCount = Math.max(maxCount, r.noteImages.length);
+    } else if (r) {
+      let c = 0;
+      while (r[`noteImage_${c + 1}`]) c++;
+      maxCount = Math.max(maxCount, c);
+    }
+  }
+  maxCount = Math.max(1, maxCount);
+
+  const addNoteHeaders = (target, group) => {
+    if (maxCount === 1) {
+      target.push({ group: group || "笔记内容", label: "笔记图", key: "noteImage_1" });
+      return;
+    }
+    for (let i = 1; i <= maxCount; i++) {
+      target.push({ group: group || "笔记内容", label: `笔记图 ${i}`, key: `noteImage_${i}` });
+    }
+  };
+  const expandedHeaders = [];
+  let noteHeaderExpanded = false;
+  for (const h of sourceHeaders) {
+    if (h.key === "noteImages" || h.key === "noteImage_1") {
+      if (!noteHeaderExpanded) addNoteHeaders(expandedHeaders, h.group);
+      noteHeaderExpanded = true;
+    } else {
+      expandedHeaders.push(h);
+    }
+  }
+  // 历史任务的旧导出 payload 可能遗失图片表头，但 row 已经带有本地图片路径。
+  // 以行数据为准补列，确保写出器仍能创建绘图锚点，避免静默输出无图 Excel。
+  if (includeCover && !hasCoverHeader) {
+    expandedHeaders.push({ group: "笔记内容", label: "封面图", key: "coverImage" });
+  }
+  if (includeNotes && !noteHeaderExpanded) {
+    addNoteHeaders(expandedHeaders, "笔记内容");
+  }
+
+  const expandedRows = sourceRows.map((r) => {
+    if (!r || typeof r !== "object") return r;
+    const next = { ...r };
+    if (Array.isArray(next.noteImages)) {
+      next.noteImages.forEach((img, idx) => {
+        next[`noteImage_${idx + 1}`] = img;
+      });
+    }
+    return next;
+  });
+
+  return { headers: expandedHeaders, rows: expandedRows };
+}
+
 // 对应 bundle 内 ff()（去掉保存对话框）：写出真实 xlsx 文件。
 export async function writeCollectionWorkbook(filePath, payload) {
   const data = payload.data ?? [];
+  const { headers: expHeaders, rows: expData } = expandNotebookImageHeaders(payload.headers ?? [], data);
   const sheet = payload.mode === "two-row"
-    ? buildTwoRowSheet(payload.headers ?? [], dataWithoutImageText(payload.headers ?? [], data))
-    : buildSingleRowSheet(data);
+    ? buildTwoRowSheet(expHeaders, dataWithoutImageText(expHeaders, expData))
+    : buildSingleRowSheet(expData);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, sheet, "Sheet1");
   XLSX.writeFile(workbook, filePath);
   if (payload.mode === "two-row") {
-    await embedImagesInWorkbook(filePath, payload.headers ?? [], data);
+    await embedImagesInWorkbook(filePath, expHeaders, expData);
   }
   return { success: true, filePath };
 }

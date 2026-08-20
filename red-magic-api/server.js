@@ -442,12 +442,19 @@ function getDefaultClientMenus() {
           path: "/database/xhs/pgy-blogger",
           component: "pages/database/xhs/pgy-blogger/index.tsx",
         },
+       {
+         id: "collect-pgy-note",
+         name: "蒲公英笔记采集",
+         icon: "solar:document-text-bold-duotone",
+         path: "/database/xhs/pgy-blog",
+         component: "pages/database/xhs/pgy-blog/index.tsx",
+       },
         {
-          id: "collect-pgy-note",
-          name: "蒲公英笔记采集",
-          icon: "solar:document-text-bold-duotone",
-          path: "/database/xhs/pgy-blog",
-          component: "pages/database/xhs/pgy-blog/index.tsx",
+          id: "pgy-kol-search",
+          name: "找博主",
+          icon: "solar:users-group-rounded-bold-duotone",
+          path: "/pgy-kol-search",
+          component: "pages/pgy-kol-search/index.tsx",
         },
       ],
     },
@@ -462,6 +469,34 @@ function getDefaultClientMenus() {
           icon: "solar:user-id-bold-duotone",
           path: "/database/starmap/blogger",
           component: "pages/database/starmap/blogger/index.tsx",
+        },
+      ],
+    },
+    {
+      id: "points",
+      name: "积分中心",
+      icon: "solar:wallet-bold-duotone",
+      children: [
+        {
+          id: "points-recharge",
+          name: "积分充值",
+          icon: "solar:card-2-bold-duotone",
+          path: "/shumiao/recharge",
+          component: "pages/shumiao/recharge/index.tsx",
+        },
+        {
+          id: "points-records",
+          name: "充值记录",
+          icon: "solar:history-bold-duotone",
+          path: "/shumiao/records",
+          component: "pages/shumiao/records/index.tsx",
+        },
+        {
+          id: "points-consume-records",
+          name: "消耗记录",
+          icon: "solar:bill-list-bold-duotone",
+          path: "/shumiao/consume-records",
+          component: "pages/shumiao/consume-records/index.tsx",
         },
       ],
     },
@@ -586,23 +621,47 @@ const wxpayEnabled = process.env.NODE_ENV === "test"
   ? process.env.PAYMENT_TEST_MODE === "1" && process.env.WXPAY_TEST_MODE === "1"
   : process.env.WXPAY_ENABLED === "1";
 const paymentEnabled = alipayEnabled || wxpayEnabled;
-const alipayGateway = alipayEnabled
-  ? createAlipayGateway()
-  : {
+let alipayGateway;
+try {
+  alipayGateway = alipayEnabled
+    ? createAlipayGateway()
+    : {
+      config: { appId: "", merchantId: "" },
+      async createPagePay() { throw new Error("支付宝支付功能未开启"); },
+      async verifyNotification() { return false; },
+      async queryTrade() { throw new Error("支付宝查询功能未开启"); },
+    };
+} catch (error) {
+  console.warn("支付宝网关初始化跳过（本地环境缺少证书文件）:", error.message);
+  alipayGateway = {
     config: { appId: "", merchantId: "" },
-    async createPagePay() { throw new Error("支付宝支付功能未开启"); },
+    async createPagePay() { throw new Error("本地环境缺少支付宝证书，无法调起真实支付"); },
     async verifyNotification() { return false; },
-    async queryTrade() { throw new Error("支付宝查询功能未开启"); },
+    async queryTrade() { throw new Error("本地环境缺少支付宝证书，无法查询真实交易"); },
   };
-const wxpayGateway = wxpayEnabled
-  ? createWxpayGateway()
-  : {
+}
+
+let wxpayGateway;
+try {
+  wxpayGateway = wxpayEnabled
+    ? createWxpayGateway()
+    : {
+      config: { appId: "", mchId: "" },
+      async createQrCode() { throw new Error("微信支付功能未开启"); },
+      async verifyNotify() { return false; },
+      async decryptNotifyResource() { throw new Error("微信支付功能未开启"); },
+      async queryOrder() { throw new Error("微信支付查询功能未开启"); },
+    };
+} catch (error) {
+  console.warn("微信支付网关初始化跳过（本地环境缺少证书文件）:", error.message);
+  wxpayGateway = {
     config: { appId: "", mchId: "" },
-    async createQrCode() { throw new Error("微信支付功能未开启"); },
+    async createQrCode() { throw new Error("本地环境缺少微信证书，无法调起真实支付"); },
     async verifyNotify() { return false; },
-    async decryptNotifyResource() { throw new Error("微信支付功能未开启"); },
-    async queryOrder() { throw new Error("微信支付查询功能未开启"); },
+    async decryptNotifyResource() { throw new Error("本地环境缺少微信证书"); },
+    async queryOrder() { throw new Error("本地环境缺少微信证书，无法查询真实交易"); },
   };
+}
 
 function trustProxyValue() {
   if (!TRUST_PROXY) return false;

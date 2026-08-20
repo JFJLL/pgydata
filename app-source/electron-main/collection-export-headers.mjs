@@ -5,7 +5,7 @@
 import { existsSync } from "node:fs";
 
 // 与主进程 PGY_IMAGE_FIELDS（PYG_CHART_FIELDS 的值集合）保持一致。
-const PGY_IMAGE_EXPORT_FIELDS = Object.freeze([
+export const PGY_IMAGE_EXPORT_FIELDS = Object.freeze([
   "fansProvinceChart",
   "fansCityChart",
   "fansAgeChart",
@@ -16,6 +16,8 @@ const PGY_IMAGE_EXPORT_FIELDS = Object.freeze([
   "dailyNotePicturePerformanceChart",
   "dailyNoteVideoPerformanceChart",
   "bloggerOverviewChart",
+  "coverImage",
+  "noteImages",
 ]);
 
 // 与主进程两行导出分支的图片占位哨兵保持一致：导出时渲染为空单元格。
@@ -127,6 +129,8 @@ const PGY_NOTEBOOK_EXPORT_HEADERS = Object.freeze([
   { group: "笔记内容", label: "笔记ID", key: "noteId" },
   { group: "笔记内容", label: "笔记标题", key: "title" },
   { group: "笔记内容", label: "笔记内容", key: "content" },
+  { group: "笔记内容", label: "封面图", key: "coverImage" },
+  { group: "笔记内容", label: "笔记图", key: "noteImages" },
   { group: "数据指标", label: "阅读中位数", key: "clickMidNum" },
   { group: "数据指标", label: "互动中位数", key: "mEngagementNum" },
   { group: "数据指标", label: "曝光量", key: "impNum" },
@@ -364,7 +368,8 @@ function blankMissingImageCells(rows) {
     if (!row || typeof row !== "object") return row;
     let changed = false;
     const next = { ...row };
-    for (const key of PGY_IMAGE_EXPORT_FIELDS) {
+    for (const key of Object.keys(next)) {
+      if (!PGY_IMAGE_EXPORT_FIELDS.includes(key) && !key.startsWith("noteImage_")) continue;
       const value = next[key];
       if (typeof value === "string" && value && value !== PGY_IMAGE_CELL_BLANK && !existsSync(value)) {
         next[key] = PGY_IMAGE_CELL_BLANK;

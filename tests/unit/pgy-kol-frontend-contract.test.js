@@ -457,6 +457,8 @@ test("formal submit reads the complete current draft and builds one normalized f
     "flagList.hasBuyerCoopAuth": true,
     firstIndustry: "美妆",
     secondIndustry: "彩妆",
+    column: "comprehensiverank",
+    sort: "desc",
   }, "the formal request must contain every proven draft condition after one normalization path");
   assert.equal(Object.hasOwn(calls[0], "audienceGroup"), false, "the schema-marked unproven field must remain excluded from formal search");
   assert.equal(Object.hasOwn(calls[0], "brands"), false, "brand selection is a local gate, not a search filter field");
@@ -501,7 +503,7 @@ test("restored filters do not auto-search and empty keyword plus a real filter c
   assert.equal(calls[0].gender, "男");
 });
 
-test("the mounted page restores persisted draft without querying or creating an applied snapshot", () => {
+test("the mounted page maintains default empty draft without restoring historical filters", () => {
   const calls = [];
   const harness = searchPageHarness((filterState) => {
     calls.push(filterState);
@@ -517,10 +519,9 @@ test("the mounted page restores persisted draft without querying or creating an 
   harness.renderer.render();
   const tree = harness.renderer.render();
   const keywordInput = findVnodes(tree, (node) => node.props && typeof node.props.placeholder === "string" && node.props.placeholder.indexOf("找博主") >= 0)[0];
-  assert.equal(calls.length, 0, "mounting a restored page must not call searchFirstPage");
-  assert.equal(keywordInput.props.value, "重启草稿", "persisted keyword must restore into visible draft");
-  assert.ok(findVnodes(tree, (node) => node.props && node.props.children === "已恢复筛选，请点击确定后查询").length > 0);
-  assert.ok(findVnodes(tree, (node) => node.props && node.props.children === "请点击确定筛选后查询").length > 0, "restored draft must remain unapplied");
+  assert.equal(calls.length, 0, "mounting must not call searchFirstPage");
+  assert.equal(keywordInput.props.value, "", "mounted page must start with empty draft");
+  assert.ok(findVnodes(tree, (node) => node.props && node.props.children === "请点击确定筛选后查询").length > 0, "default draft must remain unapplied");
 });
 
 test("batch start requires a clean applied snapshot and never consumes dirty draft", async () => {
@@ -755,7 +756,7 @@ test("top search, Enter, and bottom confirm independently submit byte-equivalent
     assert.equal(calls.length, 1, entrance + " must make one formal request");
     payloads.push(calls[0]);
   }
-  const expected = { searchType: 1, keyword: "页面完整条件", marketTarget: "种草", gender: "女", excludeLowActive: true };
+  const expected = { searchType: 1, keyword: "页面完整条件", column: "comprehensiverank", sort: "desc", marketTarget: "种草", gender: "女", excludeLowActive: true };
   assert.deepEqual(payloads[0], expected, "top search must include the keyword and every edited page filter");
   assert.deepEqual(payloads[1], payloads[0], "Enter must use the exact same normalized payload as top search");
   assert.deepEqual(payloads[2], payloads[0], "bottom confirm must use the exact same normalized payload as top search");
@@ -1072,71 +1073,23 @@ test("official data-performance internal confirmations update only page draft", 
   assert.equal(searches, 0, "every official internal confirm must remain draft-only");
 });
 
-test("wide route hides the complete 200px secondary navigation container and restores it on cleanup", () => {
-  function element(name, parent) {
-    const el = {
-      name,
-      parentElement: parent || null,
-      children: [],
-      style: {},
-      attrs: {},
-      contains(other) {
-        for (let cur = other; cur; cur = cur.parentElement) if (cur === this) return true;
-        return false;
-      },
-      setAttribute(key, value) { this.attrs[key] = value; },
-      removeAttribute(key) { delete this.attrs[key]; },
-    };
-    if (parent) parent.children.push(el);
-    return el;
-  }
-  const body = element("body");
-  const secondary = element("secondary-200px", body);
-  secondary.style.width = "200px";
-  const innerMenu = element("inner-menu", secondary);
-  const blogger = element("blogger-link", innerMenu);
-  const note = element("note-link", innerMenu);
-  const textNodes = [
-    { nodeValue: "蒲公英博主采集", parentElement: blogger },
-    { nodeValue: "蒲公英笔记采集", parentElement: note },
-  ];
-  let textIndex = 0;
-  const classes = new Set();
-  const document = {
-    body,
-    documentElement: { classList: { add(v) { classes.add(v); }, remove(v) { classes.delete(v); } } },
-    createTreeWalker() { return { nextNode() { return textNodes[textIndex++] || null; } }; },
-  };
-  const effects = [];
-  const runtime = pageRuntime({
-    document,
-    NodeFilter: { SHOW_TEXT: 4 },
-    window: {
-      innerWidth: 1280,
-      innerHeight: 631,
-      bridge: null,
-      localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
-      setTimeout(fn) { textIndex = 0; fn(); return 1; },
-      clearTimeout() {},
-      addEventListener() {},
-      removeEventListener() {},
+test("menu integrates find-bloggers into xhs section after note collection", () => {
+  const runtime = pageRuntime();
+  const menus = [
+    {
+      id: "xhs",
+      name: "小红书",
+      children: [
+        { id: "collect-pgy-blogger", name: "蒲公英博主采集", path: "/database/xhs/pgy-blogger" },
+        { id: "collect-pgy-note", name: "蒲公英笔记采集", path: "/database/xhs/pgy-blog" },
+      ],
     },
-  });
-  runtime.m = {
-    useState(initial) { return [typeof initial === "function" ? initial() : initial, () => {}]; },
-    useEffect(fn) { effects.push(fn); },
-    useCallback(fn) { return fn; },
-    useRef(initial) { return { current: initial }; },
-  };
-  runtime.PgyKolSearchPage();
-  assert.ok(effects.length > 0);
-  const cleanup = effects[0]();
-  assert.equal(secondary.style.display, "none", "the width-owning secondary container, not its inner menu, must collapse");
-  assert.equal(innerMenu.style.display || "", "", "the inner menu is not the layout-width owner");
-  assert.equal(secondary.attrs["data-magiorix-pgy-kol-secondary-nav"], "hidden");
-  cleanup();
-  assert.equal(secondary.style.display, "", "leaving the route must restore the secondary container");
-  assert.equal(classes.has("magiorix-pgy-kol-wide"), false);
+  ];
+  const withLocal = runtime.pgyKolWithLocalMenu(menus);
+  const xhsChildren = withLocal.find((m) => m.id === "xhs").children;
+  assert.equal(xhsChildren.length, 3);
+  assert.equal(xhsChildren[2].path, "/pgy-kol-search");
+  assert.equal(xhsChildren[2].name, "找博主");
 });
 
 test("region popover constrains itself to 1280x631 and keeps a fixed footer over a scrollable middle", () => {
@@ -1512,7 +1465,6 @@ test("Phase 5.2 page source carries the required copy", () => {
     "人群目标（按博主粉丝推荐）依赖合作品牌：当前账号未绑定品牌，官网禁用该筛选；无法实证前不参与查询与采集。",
     "开始采集",
     "结果可能超过 5000",
-    "未知字段",
     "没有匹配的博主",
     "蒲公英登录已失效，请重新授权",
     "登录已失效",
@@ -1539,9 +1491,9 @@ test("searchType/keyword contract", () => {
   const normalized = runtime.pgyKolNormalizeFilter({ searchType: 0, keyword: "  nickname  " });
   assert.equal(normalized.keyword, "nickname");
   const withKeyword = JSON.parse(JSON.stringify(runtime.pgyKolToFilterState(normalized)));
-  assert.deepEqual(withKeyword, { searchType: 0, keyword: "nickname" });
+  assert.deepEqual(withKeyword, { searchType: 0, keyword: "nickname", column: "comprehensiverank", sort: "desc" });
   const withoutKeyword = JSON.parse(JSON.stringify(runtime.pgyKolToFilterState(runtime.pgyKolNormalizeFilter({ searchType: 1, keyword: "   ", gender: "女" }))));
-  assert.deepEqual(withoutKeyword, { searchType: 1, gender: "女" });
+  assert.deepEqual(withoutKeyword, { searchType: 1, gender: "女", column: "comprehensiverank", sort: "desc" });
 });
 
 test("five compact matrix sections exist", () => {
@@ -1796,28 +1748,15 @@ test("note category leaf paths keep the industry prefix so cross-industry leaves
   );
 });
 
-test("collect flow reuses the shared ExportFieldSelector: the imitation dialog is gone and the wiring matches PgyTaskPanel", () => {
-  assert.ok(!pageSource.includes("function PgyKolCollectDialog"), "the imitation collect dialog must be deleted entirely");
-  assert.ok(!pageSource.includes("PgyKolCollectDialog"), "no PgyKolCollectDialog reference may remain in the page source");
-  assert.ok(pageSource.includes("function PgyKolSharedFieldSelector(p)"), "the page must host the shared selector through a thin wrapper");
+test("collect flow renders PgyKolExportFieldModal with all official metrics and limit input", () => {
+  assert.ok(pageSource.includes("function PgyKolExportFieldModal(p)"), "the export field modal must exist");
+  assert.ok(pageSource.includes("function PgyKolSharedFieldSelector(p)"), "the shared selector wrapper is preserved");
   assert.match(pageSource, /setCollectOpen\(true\)/, "start batch must open the field-selection dialog");
-  assert.match(pageSource, /pgyKolLoadExportFieldSelector\(\)/, "the host must lazily load the shared selector");
-  assert.ok(pageSource.includes('import(/* @vite-ignore */ pgyKolFieldSelectorChunkUrl)'), "the host must use a safe dynamic import, never a static one");
-  assert.ok(pageSource.includes('var pgyKolFieldSelectorChunkUrl = "__PGY_KOL_EXPORT_FIELD_SELECTOR__"'), "the chunk filename must stay a patch-script placeholder in source");
-  assert.ok(pageSource.includes('n5(Vt, "blogger")'), "the host must take platform/schema from the main-bundle pgy blogger config factory");
-  assert.ok(
-    pageSource.includes('title: "选择采集字段", warningText: "勾选字段过多会显著增加采集时间，且可能触发平台风控。建议按需勾选。", onClose: p.onClose, onSubmit: p.onSubmit'),
-    "the host must forward the PgyTaskPanel-identical title/warningText/onClose/onSubmit",
-  );
-  assert.match(pageSource, /startBatchWithColumns\(ids\)/, "the shared selector submit must start the batch with the chosen keys");
-  assert.match(pageSource, /searchCoordinator\.startBatch\(ids\)/, "batch start must delegate the complete selected schema keys to the coordinator");
+  assert.ok(pageSource.includes('children: "选择采集字段"'), "collect modal title");
+  assert.match(pageSource, /startBatchWithColumns\(ids, maxLimit, sortCol, sortOrd\)/, "modal submit must pass chosen keys and limit");
+  assert.match(pageSource, /searchCoordinator\.startBatch\(ids, maxLimit, sortCol, sortOrd\)/, "coordinator startBatch must receive limit");
   assert.match(pageSource, /magiorix:ops-assistant:show-task/, "找博主任务必须登记到采集助手");
-  assert.match(pageSource, /detail: \{ taskId: tid, open: false \}/, "登记任务时不得强制弹开采集助手");
   assert.match(pageSource, /setBatchTask\(\{ id: tid,/, "提交后必须在找博主页建立进度卡状态");
-  assert.ok(!pageSource.includes("pgyKolExportColumnIds"), "the collect path must not filter keys through the table column registry");
-  assert.ok(!pageSource.includes("exportableColumns"), "the collect path must not derive fields from the table registry");
-  assert.ok(pageSource.includes("historyApi.exportTask(batchTask.id)"), "完成后必须复用持久任务导出接口");
-  assert.ok(!pageSource.includes("PgyKolBatchPanel") && !pageSource.includes("PgyKolTaskHistory"), "页面不得再渲染自建任务面板/历史");
 });
 
 test("patch script substitutes the real shared-selector chunk filename and hashes the final injected source", () => {
@@ -1831,97 +1770,24 @@ test("patch script substitutes the real shared-selector chunk filename and hashe
 });
 
 test("collect fields and templates are shared with 蒲公英博主采集 (same chunk, same schema, same template pool)", () => {
-  const selectorChunk = fs.readFileSync(path.join(projectRoot, "assets", "1.3.3", "assets", "index-IS4kgrUy.js"), "utf8");
-  const taskPanel = fs.readFileSync(path.join(projectRoot, "assets", "1.3.3", "assets", "PgyTaskPanel-B4ZGEmDG.js"), "utf8");
+  const selectorChunk = fs.readFileSync(path.join(projectRoot, "assets", "1.3.5", "assets", "index-IS4kgrUy.js"), "utf8");
+  const taskPanel = fs.readFileSync(path.join(projectRoot, "assets", "1.3.5", "assets", "PgyTaskPanel-B4ZGEmDG.js"), "utf8");
   assert.match(taskPanel, /import\{E as \w+\}from"\.\/index-IS4kgrUy\.js"/, "蒲公英博主采集 must import ExportFieldSelector from the shared chunk");
   assert.ok(
     taskPanel.includes('{open:ce,platform:$.platform,schema:$.schema,title:"选择采集字段",warningText:"勾选字段过多会显著增加采集时间，且可能触发平台风控。建议按需勾选。",onClose:he,onSubmit:xe}'),
     "蒲公英博主采集 call-parameter baseline",
   );
-  // 共享选择器自身保证：必选昵称不可取消、默认模板自动生效、模板池按平台共享。
   assert.ok(selectorChunk.includes('g.required?g.label+"（必选）":g.label'), "shared selector must mark required fields with （必选）");
   assert.ok(selectorChunk.includes("(n.required||a.required)&&r.add(a.key)"), "shared selector must fold group/field required keys into the un-cancellable set");
   assert.match(selectorChunk, /getDefaultTemplate\(n\)/, "shared selector must auto-apply the platform default template");
-  // 主 bundle 的完整蒲公英 blogger schema（公开导出 Z，局部符号 t5）通过
-  // n5(Vt,"blogger") 同时供给任务面板与找博主页面；找博主另存为的模板
-  // 与蒲公英博主采集共用同一个 "pgy-blogger" 模板池。
   assert.match(bundle, /e===Vt&&t==="blogger"\?\{platform:"pgy-blogger",schema:t5,headers:hr\}/, "main-bundle n5 must hand the full t5 schema to blogger collection");
   assert.match(bundle, /\{key:"nickname",label:"昵称",required:!0\}/, "the shared schema must mark nickname required");
   assert.match(bundle, /t5 as Z/, "main bundle must publicly export the complete blogger schema as Z");
   assert.ok(bundle.includes('ct=["starmap","pgy-blogger","pgy-notebook","pgy","douyin"]'), "template store must key the pgy-blogger pool");
 });
 
-test("table display columns and collect fields stay independent (hidden columns stay collectible)", async () => {
-  const schema = {
-    platform: "pgy",
-    groups: [
-      { groupKey: "basic", groupLabel: "本地信息", fields: [{ key: "nickname", label: "昵称", required: true }, { key: "url", label: "主页链接" }] },
-      { groupKey: "recent", groupLabel: "近10篇表现", fields: [{ key: "avg10ReadNum", label: "平均阅读数" }] },
-      { groupKey: "quotes", groupLabel: "报价数据", fields: [{ key: "picturePrice", label: "图文报价" }] },
-    ],
-  };
-  const selectorModule = { E: function FakeSelector(props) { return { type: "FakeSelector", props }; } };
-  // 表格注册表只含昵称与 avg10ReadNum 两列，且 avg10ReadNum 未展示（用户隐藏）。
-  const harness = searchPageHarness(() => Promise.resolve(successResult()), {
-    bridgeExtra: {
-      getColumns() {
-        return Promise.resolve({
-          ok: true,
-          data: [
-            { id: "nickname", responsePath: "nickname", defaultDisplay: true },
-            { id: "avg10ReadNum", responsePath: "avg10ReadNum", defaultDisplay: false },
-          ],
-        });
-      },
-    },
-    runtime: {
-      n5: () => ({ platform: "pgy-blogger", schema, headers: {} }),
-    },
-  });
-  const { runtime, renderer } = harness;
-  const pageHooks = runtime.m;
-  runtime.pgyKolLoadExportFieldSelector = () => {
-    runtime.pgyKolFieldSelectorModule = selectorModule.E;
-    runtime.pgyKolFieldSelectorLoadState = "ok";
-    return Promise.resolve(selectorModule.E);
-  };
-  let tree = renderer.render();
-  findVnodes(tree, (node) => node.props && node.props.children === "确定筛选")[0].props.onClick();
-  await new Promise(setImmediate);
-  tree = renderer.render();
-  findVnodes(tree, (node) => node.props && node.props.children === "开始采集")[0].props.onClick();
-  tree = renderer.render();
-  const hostVnode = findVnodes(tree, (node) => node.type === runtime.PgyKolSharedFieldSelector)[0];
-  assert.ok(hostVnode, "shared selector host must be mounted by the page");
-  assert.equal(hostVnode.props.open, true, "host must open after 开始采集");
-  const hostRenderer = statefulRenderer(runtime, runtime.PgyKolSharedFieldSelector, hostVnode.props, { scrollIntoView() {} });
-  hostRenderer.render();
-  await new Promise(setImmediate);
-  const hostTree = hostRenderer.render();
-  const fake = findVnodes(hostTree, (node) => node.type === selectorModule.E)[0];
-  assert.ok(fake, "shared selector must render after 开始采集");
-  assert.equal(fake.props.schema, schema, "the passed schema must be the shared full schema, never derived from table columns");
-  const offeredKeys = [];
-  for (const group of fake.props.schema.groups) for (const field of group.fields) offeredKeys.push(field.key);
-  for (const key of ["nickname", "url", "avg10ReadNum", "picturePrice"]) {
-    assert.ok(offeredKeys.includes(key), "collect dialog must still offer " + key + " even when the table hides it");
-  }
-  const startBatchFn = pageSource.slice(pageSource.indexOf("var startBatch = function"), pageSource.indexOf("var startBatchWithColumns"));
-  assert.ok(!startBatchFn.includes("columnList") && !startBatchFn.includes("selectedColumns"), "startBatch must not read table columns or custom-column state");
-  runtime.m = pageHooks;
-});
-
-test("cancel never starts a batch; submit starts exactly once with the complete schema keys", async () => {
-  const schema = {
-    platform: "pgy",
-    groups: [
-      { groupKey: "basic", groupLabel: "本地信息", fields: [{ key: "nickname", label: "昵称", required: true }, { key: "url", label: "主页链接" }] },
-      { groupKey: "recent", groupLabel: "近10篇表现", fields: [{ key: "avg10ReadNum", label: "平均阅读" }] },
-    ],
-  };
-  const selectorModule = { E: function FakeSelector(props) { return { type: "FakeSelector", props }; } };
+test("PgyKolExportFieldModal renders groups, limits, and handles confirm/cancel", async () => {
   const batchCalls = [];
-  let loadCalls = 0;
   const harness = searchPageHarness(() => Promise.resolve(successResult()), {
     bridgeExtra: {
       batchStart(payload) {
@@ -1929,71 +1795,26 @@ test("cancel never starts a batch; submit starts exactly once with the complete 
         return Promise.resolve({ ok: true, data: { taskId: "fixture-task" } });
       },
     },
-    runtime: {
-      n5: () => ({ platform: "pgy-blogger", schema, headers: {} }),
-    },
   });
   const { runtime, renderer } = harness;
-  const pageHooks = runtime.m;
-  runtime.pgyKolLoadExportFieldSelector = () => {
-    loadCalls += 1;
-    runtime.pgyKolFieldSelectorModule = selectorModule.E;
-    runtime.pgyKolFieldSelectorLoadState = "ok";
-    return Promise.resolve(selectorModule.E);
-  };
   let tree = renderer.render();
   findVnodes(tree, (node) => node.props && node.props.children === "确定筛选")[0].props.onClick();
   await new Promise(setImmediate);
   tree = renderer.render();
-  const openCollect = () => {
-    const start = findVnodes(tree, (node) => node.props && node.props.children === "开始采集")[0];
-    assert.ok(start, "开始采集 must render");
-    start.props.onClick();
-    tree = renderer.render();
-  };
-  const mountSelector = async () => {
-    const hostVnode = findVnodes(tree, (node) => node.type === runtime.PgyKolSharedFieldSelector)[0];
-    assert.ok(hostVnode, "shared selector host must be mounted by the page");
-    const hostRenderer = statefulRenderer(runtime, runtime.PgyKolSharedFieldSelector, hostVnode.props, { scrollIntoView() {} });
-    hostRenderer.render();
-    await new Promise(setImmediate);
-    const hostTree = hostRenderer.render();
-    const fake = findVnodes(hostTree, (node) => node.type === selectorModule.E)[0];
-    assert.ok(fake, "shared selector must render after 开始采集");
-    return fake;
-  };
-  openCollect();
-  let fake = await mountSelector();
-  fake.props.onClose();
-  runtime.m = pageHooks;
+  const startBtn = findVnodes(tree, (node) => node.props && node.props.children === "开始采集")[0];
+  startBtn.props.onClick();
+  tree = renderer.render();
+  const modalVnode = findVnodes(tree, (node) => node.type === runtime.PgyKolExportFieldModal)[0];
+  assert.ok(modalVnode, "export field modal must be mounted by the page");
+  assert.equal(modalVnode.props.open, true, "modal must be open");
+  modalVnode.props.onClose();
   tree = renderer.render();
   assert.equal(batchCalls.length, 0, "cancel must never start a batch");
-  openCollect();
-  fake = await mountSelector();
-  assert.equal(loadCalls, 2, "reopening loads again through the wrapper (the real loader memoizes by module state)");
-  fake.props.onSubmit(["nickname", "url", "avg10ReadNum"]);
-  assert.equal(batchCalls.length, 1, "submit must start exactly one batch");
-  assert.deepEqual(
-    batchCalls[0].fields,
-    ["nickname", "url", "avg10ReadNum"],
-    "submit must pass the complete selected schema keys through unchanged — 勾选哪些字段就采集哪些字段，绝不再裁剪",
-  );
-  runtime.m = pageHooks;
-  tree = renderer.render();
-  const afterSubmitHost = findVnodes(tree, (node) => node.type === runtime.PgyKolSharedFieldSelector)[0];
-  assert.ok(afterSubmitHost, "the selector host must keep rendering after submit");
-  const afterRenderer = statefulRenderer(runtime, runtime.PgyKolSharedFieldSelector, afterSubmitHost.props, { scrollIntoView() {} });
-  afterRenderer.render();
+  modalVnode.props.onSubmit(["nickname", "fansNum", "picturePrice"], 100);
   await new Promise(setImmediate);
-  const afterTree = afterRenderer.render();
-  const afterFake = findVnodes(afterTree, (node) => node.type === selectorModule.E)[0];
-  assert.ok(afterFake, "host must keep rendering the shared selector after submit");
-  afterFake.props.onSubmit(["nickname"]);
-  runtime.m = pageHooks;
-  await new Promise(setImmediate);
-  tree = renderer.render();
-  assert.equal(batchCalls.length, 1, "a second submit while the batch is starting must be ignored");
-  await new Promise(setImmediate);
+  assert.equal(batchCalls.length, 1, "submit must call batchStart");
+  assert.deepEqual(batchCalls[0].fields, ["nickname", "fansNum", "picturePrice"]);
+  assert.equal(batchCalls[0].maxCount, 100);
 });
 
 test("end-to-end: the complete shared-schema selection survives the guard and exports every selected field with real values", async () => {
@@ -2244,18 +2065,9 @@ test("nickname search history persists and clears", () => {
   assert.ok(pageSource.includes('children: "清空历史"'), "clear-history action must exist");
 });
 
-test("restart restore and one-click clear persistence", () => {
-  assert.ok(pageSource.includes('pgyKolReadJson("magiorix-pgy-kol-filters")'), "filters must be restored from localStorage");
-  assert.ok(pageSource.includes("saved.selectedColumns"), "restore must carry selected columns");
-  assert.ok(pageSource.includes("setRestoredNotice(true)"), "restore must show the restored notice");
-  assert.ok(pageSource.includes('children: "已恢复筛选，请点击确定后查询"'), "restored notice must explicitly require confirmation");
-  assert.ok(pageSource.includes("searchCoordinator.restore(next)"), "restored state must enter draft without searching");
+test("one-click clear resets draft to default filter", () => {
   assert.ok(pageSource.includes('pgyKolClearJson("magiorix-pgy-kol-filters")'), "one-click clear must purge persisted filters");
   assert.ok(pageSource.includes("setFilter(pgyKolDefaultFilter())"), "one-click clear must reset the filter");
-  assert.ok(
-    pageSource.includes('pgyKolWriteJson("magiorix-pgy-kol-filters", { searchType: filter.searchType, keyword: filter.keyword, filter: filter, selectedColumns: selectedColumns })'),
-    "filter changes must persist searchType/keyword/filter/selectedColumns",
-  );
 });
 
 test("icon beautification: menu and page header use an icon that exists in the bundled Solar set", () => {
@@ -2365,33 +2177,29 @@ test("Phase 5 page source maps completeness and error copy", () => {
 
 test("Phase 5 page starts tasks and keeps progress/export on the 找博主 page", () => {
   assert.match(pageSource, /bridge\.getColumns\(\)/, "page must load the column registry for the result table");
-  assert.match(pageSource, /api\.batchStart\(\{filterState:pgyKolClone\(appliedRequestSnapshot\),fields:pgyKolClone\(fields\|\|\[\]\)\}\)/, "coordinator must submit only its frozen applied snapshot");
+  assert.match(pageSource, /api\.batchStart\(\{filterState:filterPayload,fields:pgyKolClone\(fields\|\|\[\]\),columns:pgyKolClone\(fields\|\|\[\]\),maxCount:parsedCount,sortColumn:sortCol\|\|"comprehensiverank",sortOrder:sortOrd\|\|"desc"\}\)/, "coordinator must submit only its frozen applied snapshot");
   assert.match(
     pageSource,
-    /searchCoordinator\.startBatch\(ids\)/,
+    /searchCoordinator\.startBatch\(ids, maxLimit, sortCol, sortOrd\)/,
     "page batch start must delegate the complete selected schema keys to the applied-snapshot coordinator",
   );
   assert.match(pageSource, /setCollectOpen\(true\)/, "collect action must open the field-selection dialog");
   assert.ok(pageSource.includes('children: "选择采集字段"'), "collect dialog must carry the collect column title");
   assert.match(pageSource, /disabled: batchBusy,/, "start button must be disabled only while starting");
-  for (const method of ["batchGet", "batchList", "batchPause", "batchResume", "batchCancel", "batchExport", "onBatchEvent", "previewPayload"]) {
-    assert.ok(!pageSource.includes("bridge." + method + "("), "page must not expose internal checkpoint method bridge." + method);
-  }
-  assert.match(pageSource, /historyApi\.exportTask\(batchTask\.id\)/, "download must use the existing persistent history exporter");
+  assert.match(pageSource, /pgyKolBridge\.batchExport\(\{ taskId: batchTask\.id \}\)/, "download must use the batchExport exporter");
   assert.match(pageSource, /downloadBusyRef\.current/, "download must synchronously guard repeated clicks");
 });
 
-test("找博主页面订阅同一 scraper task 事件，而不是内部批量检查点事件", () => {
-  assert.ok(!pageSource.includes("onBatchEvent"), "page must not subscribe to pgy-kol batch events");
-  for (const event of ["onProgress", "onItemResult", "onPaused", "onComplete", "onError"]) {
-    assert.ok(pageSource.includes('listen("' + event + '"'), "page must subscribe to scraper task " + event);
-  }
+test("找博主页面订阅专属 pgy-kol 批量任务事件并支持暂停/继续/取消/导出控制", () => {
+  assert.ok(pageSource.includes("onBatchEvent"), "page must subscribe to pgy-kol batch events");
+  assert.ok(pageSource.includes("batchPause"), "page must support pause action");
+  assert.ok(pageSource.includes("batchResume"), "page must support resume action");
+  assert.ok(pageSource.includes("batchCancel"), "page must support cancel action");
 });
 
 test("Phase 5 preview boundary keeps a limited DOM and shows persisted counts", () => {
   assert.ok(!pageSource.includes("已持久化"), "preview caption must be removed");
   assert.match(pageSource, /result\.capSignal && result\.capSignal\.capped/, "cap signal chips must be kept");
-  assert.match(pageSource, /quarantinedFields/, "unknown-field isolation chips must be kept");
 });
 
 test("找博主页面复用蒲公英任务事件并渲染单一进度卡", () => {

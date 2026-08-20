@@ -241,57 +241,62 @@
   // ---------- 登录 / 注册 / 忘记密码 ----------
   function viewLogin() {
     var html = ''
-      + '<div class="login-wrap">'
-      + '  <div class="login-card">'
-      + '    <div class="login-brand">Σ.<b>magiorix</b> 充值中心</div>'
-      + '    <div class="tabs">'
-      + '      <button class="tab active" data-tab="login">手机号登录</button>'
-      + '      <button class="tab" data-tab="register">手机号注册</button>'
-      + '      <button class="tab" data-tab="forgot">忘记密码</button>'
+      + '<div class="auth-shell">'
+      + '  <section class="auth-hero">'
+      + '    <div class="auth-hero-brand">Σ.<b>magiorix</b></div>'
+      + '    <div class="auth-hero-copy">'
+      + '      <span class="auth-eyebrow">官方账户服务</span>'
+      + '      <h1>让账户服务更简单、清晰。</h1>'
+      + '      <p>充值中心是 magiorix 桌面端的辅助服务。你可以在这里管理额度、订单和支付，不打断桌面端的核心创作流程。</p>'
       + '    </div>'
-      + '    <div class="form-panel" data-panel="login">'
-      + '      <div class="form-field"><label>手机号</label><input class="input" id="l-phone" type="tel" maxlength="11" placeholder="请输入手机号" autocomplete="tel"></div>'
-      + '      <div class="form-field"><label>密码</label><input class="input" id="l-pass" type="password" maxlength="64" placeholder="请输入密码" autocomplete="current-password"></div>'
-      + '      <div class="form-err" id="l-err"></div>'
-      + '      <button class="btn btn-primary btn-lg" id="l-submit">登 录</button>'
-      + '      <p class="form-hint">忘记密码？<a href="javascript:void(0)" data-forgot="1">点击这里找回</a></p>'
-      + '    </div>'
-      + '    <div class="form-panel hidden" data-panel="register">'
-      + '      <div class="form-field"><label>手机号</label><input class="input" id="r-phone" type="tel" maxlength="11" placeholder="请输入手机号" autocomplete="tel"></div>'
-      + '      <div class="form-field"><label>密码</label><input class="input" id="r-pass" type="password" maxlength="64" placeholder="8-64 位密码" autocomplete="new-password"></div>'
-      + '      <div class="form-field"><label>确认密码</label><input class="input" id="r-pass2" type="password" maxlength="64" placeholder="再次输入密码" autocomplete="new-password"></div>'
-      + '      <div class="form-err" id="r-err"></div>'
-      + '      <button class="btn btn-primary btn-lg" id="r-submit">注 册</button>'
-      + '      <p class="form-hint">注册即赠送 100 积分</p>'
-      + '    </div>'
-      + '    <div class="form-panel hidden" data-panel="forgot">'
-      + '      <div class="form-field"><label>手机号</label><input class="input" id="f-phone" type="tel" maxlength="11" placeholder="请输入手机号"></div>'
-      + '      <div class="form-field"><label>验证码</label>'
-      + '        <span class="code-row"><input class="input" id="f-code" type="text" maxlength="4" placeholder="4 位验证码">'
-      + '        <button class="btn btn-ghost code-btn" id="f-send">获取验证码</button></span>'
+      + '    <div class="auth-hero-note"><span>✓</span> 支付完成后，额度将自动同步至你的 magiorix 账户。</div>'
+      + '  </section>'
+      + '  <section class="auth-panel-wrap">'
+      + '    <div class="login-card">'
+      + '      <div class="login-brand">Σ.<b>magiorix</b></div>'
+      + '      <div class="form-panel" data-panel="login">'
+      + '        <div class="auth-heading"><span class="auth-eyebrow">欢迎回来</span><h2>登录充值中心</h2><p>使用你的手机号和密码管理额度与订单。</p></div>'
+      + '        <div class="form-field"><label>手机号</label><input class="input" id="l-phone" type="tel" maxlength="11" placeholder="请输入手机号" autocomplete="tel"></div>'
+      + '        <div class="form-field"><div class="field-line"><label>密码</label><a href="javascript:void(0)" data-auth-switch="forgot">忘记密码？</a></div><input class="input" id="l-pass" type="password" maxlength="64" placeholder="请输入密码" autocomplete="current-password"></div>'
+      + '        <div class="form-err" id="l-err"></div>'
+      + '        <button class="btn btn-primary btn-lg" id="l-submit">登录并进入充值中心 <span>→</span></button>'
+      + '        <p class="form-hint auth-bottom-link">还没有账号？<a href="javascript:void(0)" data-auth-switch="register">立即注册</a></p>'
       + '      </div>'
-      + '      <div class="form-field"><label>新密码</label><input class="input" id="f-pass" type="password" maxlength="64" placeholder="8-64 位新密码" autocomplete="new-password"></div>'
-      + '      <div class="form-err" id="f-err"></div>'
-      + '      <div class="form-ok" id="f-ok"></div>'
-      + '      <button class="btn btn-primary btn-lg" id="f-submit">重置密码</button>'
-      + '      <p class="form-hint">验证码将发送至您的手机</p>'
+      + '      <div class="form-panel hidden" data-panel="register">'
+      + '        <button class="auth-return" type="button" data-auth-switch="login">← 返回登录</button>'
+      + '        <div class="auth-heading"><span class="auth-eyebrow">创建账号</span><h2>注册充值账户</h2><p>注册后即可查看额度、充值订单和消费记录。</p></div>'
+      + '        <div class="form-field"><label>手机号</label><input class="input" id="r-phone" type="tel" maxlength="11" placeholder="请输入手机号" autocomplete="tel"></div>'
+      + '        <div class="form-field"><label>密码</label><input class="input" id="r-pass" type="password" maxlength="64" placeholder="8-64 位密码" autocomplete="new-password"></div>'
+      + '        <div class="form-field"><label>确认密码</label><input class="input" id="r-pass2" type="password" maxlength="64" placeholder="再次输入密码" autocomplete="new-password"></div>'
+      + '        <div class="form-err" id="r-err"></div>'
+      + '        <button class="btn btn-primary btn-lg" id="r-submit">创建账号 <span>→</span></button>'
+      + '        <p class="form-hint">注册成功后将赠送 100 积分。</p>'
+      + '      </div>'
+      + '      <div class="form-panel hidden" data-panel="forgot">'
+      + '        <button class="auth-return" type="button" data-auth-switch="login">← 返回登录</button>'
+      + '        <div class="auth-heading"><span class="auth-eyebrow">账户恢复</span><h2>重置登录密码</h2><p>验证手机号后，可以为账号设置新密码。</p></div>'
+      + '        <div class="form-field"><label>手机号</label><input class="input" id="f-phone" type="tel" maxlength="11" placeholder="请输入手机号"></div>'
+      + '        <div class="form-field"><label>验证码</label><span class="code-row"><input class="input" id="f-code" type="text" maxlength="4" placeholder="4 位验证码"><button class="btn btn-ghost code-btn" id="f-send">获取验证码</button></span></div>'
+      + '        <div class="form-field"><label>新密码</label><input class="input" id="f-pass" type="password" maxlength="64" placeholder="8-64 位新密码" autocomplete="new-password"></div>'
+      + '        <div class="form-err" id="f-err"></div>'
+      + '        <div class="form-ok" id="f-ok"></div>'
+      + '        <button class="btn btn-primary btn-lg" id="f-submit">确认重置密码</button>'
+      + '        <p class="form-hint">验证码将发送至你的手机。</p>'
+      + '      </div>'
       + '    </div>'
-      + '  </div>'
+      + '    <p class="auth-security-note">登录即表示你同意按平台规则使用账户服务。请勿向他人泄露密码或验证码。</p>'
+      + '  </section>'
       + '</div>';
 
     mount(html, function (root) {
-      var tabs = root.querySelectorAll(".tab");
-      function showTab(name) {
-        tabs.forEach(function (t) { t.classList.toggle("active", t.getAttribute("data-tab") === name); });
+      function showAuthPanel(name) {
         root.querySelectorAll(".form-panel").forEach(function (p) {
           p.classList.toggle("hidden", p.getAttribute("data-panel") !== name);
         });
       }
-      tabs.forEach(function (t) {
-        t.addEventListener("click", function () { showTab(t.getAttribute("data-tab")); });
+      root.querySelectorAll("[data-auth-switch]").forEach(function (trigger) {
+        trigger.addEventListener("click", function () { showAuthPanel(trigger.getAttribute("data-auth-switch")); });
       });
-      var forgotLink = root.querySelector("[data-forgot]");
-      if (forgotLink) forgotLink.addEventListener("click", function () { showTab("forgot"); });
 
       // 登录
       document.getElementById("l-submit").addEventListener("click", function () {
@@ -384,7 +389,7 @@
         apiPost("/api/auth/password/reset", { phone: phone, code: code, newPassword: newPassword })
           .then(function () {
             toast("密码已重置，请使用新密码登录", "success");
-            showTab("login");
+            showAuthPanel("login");
             document.getElementById("f-ok").textContent = "";
           })
           .catch(function (e) { err.textContent = e.message || "重置失败"; })
@@ -406,12 +411,13 @@
     return ''
       + '<div class="layout">'
       + '  <aside class="sidebar">'
-      + '    <div class="sidebar-brand">Σ.<b>magiorix</b></div>'
-      + '    <nav class="sidebar-nav">'
-      + navItem("/recharge", "充值", "coin", activeNav === "recharge")
-      + navItem("/records/recharge", "充值记录", "in", activeNav === "records-recharge")
-      + navItem("/records/consume", "消耗记录", "out", activeNav === "records-consume")
+      + '    <div class="sidebar-brand"><span>Σ.<b>magiorix</b></span><small>账户服务</small></div>'
+      + '    <nav class="sidebar-nav" aria-label="账户服务导航">'
+      + navItem("/recharge", "额度充值", "coin", activeNav === "recharge")
+      + navItem("/records/recharge", "充值订单", "in", activeNav === "records-recharge")
+      + navItem("/records/consume", "消费记录", "out", activeNav === "records-consume")
       + '    </nav>'
+      + '    <div class="sidebar-note"><strong>桌面端主应用</strong><span>数据采集、创作与分析请继续在 magiorix 客户端完成。</span></div>'
       + '    <div class="sidebar-foot">'
       + '      <div class="user-avatar">' + esc(avatar) + "</div>"
       + '      <div class="user-meta">'
@@ -439,21 +445,20 @@
   // ---------- 充值首页 ----------
   function viewRecharge(params) {
     var html = shell("recharge", ''
-      + '  <div class="page-head">'
-      + '    <div><p class="kicker">Credits</p><h1 class="page-title">充值中心</h1>'
-      + '    <p class="page-sub">选择套餐并扫码支付，支付完成后积分自动到账。</p></div>'
+      + '  <div class="page-head recharge-head">'
+      + '    <div><p class="kicker">账户额度</p><h1 class="page-title">充值中心</h1>'
+      + '    <p class="page-sub">为 magiorix 账户补充服务额度；数据采集与内容创作仍在桌面端主应用中完成。</p></div>'
+      + '    <div class="recharge-head-note"><span>安全支付</span><b>支付完成后自动到账</b></div>'
       + '  </div>'
       + '  <div class="balance-card">'
-      + '    <div><div class="balance-label">当前积分余额</div>'
+      + '    <div><div class="balance-label">当前可用额度</div>'
       + '      <div class="balance-value" id="balance-value">--<small>积分</small></div></div>'
-      + '    <div class="balance-side">消耗记录与充值记录<br>可在左侧导航中查看</div>'
+      + '    <div class="balance-side"><b>账户服务</b><br>充值订单和消费明细均可随时查看</div>'
       + "  </div>"
-      + '  <h3 class="card-title">选择套餐</h3>'
+      + '  <div class="section-head"><div><p class="kicker">选择套餐</p><h3 class="card-title">按你的使用节奏选择额度包</h3></div><p>确认订单前可随时返回重新选择</p></div>'
       + '  <div class="package-grid" id="package-grid"><div class="empty">正在加载套餐…</div></div>'
-      + '  <h3 class="card-title">充值订单</h3>'
-      + '  <div class="card"><div id="recent-orders"><div class="empty">正在加载…</div></div>'
-      + '    <p style="text-align:right;margin:12px 0 0"><a href="#/records/recharge">查看全部充值记录 →</a></p>'
-      + "  </div>"
+      + '  <div class="section-head orders-head"><div><p class="kicker">最近订单</p><h3 class="card-title">充值订单</h3></div><a href="#/records/recharge">查看全部记录 →</a></div>'
+      + '  <div class="card orders-card"><div id="recent-orders"><div class="empty">正在加载…</div></div></div>'
     );
 
     mount(html, function (root) {
@@ -482,15 +487,22 @@
           grid.innerHTML = '<div class="empty">暂无可用套餐</div>';
           return;
         }
-        grid.innerHTML = packages.map(function (pkg) {
+        grid.innerHTML = packages.map(function (pkg, index) {
           var gift = Number(pkg.giftCount || 0);
+          var recommended = index === 1 && packages.length > 1;
+          var scene = index === 0 ? "轻量体验" : (recommended ? "高频推荐" : (index === packages.length - 1 ? "团队与高频使用" : "持续创作"));
+          var title = pkg.title || (scene + "额度包");
           return ''
-            + '<button class="package-card" type="button" data-plan="' + esc(pkg.id) + '">'
-            + (gift > 0 ? '<span class="package-gift">赠 ' + fmtCount(gift) + "</span>" : "")
-            + '<div class="package-amount">' + fmtMoney(pkg.amountCents) + '<small>元</small></div>'
-            + '<div class="package-base">基础 ' + fmtCount(pkg.baseCount) + " 积分</div>"
-            + '<div class="package-total">到账 ' + fmtCount(pkg.totalCount) + " 积分</div>"
-            + '<span class="package-btn">立即充值</span>'
+            + '<button class="package-card' + (recommended ? ' recommended' : '') + '" type="button" data-plan="' + esc(pkg.id) + '">'
+            + (recommended ? '<span class="package-recommend">推荐选择</span>' : '')
+            + '<span class="package-scene">' + esc(scene) + '</span>'
+            + '<div class="package-title">' + esc(title) + '</div>'
+            + '<div class="package-amount"><span>¥</span>' + fmtMoney(pkg.amountCents) + '</div>'
+            + '<div class="package-credit"><strong>' + fmtCount(pkg.totalCount) + '</strong><span>到账积分</span></div>'
+            + '<div class="package-meta"><span>基础 ' + fmtCount(pkg.baseCount) + ' 积分</span>'
+            + (gift > 0 ? '<span>额外赠送 ' + fmtCount(gift) + ' 积分</span>' : '<span>支付成功后自动到账</span>')
+            + '</div>'
+            + '<span class="package-btn"><span>选择此套餐</span><b>→</b></span>'
             + "</button>";
         }).join("");
         grid.querySelectorAll(".package-card").forEach(function (card) {
@@ -625,19 +637,21 @@
   function viewCheckout(params) {
     var planId = String(params.plan || "");
     var html = shell("recharge", ''
-      + '  <div class="page-head">'
-      + '    <div><p class="kicker">Checkout</p><h1 class="page-title">确认订单</h1>'
-      + '    <p class="page-sub">核对套餐信息并选择支付方式。</p></div>'
-      + '    <a href="#/recharge" class="btn btn-ghost">返回</a>'
+      + '  <div class="checkout-page-head">'
+      + '    <a href="#/recharge" class="checkout-return">← 返回套餐</a>'
+      + '    <div class="checkout-step">第 2 步 / 3　确认订单</div>'
+      + '    <div><p class="kicker">订单确认</p><h1 class="page-title">确认订单</h1>'
+      + '    <p class="page-sub">核对套餐和支付方式；下单后可在充值订单中持续查看状态。</p></div>'
       + "  </div>"
       + '  <div class="checkout-grid">'
-      + '    <div class="card"><h3 class="card-title">订单信息</h3><div id="checkout-info"><div class="empty">正在加载套餐…</div></div></div>'
-      + '    <div class="card"><h3 class="card-title">选择支付方式</h3>'
+      + '    <div class="card checkout-card"><div class="checkout-card-head"><span>1</span><div><h3 class="card-title">订单信息</h3><p>请核对本次购买内容</p></div></div><div id="checkout-info"><div class="empty">正在加载套餐…</div></div></div>'
+      + '    <div class="card checkout-card"><div class="checkout-card-head"><span>2</span><div><h3 class="card-title">选择支付方式</h3><p>订单创建后将在对应渠道完成支付</p></div></div>'
       + '      <div class="pay-methods" id="pay-methods"></div>'
-      + '      <div class="form-err" id="checkout-err" style="margin-top:12px"></div>'
-      + '      <button class="btn btn-primary btn-lg" id="checkout-submit" style="margin-top:16px">立即支付</button>'
+      + '      <div class="form-err" id="checkout-err"></div>'
       + "    </div>"
       + "  </div>"
+      + '  <div class="checkout-submit-bar"><div><span>应付金额</span><strong id="checkout-total">--</strong><small>订单生成后 30 分钟内有效</small></div>'
+      + '  <button class="btn btn-primary btn-lg" id="checkout-submit">确认订单并去支付 <span>→</span></button></div>'
     );
     mount(html, function (root) {
       bindLogout(root);
@@ -647,8 +661,8 @@
       function renderMethods() {
         var box = document.getElementById("pay-methods");
         var methods = [
-          { id: "alipay", name: "支付宝", desc: "跳转支付宝完成支付" },
-          { id: "wxpay", name: "微信支付", desc: "打开微信扫码完成支付" },
+          { id: "alipay", name: "支付宝", desc: "在支付宝中安全完成支付" },
+          { id: "wxpay", name: "微信支付", desc: "使用微信扫码完成支付" },
         ];
         box.innerHTML = methods.map(function (m) {
           var selected = channel === m.id;
@@ -673,7 +687,7 @@
         if (!pkg) throw new Error("套餐不存在或已下架");
         document.getElementById("checkout-info").innerHTML = ''
           + '<div class="info-rows">'
-          + '  <div class="info-row"><span class="k">商品</span><span class="v">' + esc(pkg.title || pkg.id) + "</span></div>"
+          + '  <div class="info-row"><span class="k">商品名称</span><span class="v">' + esc(pkg.title || pkg.id) + "</span></div>"
           + '  <div class="info-row"><span class="k">支付金额</span><span class="v strong">¥' + fmtMoney(pkg.amountCents) + "</span></div>"
           + '  <div class="info-row"><span class="k">基础积分</span><span class="v">' + fmtCount(pkg.baseCount) + "</span></div>"
           + (Number(pkg.giftCount) > 0 ? '<div class="info-row"><span class="k">赠送积分</span><span class="v">' + fmtCount(pkg.giftCount) + "</span></div>" : "")
@@ -681,6 +695,8 @@
           + '  <div class="info-row"><span class="k">订单号</span><span class="v">支付时自动生成</span></div>'
           + '  <div class="info-row"><span class="k">有效期</span><span class="v">30 分钟</span></div>'
           + "</div>";
+        var totalEl = document.getElementById("checkout-total");
+        if (totalEl) totalEl.textContent = "¥" + fmtMoney(pkg.amountCents);
       }).catch(function (e) {
         document.getElementById("checkout-info").innerHTML = '<div class="empty">' + esc(e.message) + "</div>";
       });
@@ -697,7 +713,7 @@
           })
           .catch(function (e) {
             document.getElementById("checkout-err").textContent = e.message || "创建订单失败";
-            btn.disabled = false; btn.textContent = "立即支付";
+            btn.disabled = false; btn.textContent = "确认订单并去支付 →";
           });
       });
     });

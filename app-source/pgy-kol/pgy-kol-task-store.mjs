@@ -374,6 +374,9 @@ export class PgyKolTaskStore {
         updatedAt: now,
         finishedAt: null,
         pageSize: Number.isSafeInteger(input?.pageSize) ? input.pageSize : 20,
+        maxCount: Number.isSafeInteger(input?.maxCount) && input.maxCount > 0 ? input.maxCount : null,
+        sortColumn: typeof input?.sortColumn === "string" && input.sortColumn.length > 0 ? input.sortColumn : null,
+        sortOrder: input?.sortOrder === "asc" ? "asc" : "desc",
         columns: Array.isArray(input?.columns) ? input.columns.map((column) => String(column)) : [],
         // 两阶段采集：详情阶段字段集合（共享字段弹窗提交的完整 schema 键）。
         // 存在 fields 时任务走“找 ID → 详情采集”编排；legacy 任务无 fields，
@@ -448,6 +451,9 @@ export class PgyKolTaskStore {
         updatedAt: metadata.updatedAt,
         finishedAt: metadata.finishedAt,
         pageSize: metadata.pageSize,
+        maxCount: metadata.maxCount ?? null,
+        sortColumn: metadata.sortColumn ?? null,
+        sortOrder: metadata.sortOrder ?? "desc",
         columns: clone(metadata.columns ?? []),
         fields: clone(metadata.fields ?? []),
         detailTaskId: metadata.detailTaskId ?? null,

@@ -226,13 +226,14 @@ export function validateBatchStartRequest(input) {
     return filterCheck;
   }
 
-  const fields = input.fields;
+  const fields = Array.isArray(input.fields) ? input.fields : Array.isArray(input.columns) ? input.columns : null;
   if (!Array.isArray(fields) || fields.length === 0 || fields.length > PGY_KOL_BATCH_MAX_FIELDS) {
     return invalid(
       "invalid-columns",
       `fields 必须是 1-${PGY_KOL_BATCH_MAX_FIELDS} 项的数组`,
     );
   }
+  const confirmedIds = new Set(listPgyKolConfirmedColumns().map((column) => column.id));
   const seen = new Set();
   for (const field of fields) {
     if (
@@ -246,12 +247,24 @@ export function validateBatchStartRequest(input) {
       return invalid("invalid-columns", "字段名重复");
     }
     seen.add(field);
-    if (!PGY_BLOGGER_SCHEMA_KEYS.has(field)) {
+    if (!PGY_BLOGGER_SCHEMA_KEYS.has(field) && !confirmedIds.has(field)) {
       return invalid("unknown-field", `未知字段: ${field}`);
     }
   }
 
-  const value = { filterState: filterCheck.value, fields };
+  const value = { filterState: filterCheck.value, fields, columns: fields };
+  if (input.maxCount !== undefined && input.maxCount !== null) {
+    if (typeof input.maxCount !== "number" || !Number.isInteger(input.maxCount) || input.maxCount < 1) {
+      return invalid("invalid-max-count", "maxCount 必须是正整数");
+    }
+    value.maxCount = input.maxCount;
+  }
+  if (input.sortColumn !== undefined && input.sortColumn !== null) {
+    value.sortColumn = String(input.sortColumn).trim();
+  }
+  if (input.sortOrder !== undefined && input.sortOrder !== null) {
+    value.sortOrder = input.sortOrder === "asc" ? "asc" : "desc";
+  }
   const pageSize = input.pageSize === undefined || input.pageSize === null ? 20 : input.pageSize;
   if (
     typeof pageSize !== "number" ||
@@ -385,6 +398,38 @@ export function validateFilterState(value) {
       (typeof trackId !== "string" || !PGY_KOL_TRACK_ID_PATTERN.test(trackId))
     ) {
       return invalid("invalid-track-id", "非法 trackId");
+    }
+  }
+  if (Object.hasOwn(value, "column")) {
+    const col = value.column;
+    if (col !== null && col !== undefined && col !== "") {
+      if (typeof col !== "string" || col.length > 64) {
+        return invalid("invalid-sort-column", "column 必须是 1-64 字符的字符串");
+      }
+    }
+  }
+  if (Object.hasOwn(value, "sort")) {
+    const sort = value.sort;
+    if (sort !== null && sort !== undefined && sort !== "") {
+      if (sort !== "desc" && sort !== "asc") {
+        return invalid("invalid-sort-order", "sort 必须是 'desc' 或 'asc'");
+      }
+    }
+  }
+  if (Object.hasOwn(value, "maxCount")) {
+    const maxCount = value.maxCount;
+    if (maxCount !== null && maxCount !== undefined && maxCount !== "") {
+      if (typeof maxCount !== "number" || !Number.isInteger(maxCount) || maxCount < 1) {
+        return invalid("invalid-max-count", "maxCount 必须是正整数");
+      }
+    }
+  }
+  if (Object.hasOwn(value, "columns")) {
+    const cols = value.columns;
+    if (cols !== null && cols !== undefined) {
+      if (!Array.isArray(cols)) {
+        return invalid("invalid-columns", "columns 必须是数组");
+      }
     }
   }
   const budget = { nodes: 0 };

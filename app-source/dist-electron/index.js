@@ -249,12 +249,16 @@ const pgySafeExternalOrigins = new Set([
   "https://www.iesdouyin.com",
   "https://www.xingtu.cn",
   "https://xingtu.cn",
-  "https://magiorix.red-magic.cn"
+  "https://magiorix.red-magic.cn",
+  "http://127.0.0.1:3050",
+  "http://localhost:3050",
+  "http://127.0.0.1:3000",
+  "http://localhost:3000"
 ]);
 function pgyResolveExternal(value, allowedOrigins) {
   try {
     const t = new URL(String(value));
-    if (t.protocol !== "https:" || t.username || t.password || !allowedOrigins.has(t.origin)) return null;
+    if ((t.protocol !== "https:" && t.protocol !== "http:") || t.username || t.password || !allowedOrigins.has(t.origin)) return null;
     return t.href;
   } catch {
     return null;
@@ -17823,6 +17827,8 @@ function en(a, e, t = {}) {
     const r = t[o];
     if (r)
       for (const c of r) s.add(c);
+    if (o === "noteImages")
+      for (const c of Object.keys(a)) c.startsWith("noteImage_") && s.add(c);
   }
   const i = {};
   for (const [o, r] of Object.entries(a))
@@ -18110,7 +18116,67 @@ function pgyWriteSvgPng(a, e) {
   }
   return "";
 }
-const PGY_IMAGE_FIELDS = new Set(Object.values(PYG_CHART_FIELDS)), PGY_CRC_TABLE = (() => {
+const PGY_IMAGE_FIELDS = new Set([...Object.values(PYG_CHART_FIELDS), "coverImage", "noteImages"]);
+function isPgyImageKey(a) {
+  return typeof a == "string" && (PGY_IMAGE_FIELDS.has(a) || a.startsWith("noteImage_"));
+}
+async function pgyFetchImageBuffer(a, e, i) {
+  if (e && e.webContents && typeof e.isDestroyed == "function" && !e.isDestroyed()) {
+    try {
+      const t = await pgyTimeout(e.webContents.executeJavaScript(`(async()=>{
+        const response = await fetch(${JSON.stringify(a)}, {
+          credentials: "include",
+          referrer: "https://pgy.xiaohongshu.com/"
+        });
+        if (!response.ok) return { ok: false, status: response.status };
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        let binary = "";
+        for (let index = 0; index < bytes.length; index += 32768) {
+          binary += String.fromCharCode(...bytes.subarray(index, index + 32768));
+        }
+        return { ok: true, base64: btoa(binary) };
+      })()`, !0), 2e4, "pgy.imageFetch");
+      if (t && t.ok && typeof t.base64 == "string" && t.base64.length > 0) {
+        return Buffer.from(t.base64, "base64");
+      }
+    } catch (t) {
+      j.warn("[notebook-image] 浏览器会话下载失败，回退主进程请求", t);
+    }
+  }
+  const n = {
+      Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      Referer: "https://pgy.xiaohongshu.com/"
+  };
+  if (i && i.cookies && typeof i.cookies.get == "function") {
+    try {
+      const cookies = await i.cookies.get({ url: a });
+      if (Array.isArray(cookies) && cookies.length > 0) {
+        n.Cookie = cookies.map((cookie) => cookie.name + "=" + cookie.value).join("; ");
+      }
+    } catch (t) {
+      j.warn("[notebook-image] 读取图片会话 cookie 失败", t);
+    }
+  }
+  const t = await fetch(a, {
+    headers: n,
+    signal: AbortSignal.timeout(15e3)
+  });
+  if (!t.ok) throw new Error(`HTTP ${t.status}`);
+  return Buffer.from(await t.arrayBuffer());
+}
+async function pgyDownloadImageToFile(a, e, t, i) {
+  try {
+    if (!a || typeof a != "string") return "";
+    const n = await pgyFetchImageBuffer(a, t, i);
+    if (!n || n.length === 0) return "";
+    const s = PgyNativeImage.createFromBuffer(n).toPNG();
+    if (!s || s.length === 0) return "";
+    return Sr(Ja(e), { recursive: !0 }), Zi(e, s), e;
+  } catch (t) {
+    return j.warn(`[notebook-image] 下载图片失败: dest=${e}`, t), "";
+  }
+}
+const PGY_CRC_TABLE = (() => {
   const a = new Uint32Array(256);
   for (let e = 0; e < 256; e++) {
     let t = e;
@@ -20180,35 +20246,73 @@ class hm {
               url: e,
               retryable: g !== "TARGET_NOT_FOUND"
             },
-            errorMessage: `API 返回错误: code=${d.code}, msg=${d.msg}`
-          };
+          errorMessage: `API 返回错误: code=${d.code}, msg=${d.msg}`
+        };
+      }
+      const h = d.data, m = h.userInfo ?? {};
+      const noteType = Number(h.type || (h.videoInfo ? 2 : 1));
+      const imageUrls = [];
+      const imageUrlSet = new Set();
+      const imageUrlOf = (item) => {
+        if (typeof item == "string") return item.trim();
+        if (!item || typeof item != "object") return "";
+        return String(item.url || item.original || item.originUrl || item.imageUrl || item.info?.url || item.info?.original || "").trim();
+      };
+      for (const imageList of [h.imagesList, h.imageList, h.images]) {
+        if (!Array.isArray(imageList)) continue;
+        for (const item of imageList) {
+          const url = imageUrlOf(item);
+          if (url && !imageUrlSet.has(url)) imageUrlSet.add(url), imageUrls.push(url);
         }
-        const h = d.data, m = h.userInfo ?? {}, f = {
-          userId: m.userId,
-          nickname: m.nickName,
-          title: h.title,
-          content: h.content,
-          fansNum: m.fansNum,
-          clickMidNum: m.clickMidNum,
-          mEngagementNum: m.mEngagementNum,
-          picturePrice: m.picturePrice,
-          videoPrice: m.videoPrice,
-          noteId: h.noteId,
-          noteLink: h.noteLink,
-          impNum: h.impNum,
-          readNum: h.readNum,
-          likeNum: h.likeNum,
-          favNum: h.favNum,
-          cmtNum: h.cmtNum,
-          shareNum: h.shareNum,
-          followCnt: h.followCnt,
-          createTime: h.createTime
-        };
-        return {
-          status: "success",
-          data: en(f, r)
-        };
-      } catch (u) {
+      }
+      let localCoverPath = "";
+      const coverUrl = imageUrls[0] || h.videoInfo?.thumbnail || h.videoInfo?.thumbnailUrl || h.videoInfo?.firstFrame || h.videoInfo?.cover || h.videoInfo?.coverUrl || h.videoInfo?.image || h.cover || h.coverUrl || h.image || "";
+      const coverSelected = pgyHasSelectedField(r, "coverImage");
+      const noteImagesSelected = pgyHasSelectedField(r, "noteImages");
+      j.info(`[notebook-image] noteId=${l} type=${noteType} candidates=${imageUrls.length} coverSelected=${coverSelected} noteImagesSelected=${noteImagesSelected}`);
+      if (coverUrl && coverSelected) {
+        const dest = pgyChartFile("note-covers", l + "_cover", "cover");
+        localCoverPath = (await pgyDownloadImageToFile(coverUrl, dest, s, t)) || "";
+      }
+      const noteImgPaths = [];
+      if (noteType === 1 && noteImagesSelected) {
+        for (let idx = 0; idx < imageUrls.length; idx++) {
+          const dest = pgyChartFile("note-images", l + "_img_" + (idx + 1), "img_" + (idx + 1));
+          const saved = await pgyDownloadImageToFile(imageUrls[idx], dest, s, t);
+          if (saved) noteImgPaths.push(saved);
+        }
+      }
+      const f = {
+        userId: m.userId,
+        nickname: m.nickName,
+        title: h.title,
+        content: h.content,
+        coverImage: localCoverPath,
+        noteImages: noteImgPaths,
+        fansNum: m.fansNum,
+        clickMidNum: m.clickMidNum,
+        mEngagementNum: m.mEngagementNum,
+        picturePrice: m.picturePrice,
+        videoPrice: m.videoPrice,
+        noteId: h.noteId,
+        noteLink: h.noteLink,
+        impNum: h.impNum,
+        readNum: h.readNum,
+        likeNum: h.likeNum,
+        favNum: h.favNum,
+        cmtNum: h.cmtNum,
+        shareNum: h.shareNum,
+        followCnt: h.followCnt,
+        createTime: h.createTime
+      };
+      noteImgPaths.forEach((p, idx) => {
+        f[`noteImage_${idx + 1}`] = p;
+      });
+      return {
+        status: "success",
+        data: en(f, r, { noteImages: ["noteImages"] })
+      };
+    } catch (u) {
         if (u instanceof wn)
           return j.warn(`[notebook] cookie 失效: code=${u.code}`), {
             status: "error",
@@ -23080,7 +23184,11 @@ function pgyNextRelId(a) {
   return `rId${e}`;
 }
 function pgyAddContentTypes(a) {
-  return a.includes('Extension="png"') || (a = a.replace("</Types>", '<Default Extension="png" ContentType="image/png"/></Types>')), a.includes('/xl/drawings/drawing1.xml') || (a = a.replace("</Types>", '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>')), a;
+  a.includes('Extension="png"') || (a = a.replace("</Types>", '<Default Extension="png" ContentType="image/png"/></Types>'));
+  a.includes('Extension="jpeg"') || (a = a.replace("</Types>", '<Default Extension="jpeg" ContentType="image/jpeg"/></Types>'));
+  a.includes('Extension="jpg"') || (a = a.replace("</Types>", '<Default Extension="jpg" ContentType="image/jpeg"/></Types>'));
+  a.includes('/xl/drawings/drawing1.xml') || (a = a.replace("</Types>", '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>'));
+  return a;
 }
 function pgySheetRelXml(a, e) {
   if (!a)
@@ -23111,7 +23219,7 @@ function pgyDrawingRelXml(a) {
 }
 function pgyDataWithoutImageText(a, e) {
   const t = Array.isArray(e) ? e : [];
-  const n = new Set((Array.isArray(a) ? a : []).filter((s) => s && PGY_IMAGE_FIELDS.has(s.key)).map((s) => s.key));
+  const n = new Set((Array.isArray(a) ? a : []).filter((s) => s && isPgyImageKey(s.key)).map((s) => s.key));
   return n.size === 0 ? t : t.map((s) => {
     const i = { ...s };
     for (const o of n)
@@ -23123,7 +23231,7 @@ async function pgyEmbedImagesInWorkbook(a, e, t) {
   const n = [];
   for (let s = 0; s < e.length; s++) {
     const i = e[s];
-    if (!PGY_IMAGE_FIELDS.has(i.key)) continue;
+    if (!isPgyImageKey(i.key)) continue;
     for (let o = 0; o < t.length; o++) {
       const r = t[o][i.key];
       typeof r == "string" && r && kt(r) && n.push({ path: r, col: s, row: o + 2, name: `${i.label || i.key}-${o + 1}` });
@@ -23132,14 +23240,68 @@ async function pgyEmbedImagesInWorkbook(a, e, t) {
   if (n.length === 0) return;
   const s = await JSZip.loadAsync(Qi(a));
   n.forEach((o, r) => {
-    o.media = `pgy_chart_${r + 1}.png`, s.file(`xl/media/${o.media}`, Qi(o.path));
+    const ext = Xi.extname(o.path).replace(".", "").toLowerCase() || "png";
+    const mediaExt = ext === "jpg" ? "jpeg" : ext;
+    o.media = `pgy_img_${r + 1}.${mediaExt}`, s.file(`xl/media/${o.media}`, Qi(o.path));
   });
   let i = await s.file("xl/worksheets/sheet1.xml").async("string");
   const o = s.file("xl/worksheets/_rels/sheet1.xml.rels"), r = o ? await o.async("string") : "";
   const c = r.match(/Id="([^"]+)"[^>]*Target="\.\.\/drawings\/drawing1\.xml"/), u = c ? c[1] : pgyNextRelId(r);
   s.file("[Content_Types].xml", pgyAddContentTypes(await s.file("[Content_Types].xml").async("string"))), s.file("xl/worksheets/sheet1.xml", pgyPatchSheetXml(i, u, n)), s.file("xl/worksheets/_rels/sheet1.xml.rels", pgySheetRelXml(r, u)), s.file("xl/drawings/drawing1.xml", pgyDrawingXml(n)), s.file("xl/drawings/_rels/drawing1.xml.rels", pgyDrawingRelXml(n)), Zi(a, await s.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
 }
+function expandNotebookImageHeaders(headers, rows) {
+  const sourceHeaders = Array.isArray(headers) ? headers : [];
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  const hasNoteImages = sourceHeaders.some((h) => h && (h.key === "noteImages" || h.key === "noteImage_1"));
+  if (!hasNoteImages) return { headers: sourceHeaders, rows: sourceRows };
+  let maxCount = 0;
+  for (const r of sourceRows) {
+    if (r && Array.isArray(r.noteImages)) {
+      maxCount = Math.max(maxCount, r.noteImages.length);
+    } else if (r) {
+      let c = 0;
+      while (r[`noteImage_${c + 1}`]) c++;
+      maxCount = Math.max(maxCount, c);
+    }
+  }
+  maxCount = Math.max(1, maxCount);
+  const expandedHeaders = [];
+  for (const h of sourceHeaders) {
+    if (h && (h.key === "noteImages" || h.key === "noteImage_1")) {
+      if (maxCount === 1) {
+        expandedHeaders.push({ group: h.group || "笔记内容", label: "笔记图", key: "noteImage_1" });
+      } else {
+        for (let i = 1; i <= maxCount; i++) {
+          expandedHeaders.push({ group: h.group || "笔记内容", label: `笔记图 ${i}`, key: `noteImage_${i}` });
+        }
+      }
+    } else {
+      expandedHeaders.push(h);
+    }
+  }
+  const expandedRows = sourceRows.map((r) => {
+    if (!r || typeof r !== "object") return r;
+    const next = { ...r };
+    if (Array.isArray(next.noteImages)) {
+      next.noteImages.forEach((img, idx) => {
+        next[`noteImage_${idx + 1}`] = img;
+      });
+    }
+    return next;
+  });
+  return { headers: expandedHeaders, rows: expandedRows };
+}
 async function ff(a) {
+  // pgy notebook direct export canonical payload: 前端缓存可能遗漏 coverImage/noteImages，
+  // 但主进程历史任务保存了完整字段和已下载的本地图片路径，必须以它为准写 Excel。
+  if (typeof (a == null ? void 0 : a.taskId) === "string") {
+    const pgyHistoryTask = await pgyCollectionHistory.getTask(a.taskId).catch(() => null);
+    if (pgyHistoryTask && pgyHistoryTask.pluginId === "pgy" && pgyHistoryTask.taskType === "notebook") {
+      const pgyHistoryRows = await pgyCollectionHistory.getExportRows(a.taskId).catch(() => []);
+      if (Array.isArray(pgyHistoryRows) && pgyHistoryRows.length > 0)
+        a = buildCollectionHistoryExportPayload(pgyHistoryTask, pgyHistoryRows);
+    }
+  }
   // 找博主筛选来源（search-batch）的任务：只有完成且计数收口才允许导出；
   // 纵深防御，防止 running/preparing 时导出只有部分行的 Excel。
   if (typeof (a == null ? void 0 : a.taskId) === "string" && a.taskId.startsWith("pgykol-detail-")) {
@@ -23160,8 +23322,10 @@ async function ff(a) {
   if (e || !t)
     return { success: !1 };
   try {
-    const i = a.data ?? [], n = a.mode === "two-row" ? gf(a.headers ?? [], pgyDataWithoutImageText(a.headers ?? [], i)) : hf(i), s = Ve.utils.book_new();
-    return Ve.utils.book_append_sheet(s, n, "Sheet1"), Ve.writeFile(s, t), a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, a.headers ?? [], i), $i.info(`Excel 已导出: ${pgyRedactLocalPath(String(t))}`), { success: !0, filePath: t };
+    const rawData = a.data ?? [];
+    const { headers: expHeaders, rows: expData } = expandNotebookImageHeaders(a.headers ?? [], rawData);
+    const n = a.mode === "two-row" ? gf(expHeaders, pgyDataWithoutImageText(expHeaders, expData)) : hf(expData), s = Ve.utils.book_new();
+    return Ve.utils.book_append_sheet(s, n, "Sheet1"), Ve.writeFile(s, t), a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, expHeaders, expData), $i.info(`Excel 已导出: ${pgyRedactLocalPath(String(t))}`), { success: !0, filePath: t };
   } catch (n) {
     throw $i.error("Excel 导出失败:", pgyRedactLocalPath(n instanceof Error ? n.message : String(n))), n;
   }
@@ -23220,8 +23384,8 @@ function gf(a, e) {
       u[v] || (u[v] = { v: "", t: "s" }), f <= 1 ? u[v].s = dr : u[v].s = d.has(g) ? fr : mr;
     }
   const h = a.map((f) => f.key), m = gr(e, h);
-  return u["!rows"] = c.map((f, g) => g < 2 ? { hpx: 28 } : a.some((v, y) => PGY_IMAGE_FIELDS.has(v.key) && f[y] && f[y] !== "-") ? { hpx: 112 } : { hpx: 22 }), u["!cols"] = a.map((f, g) => {
-    if (PGY_IMAGE_FIELDS.has(f.key))
+  return u["!rows"] = c.map((f, g) => g < 2 ? { hpx: 28 } : a.some((v, y) => isPgyImageKey(v.key) && f[y] && f[y] !== "-") ? { hpx: 112 } : { hpx: 22 }), u["!cols"] = a.map((f, g) => {
+    if (isPgyImageKey(f.key))
       return { wch: 24 };
     const v = gs(f.label);
     return { wch: hr(v, m[g]) };

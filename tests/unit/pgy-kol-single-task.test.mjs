@@ -29,9 +29,10 @@ function jsonResponse(body, httpStatusCode = 200) {
 }
 
 // 205 个唯一博主，11 页（20×10 + 5），页内无重复，不触发 repeat-page 误停。
-function twoHundredFiveSearch() {
+function twoHundredFiveSearch(requests) {
   return async (opts) => {
     const payload = JSON.parse(opts.body);
+    if (Array.isArray(requests)) requests.push(payload);
     const page = payload.pageNum;
     const startIndex = (page - 1) * 20;
     const count = Math.min(20, 205 - startIndex);
@@ -165,6 +166,7 @@ test("205 位模拟：详情完成 1 位时不可导出；全部完成后一次�
     filterState: {},
     fields: ["nickname", "url", "avg10ReadNum"],
     budgets: { queryBudget: 500 },
+    detailMode: true,
   });
   // 详情任务先于发现完成即存在（preparing，total=0）。
   const preparingTask = await detailRunner.getTask(res.taskId);
@@ -216,6 +218,38 @@ test("205 位模拟：详情完成 1 位时不可导出；全部完成后一次�
   }
 });
 
+test("默认开始采集复用筛选结果快速导出：UID 列隔离且不创建详情任务", async () => {
+  const taskBaseDir = tmpDir("user-id-fast-export");
+  const detailBaseDir = tmpDir("user-id-fast-export-detail");
+  const detailRunner = createFakeDetailRunner({ baseDir: detailBaseDir });
+  const requests = [];
+  const service = createService({
+    taskBaseDir,
+    detailRunner,
+    searchImpl: twoHundredFiveSearch(requests),
+  });
+  const res = await service.batchStart({
+    filterState: { userId: "legacy-export-only-uid" },
+    fields: ["nickname", "userId"],
+    maxCount: 1,
+    budgets: { queryBudget: 10 },
+  });
+  await waitFor(
+    async () => {
+      const task = await service.taskStore.getTask(res.taskId);
+      return task && task.status === "completed" ? task : null;
+    },
+    "快速列表任务完成",
+  );
+  assert.ok(requests.length > 0, "找博主任务必须实际发起搜索请求");
+  assert.equal(requests[0].userId, undefined, "userId 仅是导出列，绝不应发送到搜索接口");
+  const checkpoint = await service.taskStore.getTask(res.taskId);
+  assert.equal(checkpoint.detailTaskId, null, "默认开始采集不得创建逐博主详情任务");
+  const payload = await service.batchExport({ taskId: res.taskId });
+  assert.deepEqual(payload.headers.map((header) => header.key), ["nickname", "userId"], "导出字段仍应完整保留");
+  assert.equal(payload.data.length, 1, "快速导出应遵从最大博主数量");
+});
+
 test("单任务身份：一次启动只有一个 collection-history 记录，checkpoint 不出现在用户历史", async () => {
   const taskBaseDir = tmpDir("identity");
   const detailBaseDir = tmpDir("identity-detail");
@@ -229,6 +263,7 @@ test("单任务身份：一次启动只有一个 collection-history 记录，che
     filterState: {},
     fields: ["nickname", "url"],
     budgets: { queryBudget: 500 },
+    detailMode: true,
   });
   await waitFor(
     async () => {
@@ -268,6 +303,7 @@ test("发现完成前导出被拒绝；preparing 状态不进入导出", async (
     filterState: {},
     fields: ["nickname"],
     budgets: { queryBudget: 500 },
+    detailMode: true,
   });
   try {
     // 发现完成（列表填充 205）但详情尚未完成：导出必须被拒绝。

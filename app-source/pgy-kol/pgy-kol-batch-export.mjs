@@ -42,11 +42,66 @@ function formatCellValue(column, value) {
   return sanitizeExcelValue(formatPgyKolColumnValue(column, value));
 }
 
+function getSortValue(fields, sortCol) {
+  if (!fields || typeof fields !== "object") return null;
+  if (sortCol === "fansNum" || sortCol === "fansCount") {
+    return fields.fansNum !== undefined && fields.fansNum !== null ? fields.fansNum : fields.fansCount;
+  }
+  if (sortCol === "readMidNor30" || sortCol === "clickNum" || sortCol === "clickMidNum") {
+    return fields.readMidNor30 !== undefined && fields.readMidNor30 !== null
+      ? fields.readMidNor30
+      : (fields.clickNum !== undefined && fields.clickNum !== null ? fields.clickNum : fields.clickMidNum);
+  }
+  if (sortCol === "interMidNor30" || sortCol === "mEngagementNum" || sortCol === "interMidNum") {
+    return fields.interMidNor30 !== undefined && fields.interMidNor30 !== null
+      ? fields.interMidNor30
+      : (fields.mEngagementNum !== undefined && fields.mEngagementNum !== null ? fields.mEngagementNum : fields.interMidNum);
+  }
+  if (sortCol === "fansRiseNum" || sortCol === "fans30GrowthRate") {
+    return fields.fansRiseNum !== undefined && fields.fansRiseNum !== null ? fields.fansRiseNum : fields.fans30GrowthRate;
+  }
+  return fields[sortCol];
+}
+
+function parseSortValue(v) {
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v === "number" && !isNaN(v)) return v;
+  const str = String(v).trim().replace(/[元%￥,]/g, "");
+  const num = Number(str);
+  if (!isNaN(num) && str.length > 0) return num;
+  return String(v);
+}
+
 export function buildPgyKolBatchExportPayload(task, rows) {
   const taskId = task && task.taskId !== undefined ? String(task.taskId) : "";
   const fileName = (task && task.fileName) || `${taskId}.xlsx`;
-  const sourceRows = Array.isArray(rows) ? rows : [];
+  let sourceRows = Array.isArray(rows) ? rows.slice() : [];
   const allHeaders = getPgyKolExportHeaders(task && Array.isArray(task.columns) ? task.columns : []);
+
+  const sortCol = (task && task.sortColumn) || (task && task.filterState && task.filterState.column) || null;
+  const sortOrd = (task && task.sortOrder) || (task && task.filterState && task.filterState.sort) || "desc";
+
+  if (sortCol && sortCol !== "comprehensiverank") {
+    sourceRows.sort((a, b) => {
+      const fa = rowFieldsOf(a);
+      const fb = rowFieldsOf(b);
+      const va = parseSortValue(getSortValue(fa, sortCol));
+      const vb = parseSortValue(getSortValue(fb, sortCol));
+      const isNumA = typeof va === "number";
+      const isNumB = typeof vb === "number";
+      if (isNumA && isNumB) {
+        return sortOrd === "asc" ? va - vb : vb - va;
+      }
+      if (isNumA && !isNumB) return -1;
+      if (!isNumA && isNumB) return 1;
+      if (va == null && vb != null) return 1;
+      if (va != null && vb == null) return -1;
+      if (va == null && vb == null) return 0;
+      const strA = String(va);
+      const strB = String(vb);
+      return sortOrd === "asc" ? strA.localeCompare(strB, "zh-CN") : strB.localeCompare(strA, "zh-CN");
+    });
+  }
 
   const present = new Set();
   for (const row of sourceRows) {

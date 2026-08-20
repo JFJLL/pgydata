@@ -177,7 +177,7 @@ export function createPgyKolService({
           // 双重前缀），但未实证字段仍然拒绝发送；trackId 优先使用任务快照中的
           // 搜索上下文（batchStart 已 track），其次随机生成。
           for (const key of Object.keys(state)) {
-            if (key === "searchType" || key === "keyword" || key === "trackId" || key === "brandUserId") {
+            if (key === "searchType" || key === "keyword" || key === "trackId" || key === "brandUserId" || key === "column" || key === "sort" || key === "maxCount" || key === "columns" || key === "userId") {
               continue;
             }
             const field = schema.getFieldByStateKey(key);
@@ -190,7 +190,7 @@ export function createPgyKolService({
               );
             }
           }
-          return {
+          const payloadOut = {
             ...BASE_PAYLOAD,
             ...state,
             pageNum,
@@ -199,6 +199,11 @@ export function createPgyKolService({
               ? state.trackId
               : randomUUID(),
           };
+          delete payloadOut.maxCount;
+          delete payloadOut.columns;
+          // 兼容旧任务快照：导出字段 userId 只能用于结果行身份，分页请求一律剔除。
+          delete payloadOut.userId;
+          return payloadOut;
         },
         planSplit: (filterState) => planner.planSplit({ filterState }),
         analyzePageSequence: (options) => planner.analyzePageSequence(options),
@@ -261,7 +266,21 @@ export function createPgyKolService({
     pageSize = 20,
     trackId,
   } = {}) {
-    const payload = builder.build(filterState || {}, { pageNum, pageSize, trackId });
+    // 排序和采集控制项属于批量任务参数，不属于筛选条件。
+    // 旧版渲染进程可能把这些 UI 字段混入 search 请求；先在服务边界清除，
+    // 防止旧/新前端与主进程版本错配时触发 unknown-field。
+    const searchFilterState =
+      filterState !== null && typeof filterState === "object"
+        ? { ...filterState }
+        : {};
+    delete searchFilterState.column;
+    delete searchFilterState.sort;
+    delete searchFilterState.maxCount;
+    delete searchFilterState.columns;
+    // 兼容旧前端把“博主 UID”导出字段混入筛选状态的情况。userId 只属于
+    // 结果行/导出列，绝不应进入搜索 payload 或触发未知筛选字段错误。
+    delete searchFilterState.userId;
+    const payload = builder.build(searchFilterState, { pageNum, pageSize, trackId });
     const activeSession = session || (sessionProvider ? sessionProvider() : undefined);
     return searchClient.searchWithTrack({ payload, session: activeSession });
   }
@@ -325,9 +344,15 @@ export function createPgyKolService({
    *
    * @returns {Promise<{ taskId: string }>}
    */
-  async function batchStart({ filterState, fields, pageSize = 20, budgets } = {}) {
+  async function batchStart({ filterState, fields, maxCount, sortColumn, sortOrder, pageSize = 20, budgets, detailMode = false } = {}) {
     await ensureTaskStore();
-    const state = filterState !== null && typeof filterState === "object" ? filterState : {};
+    const state = filterState !== null && typeof filterState === "object" ? Object.assign({}, filterState) : {};
+    if (sortColumn) {
+      state.column = sortColumn;
+    }
+    if (sortOrder) {
+      state.sort = sortOrder;
+    }
     const payload0 = builder.build(state, { pageNum: 1, pageSize });
     const normalized = {};
     for (const key of Object.keys(state)) {
@@ -338,7 +363,7 @@ export function createPgyKolService({
       // 消费行为树节点）走 builder 序列化；字符串/数字/字符串数组原样保留。
       // 快照值落盘前做值与路径脱敏（fresh reviewer M2）：已知字段的字符串值
       // 也可能携带本地路径或敏感形态文本，不得原样写入 task.json。
-      const isSpecialKey = key === "searchType" || key === "keyword" || key === "trackId";
+      const isSpecialKey = key === "searchType" || key === "keyword" || key === "trackId" || key === "column" || key === "sort" || key === "maxCount" || key === "columns" || key === "userId";
       const stateField = schema.getFieldByStateKey(key);
       const needsPayloadSerialization =
         containsNodeObject(state[key]) ||
@@ -398,18 +423,26 @@ export function createPgyKolService({
       ...PGY_KOL_DEFAULT_TASK_BUDGETS,
       ...(budgets !== null && typeof budgets === "object" ? budgets : {}),
     };
+    const finalColumns = Array.isArray(fields) && fields.length > 0 ? fields : [];
     const checkpointTaskId = `pgykol-${Date.now().toString(36)}-${randomUUID().replace(/-/g, "").slice(0, 8)}`;
     await taskStore.createTask({
       taskId: checkpointTaskId,
       filterState: normalized,
-      fields,
+      columns: finalColumns,
+      fields: finalColumns,
+      maxCount: Number.isInteger(maxCount) && maxCount > 0 ? maxCount : (Number.isInteger(state.maxCount) && state.maxCount > 0 ? state.maxCount : null),
+      sortColumn: sortColumn || normalized.column || null,
+      sortOrder: sortOrder || normalized.sort || "desc",
       pageSize,
       budgets: mergedBudgets,
     });
-    // 用户可见的“一次完整采集”：立即创建蒲公英博主详情任务（preparing，目标列表
-    // 由后台发现完成后填充）。该任务是唯一进入采集助手/历史/导出的任务；
-    // checkpointTaskId 只是内部发现检查点，不进入用户历史。
-    const detailTaskId = await createSearchBatchDetail(checkpointTaskId, fields);
+    // 默认路径复用“确定筛选”已查询到的博主列表，只做列表分页与 Excel 导出，
+    // 不再把每位博主转为详情页逐个采集。这样 7～8 位结果应在一两秒内完成。
+    // 保留显式 detailMode 仅供将来确有详情字段需求的受控调用，页面默认不传。
+    let detailTaskId = null;
+    if (detailMode === true && finalColumns.length > 0 && detail && typeof detail.create === "function") {
+      detailTaskId = await createSearchBatchDetail(checkpointTaskId, finalColumns);
+    }
     const loop = ensureBatchRunner().start(checkpointTaskId);
     if (loop !== undefined && loop !== null && typeof loop.then === "function") {
       loop
@@ -423,12 +456,11 @@ export function createPgyKolService({
               ),
             );
           taskStore.setStatus(checkpointTaskId, "failed").catch(() => {});
-          settleDetailOnCheckpointFailure(checkpointTaskId).catch(() => {});
         });
     }
-    return detailTaskId
-      ? { taskId: detailTaskId, checkpointTaskId }
-      : { taskId: checkpointTaskId, checkpointTaskId, detailTaskId: null };
+    // 快速列表导出时，对外 ID 即 checkpoint ID，因此进度、完成事件、暂停/取消和
+    // 页面任务卡绑定同一个任务；显式详情模式维持详情任务 ID 的既有 API 语义。
+    return { taskId: detailTaskId || checkpointTaskId, checkpointTaskId, detailTaskId };
   }
 
   /**
@@ -1497,15 +1529,9 @@ export function createPgyKolService({
     if (!task) {
       throw new Error("任务不存在");
     }
-    const fields = Array.isArray(task.fields) ? task.fields : [];
-    // 两阶段任务：最终导出详情阶段采集结果（完整 schema 表头 + 真实值），
-    // 绝不回退到阶段一的搜索列表行（那只会得到大量空单元格）。
-    if (fields.length > 0) {
-      if (!task.detailTaskId) {
-        const error = new Error("详情采集尚未开始，暂无可导出的完整结果");
-        error.kind = "details-not-ready";
-        throw error;
-      }
+    // 只有显式详情模式创建了 detailTaskId 时才走详情任务导出。默认快速列表
+    // 任务同样携带 fields（用于选择 Excel 列），不能因此被误判为“详情未就绪”。
+    if (Array.isArray(task.fields) && task.fields.length > 0 && task.detailTaskId) {
       if (!detail) {
         const error = new Error("详情采集依赖未启用");
         error.kind = "details-not-ready";
@@ -1534,11 +1560,16 @@ export function createPgyKolService({
     if (rows.length === 0) {
       throw new Error("该任务暂无可导出的内容");
     }
+    const sourceRows = Number.isInteger(task.maxCount) && task.maxCount > 0
+      ? rows.slice(0, task.maxCount)
+      : rows;
     // 导出时允许显式指定字段（页面导出弹窗选择）；缺省沿用任务启动时快照列。
     const exportTask = Array.isArray(columns) && columns.length > 0
       ? Object.assign({}, task, { columns })
-      : task;
-    const payload = buildPgyKolBatchExportPayload(exportTask, rows);
+      : Array.isArray(task.columns) && task.columns.length > 0
+      ? task
+      : Object.assign({}, task, { columns: task.fields });
+    const payload = buildPgyKolBatchExportPayload(exportTask, sourceRows);
     if (typeof exporter === "function") {
       return exporter(payload);
     }

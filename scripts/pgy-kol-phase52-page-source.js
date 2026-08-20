@@ -1,6 +1,6 @@
 function pgyKolDevEnabled(){return true}
 
-function pgyKolWithLocalMenu(e){if(!pgyKolDevEnabled()||!Array.isArray(e))return e;var found=false;function visit(list){for(var i=0;i<list.length;i++){var item=list[i];if(!item)continue;if(item.path==="/pgy-kol-search"){item.id=item.id||"pgy-kol-search";item.icon="solar:users-group-rounded-bold-duotone";found=true}if(item.path==="/shumiao/consume-records")item.icon="solar:bill-list-bold-duotone";if(Array.isArray(item.children))visit(item.children)}}visit(e);if(found)return e;return e.concat([{id:"pgy-kol-search",name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"solar:users-group-rounded-bold-duotone"}])}
+function pgyKolWithLocalMenu(e){if(!pgyKolDevEnabled()||!Array.isArray(e))return e;var found=false;function visit(list){for(var i=0;i<list.length;i++){var item=list[i];if(!item)continue;if(item.path==="/pgy-kol-search"){item.id=item.id||"pgy-kol-search";item.icon="solar:users-group-rounded-bold-duotone";found=true}if(item.path==="/shumiao/consume-records")item.icon="solar:bill-list-bold-duotone";if(Array.isArray(item.children))visit(item.children)}}visit(e);if(found)return e;for(var j=0;j<e.length;j++){var parent=e[j];if(parent&&(parent.id==="xhs"||(Array.isArray(parent.children)&&parent.children.some(function(c){return c.path==="/database/xhs/pgy-blog"})))){if(!Array.isArray(parent.children))parent.children=[];var noteIdx=-1;for(var k=0;k<parent.children.length;k++){if(parent.children[k].path==="/database/xhs/pgy-blog"){noteIdx=k;break;}}var kolItem={id:"pgy-kol-search",name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"solar:users-group-rounded-bold-duotone"};if(noteIdx>=0){parent.children.splice(noteIdx+1,0,kolItem);}else{parent.children.push(kolItem);}return e;}}return e.concat([{id:"pgy-kol-search",name:"找博主",path:"/pgy-kol-search",component:"pages/pgy-kol-search/index.tsx",icon:"solar:users-group-rounded-bold-duotone"}])}
 
 function pgyKolNodeKey(n){if(n&&n.uniqueKey)return n.uniqueKey;var v=n&&n.value!==undefined?String(n.value):"",p=n&&n.fullPath?n.fullPath:n&&n.label||"";return v+":"+p}
 
@@ -68,7 +68,7 @@ function pgyKolCreateSearchCoordinator(options){
     inFlightByKey[key]=entry;
     return promise;
   }
-  function startBatch(fields){var api=bridge(),view=snapshot(),appliedKey=appliedRequestSnapshot?pgyKolStableSerialize(appliedRequestSnapshot):null;if(!state.appliedFilter||view.isDirty||!successfulKey||successfulKey!==appliedKey){notice("请先确定筛选并查询");return Promise.resolve({ok:false,blocked:true,error:{code:"filter-not-applied",message:"请先确定筛选并查询"}})}if(!api||typeof api.batchStart!=="function")return Promise.resolve({ok:false,error:{code:"bridge-missing",message:"当前环境不支持批量采集"}});return api.batchStart({filterState:pgyKolClone(appliedRequestSnapshot),fields:pgyKolClone(fields||[])})}
+  function startBatch(fields, maxCount, sortCol, sortOrd){var api=bridge(),view=snapshot(),appliedKey=appliedRequestSnapshot?pgyKolStableSerialize(appliedRequestSnapshot):null;if(!state.appliedFilter||view.isDirty||!successfulKey||successfulKey!==appliedKey){notice("请先确定筛选并查询");return Promise.resolve({ok:false,blocked:true,error:{code:"filter-not-applied",message:"请先确定筛选并查询"}})}if(!api||typeof api.batchStart!=="function")return Promise.resolve({ok:false,error:{code:"bridge-missing",message:"当前环境不支持批量采集"}});var parsedCount = Number.isInteger(maxCount) && maxCount > 0 ? maxCount : null;return api.batchStart({filterState:pgyKolClone(appliedRequestSnapshot),fields:pgyKolClone(fields||[]),columns:pgyKolClone(fields||[]),maxCount:parsedCount,sortColumn:sortCol||"comprehensiverank",sortOrder:sortOrd||"desc"})}
   return {editDraft:editDraft,applyAndSearch:applyAndSearch,startBatch:startBatch,restore:restore,getState:snapshot};
 }
 
@@ -1255,7 +1255,8 @@ function PgyKolMatrixRow(p) {
     children: [
       p.label
         ? o.jsx(w, {
-            sx: { width: 88, flexShrink: 0, fontSize: 13, color: "rgba(0,0,0,.45)", textAlign: "right", lineHeight: "28px" },
+            sx: { width: 88, flexShrink: 0, fontSize: 13, color: p.labelActive ? "#ff2442" : "rgba(0,0,0,.45)", textAlign: "right", lineHeight: "28px", cursor: p.onLabelClick ? "pointer" : "default", userSelect: "none" },
+            onClick: p.onLabelClick,
             children: p.label,
           })
         : null,
@@ -1281,12 +1282,7 @@ function PgyKolField(p) {
 /* ============ Phase 5.2：展示指标弹窗（官网两栏式：可添加列 / 已添加） ============ */
 
 /* ============ 采集字段弹窗：复用蒲公英博主采集的共享 ExportFieldSelector ============ */
-/* 不允许再维护第二套字段弹窗（旧的表格列派生弹窗已删除）。共享选择器位于独立
-   chunk（assets/<version>/assets/index-IS4kgrUy.js 的 E 导出），由下面这个加载器在
-   用户点「开始采集」后动态 import。不能改成静态 import：主 bundle 与共享 chunk 互相
-   依赖（chunk 从主 bundle 取模板 store），静态导入会在模块初始化阶段形成环；运行时
-   动态导入时主 bundle 已完成求值，绑定安全。chunk 文件名由补丁脚本
-   apply-magiorix-frontend-patches.js 解析后替换下面的占位符。 */
+/* 保留旧版共享选择器逻辑供未来备用 */
 var pgyKolFieldSelectorChunkUrl = "__PGY_KOL_EXPORT_FIELD_SELECTOR__";
 var pgyKolFieldSelectorPromise = null;
 var pgyKolFieldSelectorModule = null;
@@ -1306,10 +1302,6 @@ function pgyKolLoadExportFieldSelector() {
   });
   return pgyKolFieldSelectorPromise;
 }
-/* 包装器：只负责按 PgyTaskPanel 蒲公英博主采集的同一套参数挂载共享组件。
-   platform/schema 复用主 bundle 的完整蒲公英 blogger schema（n5(Vt,"blogger")，
-   即公开导出 r 与插件常量 Vt="pgy"，schema 为公开导出 Z/局部符号 t5），
-   绝不复制 schema，也绝不从表格 columnList/selectedColumns 推导字段。 */
 function PgyKolSharedFieldSelector(p) {
   var cfg = n5(Vt, "blogger") || { platform: "pgy-blogger", schema: { platform: "pgy", groups: [] } };
   var tickState = m.useState(0), bump = tickState[1];
@@ -1339,8 +1331,317 @@ function PgyKolSharedFieldSelector(p) {
   return o.jsx(pgyKolFieldSelectorModule, { open: p.open, platform: cfg.platform, schema: cfg.schema, title: "选择采集字段", warningText: "勾选字段过多会显著增加采集时间，且可能触发平台风控。建议按需勾选。", onClose: p.onClose, onSubmit: p.onSubmit });
 }
 
-function pgyKolTaskElapsed(startedAt) {
-  var seconds = startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0;
+
+var pgyKolSortOptions = [
+  { value: "comprehensiverank", label: "综合排序" },
+  { value: "fansNum", label: "粉丝数" },
+  { value: "fansActiveIn28dLv", label: "活跃粉丝占比" },
+  { value: "readMidNor30", label: "阅读中位数" },
+  { value: "interMidNor30", label: "互动中位数" },
+  { value: "picturePrice", label: "图文报价" },
+  { value: "videoPrice", label: "视频报价" },
+  { value: "accumCommonImpMedinNum30d", label: "曝光中位数" },
+  { value: "thousandLikePercent30", label: "千赞笔记比例" },
+  { value: "hundredLikePercent30", label: "百赞笔记比例" },
+  { value: "accumCoopImpMedinNum30d", label: "合作曝光中位数" },
+  { value: "readMidCoop30", label: "合作阅读中位数" },
+  { value: "interMidCoop30", label: "合作互动中位数" },
+  { value: "kliveCnt30d", label: "近30天直播场次" },
+  { value: "avgLiveViewerNum", label: "场均观播人数" },
+  { value: "avgAgmv90d", label: "场均销售额" }
+];
+
+var pgyKolExportFieldGroups = [
+  {
+    group: "本地信息",
+    fields: [
+      { id: "nickname", label: "昵称 (必选)", required: true },
+      { id: "userId", label: "博主UID" },
+      { id: "redId", label: "小红书号" },
+      { id: "location", label: "地区" },
+      { id: "gender", label: "性别" },
+      { id: "avatar", label: "头像" },
+      { id: "currentLevel", label: "健康等级" }
+    ]
+  },
+  {
+    group: "报价数据",
+    fields: [
+      { id: "picturePrice", label: "图文报价" },
+      { id: "videoPrice", label: "视频报价" }
+    ]
+  },
+  {
+    group: "账号数据",
+    fields: [
+      { id: "fansNum", label: "粉丝数" },
+      { id: "fansRiseNum", label: "粉丝量变化幅度" },
+      { id: "fansActiveIn28dLv", label: "活跃粉丝占比" },
+      { id: "interactionRate30", label: "互动粉丝占比" }
+    ]
+  },
+  {
+    group: "直播数据",
+    fields: [
+      { id: "kliveCnt30d", label: "近30天直播场次" },
+      { id: "avgLiveViewerNum", label: "场均观播人数" },
+      { id: "avgAgmv90d", label: "场均销售额" }
+    ]
+  },
+  {
+    group: "日常30天",
+    fields: [
+      { id: "accumCommonImpMedinNum30d", label: "曝光中位数" },
+      { id: "readMidNor30", label: "阅读中位数" },
+      { id: "interMidNor30", label: "互动中位数" },
+      { id: "thousandLikePercent30", label: "千赞比例" },
+      { id: "hundredLikePercent30", label: "百赞比例" },
+      { id: "accumPicCommonImpMedinNum30d", label: "图文曝光中位数" },
+      { id: "pictureClickMidNum", label: "图文阅读中位数" },
+      { id: "pictureInterMidNum", label: "图文互动中位数" },
+      { id: "pictureThousandLikePercent30", label: "图文千赞比例" },
+      { id: "pictureHundredLikePercent30", label: "图文百赞比例" },
+      { id: "accumVideoCommonImpMedinNum30d", label: "视频曝光中位数" },
+      { id: "videoClickMidNum", label: "视频阅读中位数" },
+      { id: "videoInterMidNum", label: "视频互动中位数" },
+      { id: "videoThousandLikePercent30", label: "视频千赞比例" },
+      { id: "videoHundredLikePercent30", label: "视频百赞比例" },
+      { id: "videoFinishRate", label: "视频完播率" }
+    ]
+  },
+  {
+    group: "合作数据",
+    fields: [
+      { id: "accumCoopImpMedinNum30d", label: "曝光中位数（合作）" },
+      { id: "readMidCoop30", label: "阅读中位数（合作）" },
+      { id: "interMidCoop30", label: "互动中位数（合作）" },
+      { id: "overflowNum", label: "外溢进店中位数" },
+      { id: "estimatePictureCpm", label: "预估图文CPM" },
+      { id: "pictureReadCost", label: "预估阅读单价(图文)" },
+      { id: "pictureCpcPerPrice", label: "预估互动单价(图文)" },
+      { id: "estimateVideoCpm", label: "预估视频CPM" },
+      { id: "videoReadCost", label: "预估阅读单价(视频)" },
+      { id: "videoCpcPerPrice", label: "预估互动单价(视频)" }
+    ]
+  },
+  {
+    group: "其他指标",
+    fields: [
+      { id: "inviteReply48hNumRatio", label: "邀约48h回复率" }
+    ]
+  }
+];
+
+function pgyKolGetAllExportFieldKeys() {
+  var list = [];
+  pgyKolExportFieldGroups.forEach(function (g) {
+    g.fields.forEach(function (f) {
+      list.push(f.id);
+    });
+  });
+  return list;
+}
+
+function PgyKolExportFieldModal(p) {
+  var allKeys = pgyKolGetAllExportFieldKeys();
+  var selState = m.useState(allKeys.slice()), selected = selState[0], setSelected = selState[1];
+  var countState = m.useState(""), maxCount = countState[0], setMaxCount = countState[1];
+  var colState = m.useState("comprehensiverank"), sortCol = colState[0], setSortCol = colState[1];
+  var ordState = m.useState("desc"), sortOrd = ordState[0], setSortOrd = ordState[1];
+
+  m.useEffect(function () {
+    if (!p.open) return;
+    setSelected(allKeys.slice());
+    if (p.totalAvailable && Number.isFinite(p.totalAvailable)) {
+      setMaxCount(String(Math.min(5000, p.totalAvailable)));
+    } else {
+      setMaxCount("");
+    }
+  }, [p.open, p.totalAvailable]);
+
+  if (!p.open) return null;
+
+  var toggleField = function (id) {
+    if (id === "nickname") return;
+    setSelected(function (prev) {
+      var idx = prev.indexOf(id);
+      return idx >= 0 ? prev.slice(0, idx).concat(prev.slice(idx + 1)) : prev.concat([id]);
+    });
+  };
+
+  var toggleGroup = function (group) {
+    var gKeys = group.fields.map(function (f) { return f.id; });
+    var allChecked = gKeys.every(function (k) { return selected.indexOf(k) >= 0; });
+    setSelected(function (prev) {
+      if (allChecked) {
+        return prev.filter(function (k) { return k === "nickname" || gKeys.indexOf(k) < 0; });
+      }
+      var next = prev.slice();
+      gKeys.forEach(function (k) {
+        if (next.indexOf(k) < 0) next.push(k);
+      });
+      return next;
+    });
+  };
+
+  var selectAll = function () {
+    setSelected(allKeys.slice());
+  };
+
+  var invertSelect = function () {
+    setSelected(function (prev) {
+      var next = ["nickname"];
+      allKeys.forEach(function (k) {
+        if (k !== "nickname" && prev.indexOf(k) < 0) next.push(k);
+      });
+      return next;
+    });
+  };
+
+  var resetSelect = function () {
+    setSelected(allKeys.slice());
+  };
+
+  var handleConfirm = function () {
+    if (selected.length === 0) return;
+    var parsed = parseInt(maxCount, 10);
+    var finalCount = Number.isInteger(parsed) && parsed > 0 ? Math.min(5000, parsed) : null;
+    p.onSubmit(selected.slice(), finalCount, sortCol, sortOrd);
+  };
+
+  return o.jsxs(ue, {
+    open: p.open,
+    onClose: p.onClose,
+    maxWidth: "md",
+    fullWidth: true,
+    children: [
+      o.jsxs(be, {
+        sx: { display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 },
+        children: [
+          o.jsx(w, { variant: "h6", fontWeight: 700, children: "选择采集字段" }),
+          o.jsx(te, { size: "small", onClick: p.onClose, children: o.jsx(B, { icon: "mdi:close", width: 20, height: 20 }) }),
+        ],
+      }),
+      o.jsxs(pe, {
+        sx: { pt: 1, pb: 2 },
+        children: [
+          o.jsx(oe, {
+            severity: "warning",
+            sx: { borderRadius: 1, mb: 1.5, fontSize: 13, "& .MuiAlert-message": { py: 0.25 } },
+            children: "勾选字段过多会增加单次请求数据量。支持自定义选择导出指标、排序规则与采集数量。",
+          }),
+          o.jsxs(x, {
+            sx: { display: "flex", alignItems: "center", gap: 2, mb: 1.5, p: 1.5, bgcolor: "#f8fafc", borderRadius: 1.5, border: "1px solid #e2e8f0", flexWrap: "wrap" },
+            children: [
+              o.jsxs(x, {
+                sx: { display: "inline-flex", alignItems: "center", gap: 0.75 },
+                children: [
+                  o.jsx(w, { sx: { fontSize: 13, fontWeight: 600, color: "#334155" }, children: "采集数量：" }),
+                  o.jsx(ae, {
+                    size: "small",
+                    type: "number",
+                    placeholder: p.totalAvailable ? "默认 " + Math.min(5000, p.totalAvailable) + " 条" : "最多5000条",
+                    value: maxCount,
+                    onChange: function (e) { setMaxCount(e.target.value); },
+                    sx: { width: 130, bgcolor: "#fff", "& .MuiInputBase-input": { py: 0.6, px: 1, fontSize: 13 } },
+                  }),
+                  o.jsx(w, { sx: { fontSize: 12, color: "#64748b" }, children: "条" }),
+                ],
+              }),
+              o.jsxs(x, {
+                sx: { display: "inline-flex", alignItems: "center", gap: 0.75 },
+                children: [
+                  o.jsx(w, { sx: { fontSize: 13, fontWeight: 600, color: "#334155" }, children: "排序依据：" }),
+                  o.jsx("select", {
+                    value: sortCol,
+                    onChange: function (e) { setSortCol(e.target.value); },
+                    style: { padding: "5px 10px", fontSize: 13, borderRadius: 6, border: "1px solid #cbd5e1", outline: "none", background: "#fff", color: "#1e293b", cursor: "pointer", height: 32 },
+                    children: pgyKolSortOptions.map(function (opt) {
+                      return o.jsx("option", { key: opt.value, value: opt.value, children: opt.label });
+                    }),
+                  }),
+                  o.jsx($, {
+                    size: "small",
+                    variant: "outlined",
+                    onClick: function () { setSortOrd(sortOrd === "asc" ? "desc" : "asc"); },
+                    sx: { minWidth: 64, height: 32, px: 1, fontSize: 12, borderRadius: 1.5, borderColor: "#cbd5e1", color: "#334155" },
+                    children: sortOrd === "asc" ? "升序 ↑" : "降序 ↓",
+                  }),
+                ],
+              }),
+              o.jsxs(x, {
+                sx: { ml: "auto", display: "flex", gap: 1 },
+                children: [
+                  o.jsx($, { size: "small", variant: "text", onClick: selectAll, sx: { fontSize: 12, minWidth: 0, color: "primary.main" }, children: "全选" }),
+                  o.jsx($, { size: "small", variant: "text", onClick: invertSelect, sx: { fontSize: 12, minWidth: 0, color: "text.secondary" }, children: "反选" }),
+                ],
+              }),
+            ],
+          }),
+          o.jsx(x, {
+            sx: { maxHeight: 420, overflowY: "auto", pr: 0.5 },
+            children: pgyKolExportFieldGroups.map(function (g) {
+              var gKeys = g.fields.map(function (f) { return f.id; });
+              var gChecked = gKeys.every(function (k) { return selected.indexOf(k) >= 0; });
+              var gIndet = !gChecked && gKeys.some(function (k) { return selected.indexOf(k) >= 0; });
+              return o.jsxs(x, {
+                key: g.group,
+                sx: { mb: 2 },
+                children: [
+                  o.jsxs(x, {
+                    sx: { display: "flex", alignItems: "center", gap: 0.75, cursor: "pointer", pb: 0.75, borderBottom: "1px solid #f1f5f9" },
+                    onClick: function () { toggleGroup(g); },
+                    children: [
+                      o.jsx(x, {
+                        sx: { width: 16, height: 16, borderRadius: 0.5, border: "1px solid", borderColor: gChecked || gIndet ? "primary.main" : "#cbd5e1", bgcolor: gChecked ? "primary.main" : gIndet ? "primary.light" : "transparent", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: "bold" },
+                        children: gChecked ? "✓" : gIndet ? "−" : null,
+                      }),
+                      o.jsx(w, { sx: { fontSize: 13, fontWeight: 700, color: "#1e293b" }, children: g.group }),
+                    ],
+                  }),
+                  o.jsx(x, {
+                    sx: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 0.75, pt: 1, pl: 2.5 },
+                    children: g.fields.map(function (f) {
+                      var isSel = selected.indexOf(f.id) >= 0;
+                      var isReq = !!f.required;
+                      return o.jsxs(x, {
+                        key: f.id,
+                        sx: { display: "flex", alignItems: "center", gap: 0.75, cursor: isReq ? "default" : "pointer", py: 0.25 },
+                        onClick: function () { toggleField(f.id); },
+                        children: [
+                          o.jsx(x, {
+                            sx: { width: 15, height: 15, borderRadius: 0.5, border: "1px solid", borderColor: isSel ? "primary.main" : "#cbd5e1", bgcolor: isSel ? "primary.main" : "transparent", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10 },
+                            children: isSel ? "✓" : null,
+                          }),
+                          o.jsx(w, { sx: { fontSize: 13, color: isReq ? "#64748b" : isSel ? "#0f172a" : "#475569" }, children: f.label }),
+                        ],
+                      });
+                    }),
+                  }),
+                ],
+              });
+            }),
+          }),
+        ],
+      }),
+      o.jsxs(_e, {
+        sx: { px: 3, py: 1.5, borderTop: "1px solid #f1f5f9", display: "flex", alignItems: "center" },
+        children: [
+          o.jsx($, { size: "small", variant: "text", onClick: resetSelect, sx: { color: "text.secondary", fontSize: 13 }, children: "重置字段" }),
+          o.jsx(w, { sx: { fontSize: 13, color: "text.secondary", ml: 1 }, children: "已选 " + selected.length + " 项" }),
+          o.jsx(x, { sx: { flexGrow: 1 } }),
+          o.jsx($, { onClick: p.onClose, sx: { mr: 1 }, children: "取消" }),
+          o.jsx($, { variant: "contained", sx: { bgcolor: "#ff2442", "&:hover": { bgcolor: "#e01e38" } }, disabled: selected.length === 0, onClick: handleConfirm, children: "开始采集" }),
+        ],
+      }),
+    ],
+  });
+}
+
+function pgyKolTaskElapsed(startedAt, finishedAt) {
+  if (!startedAt) return "0秒";
+  var end = (finishedAt && typeof finishedAt === "number") ? finishedAt : Date.now();
+  var seconds = Math.max(0, Math.floor((end - startedAt) / 1000));
   return seconds < 60 ? seconds + "秒" : Math.floor(seconds / 60) + "分" + (seconds % 60) + "秒";
 }
 
@@ -1348,32 +1649,44 @@ function PgyKolSearchTaskCard(p) {
   var task = p.task;
   if (!task) return null;
   var completed = task.status === "completed";
+  var paused = task.status === "paused" || !!task.paused;
+  var running = task.status === "running" && !paused;
   var stopped = ["failed", "cancelled", "interrupted", "auth_expired"].indexOf(task.status) >= 0;
   var total = Number(task.total || task.estimateTotal || 0);
-  var current = Number(task.current || 0);
+  var current = Number(task.current || task.success || 0);
   var percent = completed ? 100 : total > 0 ? Math.max(0, Math.min(100, Math.round(current / total * 100))) : 0;
-  var progressText = total > 0 ? current + "/" + total : task.discovered ? "已发现 " + task.discovered : "正在准备采集";
-  var statusText = completed ? "已完成" : stopped ? "已停止" : task.paused ? "已暂停" : "采集中";
+  var progressText = total > 0 ? current + "/" + total : task.discovered ? "已发现 " + task.discovered : current > 0 ? "已采集 " + current : "正在准备采集";
+  var statusText = completed ? "已完成" : paused ? "已暂停" : running ? "采集中" : task.status === "cancelled" ? "已取消" : "已停止";
+
   return o.jsxs(x, {
-    sx: { mt: 1.5, mb: 1.5, p: 2.5, border: "2px solid", borderColor: completed ? "#00c46a" : stopped ? "#ef5350" : "#31b86b", borderRadius: 2, bgcolor: "#fff", boxShadow: "0 8px 24px rgba(15,23,42,.06)" },
+    sx: { mt: 1.5, mb: 1.5, p: 2.5, border: "2px solid", borderColor: completed ? "#00c46a" : paused ? "#f59e0b" : stopped ? "#ef5350" : "#31b86b", borderRadius: 2, bgcolor: "#fff", boxShadow: "0 8px 24px rgba(15,23,42,.06)" },
     children: [
       o.jsxs(x, { sx: { display: "flex", alignItems: "center", gap: 1.25 }, children: [
         o.jsx(B, { icon: "solar:file-text-bold-duotone", width: 24, height: 24, style: { color: "#536471" } }),
         o.jsx(w, { sx: { fontSize: 15, fontWeight: 600 }, children: task.fileName || "找博主采集结果.xlsx" }),
-        o.jsx(f1, { size: "small", color: completed ? "success" : stopped ? "error" : task.paused ? "warning" : "success", icon: o.jsx(B, { icon: completed ? "solar:check-circle-bold" : stopped ? "solar:danger-circle-bold" : task.paused ? "solar:pause-circle-bold" : "svg-spinners:pulse-3", width: 16 }), label: statusText, sx: { ml: "auto", fontWeight: 700 } }),
-        o.jsx(te, { size: "small", "aria-label": "关闭采集进度", onClick: p.onClose, sx: { color: "text.secondary" }, children: o.jsx(B, { icon: "solar:close-circle-bold", width: 20, height: 20 }) }),
+        o.jsx(f1, { size: "small", color: completed ? "success" : paused ? "warning" : stopped ? "error" : "success", icon: o.jsx(B, { icon: completed ? "solar:check-circle-bold" : paused ? "solar:pause-circle-bold" : stopped ? "solar:danger-circle-bold" : "svg-spinners:pulse-3", width: 16 }), label: statusText, sx: { ml: "auto", fontWeight: 700 } }),
+        (completed || stopped) ? o.jsx(te, { size: "small", "aria-label": "关闭采集卡片", onClick: p.onClose, sx: { color: "text.secondary" }, children: o.jsx(B, { icon: "solar:close-circle-bold", width: 20, height: 20 }) }) : null,
       ] }),
       o.jsxs(x, { sx: { display: "flex", alignItems: "center", mt: 2, mb: .75 }, children: [
         o.jsx(w, { sx: { fontSize: 14, color: "text.secondary" }, children: "采集进度" }),
-        o.jsx(w, { sx: { ml: "auto", fontSize: 14, fontWeight: 700, color: completed ? "#00b862" : "#31a765" }, children: percent + "%" }),
+        o.jsx(w, { sx: { ml: "auto", fontSize: 14, fontWeight: 700, color: completed ? "#00b862" : paused ? "#f59e0b" : "#31a765" }, children: percent + "%" }),
       ] }),
-      o.jsx(x, { sx: { height: 10, borderRadius: 99, overflow: "hidden", bgcolor: "#e8f5ed" }, children: o.jsx(x, { sx: { height: "100%", width: percent + "%", minWidth: !completed && !stopped ? 8 : 0, borderRadius: 99, background: "linear-gradient(90deg,#63c779,#31a65b)", transition: "width .35s ease" } }) }),
+      o.jsx(x, { sx: { height: 10, borderRadius: 99, overflow: "hidden", bgcolor: "#e8f5ed" }, children: o.jsx(x, { sx: { height: "100%", width: percent + "%", minWidth: !completed && !stopped ? 8 : 0, borderRadius: 99, background: completed ? "linear-gradient(90deg,#63c779,#31a65b)" : paused ? "linear-gradient(90deg,#fbbf24,#f59e0b)" : "linear-gradient(90deg,#63c779,#31a65b)", transition: "width .35s ease" } }) }),
       o.jsxs(x, { sx: { display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap", mt: 2, color: "text.secondary" }, children: [
         o.jsxs(x, { sx: { display: "flex", alignItems: "center", gap: .75 }, children: [o.jsx(B, { icon: "solar:chart-square-bold-duotone", width: 20 }), o.jsx(w, { sx: { fontSize: 14 }, children: "进度：" }), o.jsx(w, { sx: { fontSize: 14, fontWeight: 700, color: "text.primary" }, children: progressText })] }),
-        o.jsxs(x, { sx: { display: "flex", alignItems: "center", gap: .75 }, children: [o.jsx(B, { icon: "solar:clock-circle-bold-duotone", width: 20 }), o.jsx(w, { sx: { fontSize: 14 }, children: "已用时间：" }), o.jsx(w, { sx: { fontSize: 14, fontWeight: 700, color: "text.primary" }, children: pgyKolTaskElapsed(task.startedAt) })] }),
-        o.jsxs(x, { sx: { display: "flex", alignItems: "center", gap: .75 }, children: [o.jsx(B, { icon: "solar:check-circle-bold-duotone", width: 20 }), o.jsx(w, { sx: { fontSize: 14 }, children: "成功：" }), o.jsx(w, { sx: { fontSize: 14, fontWeight: 700, color: "#00b862" }, children: Number(task.success || 0) })] }),
+        o.jsxs(x, { sx: { display: "flex", alignItems: "center", gap: .75 }, children: [o.jsx(B, { icon: "solar:clock-circle-bold-duotone", width: 20 }), o.jsx(w, { sx: { fontSize: 14 }, children: "已用时间：" }), o.jsx(w, { sx: { fontSize: 14, fontWeight: 700, color: "text.primary" }, children: pgyKolTaskElapsed(task.startedAt, task.finishedAt) })] }),
+        o.jsxs(x, { sx: { display: "flex", alignItems: "center", gap: .75 }, children: [o.jsx(B, { icon: "solar:check-circle-bold-duotone", width: 20 }), o.jsx(w, { sx: { fontSize: 14 }, children: "成功：" }), o.jsx(w, { sx: { fontSize: 14, fontWeight: 700, color: "#00b862" }, children: current })] }),
       ] }),
-      completed && Number(task.success || 0) > 0 ? o.jsx($, { variant: "contained", color: "success", onClick: p.onDownload, disabled: p.downloadBusy, startIcon: p.downloadBusy ? o.jsx(de, { size: 17, color: "inherit" }) : o.jsx(B, { icon: "solar:download-minimalistic-bold-duotone", width: 19 }), sx: { mt: 2, px: 2.25, borderRadius: 99, fontWeight: 700, boxShadow: "0 8px 20px rgba(0,196,106,.18)" }, children: p.downloadBusy ? "正在下载..." : "下载采集结果" }) : null,
+      o.jsxs(x, { sx: { display: "flex", alignItems: "center", gap: 1.5, pt: 2, flexWrap: "wrap" }, children: [
+        running ? o.jsx($, { variant: "outlined", color: "warning", size: "small", onClick: p.onPause, startIcon: o.jsx(B, { icon: "solar:pause-bold", width: 16 }), sx: { borderRadius: 2, fontWeight: 600 }, children: "暂停" }) : null,
+        paused ? o.jsxs(o.Fragment, { children: [
+          o.jsx($, { variant: "contained", color: "primary", size: "small", onClick: p.onResume, startIcon: o.jsx(B, { icon: "solar:play-bold", width: 16 }), sx: { borderRadius: 2, fontWeight: 600 }, children: "继续" }),
+          current > 0 ? o.jsx($, { variant: "outlined", color: "success", size: "small", onClick: p.onDownload, disabled: p.downloadBusy, startIcon: p.downloadBusy ? o.jsx(de, { size: 16, color: "inherit" }) : o.jsx(B, { icon: "solar:download-bold", width: 16 }), sx: { borderRadius: 2, fontWeight: 600 }, children: p.downloadBusy ? "正在导出..." : "下载已采集" }) : null,
+          o.jsx($, { variant: "outlined", color: "error", size: "small", onClick: p.onCancel, startIcon: o.jsx(B, { icon: "solar:close-circle-bold", width: 16 }), sx: { borderRadius: 2, fontWeight: 600 }, children: "取消任务" }),
+        ] }) : null,
+        completed && current > 0 ? o.jsx($, { variant: "contained", color: "success", size: "small", onClick: p.onDownload, disabled: p.downloadBusy, startIcon: p.downloadBusy ? o.jsx(de, { size: 17, color: "inherit" }) : o.jsx(B, { icon: "solar:download-minimalistic-bold-duotone", width: 19 }), sx: { borderRadius: 99, fontWeight: 700, px: 2.25, boxShadow: "0 8px 20px rgba(0,196,106,.18)" }, children: p.downloadBusy ? "正在下载..." : "下载采集结果" }) : null,
+        (stopped || completed) && o.jsx($, { variant: "text", color: "inherit", size: "small", onClick: p.onClose, sx: { borderRadius: 2, color: "text.secondary" }, children: "关闭卡片" }),
+      ] }),
       p.downloadNotice ? o.jsx(oe, { severity: p.downloadNotice.severity || "info", sx: { mt: 1.5 }, onClose: p.onClearNotice, children: p.downloadNotice.message }) : null,
       task.message ? o.jsx(oe, { severity: stopped ? "error" : "info", sx: { mt: 1.5 }, children: task.message }) : null,
     ],
@@ -1432,17 +1745,43 @@ function PgyKolSearchPage() {
   var searchCoordinator = coordinatorRef.current;
   function setFilter(next) { return searchCoordinator.editDraft(next); }
 
+  var pauseBatchTask = function () {
+    if (!batchTask || !batchTask.id) return;
+    var pgyKolBridge = window.bridge && window.bridge.pgyKol;
+    if (pgyKolBridge && typeof pgyKolBridge.batchPause === "function") {
+      pgyKolBridge.batchPause({ taskId: batchTask.id });
+      setBatchTask(function (prev) { return Object.assign({}, prev || {}, { paused: true, status: "paused" }); });
+    }
+  };
+
+  var resumeBatchTask = function () {
+    if (!batchTask || !batchTask.id) return;
+    var pgyKolBridge = window.bridge && window.bridge.pgyKol;
+    if (pgyKolBridge && typeof pgyKolBridge.batchResume === "function") {
+      pgyKolBridge.batchResume({ taskId: batchTask.id });
+      setBatchTask(function (prev) { return Object.assign({}, prev || {}, { paused: false, status: "running" }); });
+    }
+  };
+
+  var cancelBatchTask = function () {
+    if (!batchTask || !batchTask.id) return;
+    var pgyKolBridge = window.bridge && window.bridge.pgyKol;
+    if (pgyKolBridge && typeof pgyKolBridge.batchCancel === "function") {
+      pgyKolBridge.batchCancel({ taskId: batchTask.id });
+      setBatchTask(function (prev) { return Object.assign({}, prev || {}, { status: "cancelled", paused: false }); });
+    }
+  };
+
   function downloadBatchTask() {
     if (!batchTask || !batchTask.id || downloadBusyRef.current) return;
-    var historyApi = window.bridge && window.bridge.scraper && window.bridge.scraper.history;
-    if (!historyApi || typeof historyApi.exportTask !== "function") {
-      setDownloadNotice({ severity: "error", message: "当前环境不支持下载采集结果" });
-      return;
-    }
+    var pgyKolBridge = window.bridge && window.bridge.pgyKol;
     downloadBusyRef.current = true;
     setDownloadBusy(true);
     setDownloadNotice({ severity: "info", message: "正在生成 Excel，请稍候…" });
-    Promise.resolve(historyApi.exportTask(batchTask.id)).then(function (result) {
+    var exportPromise = (pgyKolBridge && typeof pgyKolBridge.batchExport === "function")
+      ? pgyKolBridge.batchExport({ taskId: batchTask.id })
+      : Promise.reject(new Error("当前环境不支持导出"));
+    Promise.resolve(exportPromise).then(function (result) {
       if (result && result.success === false) throw new Error(result.message || "下载失败");
       setDownloadNotice({ severity: "success", message: result && result.filePath ? "采集结果已保存到：" + result.filePath : "采集结果已下载" });
     }).catch(function (err) {
@@ -1453,104 +1792,51 @@ function PgyKolSearchPage() {
     });
   }
 
-  /* 路由级宽内容标记：只在找博主页存在时由外层收起重复二级导航，
-   * 全局平台主导航不在本组件的职责范围内。 */
+  /* 保持标准小红书二级导航与布局 */
   m.useEffect(function () {
-    document.documentElement.classList.add("magiorix-pgy-kol-wide");
-    /* 二级导航没有稳定的 class（构建时会 hash），只按它同时拥有的两条
-     * 蒲公英采集入口定位。最左侧平台主导航不含这两个入口，因此不会被隐藏。 */
-    var hidden = null;
-    function closestCollectorNav() {
-      var blogger = null, note = null;
-      var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
-      var textNode;
-      while ((textNode = walker.nextNode())) {
-        var text = (textNode.nodeValue || "").trim();
-        if (text === "蒲公英博主采集") blogger = textNode.parentElement;
-        if (text === "蒲公英笔记采集") note = textNode.parentElement;
-      }
-      if (!blogger || !note) return null;
-      var common = null;
-      for (var el = blogger.parentElement; el && el !== document.body; el = el.parentElement) {
-        if (el.contains(note)) { common = el; break; }
-      }
-      if (!common) return null;
-      var widthOwner = null;
-      for (var cur = common; cur && cur !== document.body; cur = cur.parentElement) {
-        var inlineWidth = cur.style && cur.style.width ? parseFloat(cur.style.width) : NaN;
-        var rectWidth = typeof cur.getBoundingClientRect === "function" ? Number(cur.getBoundingClientRect().width) : NaN;
-        var computedWidth = NaN;
-        if (window.getComputedStyle) {
-          var computed = window.getComputedStyle(cur);
-          computedWidth = computed ? parseFloat(computed.width) : NaN;
-        }
-        var width = Number.isFinite(inlineWidth) ? inlineWidth : Number.isFinite(rectWidth) && rectWidth > 0 ? rectWidth : computedWidth;
-        if (Number.isFinite(width) && width >= 140 && width <= 280) widthOwner = cur;
-        if (widthOwner && Number.isFinite(width) && width > 360) break;
-      }
-      return widthOwner || common;
-    }
-    function applyWideLayout() {
-      var nav = closestCollectorNav();
-      if (!nav || hidden && nav === hidden.node) return;
-      if (hidden && hidden.node) {
-        hidden.node.style.display = hidden.display;
-        if (hidden.attribute === null) hidden.node.removeAttribute("data-magiorix-pgy-kol-secondary-nav");
-        else hidden.node.setAttribute("data-magiorix-pgy-kol-secondary-nav", hidden.attribute);
-      }
-      hidden = { node: nav, display: nav.style.display || "", attribute: nav.getAttribute ? nav.getAttribute("data-magiorix-pgy-kol-secondary-nav") : null };
-      nav.setAttribute("data-magiorix-pgy-kol-secondary-nav", "hidden");
-      nav.style.display = "none";
-    }
-    var first = window.setTimeout(applyWideLayout, 0);
-    var second = window.setTimeout(applyWideLayout, 160);
-    var observer = window.MutationObserver ? new window.MutationObserver(applyWideLayout) : null;
-    if (observer && document.body) observer.observe(document.body, { childList: true, subtree: true });
-    return function () {
-      window.clearTimeout(first); window.clearTimeout(second);
-      if (observer) observer.disconnect();
-      if (hidden && hidden.node) {
-        hidden.node.style.display = hidden.display;
-        if (hidden.attribute === null) hidden.node.removeAttribute("data-magiorix-pgy-kol-secondary-nav");
-        else hidden.node.setAttribute("data-magiorix-pgy-kol-secondary-nav", hidden.attribute);
-      }
-      document.documentElement.classList.remove("magiorix-pgy-kol-wide");
-    };
+    return function () {};
   }, []);
 
-  /* 找博主任务直接复用蒲公英博主采集的 scraper 事件：页面显示进度卡，
-   * 采集助手同时保留当前任务、历史记录与下载能力。 */
+  /* 找博主专属批量任务事件与控制监听 */
   m.useEffect(function () {
-    var taskApi = window.bridge && window.bridge.scraper && window.bridge.scraper.task;
-    if (!taskApi) return;
-    var cleanups = [];
-    function listen(name, handler) {
-      if (typeof taskApi[name] !== "function") return;
-      var off = taskApi[name](handler);
-      if (typeof off === "function") cleanups.push(off);
-    }
-    function current(event) { return !!event && !!batchTaskIdRef.current && event.taskId === batchTaskIdRef.current; }
-    listen("onProgress", function (event) {
-      if (!current(event)) return;
-      setBatchTask(function (prev) { return Object.assign({}, prev || {}, { current: event.current != null ? event.current : prev && prev.current || 0, total: event.total != null ? event.total : prev && prev.total || 0, discovered: event.discovered != null ? event.discovered : prev && prev.discovered || 0, estimateTotal: event.estimateTotal != null ? event.estimateTotal : prev && prev.estimateTotal || 0, paused: false, status: "running" }); });
+    var pgyKolBridge = window.bridge && window.bridge.pgyKol;
+    if (!pgyKolBridge || typeof pgyKolBridge.onBatchEvent !== "function") return;
+    var unsub = pgyKolBridge.onBatchEvent(function (event) {
+      if (!event || !batchTaskIdRef.current || event.taskId !== batchTaskIdRef.current) return;
+      if (event.type === "progress") {
+        setBatchTask(function (prev) {
+          if (!prev) return prev;
+          var cur = event.counts ? event.counts.unique : prev.current;
+          return Object.assign({}, prev, {
+            current: cur,
+            discovered: event.counts ? event.counts.raw : prev.discovered,
+            status: prev.paused ? "paused" : "running"
+          });
+        });
+      } else if (event.type === "status") {
+        setBatchTask(function (prev) {
+          if (!prev) return prev;
+          var terminal = ["completed", "failed", "cancelled", "interrupted", "auth-expired"].indexOf(event.status) >= 0;
+          return Object.assign({}, prev, {
+            status: event.status,
+            paused: event.status === "paused",
+            finishedAt: terminal ? Date.now() : prev.finishedAt
+          });
+        });
+      } else if (event.type === "done") {
+        setBatchTask(function (prev) {
+          if (!prev) return prev;
+          var cur = event.summary && event.summary.counts ? event.summary.counts.unique : prev.current;
+          return Object.assign({}, prev, {
+            current: cur,
+            status: event.status || "completed",
+            paused: false,
+            finishedAt: Date.now()
+          });
+        });
+      }
     });
-    listen("onItemResult", function (event) {
-      if (!current(event)) return;
-      setBatchTask(function (prev) { var success = Number(prev && prev.success || 0), failed = Number(prev && prev.failed || 0); if (event.status === "success") success += 1; else failed += 1; return Object.assign({}, prev || {}, { success: success, failed: failed }); });
-    });
-    listen("onPaused", function (event) {
-      if (!current(event)) return;
-      setBatchTask(function (prev) { return Object.assign({}, prev || {}, { paused: !!event.paused, status: event.paused ? "paused" : "running" }); });
-    });
-    listen("onComplete", function (event) {
-      if (!current(event)) return;
-      setBatchTask(function (prev) { var total = event.total != null ? Number(event.total) : Number(prev && prev.total || 0); return Object.assign({}, prev || {}, { current: event.current != null ? Number(event.current) : total, total: total, success: event.successCount != null ? Number(event.successCount) : Number(prev && prev.success || 0), failed: event.errorCount != null ? Number(event.errorCount) : Number(prev && prev.failed || 0), paused: false, status: event.status || (event.cancelled ? "cancelled" : "completed") }); });
-    });
-    listen("onError", function (event) {
-      if (!current(event)) return;
-      setBatchTask(function (prev) { return Object.assign({}, prev || {}, { status: "failed", message: event.message || "采集失败，请稍后重试" }); });
-    });
-    return function () { cleanups.forEach(function (off) { try { off(); } catch (e) {} }); };
+    return function () { if (typeof unsub === "function") unsub(); };
   }, []);
 
   /* 配置加载：地域/行业特色画像/二十大人群/内容题材/预估消费行为/笔记类目/行业/热门活动，
@@ -1594,16 +1880,9 @@ function PgyKolSearchPage() {
     });
   }, []);
 
-  /* 重启恢复上次筛选。 */
+  /* 每次打开已选条件默认为空（不恢复历史筛选） */
   m.useEffect(function () {
-    var saved = pgyKolReadJson("magiorix-pgy-kol-filters");
-    if (saved && typeof saved === "object" && saved.filter && typeof saved.filter === "object") {
-      var next = Object.assign({}, pgyKolDefaultFilter(), saved.filter);
-      if (saved.searchType === 0 || saved.searchType === 1) next.searchType = saved.searchType;
-      if (typeof saved.keyword === "string") next.keyword = saved.keyword;
-      searchCoordinator.restore(next);
-      setRestoredNotice(true);
-    }
+    setRestoredNotice(false);
   }, []);
 
   /* 展示指标（column registry 单一来源）。 */
@@ -1755,20 +2034,19 @@ function PgyKolSearchPage() {
     }
     setCollectOpen(true);
   };
-  var startBatchWithColumns = function (ids) {
+  var startBatchWithColumns = function (ids, maxLimit, sortCol, sortOrd) {
     if (batchBusy || !ids || !ids.length) return;
-    // 字段集合原样提交：主进程两阶段编排会在详情阶段用同一集合调用
-    // 现有 pgy/blogger 详情采集器，勾选哪些字段就采集并导出哪些字段。
     setBatchBusy(true);
     setBatchError(null);
-    searchCoordinator.startBatch(ids).then(function (res) {
+    searchCoordinator.startBatch(ids, maxLimit, sortCol, sortOrd).then(function (res) {
       setBatchBusy(false);
       if (res && res.ok) {
         var tid = res.data && res.data.taskId;
         if (tid) {
           batchTaskIdRef.current = tid;
           setDownloadNotice(null);
-          setBatchTask({ id: tid, fileName: "找博主采集结果.xlsx", current: 0, total: 0, discovered: 0, estimateTotal: 0, success: 0, failed: 0, status: "running", paused: false, startedAt: Date.now() });
+          var est = maxLimit || (result && result.total) || 0;
+          setBatchTask({ id: tid, fileName: "找博主采集结果.xlsx", current: 0, total: 0, discovered: 0, estimateTotal: est, success: 0, failed: 0, status: "running", paused: false, startedAt: Date.now() });
           window.dispatchEvent(new CustomEvent("magiorix:ops-assistant:show-task", { detail: { taskId: tid, open: false } }));
         }
       } else {
@@ -2215,10 +2493,11 @@ function PgyKolSearchPage() {
             }),
             o.jsx(PgyKolMatrixSection, {
               title: "常规剔除",
-              children: o.jsxs(x, {
-                sx: { display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", minHeight: 36 },
+              children: o.jsx(PgyKolMatrixRow, {
+                label: "一键剔除",
+                labelActive: allExcludeOn,
+                onLabelClick: oneClickExclude,
                 children: [
-                  o.jsx(w, { sx: { fontSize: 14, color: allExcludeOn ? "#ff2442" : "rgba(0,0,0,.7)", cursor: "pointer", lineHeight: "28px", userSelect: "none" }, onClick: oneClickExclude, children: "一键剔除" }),
                   o.jsx(PgyKolCheck, { label: "剔除低活博主", checked: filter.excludeLowActive, onToggle: function () { toggleBool("excludeLowActive"); } }),
                   o.jsx(PgyKolCheck, { label: "剔除掉粉博主", checked: filter.fansNumUp, onToggle: function () { toggleBool("fansNumUp"); } }),
                   o.jsx(PgyKolCheck, { label: "剔除已合作博主", checked: filter.excludedTradeReportBrand, disabled: !hasBrands, onToggle: function () { toggleBool("excludedTradeReportBrand"); } }),
@@ -2229,12 +2508,11 @@ function PgyKolSearchPage() {
           ],
         }) : null,
 
-        /* 全局确定操作栏：此前所有控件只编辑草稿，到这里才正式搜索。 */
+        /* 全局确定操作栏：只保留确定筛选按钮（右对齐） */
         o.jsxs(x, {
           sx: { display: "flex", alignItems: "center", gap: 1, justifyContent: "flex-end", borderTop: "1px solid #ebedf0", pt: 1.25, mb: 1.5, flexWrap: "wrap" },
           children: [
             o.jsx(w, { sx: { fontSize: 13, color: coordinatorView.isDirty ? "#ff2442" : "rgba(0,0,0,.45)", mr: "auto" }, children: coordinatorView.appliedFilter ? coordinatorView.isDirty ? "筛选已修改，点击确定后更新结果" : "当前筛选已确定" : "请点击确定筛选后查询" }),
-            o.jsx($, { size: "small", variant: "outlined", onClick: function () { setMatrixOpen(!matrixOpen); }, children: matrixOpen ? "收起筛选" : "展开筛选" }),
             o.jsx($, { variant: "contained", size: "medium", onClick: applyAndSearch, sx: { bgcolor: "#ff2442", color: "#fff", minWidth: 112 }, startIcon: status === "loading" ? o.jsx(de, { size: 18, color: "inherit" }) : null, children: status === "loading" ? "查询中..." : "确定筛选" }),
           ],
         }),
@@ -2243,7 +2521,7 @@ function PgyKolSearchPage() {
         status === "auth-expired" ? o.jsx(oe, { severity: "error", sx: { mt: 1 }, children: "蒲公英登录已失效，请重新授权" }) : null,
         status === "error" && error ? o.jsx(oe, { severity: "error", sx: { mt: 1 }, children: "查询失败（错误码 " + (error.code || "unknown") + "）：" + (error.message || "未知错误") }) : null,
 
-        /* 结果区 */
+        /* 结果区：只展示博主数量概览，隐藏表格 */
         result ? o.jsxs(x, {
           sx: { mt: 2 },
           children: [
@@ -2251,14 +2529,12 @@ function PgyKolSearchPage() {
             o.jsxs(x, {
               sx: { display: "flex", alignItems: "center", gap: 1, mb: 1, flexWrap: "wrap" },
               children: [
-                o.jsx(w, { variant: "h6", children: "共 " + (result.total != null ? result.total : "?") + " 位博主" }),
-                o.jsx(f1, { size: "small", label: "当前展示 " + (result.kols ? result.kols.length : 0) + " 条" }),
+                o.jsx(w, { variant: "h6", fontWeight: 700, children: "共 " + (result.total != null ? result.total : "?") + " 位博主" }),
                 result.capSignal && result.capSignal.capped ? o.jsx(f1, { size: "small", color: "warning", label: "结果可能超过 5000" }) : null,
-                result.quarantinedFields && result.quarantinedFields.length > 0 ? o.jsx(f1, { size: "small", variant: "outlined", label: "未知字段 " + result.quarantinedFields.length + " 个已隔离" }) : null,
+                
               ],
             }),
             result.capSignal && result.capSignal.capped ? o.jsx(oe, { severity: "warning", sx: { mb: 1 }, children: "结果可能超过 5000，完整性未证明" }) : null,
-            o.jsx(PgyKolResultTable, { result: result, columns: selectedColumns, list: columnList }),
           ],
         }) : null,
 
@@ -2270,10 +2546,10 @@ function PgyKolSearchPage() {
           ],
         }),
         batchError ? o.jsx(oe, { severity: "error", sx: { mt: 1 }, children: pgyKolBatchErrorMessage(batchError) }) : null,
-        o.jsx(PgyKolSearchTaskCard, { task: batchTask, downloadBusy: downloadBusy, downloadNotice: downloadNotice, onDownload: downloadBatchTask, onClearNotice: function () { setDownloadNotice(null); }, onClose: function () { batchTaskIdRef.current = ""; setBatchTask(null); setDownloadNotice(null); } }),
+        o.jsx(PgyKolSearchTaskCard, { task: batchTask, downloadBusy: downloadBusy, downloadNotice: downloadNotice, onPause: pauseBatchTask, onResume: resumeBatchTask, onCancel: cancelBatchTask, onDownload: downloadBatchTask, onClearNotice: function () { setDownloadNotice(null); }, onClose: function () { batchTaskIdRef.current = ""; setBatchTask(null); setDownloadNotice(null); } }),
 
         /* 弹窗 */
-        o.jsx(PgyKolSharedFieldSelector, { open: collectOpen, onClose: function () { setCollectOpen(false); }, onSubmit: function (ids) { setCollectOpen(false); startBatchWithColumns(ids); } }),
+        o.jsx(PgyKolExportFieldModal, { open: collectOpen, totalAvailable: result ? result.total : null, onClose: function () { setCollectOpen(false); }, onSubmit: function (ids, maxLimit, sortCol, sortOrd) { setCollectOpen(false); startBatchWithColumns(ids, maxLimit, sortCol, sortOrd); } }),
         o.jsx(PgyKolBrandPopup, { open: brandPopupMode != null, onClose: function () { setBrandPopupMode(null); }, mode: brandPopupMode, current: brandPopupMode === "recent" ? filter.tradeReportBrandIdSet : filter.brands, onApply: applyBrands }),
         o.jsx(PgyKolNoteCategoryPopup, { open: categoryOpen, anchor: noteAnchor, onClose: function () { setCategoryOpen(false); }, nodes: noteCats, industry: catIndustry, onSelectIndustry: setCatIndustry, selected: filter.noteCategory, onToggle: function (next) { update({ noteCategory: next }); } }),
         o.jsx(PgyKolIndustryPopup, { open: industryPopupOpen, onClose: function () { setIndustryPopupOpen(false); }, cfg: configs.industry, first: filter.firstIndustry, second: filter.secondIndustry, onFirst: function (v) { update({ firstIndustry: v }); }, onSecond: function (v) { update({ secondIndustry: v }); } }),

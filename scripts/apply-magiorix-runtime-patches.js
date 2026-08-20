@@ -25,8 +25,8 @@ function replaceOnce(source, from, to, label) {
   const sourceNorm = norm(source);
   const fromNorm = norm(from);
   const toNorm = norm(to);
+  if (sourceNorm.includes(toNorm)) return source;
   if (!sourceNorm.includes(fromNorm)) {
-    if (sourceNorm.includes(toNorm)) return source;
     throw new Error(`Missing patch target: ${label}`);
   }
   return sourceNorm.replace(fromNorm, toNorm);
@@ -69,7 +69,8 @@ function insertAfterOnce(source, marker, insert, already, label) {
   return sourceNorm.replace(markerNorm, `${markerNorm}\n${norm(insert)}`);
 }
 
-let main = fs.readFileSync(mainPath, "utf8");
+const originalMain = fs.readFileSync(mainPath, "utf8");
+let main = originalMain;
 
 // 近期笔记波动只保留 interactionMedian 数据列，不再生成或导出图片。
 main = replaceAllIfExists(main, '  recentNoteInteractionFluctuationChart: ["recentNoteInteractionFluctuationChart"],\n', "");
@@ -98,7 +99,8 @@ main = replaceAllIfExists(
   '    "mEngagementNum30",\n    "impMedian30",',
   '    "mEngagementNum30",\n    "recentNoteInteractionMedian",\n    "impMedian30",',
 );
-let preload = fs.readFileSync(preloadPath, "utf8");
+const originalPreload = fs.readFileSync(preloadPath, "utf8");
+let preload = originalPreload;
 
 main = main.split("薯苗").join("积分");
 main = main.split("树苗").join("积分");
@@ -217,12 +219,16 @@ const pgySafeExternalOrigins = new Set([
   "https://www.iesdouyin.com",
   "https://www.xingtu.cn",
   "https://xingtu.cn",
-  "https://magiorix.red-magic.cn"
+  "https://magiorix.red-magic.cn",
+  "http://127.0.0.1:3050",
+  "http://localhost:3050",
+  "http://127.0.0.1:3000",
+  "http://localhost:3000"
 ]);
 function pgyResolveExternal(value, allowedOrigins) {
   try {
     const t = new URL(String(value));
-    if (t.protocol !== "https:" || t.username || t.password || !allowedOrigins.has(t.origin)) return null;
+    if ((t.protocol !== "https:" && t.protocol !== "http:") || t.username || t.password || !allowedOrigins.has(t.origin)) return null;
     return t.href;
   } catch {
     return null;
@@ -2391,13 +2397,202 @@ main = main.replace(
       typeof o[r.field] == "string" && o[r.field] && (s[r.field] = o[r.field]);`,
 );
 
+// noteImages 是一个选择项，但其展开列数量由实际返回的 noteImage_N 决定。
+main = replaceOnce(
+  main,
+  `    const r = t[o];
+    if (r)
+      for (const c of r) s.add(c);`,
+  `    const r = t[o];
+    if (r)
+      for (const c of r) s.add(c);
+    if (o === "noteImages")
+      for (const c of Object.keys(a)) c.startsWith("noteImage_") && s.add(c);`,
+  "allow all dynamic notebook image aliases",
+);
+
+// 笔记图片字段：封面图对图文/视频笔记都可用；笔记图只对图文笔记展开。
+// 下载后统一转成 PNG，避免官网返回的 JPEG/WebP 被错误地以 .png 原始字节写入 xlsx。
+if (!main.includes("function isPgyImageKey")) {
+  const pgyNotebookImageHelper = `function isPgyImageKey(a) {
+  return typeof a == "string" && (PGY_IMAGE_FIELDS.has(a) || a.startsWith("noteImage_"));
+}
+async function pgyFetchImageBuffer(a, e, i) {
+  if (e && e.webContents && typeof e.isDestroyed == "function" && !e.isDestroyed()) {
+    try {
+      const t = await pgyTimeout(
+        e.webContents.executeJavaScript(
+          "(async()=>{const response=await fetch(" + JSON.stringify(a) + ",{credentials:\"include\",referrer:\"https://pgy.xiaohongshu.com/\"});if(!response.ok)return {ok:false,status:response.status};const bytes=new Uint8Array(await response.arrayBuffer());let binary=\"\";for(let index=0;index<bytes.length;index+=32768)binary+=String.fromCharCode(...bytes.subarray(index,index+32768));return {ok:true,base64:btoa(binary)}})()",
+          !0,
+        ),
+        2e4,
+        "pgy.imageFetch",
+      );
+      if (t && t.ok && typeof t.base64 == "string" && t.base64.length > 0) {
+        return Buffer.from(t.base64, "base64");
+      }
+    } catch (t) {
+      j.warn("[notebook-image] 浏览器会话下载失败，回退主进程请求", t);
+    }
+  }
+  const n = {
+      Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      Referer: "https://pgy.xiaohongshu.com/",
+  };
+  if (i && i.cookies && typeof i.cookies.get == "function") {
+    try {
+      const cookies = await i.cookies.get({ url: a });
+      if (Array.isArray(cookies) && cookies.length > 0) {
+        n.Cookie = cookies.map((cookie) => cookie.name + "=" + cookie.value).join("; ");
+      }
+    } catch (t) {
+      j.warn("[notebook-image] 读取图片会话 cookie 失败", t);
+    }
+  }
+  const t = await fetch(a, {
+    headers: n,
+    signal: AbortSignal.timeout(15e3),
+  });
+  if (!t.ok) throw new Error("HTTP " + t.status);
+  return Buffer.from(await t.arrayBuffer());
+}
+async function pgyDownloadImageToFile(a, e, t, i) {
+  try {
+    if (!a || typeof a != "string") return "";
+    const n = await pgyFetchImageBuffer(a, t, i);
+    if (!n || n.length === 0) return "";
+    const s = PgyNativeImage.createFromBuffer(n).toPNG();
+    if (!s || s.length === 0) return "";
+    return Sr(Ja(e), { recursive: !0 }), Zi(e, s), e;
+  } catch (t) {
+    return j.warn("[notebook-image] 下载图片失败: dest=" + e, t), "";
+  }
+}`;
+  const oldPgyImageDeclaration = `const PGY_IMAGE_FIELDS = new Set(Object.values(PYG_CHART_FIELDS)), PGY_CRC_TABLE = (() => {`;
+  const newPgyImageDeclaration = "const PGY_IMAGE_FIELDS = new Set([...Object.values(PYG_CHART_FIELDS), \"coverImage\", \"noteImages\"]);\n" + pgyNotebookImageHelper + "\nconst PGY_CRC_TABLE = (() => {";
+  if (main.includes(oldPgyImageDeclaration)) {
+    main = replaceOnce(
+      main,
+      oldPgyImageDeclaration,
+      newPgyImageDeclaration,
+      "pgy notebook image helper",
+    );
+  } else {
+    main = replaceOnce(
+      main,
+      "\nconst PGY_CRC_TABLE = (() => {",
+      "\n" + pgyNotebookImageHelper + "\nconst PGY_CRC_TABLE = (() => {",
+      "pgy notebook image helper after split image declaration",
+    );
+  }
+}
+
+if (!main.includes("const noteType = Number(h.type || (h.videoInfo ? 2 : 1));")) {
+  main = replaceOnce(
+    main,
+    `        const h = d.data, m = h.userInfo ?? {}, f = {
+`,
+    `        const h = d.data, m = h.userInfo ?? {};
+        const noteType = Number(h.type || (h.videoInfo ? 2 : 1));
+        const imageUrls = [];
+        const imageUrlSet = new Set();
+        const imageUrlOf = (item) => {
+          if (typeof item == "string") return item.trim();
+          if (!item || typeof item != "object") return "";
+          return String(item.url || item.original || item.originUrl || item.imageUrl || item.info?.url || item.info?.original || "").trim();
+        };
+        for (const imageList of [h.imagesList, h.imageList, h.images]) {
+          if (!Array.isArray(imageList)) continue;
+          for (const item of imageList) {
+            const url = imageUrlOf(item);
+            if (url && !imageUrlSet.has(url)) imageUrlSet.add(url), imageUrls.push(url);
+          }
+        }
+        let localCoverPath = "";
+        const coverUrl = imageUrls[0] || h.videoInfo?.thumbnail || h.videoInfo?.thumbnailUrl || h.videoInfo?.firstFrame || h.videoInfo?.cover || h.videoInfo?.coverUrl || h.videoInfo?.image || h.cover || h.coverUrl || h.image || "";
+        const coverSelected = pgyHasSelectedField(r, "coverImage");
+        const noteImagesSelected = pgyHasSelectedField(r, "noteImages");
+        j.info("[notebook-image] noteId=" + l + " type=" + noteType + " candidates=" + imageUrls.length + " coverSelected=" + coverSelected + " noteImagesSelected=" + noteImagesSelected);
+        if (coverUrl && coverSelected) {
+          const dest = pgyChartFile("note-covers", l + "_cover", "cover");
+          localCoverPath = (await pgyDownloadImageToFile(coverUrl, dest, s, t)) || "";
+        }
+        const noteImgPaths = [];
+        if (noteType === 1 && noteImagesSelected) {
+          for (let idx = 0; idx < imageUrls.length; idx++) {
+            const dest = pgyChartFile("note-images", l + "_img_" + (idx + 1), "img_" + (idx + 1));
+            const saved = await pgyDownloadImageToFile(imageUrls[idx], dest, s, t);
+            if (saved) noteImgPaths.push(saved);
+          }
+        }
+        const f = {
+`,
+    "pgy notebook image scraping setup",
+  );
+  main = replaceOnce(
+    main,
+    `          content: h.content,
+`,
+    `          content: h.content,
+          coverImage: localCoverPath,
+          noteImages: noteImgPaths,
+`,
+    "pgy notebook image fields",
+  );
+  main = replaceOnce(
+    main,
+    `          createTime: h.createTime
+        };
+        return {
+          status: "success",
+          data: en(f, r)
+`,
+    `          createTime: h.createTime
+        };
+        noteImgPaths.forEach((p, idx) => {
+          f["noteImage_" + (idx + 1)] = p;
+        });
+        return {
+          status: "success",
+          data: en(f, r, { noteImages: ["noteImages"] })
+`,
+    "pgy notebook image field aliases",
+  );
+}
+
+// 图片列必须使用图片列判断，且导出包声明 jpeg/jpg 类型，兼容既有图片字段。
+main = replaceAllIfExists(main, "PGY_IMAGE_FIELDS.has(i.key)", "isPgyImageKey(i.key)");
+main = replaceAllIfExists(main, "PGY_IMAGE_FIELDS.has(v.key)", "isPgyImageKey(v.key)");
+main = replaceAllIfExists(main, "PGY_IMAGE_FIELDS.has(f.key)", "isPgyImageKey(f.key)");
+if (!main.includes('Extension="jpeg"')) {
+  main = replaceOnce(
+    main,
+    `function pgyAddContentTypes(a) {
+  return a.includes('Extension="png"') || (a = a.replace("</Types>", '<Default Extension="png" ContentType="image/png"/></Types>')), a.includes('/xl/drawings/drawing1.xml') || (a = a.replace("</Types>", '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>')), a;
+}`,
+    `function pgyAddContentTypes(a) {
+  a.includes('Extension="png"') || (a = a.replace("</Types>", '<Default Extension="png" ContentType="image/png"/></Types>'));
+  a.includes('Extension="jpeg"') || (a = a.replace("</Types>", '<Default Extension="jpeg" ContentType="image/jpeg"/></Types>'));
+  a.includes('Extension="jpg"') || (a = a.replace("</Types>", '<Default Extension="jpg" ContentType="image/jpeg"/></Types>'));
+  a.includes('/xl/drawings/drawing1.xml') || (a = a.replace("</Types>", '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>'));
+  return a;
+}`,
+    "pgy image content types",
+  );
+}
+main = replaceAllIfExists(
+  main,
+  'o.media = `pgy_chart_\${r + 1}.png`, s.file(`xl/media/\${o.media}`, Qi(o.path));',
+  'const ext = Xi.extname(o.path).replace(".", "").toLowerCase() || "png";\n      const mediaExt = ext === "jpg" ? "jpeg" : ext;\n      o.media = `pgy_img_\${r + 1}.\${mediaExt}`, s.file(`xl/media/\${o.media}`, Qi(o.path));',
+);
+
 if (!main.includes("function pgyDataWithoutImageText")) {
   main = replaceOnce(
     main,
     `async function pgyEmbedImagesInWorkbook(a, e, t) {`,
     `function pgyDataWithoutImageText(a, e) {
   const t = Array.isArray(e) ? e : [];
-  const n = new Set((Array.isArray(a) ? a : []).filter((s) => s && PGY_IMAGE_FIELDS.has(s.key)).map((s) => s.key));
+  const n = new Set((Array.isArray(a) ? a : []).filter((s) => s && isPgyImageKey(s.key)).map((s) => s.key));
   return n.size === 0 ? t : t.map((s) => {
     const i = { ...s };
     for (const o of n)
@@ -2427,26 +2622,88 @@ main = insertAfterOnce(
   "block export while plugin task is paused",
 );
 
-main = replaceOnce(
-  main,
-  'const n = a.mode === "two-row" ? gf(a.headers, a.data) : hf(a.data), s = Ve.utils.book_new();',
-  'const i = a.data ?? [], n = a.mode === "two-row" ? gf(a.headers ?? [], pgyDataWithoutImageText(a.headers ?? [], i)) : hf(i), s = Ve.utils.book_new();',
-  "excel export clears image path cells",
-);
+if (!main.includes("function expandNotebookImageHeaders")) {
+  main = replaceOnce(
+    main,
+    'async function ff(a) {',
+    `function expandNotebookImageHeaders(headers, rows) {
+  const sourceHeaders = Array.isArray(headers) ? headers.filter(Boolean) : [];
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  const hasCoverHeader = sourceHeaders.some((h) => h.key === "coverImage");
+  const hasNoteHeader = sourceHeaders.some((h) => h.key === "noteImages" || h.key === "noteImage_1");
+  const hasCoverData = sourceRows.some((r) => r && typeof r.coverImage === "string" && r.coverImage.length > 0);
+  const hasNoteData = sourceRows.some((r) => r && (Array.isArray(r.noteImages) || r.noteImage_1));
+  const includeCover = hasCoverHeader || hasCoverData;
+  const includeNotes = hasNoteHeader || hasNoteData;
+  let maxCount = 0;
+  for (const r of sourceRows) {
+    if (r && Array.isArray(r.noteImages)) {
+      maxCount = Math.max(maxCount, r.noteImages.length);
+    } else if (r) {
+      let c = 0;
+      while (r["noteImage_" + (c + 1)]) c++;
+      maxCount = Math.max(maxCount, c);
+    }
+  }
+  maxCount = Math.max(1, maxCount);
+  const addNoteHeaders = (target, group) => {
+    if (maxCount === 1) {
+      target.push({ group: group || "笔记内容", label: "笔记图", key: "noteImage_1" });
+      return;
+    }
+    for (let i = 1; i <= maxCount; i++) {
+      target.push({ group: group || "笔记内容", label: "笔记图 " + i, key: "noteImage_" + i });
+    }
+  };
+  const expandedHeaders = [];
+  let noteHeaderExpanded = false;
+  for (const h of sourceHeaders) {
+    if (h.key === "noteImages" || h.key === "noteImage_1") {
+      if (!noteHeaderExpanded) addNoteHeaders(expandedHeaders, h.group);
+      noteHeaderExpanded = true;
+    } else {
+      expandedHeaders.push(h);
+    }
+  }
+  // 历史导出 payload 可能遗漏图片表头，但结果行已经持有本地图片路径。
+  // 此处以行数据为准补列，保证后续图片嵌入函数拥有实际的目标单元格。
+  if (includeCover && !hasCoverHeader) {
+    expandedHeaders.push({ group: "笔记内容", label: "封面图", key: "coverImage" });
+  }
+  if (includeNotes && !noteHeaderExpanded) {
+    addNoteHeaders(expandedHeaders, "笔记内容");
+  }
+  const expandedRows = sourceRows.map((r) => {
+    if (!r || typeof r !== "object") return r;
+    const next = { ...r };
+    if (Array.isArray(next.noteImages)) {
+      next.noteImages.forEach((img, idx) => {
+        next["noteImage_" + (idx + 1)] = img;
+      });
+    }
+    return next;
+  });
+  return { headers: expandedHeaders, rows: expandedRows };
+}
+async function ff(a) {`,
+    "expand notebook image headers helper",
+  );
+}
 
-main = replaceOnce(
-  main,
-  'return y == null || y === "" ? "-" : typeof y == "number" || typeof y == "boolean" ? y : String(y);',
-  'return y === "__PGY_IMAGE_CELL_BLANK__" ? "" : y == null || y === "" ? "-" : typeof y == "number" || typeof y == "boolean" ? y : String(y);',
-  "excel blank image path cells",
-);
-
-main = replaceOnce(
-  main,
-  'return Ve.utils.book_append_sheet(s, n, "Sheet1"), Ve.writeFile(s, t), a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, a.headers ?? [], i), $i.info(`Excel 已导出: ${t}`), { success: !0, filePath: t };',
-  'return Ve.utils.book_append_sheet(s, n, "Sheet1"), Ve.writeFile(s, t), a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, a.headers ?? [], i), $i.info(`Excel 已导出: ${pgyRedactLocalPath(String(t))}`), { success: !0, filePath: t };',
-  "excel export embeds images from original data",
-);
+if (!main.includes("const rawData = a.data ?? []")) {
+  main = replaceOnce(
+    main,
+    'const i = a.data ?? [], n = a.mode === "two-row" ? gf(a.headers ?? [], pgyDataWithoutImageText(a.headers ?? [], i)) : hf(i), s = Ve.utils.book_new();',
+    'const rawData = a.data ?? [];\n    const { headers: expHeaders, rows: expData } = expandNotebookImageHeaders(a.headers ?? [], rawData);\n    const n = a.mode === "two-row" ? gf(expHeaders, pgyDataWithoutImageText(expHeaders, expData)) : hf(expData), s = Ve.utils.book_new();',
+    "expand notebook image headers in ff",
+  );
+  main = replaceOnce(
+    main,
+    'a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, a.headers ?? [], i),',
+    'a.mode === "two-row" && await pgyEmbedImagesInWorkbook(t, expHeaders, expData),',
+    "expand notebook image rows in ff",
+  );
+}
 
 if (!main.includes("桌面端启动")) {
   main = replaceOnce(
@@ -3727,7 +3984,8 @@ main = replaceOnce(
 );
 
 // 6) 导出对话框纵深门闸：search-batch 来源任务未完成时拒绝导出。
-main = replaceOnce(
+// 运行时文件已带门闸时允许无变更通过，保证本地候选包可重复构建。
+main = replaceAllIfExists(
   main,
   `async function ff(a) {
   const pausedTask = typeof (a == null ? void 0 : a.taskId) == "string" ? ge == null ? void 0 : ge.runningTasks.get(a.taskId) : null;`,
@@ -3743,9 +4001,33 @@ main = replaceOnce(
     }
   }
   const pausedTask = typeof (a == null ? void 0 : a.taskId) == "string" ? ge == null ? void 0 : ge.runningTasks.get(a.taskId) : null;`,
-  "export dialog rejects incomplete search-batch tasks",
+    "export dialog rejects incomplete search-batch tasks",
 );
 }
+// 手动输入页面会直接调用 scraper:export:to-excel；这条路径此前把前端缓存的
+// 19 列 payload 直接交给 ff，即使 collection-history 已保存图片路径也会丢列。
+// 对带 taskId 的蒲公英笔记导出，强制以持久化任务 + 成功结果重建规范 payload。
+if (!main.includes("pgy notebook direct export canonical payload")) {
+  main = replaceOnce(
+    main,
+    `async function ff(a) {
+  // 找博主筛选来源（search-batch）的任务：只有完成且计数收口才允许导出；`,
+    `async function ff(a) {
+  // pgy notebook direct export canonical payload: 前端缓存可能遗漏 coverImage/noteImages，
+  // 但主进程历史任务保存了完整字段和已下载的本地图片路径，必须以它为准写 Excel。
+  if (typeof (a == null ? void 0 : a.taskId) === "string") {
+    const pgyHistoryTask = await pgyCollectionHistory.getTask(a.taskId).catch(() => null);
+    if (pgyHistoryTask && pgyHistoryTask.pluginId === "pgy" && pgyHistoryTask.taskType === "notebook") {
+      const pgyHistoryRows = await pgyCollectionHistory.getExportRows(a.taskId).catch(() => []);
+      if (Array.isArray(pgyHistoryRows) && pgyHistoryRows.length > 0)
+        a = buildCollectionHistoryExportPayload(pgyHistoryTask, pgyHistoryRows);
+    }
+  }
+  // 找博主筛选来源（search-batch）的任务：只有完成且计数收口才允许导出；`,
+    "canonicalize direct pgy notebook export from collection history",
+  );
+}
+
 main = replaceSection(
   main,
   "const PGY_PYTHON_CHART_SCRIPT = String.raw`",
@@ -4058,6 +4340,6 @@ main = replaceOnce(
   "pgy trend rows bounded before renderer",
 );
 
-fs.writeFileSync(mainPath, main);
-fs.writeFileSync(preloadPath, preload);
+if (main !== originalMain) fs.writeFileSync(mainPath, main);
+if (preload !== originalPreload) fs.writeFileSync(preloadPath, preload);
 console.log("Applied magiorix runtime patches.");

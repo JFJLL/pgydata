@@ -529,6 +529,7 @@ export function createPgyKolBatchRunner({
       ...(resumeBudgets ?? {}),
     };
     const pageSize = typeof task.pageSize === "number" && task.pageSize > 0 ? task.pageSize : 20;
+    const maxCount = Number.isInteger(task.maxCount) && task.maxCount > 0 ? task.maxCount : null;
     const state = {
       // 查询预算跨实例累计：resume 后继续消耗已持久化的 budgetUsed，
       // 防止通过反复 resume 无限放大真实请求量。
@@ -542,7 +543,7 @@ export function createPgyKolBatchRunner({
       },
     };
 
-    await runLoop({ taskId, leaves, seen, budgets, pageSize, state });
+    await runLoop({ taskId, leaves, seen, budgets, pageSize, maxCount, state });
     await finalize(taskId, leaves, state);
   }
 
@@ -709,6 +710,14 @@ export function createPgyKolBatchRunner({
       const sequence = sequences.get(seqKey) || [];
       sequence.push({ pageNum, newUidCount });
       sequences.set(seqKey, sequence);
+
+      if (Number.isInteger(ctx.maxCount) && ctx.maxCount > 0 && state.counts.unique >= ctx.maxCount) {
+        state.stopReason = "max-count-reached";
+        leaf.status = "done";
+        await store.updateLeaf(taskId, leaf);
+        return "stop";
+      }
+
       const repeat = analyzePageSequence({ pages: sequence });
       if (repeat && repeat.repeatSignal) {
         state.stopReason = state.stopReason ?? "repeat-page";
@@ -844,7 +853,7 @@ export function createPgyKolBatchRunner({
   }
 
   function computeCompleteness(leaves, stopReason) {
-    if (stopReason) {
+    if (stopReason && stopReason !== "max-count-reached") {
       return "cannot-prove";
     }
     if (leaves.length === 0) {

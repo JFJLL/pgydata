@@ -1,6 +1,9 @@
 [CmdletBinding()]
 param(
   [switch]$OverwriteCandidate,
+  # 仅用于已获用户确认的本机修复候选包：允许复用已发布版本号，但绝不改写
+  # 发布 manifest/latest，也不能用于上传或晋升发布。
+  [switch]$LocalRepairCandidate,
   [string]$InstallerBaseUrl = "https://redmagic.oss-cn-beijing.aliyuncs.com/exe",
   [string]$AssetsBaseUrl = "https://magiorix.red-magic.cn/assets/desktop"
 )
@@ -61,10 +64,14 @@ function Remove-DirectorySafe([string]$Path, [string]$Root) {
 }
 
 function Find-Makensis {
+  # 某些受控终端会缺失 ProgramFiles(x86)；先判断环境变量再 Join-Path，
+  # 否则路径探测本身会因 null 参数失败，掩盖真正的 NSIS 可用性结果。
   $candidates = @(
     $env:NSIS_MAKENSIS,
-    (Join-Path ${env:ProgramFiles(x86)} "NSIS\makensis.exe"),
-    (Join-Path $env:ProgramFiles "NSIS\makensis.exe")
+    $(if (-not [string]::IsNullOrWhiteSpace(${env:ProgramFiles(x86)})) { Join-Path ${env:ProgramFiles(x86)} "NSIS\makensis.exe" }),
+    $(if (-not [string]::IsNullOrWhiteSpace($env:ProgramFiles)) { Join-Path $env:ProgramFiles "NSIS\makensis.exe" }),
+    "C:\Program Files (x86)\NSIS\makensis.exe",
+    "C:\Program Files\NSIS\makensis.exe"
   ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 
   foreach ($candidate in $candidates) {
@@ -221,9 +228,14 @@ function New-AssetsZip([string]$AssetsDir, [string]$ZipPath) {
 }
 
 function Invoke-CheckedProcess([string]$FilePath, [string[]]$Arguments, [string]$WorkingDirectory) {
-  $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -WorkingDirectory $WorkingDirectory -NoNewWindow -Wait -PassThru
-  if ($process.ExitCode -ne 0) {
-    throw "$FilePath failed with exit code $($process.ExitCode)"
+  Push-Location $WorkingDirectory
+  try {
+    & $FilePath $Arguments
+    if ($LASTEXITCODE -ne 0) {
+      throw "$FilePath failed with exit code $LASTEXITCODE"
+    }
+  } finally {
+    Pop-Location
   }
 }
 
@@ -256,13 +268,23 @@ if (-not $node) {
 
 Assert-Rcedit | Out-Null
 
+if ($LocalRepairCandidate -and -not $OverwriteCandidate) {
+  throw "LocalRepairCandidate requires -OverwriteCandidate and is limited to a local repair candidate."
+}
+$allowPublishedVersionLocalRepair = $LocalRepairCandidate -and $OverwriteCandidate
 if (Test-Path -LiteralPath $publishedVersionManifest -PathType Leaf) {
-  throw "Version $version already has a published manifest and is immutable. Bump the patch version."
+  if (-not $allowPublishedVersionLocalRepair) {
+    throw "Version $version already has a published manifest and is immutable. Bump the patch version."
+  }
+  Write-Warning "Building a local repair candidate for published version $version. The published manifest will not be modified."
 }
 if (Test-Path -LiteralPath $publishedLatestManifest -PathType Leaf) {
   $publishedLatest = Get-Content -LiteralPath $publishedLatestManifest -Raw -Encoding UTF8 | ConvertFrom-Json
-  if ([string]$publishedLatest.desktop.version -eq $version) {
+  if ([string]$publishedLatest.desktop.version -eq $version -and -not $allowPublishedVersionLocalRepair) {
     throw "Version $version is already latest and is immutable. Bump the patch version."
+  }
+  if ([string]$publishedLatest.desktop.version -eq $version -and $allowPublishedVersionLocalRepair) {
+    Write-Warning "latest.json remains untouched; this candidate is for local installation verification only."
   }
 }
 if ((Test-Path -LiteralPath $outDir) -and -not $OverwriteCandidate) {
@@ -289,7 +311,17 @@ Write-Output "Rebuilding bundled PGY chart renderer..."
 Invoke-CheckedProcess -FilePath (Join-Path $PSHOME "pwsh.exe") -Arguments @("-NoProfile", "-File", (Join-Path $PSScriptRoot "build-pgy-chart-renderer.ps1")) -WorkingDirectory $projectRoot
 
 Write-Output "Packing Electron app.asar from app-source..."
-$asarOut = Join-Path (Join-Path $sourceAppDir "resources") "app.asar"
+$sourceResourcesDir = Join-Path $sourceAppDir "resources"
+$asarOut = Join-Path $sourceResourcesDir "app.asar"
+$asarOutputOverride = [string]$env:MAGIORIX_ASAR_OUTPUT
+if (-not [string]::IsNullOrWhiteSpace($asarOutputOverride)) {
+  $asarOut = [System.IO.Path]::GetFullPath($asarOutputOverride)
+  $resourcesRoot = ([System.IO.Path]::GetFullPath($sourceResourcesDir)).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+  if (-not $asarOut.StartsWith($resourcesRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "MAGIORIX_ASAR_OUTPUT must stay inside the runtime resources directory: $resourcesRoot"
+  }
+  Write-Output "Using ASAR output override: $asarOut"
+}
 Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "apply-magiorix-runtime-patches.js")) -WorkingDirectory $projectRoot
 Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "pack-asar.js"), $appSourceDir, $asarOut, "--require", "node_modules/unzipper/package.json") -WorkingDirectory $projectRoot
 Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "verify-asar-entries.js"), $asarOut, "node_modules/unzipper/package.json", "node_modules/unzipper/unzip.js") -WorkingDirectory $projectRoot
@@ -333,12 +365,22 @@ foreach ($file in $rootFiles) {
 
 New-Item -ItemType Directory -Force -Path (Join-Path $payloadAppDir "resources") | Out-Null
 foreach ($file in @("app.asar", "app-update.yml", "elevate.exe", "pgy-chart-renderer.exe", $appIconResource)) {
-  $source = Join-Path (Join-Path $sourceAppDir "resources") $file
+  $source = if ($file -eq "app.asar") { $asarOut } else { Join-Path $sourceResourcesDir $file }
   if (-not (Test-Path -LiteralPath $source)) {
     throw "Required resource file not found: $source"
   }
-  Copy-Item -LiteralPath $source -Destination (Join-Path $payloadAppDir "resources") -Force
+    Copy-Item -LiteralPath $source -Destination (Join-Path $payloadAppDir "resources") -Force
 }
+
+# 交付防线：安装 payload 内的 app.asar 必须与刚刚打包完成的运行包逐字节一致。
+# 这避免“源码/项目 runtime 已更新，但安装包仍携带旧主进程”的前后端错配。
+$payloadAsar = Join-Path $payloadAppDir "resources\app.asar"
+$sourceAsarHash = (Get-FileHash -LiteralPath $asarOut -Algorithm SHA256).Hash
+$payloadAsarHash = (Get-FileHash -LiteralPath $payloadAsar -Algorithm SHA256).Hash
+if ($sourceAsarHash -ne $payloadAsarHash) {
+  throw "Installer payload app.asar hash mismatch. Source=$sourceAsarHash Payload=$payloadAsarHash"
+}
+Write-Output "Verified installer payload app.asar SHA256: $payloadAsarHash"
 
 Set-ExeBrand -ExePath (Join-Path $payloadAppDir $installedExeName) -IconPath (Join-Path $payloadAppDir "resources\$appIconResource")
 
@@ -652,6 +694,8 @@ if (-not (Test-Path -LiteralPath $setupExe)) {
 
 $setupItem = Get-Item -LiteralPath $setupExe
 $setupHash = (Get-FileHash -LiteralPath $setupExe -Algorithm SHA256).Hash
+$asarHashPath = Join-Path $outDir "$appId-$version-app.asar.sha256.txt"
+Set-Content -LiteralPath $asarHashPath -Value "$sourceAsarHash  app.asar" -Encoding ASCII
 $assetsItem = Get-Item -LiteralPath $outAssetsZip
 $assetsHash = (Get-FileHash -LiteralPath $outAssetsZip -Algorithm SHA256).Hash
 
@@ -686,5 +730,6 @@ Write-Output "Created assets zip: $outAssetsZip"
 Write-Output "Assets zip size: $($assetsItem.Length)"
 Write-Output "Assets zip SHA256: $assetsHash"
 Write-Output "Created SHA256 file: $setupSha256Path"
+Write-Output "Created runtime ASAR SHA256 file: $asarHashPath"
 Write-Output "Created release info: $releaseInfoPath"
 Write-Output "Install log path: $installLogPath"
