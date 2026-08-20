@@ -26,6 +26,8 @@ desktop-versions/
 !runtime/magiorix-desktop/resources/**
 !runtime/magiorix-desktop/resources/elevate.exe
 !runtime/magiorix-desktop/resources/pgy-chart-renderer.exe
+!runtime/magiorix-desktop/resources/magiorix-core.exe
+!runtime/magiorix-desktop/resources/magiorix-core.metadata.json
 
 # Reverse-engineering and temporary work directories
 .codegraph/
@@ -55,3 +57,7 @@ Thumbs.db
 .verification/
 artifacts/verification/
 .freebuff/
+
+# Native authorization core build output (source and Cargo.lock are tracked)
+native/magiorix-core/target/
+native/magiorix-core/**/*.pdb

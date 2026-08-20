@@ -158,3 +158,36 @@
 - **实现提交**：4bbc7791559837fd52b27a3d9da6bbcb941a8f45（security: add signed task authorization and credit reservation）。
 - **推送状态**：未推送。当前会话无法可靠确认仓库为 Private（GitHub 集成未启用），依安全红线仅保留本地提交。
 
+
+## 阶段三：Windows Rust 原生核心（Implementation Candidate）
+
+- **状态**：已建立并验证原生核心源码、侧车帧协议、Electron 主进程客户端、构建脚本与单元测试；本阶段仍是 `unsigned-local` Candidate，**不得发布、不得推送、不得切换 production required**。
+- **阶段二基线**：`4bbc7791559837fd52b27a3d9da6bbcb941a8f45`（实现）与 `4b5f283`（台账）。
+- **工程**：新增 `native/magiorix-core/`，包含 `Cargo.toml`、`Cargo.lock`、`rust-toolchain.toml`、`src/`、`tests/`、`protocol/` 与 `README-internal.md`；`target/` 和 PDB 被 `.gitignore` 排除。
+- **工具链与依赖**：锁定 Rust `1.85.0`、`x86_64-pc-windows-msvc`；主要依赖为 `ed25519-dalek 2.1.1`、`hmac 0.12.1`、`sha2 0.10.8`、`rmp-serde 1.3.0`、`serde 1.0.210`、`uuid 1.10.0`、`zeroize 1.7.0` 与 Windows-only `windows-sys 0.59.0`。Release 配置启用 `opt-level=3`、fat LTO、单 codegen unit、`panic=abort`、符号剥离、无 debug 信息和 overflow checks。
+- **协议**：`coreProtocolVersion=1`。使用 4-byte big-endian 长度前缀和 canonical MessagePack；最大帧 1 MiB。stdin hello 传递 256-bit secret，后续请求采用 HMAC-SHA-256、严格递增 sequence、requestId 防重放和白名单命令。core 不监听端口、不接受任意路径或 shell 命令，直接启动时静默退出。
+- **原生迁移**：Rust 已实现与第二阶段 canonical JSON 一致的 TaskDescriptor 规范化与 SHA-256 digest、Ed25519 Ticket kid/签名/有效期/绑定/jti 校验库、授权 handle、核心拥有的 Receipt sequence/hash 链/预算计数、`dpapi-current-user` 设备签名密钥抽象，以及 pgy-kol filter key/value 规范化、预算上限和分页容量规划。
+- **Electron 边界**：新增 `native-core-client.mjs`，固定 stdin/stdout sidecar、Windows 隐藏窗口、SHA-256/安装目录/符号链接检查、HMAC 响应验证、超时和进程退出拒绝。`TaskAuthorizationProvider` 在 `required` 模式下没有 native core 或 native digest 结果不一致时 fail closed；当前 Candidate 因尚未捆绑可信 Ticket keyring 和可恢复 native state，明确拒绝签发 native handle，而不回退到 JS。
+- **打包编排**：新增 `scripts/build-magiorix-core.ps1`；受保护 Windows 构建环境使用 `cargo +1.85.0 build --locked --release --target x86_64-pc-windows-msvc`，复制 core 到 `runtime/magiorix-desktop/resources/`，生成 `magiorix-core.metadata.json`，并在非 `UnsignedLocal` 情况下拒绝未完成 Authenticode 的候选。
+
+### 阶段三验证记录
+
+| 验证项目 | 结果 |
+| --- | --- |
+| Rust `cargo fmt --check` | PASS |
+| Rust `cargo test --locked` | PASS，5 项（Ticket、jti、Receipt、预算、帧、直接启动） |
+| Rust `cargo build --locked --release` | PASS（Linux 验证环境） |
+| 原生客户端 Node 测试 | PASS，2 项（canonical MessagePack、SHA-256 fail closed） |
+| 任务授权/回执 Node 测试 | PASS，10 项 |
+| pgy-kol 全量回归 | PASS，326 项 |
+| 后端全量回归 | PASS，54 项 |
+| `git diff --check` / 静态检查 / PowerShell 解析 | PASS |
+
+### 发布阻塞与未解决风险
+
+1. 当前连接设备未安装 Rust/MSVC 工具链，且没有 Windows Authenticode 证书。因此没有生成、签名或分发 `magiorix-core.exe`；仅完成了经 Linux 工具链验证的 Rust 源码和 Windows 构建脚本。
+2. Rust core 已拥有安全逻辑库，但 Candidate 的 sidecar dispatcher 只激活 `health`、`task.digest`、`task.plan` 与 `shutdown`；`device.ensure`、`ticket.verify`、`receipt.append` 和 `receipt.finalize` 在缺少受保护 native state/keyring 时明确拒绝。因此 required 模式 fail closed，不能作为生产付费任务路径。
+3. JS 中仍保留阶段二 `TaskDescriptor`、Ticket 与 Receipt 逻辑，作为 shadow 比对和既有 Candidate 兼容；在 native keyring/state 和所有入口实际注入完成前，不得删除兼容路径或提升 production required。
+4. 未执行 Windows x86_64 MSVC 交叉构建、Authenticode、安装/升级/卸载、core 锁定文件升级或真实 core sidecar smoke test。阶段四/受保护 Windows 发布环境必须补齐。
+5. 仓库可见性未被可靠确认，未执行 push。
+
