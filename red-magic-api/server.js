@@ -815,9 +815,6 @@ function paymentResultPageHtml() {
         var order = payload.data || {};
         if(Number(order.status) === 1){ showPaid(); return; }
         if(Number(order.status) === 2){ setStatus("订单已关闭", false); return; }
-        if(String(order.lastQueryStatus || "").indexOf("MANUAL_REVIEW:") === 0){
-          setStatus("订单已进入人工复核，请联系客服", false); return;
-        }
         if(Date.now() - startedAt >= 15000 && Date.now() - queryAt >= 15000){
           queryAt = Date.now();
           fetch(url + "/query", { method: "POST", headers: { satoken: token } }).catch(function(){});
@@ -1358,10 +1355,6 @@ function paymentOrderView(row) {
   };
 }
 
-function isManualReviewOrder(row) {
-  return String(row?.last_query_status || "").startsWith("MANUAL_REVIEW:");
-}
-
 app.get("/api/shumiao/balance", authRequired, asyncHandler(async (req, res) => {
   const account = await withMutation((tx) => ensureAccount(req.user.id, 0, tx));
   return success(res, { balance: Number(account.balance || 0) });
@@ -1715,10 +1708,6 @@ app.post("/api/shumiao/order/:orderNo/query", authRequired, asyncHandler(async (
   }
   const gateway = channel === "wxpay" ? wxpayGateway : alipayGateway;
   if (Number(existing.status) !== ORDER_STATUS.PENDING) return success(res, paymentOrderView(existing));
-  if (isManualReviewOrder(existing)) {
-    return success(res, paymentOrderView(existing), "订单已进入人工复核，请联系客服");
-  }
-
   const claim = await withMutation(() => claimPendingOrder({
     db: database,
     orderNo,
@@ -1786,10 +1775,6 @@ app.post("/api/shumiao/order/:orderNo/close", authRequired, asyncHandler(async (
   if (Number(existing.status) !== ORDER_STATUS.PENDING) {
     return success(res, { order: paymentOrderView(existing) }, "订单已处理，无需关闭");
   }
-  if (isManualReviewOrder(existing)) {
-    return success(res, { order: paymentOrderView(existing) }, "订单已进入人工复核，请联系客服");
-  }
-
   const channel = String(existing.channel || "alipay").trim().toLowerCase();
   const channelEnabled = channel === "wxpay" ? wxpayEnabled : alipayEnabled;
   if (!channelEnabled) {

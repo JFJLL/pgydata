@@ -125,7 +125,7 @@ test("an expired order gets a final query and only definitive unpaid closes", as
   assert.equal(errorRows[0].last_query_status, "ERROR:QUERY_FAILED");
 });
 
-test("orders older than 24 hours are queried once before structured manual review", async () => {
+test("orders older than 24 hours remain pending after a nonfinal gateway state", async () => {
   const rows = [pendingRow("RM-STALE", {
     created_at: "2026-08-01T12:00:00.000Z",
     expires_at: "2026-08-01T12:30:00.000Z",
@@ -143,10 +143,10 @@ test("orders older than 24 hours are queried once before structured manual revie
     now: "2026-08-03T12:00:00.000Z",
     maxAgeMs: 24 * 60 * 60 * 1000,
   });
-  assert.deepEqual(results, [{ orderNo: "RM-STALE", status: "MANUAL_REVIEW", reason: "MAX_AGE:WAIT_BUYER_PAY" }]);
+  assert.deepEqual(results, [{ orderNo: "RM-STALE", status: "EXPIRED:WAIT_BUYER_PAY" }]);
   assert.equal(queryCount, 1);
-  assert.equal(rows[0].last_query_status, "MANUAL_REVIEW:MAX_AGE");
-  assert.equal(rows[0].manual_review_reason, "MAX_AGE:WAIT_BUYER_PAY");
+  assert.equal(rows[0].last_query_status, "EXPIRED:WAIT_BUYER_PAY");
+  assert.equal(rows[0].manual_review_reason, null);
 });
 
 test("automatic reconciliation does not repeat an expired query, while a manual retry remains available", async () => {
@@ -189,7 +189,7 @@ test("automatic reconciliation does not repeat an expired query, while a manual 
   assert.equal(rows[0].queryAttempts, 2);
 });
 
-test("an expired order with a final query becomes manual review after max age without another gateway call", async () => {
+test("an expired order with a final query remains pending without another gateway call", async () => {
   const rows = [pendingRow("RM-EXPIRED-STALE", {
     created_at: "2026-08-01T12:00:00.000Z",
     expires_at: "2026-08-01T12:30:00.000Z",
@@ -199,17 +199,13 @@ test("an expired order with a final query becomes manual review after max age wi
   const results = await reconcileOnce({
     db: fakeDb(rows),
     gateway: { async queryTrade() { queryCount += 1; return { tradeStatus: "WAIT_BUYER_PAY" }; } },
-    settle: async () => { throw new Error("manual review order must not settle"); },
+    settle: async () => { throw new Error("pending order must not settle"); },
     now: "2026-08-03T12:00:00.000Z",
     maxAgeMs: 24 * 60 * 60 * 1000,
   });
-  assert.deepEqual(results, [{
-    orderNo: "RM-EXPIRED-STALE",
-    status: "MANUAL_REVIEW",
-    reason: "MAX_AGE:EXPIRY_QUERY_ALREADY_ATTEMPTED",
-  }]);
+  assert.deepEqual(results, [{ orderNo: "RM-EXPIRED-STALE", status: "EXPIRED" }]);
   assert.equal(queryCount, 0);
-  assert.equal(rows[0].last_query_status, "MANUAL_REVIEW:MAX_AGE");
+  assert.equal(rows[0].last_query_status, "EXPIRED:QUERY_COMPLETE");
 });
 
 test("a query for another order is retryable and cannot close or credit the local order", async () => {

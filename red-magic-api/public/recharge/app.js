@@ -147,12 +147,8 @@
   function isStrongPassword(value) {
     return typeof value === "string" && value.length >= 8 && value.length <= 64;
   }
-  function isManualReview(order) {
-    return String(order && order.lastQueryStatus || "").indexOf("MANUAL_REVIEW:") === 0;
-  }
   function statusBadge(order) {
     var status = Number(order.status);
-    if (isManualReview(order)) return '<span class="badge badge-review"><span class="dot"></span>人工复核</span>';
     if (status === 1) return '<span class="badge badge-paid"><span class="dot"></span>已到账</span>';
     if (status === 2) return '<span class="badge badge-closed"><span class="dot"></span>已关闭</span>';
     return '<span class="badge badge-pending"><span class="dot"></span>待支付</span>';
@@ -771,17 +767,6 @@
           + '  <div class="modal-actions" style="justify-content:center"><a href="#/recharge" class="btn btn-primary">返回充值中心</a></div>'
           + "</div>";
       }
-      function renderReview() {
-        stopPolling();
-        var card = document.getElementById("pay-card");
-        card.innerHTML = ''
-          + '<div class="detail-ok">'
-          + '  <div class="big-icon" style="color:var(--amber)">!</div>'
-          + '  <h2>人工复核中</h2>'
-          + '  <p>订单已进入人工复核，请联系客服处理。</p>'
-          + '  <div class="modal-actions" style="justify-content:center"><a href="#/recharge" class="btn btn-primary">返回充值中心</a></div>'
-          + "</div>";
-      }
       function renderPay(order, cached) {
         var isAlipay = String(order.channel || "alipay") !== "wxpay";
         var accentClass = isAlipay ? "alipay" : "wxpay";
@@ -792,9 +777,7 @@
         var qrBlock = "";
         var qrSource = cached ? cached.qrCode || "" : "";
         if (qrSource) {
-          qrBlock = isAlipay
-            ? '<div class="qr-box"><img src="' + esc(qrSource) + '" alt="支付宝付款二维码"></div>'
-            : '<div class="qr-box"><img id="wx-qr" alt="微信付款二维码"></div>';
+          qrBlock = '<div class="qr-box"><img id="pay-qr" alt="' + (isAlipay ? "支付宝付款二维码" : "微信付款二维码") + '"></div>';
         } else {
           qrBlock = '<div class="qr-box" style="color:var(--muted);font-size:12px;text-align:center">二维码已失效<br>请返回充值中心重新下单</div>';
         }
@@ -825,23 +808,22 @@
           + qrBlock
           + '    <div class="qr-hint"><b>' + scanHint + "</b></div>"
           + '    <div class="pay-status" id="pay-status"></div>'
-          + '    <div class="pay-countdown" id="pay-countdown"></div>'
           + "  </div>"
           + "</div>";
 
-        if (!isAlipay && qrSource) {
+        if (qrSource) {
           QRCode.toDataURL(String(qrSource), {
             width: 248,
             margin: 1,
             errorCorrectionLevel: "M",
             color: { dark: "#111827", light: "#ffffff" },
           }, function (err, url) {
-            var img = document.getElementById("wx-qr");
+            var img = document.getElementById("pay-qr");
             if (!err && url && img) img.src = url;
             else if (img) {
               img.style.display = "none";
               var box = img.closest(".qr-box");
-              if (box) box.innerHTML = '<div style="color:var(--muted);font-size:12px">二维码生成失败</div>';
+              if (box) box.innerHTML = '<div style="color:var(--muted);font-size:12px">二维码生成失败，请点击左侧付款按钮</div>';
             }
           });
         }
@@ -882,10 +864,6 @@
       function statusEl() {
         return document.getElementById("pay-status");
       }
-      function countdownEl() {
-        return document.getElementById("pay-countdown");
-      }
-
       function handleOrder(order) {
         if (Number(order.status) === 1) {
           renderPaid(order);
@@ -894,10 +872,6 @@
         }
         if (Number(order.status) === 2) {
           renderClosed();
-          return true;
-        }
-        if (isManualReview(order)) {
-          renderReview();
           return true;
         }
         return false;
@@ -941,20 +915,7 @@
       }
 
       function startPolling() {
-        var remaining = Math.max(0, POLL_MAX_ATTEMPTS - attempts);
-        var countdown = countdownEl();
-        if (countdown) countdown.textContent = "自动检测剩余约 " + Math.ceil(remaining * POLL_INTERVAL_MS / 1000) + " 秒";
         checkNow(false);
-        var timer = setInterval(function () {
-          if (stopped) {
-            clearInterval(timer);
-            return;
-          }
-          var remaining2 = Math.max(0, POLL_MAX_ATTEMPTS - attempts);
-          var cd = countdownEl();
-          if (cd) cd.textContent = "自动检测剩余约 " + Math.ceil(remaining2 * POLL_INTERVAL_MS / 1000) + " 秒";
-        }, 1000);
-        viewTimers.push(timer);
       }
 
       apiGet("/api/shumiao/order/" + encodeURIComponent(orderNo))
@@ -1015,7 +976,6 @@
               + "</div>";
             return;
           }
-          var isReview = isManualReview(order);
           var rows = ""
             + '<div class="info-row"><span class="k">订单号</span><span class="v mono">' + esc(orderNo) + "</span></div>"
             + '<div class="info-row"><span class="k">支付金额</span><span class="v strong">¥' + fmtMoney(order.amountYuan != null ? order.amountYuan * 100 : order.amountCents) + "</span></div>"
@@ -1023,9 +983,7 @@
             + '<div class="info-row"><span class="k">支付方式</span><span class="v">' + channelText(order.channel) + "</span></div>"
             + '<div class="info-row"><span class="k">状态</span><span class="v">' + statusBadge(order) + "</span></div>"
             + '<div class="info-row"><span class="k">创建时间</span><span class="v">' + fmtTime(order.createdAt) + "</span></div>";
-          var actions = isReview
-            ? '<div class="form-err" style="margin:14px 0 0">订单已进入人工复核，请联系客服处理。</div>'
-            : '<div class="modal-actions">'
+          var actions = '<div class="modal-actions">'
             + '  <button class="btn btn-danger" id="detail-close">关闭订单</button>'
             + '  <button class="btn btn-primary" id="detail-continue">继续支付</button>'
             + "</div>";
@@ -1112,7 +1070,8 @@
   // ---------- 消耗记录 ----------
   function viewConsumeRecords(params) {
     var page = Math.max(1, Number(params.page || 1));
-    var pageSize = 10;
+    var requestedPageSize = Number(params.pageSize || 10);
+    var pageSize = [10, 20, 50, 100].indexOf(requestedPageSize) >= 0 ? requestedPageSize : 10;
     var html = shell("records-consume", ''
       + '  <div class="page-head">'
       + '    <div><p class="kicker">Consume Records</p><h1 class="page-title">消耗记录</h1>'
@@ -1128,6 +1087,9 @@
           var total = Number(data.total || 0);
           var pages = Math.max(1, Math.ceil(total / pageSize));
           var list = data.list || [];
+          var pageSizeOptions = [10, 20, 50, 100].map(function (size) {
+            return '<option value="' + size + '"' + (size === pageSize ? " selected" : "") + ">" + size + " 条</option>";
+          }).join("");
           var head = ""
             + "<thead><tr>"
             + "<th>时间</th><th>消耗积分</th><th>明细条数</th><th>备注</th><th>消耗后余额</th>"
@@ -1137,7 +1099,7 @@
               + "<td>" + fmtTime(r.createdAt) + "</td>"
               + "<td style=\"color:var(--red);font-weight:600\">-" + fmtCount(r.consumeCount) + "</td>"
               + "<td>" + fmtCount(r.itemCount) + "</td>"
-              + "<td>" + esc(r.remark || "") + "</td>"
+              + "<td>" + esc(String(r.remark || "").replace(/树苗/g, "积分")) + "</td>"
               + "<td>" + fmtCount(r.balanceAfter) + "</td>"
               + "</tr>";
           }).join("");
@@ -1145,14 +1107,19 @@
             ? '<div class="table-wrap"><table>' + head + "<tbody>" + rows + "</tbody></table></div>"
             : '<div class="empty">暂无消耗记录</div>';
           box.innerHTML += '<div class="pagination">'
+            + '  <label class="page-size-control"><span>每页</span><select id="consume-page-size">' + pageSizeOptions + "</select></label>"
             + '  <button class="page-btn" id="prev-page" ' + (page <= 1 ? "disabled" : "") + ">上一页</button>"
             + '  <span class="page-info">第 ' + page + " / " + pages + " 页 · 共 " + total + " 条</span>"
             + '  <button class="page-btn" id="next-page" ' + (page >= pages ? "disabled" : "") + ">下一页</button>"
             + "</div>";
+          var pageSizeSelect = document.getElementById("consume-page-size");
           var prev = document.getElementById("prev-page");
           var next = document.getElementById("next-page");
-          if (prev) prev.addEventListener("click", function () { go("/records/consume?page=" + (page - 1)); });
-          if (next) next.addEventListener("click", function () { go("/records/consume?page=" + (page + 1)); });
+          if (pageSizeSelect) pageSizeSelect.addEventListener("change", function () {
+            go("/records/consume?page=1&pageSize=" + encodeURIComponent(pageSizeSelect.value));
+          });
+          if (prev) prev.addEventListener("click", function () { go("/records/consume?page=" + (page - 1) + "&pageSize=" + pageSize); });
+          if (next) next.addEventListener("click", function () { go("/records/consume?page=" + (page + 1) + "&pageSize=" + pageSize); });
         })
         .catch(function (e) {
           document.getElementById("records-box").innerHTML = '<div class="empty">加载失败：' + esc(e.message) + "</div>";

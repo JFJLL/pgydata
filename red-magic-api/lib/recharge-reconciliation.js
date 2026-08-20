@@ -55,7 +55,6 @@ async function claimPendingOrder({
       WHERE order_no = ?
        AND status = ?
        AND channel = ?
-       AND (last_query_status IS NULL OR last_query_status NOT LIKE 'MANUAL_REVIEW:%')
        AND (last_query_at IS NULL OR last_query_at <= ?)
        ${expiryGuard}`,
     params,
@@ -103,7 +102,6 @@ async function reconcileOnce({
      FROM recharge_orders
      WHERE status = ?
        AND channel = ?
-       AND (last_query_status IS NULL OR last_query_status NOT LIKE 'MANUAL_REVIEW:%')
      ORDER BY created_at ASC LIMIT ?`,
     [ORDER_STATUS.PENDING, channel, batchSize],
   );
@@ -115,15 +113,10 @@ async function reconcileOnce({
         await mutate(() => setQueryStatus({
           db,
           orderNo: candidate.order_no,
-          status: "MANUAL_REVIEW:MAX_AGE",
-          manualReviewReason: "MAX_AGE:EXPIRY_QUERY_ALREADY_ATTEMPTED",
+          status: "EXPIRED:QUERY_COMPLETE",
           now: current,
         }));
-        results.push({
-          orderNo: candidate.order_no,
-          status: "MANUAL_REVIEW",
-          reason: "MAX_AGE:EXPIRY_QUERY_ALREADY_ATTEMPTED",
-        });
+        results.push({ orderNo: candidate.order_no, status: "EXPIRED" });
       }
       continue;
     }
@@ -156,34 +149,14 @@ async function reconcileOnce({
       } else if (isDefinitiveUnpaidStatus(status)) {
         await mutate(() => setQueryStatus({ db, orderNo: order.order_no, status, close: true, now: current }));
         results.push({ orderNo: order.order_no, status, expired });
-      } else if (stale) {
-        await mutate(() => setQueryStatus({
-          db,
-          orderNo: order.order_no,
-          status: "MANUAL_REVIEW:MAX_AGE",
-          manualReviewReason: `MAX_AGE:${status}`,
-          now: current,
-        }));
-        results.push({ orderNo: order.order_no, status: "MANUAL_REVIEW", reason: `MAX_AGE:${status}` });
       } else {
         const pendingStatus = expired ? `EXPIRED:${status}` : status;
         await mutate(() => setQueryStatus({ db, orderNo: order.order_no, status: pendingStatus, now: current }));
         results.push({ orderNo: order.order_no, status: pendingStatus });
       }
     } catch {
-      if (stale) {
-        await mutate(() => setQueryStatus({
-          db,
-          orderNo: order.order_no,
-          status: "MANUAL_REVIEW:MAX_AGE",
-          manualReviewReason: "MAX_AGE:QUERY_FAILED",
-          now: current,
-        }));
-        results.push({ orderNo: order.order_no, status: "MANUAL_REVIEW", reason: "MAX_AGE:QUERY_FAILED" });
-      } else {
-        await mutate(() => setQueryStatus({ db, orderNo: order.order_no, status: "ERROR:QUERY_FAILED", now: current }));
-        results.push({ orderNo: order.order_no, status: "ERROR" });
-      }
+      await mutate(() => setQueryStatus({ db, orderNo: order.order_no, status: "ERROR:QUERY_FAILED", now: current }));
+      results.push({ orderNo: order.order_no, status: "ERROR" });
     }
   }
   return results;
