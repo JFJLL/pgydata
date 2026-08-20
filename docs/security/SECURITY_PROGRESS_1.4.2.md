@@ -152,3 +152,9 @@
 2. 本地 Candidate 未配置真实 Ticket 私钥和 Windows Authenticode 证书，不能作为可发布构建物；生产密钥装载和证书签名必须在受保护 CI/发布环境中完成。
 3. 阶段三仍需将设备私钥保护、Ticket 验签与 Receipt 签名迁入 Rust 原生核心，并完成所有采集入口的生产级强制接入。
 
+
+### 阶段二提交状态
+
+- **实现提交**：4bbc7791559837fd52b27a3d9da6bbcb941a8f45（security: add signed task authorization and credit reservation）。
+- **推送状态**：未推送。当前会话无法可靠确认仓库为 Private（GitHub 集成未启用），依安全红线仅保留本地提交。
+
