@@ -191,3 +191,9 @@
 4. 未执行 Windows x86_64 MSVC 交叉构建、Authenticode、安装/升级/卸载、core 锁定文件升级或真实 core sidecar smoke test。阶段四/受保护 Windows 发布环境必须补齐。
 5. 仓库可见性未被可靠确认，未执行 push。
 
+
+### 阶段三提交状态
+
+- **实现提交**：6418978c819591b42431e44ea7697102beb86526（security: move task authorization and critical logic into native core）。
+- **推送状态**：未推送。当前会话无法可靠确认仓库为 Private，依安全红线只保留本地提交。
+
