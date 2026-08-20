@@ -5,6 +5,14 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Production Candidates embed distinct public Ticket and policy trust roots in the native binary.
+if (-not $UnsignedLocal) {
+  $mode = ($env:MAGIORIX_TASK_AUTH_MODE ?? 'required').Trim().ToLowerInvariant()
+  if ($mode -in @('off', 'shadow')) { throw 'Production Candidate cannot use MAGIORIX_TASK_AUTH_MODE=off or shadow' }
+  foreach ($name in @('MAGIORIX_TICKET_PUBLIC_KEYS_JSON', 'MAGIORIX_POLICY_PUBLIC_KEYS_JSON')) {
+    if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { throw "Production Candidate requires $name (a public-key JSON trust root)" }
+  }
+}
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $CoreRoot = Join-Path $RepoRoot 'native\magiorix-core'
 $Target = 'x86_64-pc-windows-msvc'

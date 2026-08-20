@@ -1,10 +1,15 @@
-use std::io::{self, Read, Write};
+use std::{
+    io::{self, Read, Write},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use magiorix_core::{
-    canonical_messagepack, decode_canonical_messagepack, encode_length_prefixed, plan_pgy_kol,
-    CoreError, PgyPlanInput, SecureFrame, SessionGuard, TaskDescriptor, CORE_VERSION,
-    MAX_FRAME_BYTES, PROTOCOL_VERSION,
+    canonical_messagepack, decode_canonical_messagepack, decrypt_strategy_with_dpapi_key,
+    embedded_strategy_verifier, embedded_ticket_verifier, encode_length_prefixed,
+    generate_dpapi_device_encryption_identity, plan_pgy_kol, CoreError, PgyPlanInput, SecureFrame,
+    SessionGuard, StrategyBundle, StrategyExpectedBinding, TaskDescriptor, TicketBinding,
+    TicketPayload, TicketVerifier, CORE_VERSION, MAX_FRAME_BYTES, PROTOCOL_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -22,6 +27,45 @@ struct Response<'a> {
     ok: bool,
     code: &'a str,
     payload: Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StrategyDecryptRequest {
+    bundle: StrategyBundle,
+    expected: StrategyExpectedBinding,
+    protected_private_key_b64: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TicketVerifyRequest {
+    ticket: TicketPayload,
+    signature_hex: String,
+    expected: TicketExpectedBinding,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TicketExpectedBinding {
+    user_id: u64,
+    device_key_id: String,
+    client_task_id: String,
+    task_digest: String,
+    requested_items: u32,
+    client_version: String,
+}
+
+#[derive(Default)]
+struct CoreRuntime {
+    ticket_verifier: Option<TicketVerifier>,
+}
+
+fn current_unix_time() -> Result<i64, CoreError> {
+    let elapsed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| CoreError::Strategy("system clock is before Unix epoch"))?;
+    i64::try_from(elapsed.as_secs()).map_err(|_| CoreError::Strategy("system clock is invalid"))
 }
 
 fn read_frame<R: Read>(input: &mut R) -> Result<Vec<u8>, CoreError> {
@@ -58,7 +102,7 @@ fn write_hello<W: Write>(output: &mut W, hello: &Hello) -> Result<(), CoreError>
     output.flush().map_err(|_| CoreError::InvalidFrame)
 }
 
-fn dispatch(frame: &SecureFrame) -> Result<(Value, bool), CoreError> {
+fn dispatch(frame: &SecureFrame, runtime: &mut CoreRuntime) -> Result<(Value, bool), CoreError> {
     match frame.command.as_str() {
         "health" => Ok((
             json!({"coreVersion": CORE_VERSION, "protocolVersion": PROTOCOL_VERSION, "network": false}),
@@ -79,13 +123,62 @@ fn dispatch(frame: &SecureFrame) -> Result<(Value, bool), CoreError> {
                 false,
             ))
         }
-        "device.ensure" | "device.rotate" | "ticket.verify" | "receipt.append"
-        | "receipt.finalize" => {
-            // These commands are wired only after the parent has supplied the explicit trusted-key
-            // and protected-state context. They deliberately reject incomplete invocations.
+        "device.ensure" | "device.rotate" => {
+            let identity = generate_dpapi_device_encryption_identity()?;
+            Ok((
+                serde_json::to_value(identity).map_err(|_| CoreError::Serialization)?,
+                false,
+            ))
+        }
+        "strategy.decrypt" => {
+            let request: StrategyDecryptRequest = serde_json::from_value(frame.payload.clone())
+                .map_err(|_| CoreError::InvalidFrame)?;
+            let verifier = embedded_strategy_verifier()?;
+            let decision = decrypt_strategy_with_dpapi_key(
+                &verifier,
+                &request.bundle,
+                &request.expected,
+                &request.protected_private_key_b64,
+                current_unix_time()?,
+            )?;
+            Ok((
+                serde_json::to_value(decision).map_err(|_| CoreError::Serialization)?,
+                false,
+            ))
+        }
+        "ticket.verify" => {
+            let request: TicketVerifyRequest = serde_json::from_value(frame.payload.clone())
+                .map_err(|_| CoreError::InvalidFrame)?;
+            if runtime.ticket_verifier.is_none() {
+                runtime.ticket_verifier = Some(embedded_ticket_verifier()?);
+            }
+            let expected = TicketBinding {
+                user_id: request.expected.user_id,
+                device_key_id: &request.expected.device_key_id,
+                client_task_id: &request.expected.client_task_id,
+                task_digest: &request.expected.task_digest,
+                requested_items: request.expected.requested_items,
+                client_version: &request.expected.client_version,
+            };
+            let handle = runtime
+                .ticket_verifier
+                .as_mut()
+                .ok_or(CoreError::InvalidHandle)?
+                .verify(
+                    &request.ticket,
+                    &request.signature_hex,
+                    &expected,
+                    current_unix_time()?,
+                )?;
+            Ok((
+                serde_json::to_value(handle).map_err(|_| CoreError::Serialization)?,
+                false,
+            ))
+        }
+        "receipt.append" | "receipt.finalize" => {
+            // Receipt state persistence is not initialized until the device signing backend is bound.
             Err(CoreError::InvalidHandle)
         }
-        "strategy.decrypt" => Err(CoreError::UnknownCommand),
         "shutdown" => Ok((json!({"stopping": true}), true)),
         _ => Err(CoreError::UnknownCommand),
     }
@@ -113,6 +206,7 @@ fn run() -> Result<(), CoreError> {
     let mut secret_array = [0_u8; 32];
     secret_array.copy_from_slice(&secret);
     let mut session = SessionGuard::new(secret_array);
+    let mut runtime = CoreRuntime::default();
     write_hello(&mut stdout, &hello)?;
 
     loop {
@@ -120,7 +214,7 @@ fn run() -> Result<(), CoreError> {
         let frame: SecureFrame = decode_canonical_messagepack(&raw)?;
         session.verify_inbound(&frame)?;
         let request_id: Uuid = frame.request_id;
-        let response = match dispatch(&frame) {
+        let response = match dispatch(&frame, &mut runtime) {
             Ok((payload, shutdown)) => (
                 Response {
                     ok: true,

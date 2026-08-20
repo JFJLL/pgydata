@@ -14,6 +14,7 @@ const { createAlipayGateway, isSuccessfulTradeStatus, normalizeNotification } = 
 const { createWxpayGateway, normalizeNotification: normalizeWxpayNotification } = require("./lib/wxpay-gateway");
 const { ORDER_STATUS, SettlementError, settleRechargeOrder } = require("./lib/recharge-settlement");
 const { TaskAuthorizationService } = require("./lib/task-authorization-service");
+const { StrategyBundleService } = require("./lib/strategy-bundle-service");
 const {
   claimPendingOrder,
   centsFromAmount,
@@ -40,6 +41,14 @@ const RELEASE_MANIFEST_PATH = process.env.RELEASE_MANIFEST_PATH
 const RELEASE_MANIFEST = loadReleaseManifest(RELEASE_MANIFEST_PATH);
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
 const taskAuthService = new TaskAuthorizationService({
+  db: {
+    get: dbGet,
+    all: dbAll,
+    run: dbRun,
+  },
+  clock: nowIso,
+});
+const strategyBundleService = new StrategyBundleService({
   db: {
     get: dbGet,
     all: dbAll,
@@ -1476,6 +1485,20 @@ app.post("/api/desktop/devices/:id/revoke", authRequired, asyncHandler(async (re
   return ok(res, { revoked: true });
 }));
 
+app.post("/api/desktop/devices/encryption-key", authRequired, asyncHandler(async (req, res) => {
+  const { deviceKeyId, encryptionPublicKey } = req.body || {};
+  if (!deviceKeyId || !encryptionPublicKey) return fail(res, 400, "deviceKeyId and encryptionPublicKey are required");
+  const key = Buffer.from(String(encryptionPublicKey), "base64");
+  if (key.length !== 32) return fail(res, 400, "encryptionPublicKey must be a base64 X25519 public key");
+  const updated = await dbRun(
+    `UPDATE desktop_devices
+     SET encryption_public_key = ?, key_backend = 'native-core-hpke', updated_at = ?
+     WHERE user_id = ? AND device_key_id = ? AND status = 'ACTIVE'`,
+    [key.toString("base64"), nowIso(), req.user.id, deviceKeyId],
+  );
+  if (!updated || updated.changes !== 1) return fail(res, 404, "Active device was not found");
+  return ok(res, { deviceKeyId, encryptionKeyAlgorithm: "X25519", keyBackend: "native-core-hpke" });
+}));
 app.post("/api/desktop/task-authorizations", authRequired, asyncHandler(async (req, res) => {
   const { clientTaskId, deviceKeyId, taskType, taskDigest, requestedItems, clientVersion } = req.body;
   if (!clientTaskId || !deviceKeyId || !taskType || !taskDigest || !requestedItems) {
@@ -1501,6 +1524,42 @@ app.post("/api/desktop/task-authorizations", authRequired, asyncHandler(async (r
   }
 }));
 
+app.post("/api/desktop/strategy-bundles", authRequired, asyncHandler(async (req, res) => {
+  try {
+    const {
+      authorizationId,
+      ticketJti,
+      deviceKeyId,
+      taskDigest,
+      taskType,
+      clientVersion,
+      coreVersion,
+      coreProtocolVersion,
+      releaseManifestKeyId,
+      ticketKeyId,
+      policyKeyId,
+      policyVersion,
+    } = req.body || {};
+    const result = await strategyBundleService.createBundle({
+      userId: req.user.id,
+      authorizationId,
+      ticketJti,
+      deviceKeyId,
+      taskDigest,
+      taskType,
+      clientVersion,
+      coreVersion,
+      coreProtocolVersion,
+      releaseManifestKeyId,
+      ticketKeyId,
+      policyKeyId,
+      policyVersion,
+    });
+    return ok(res, result);
+  } catch (err) {
+    return fail(res, err.statusCode || 400, err.message, { code: err.code || "strategy-bundle-rejected" });
+  }
+}));
 app.get("/api/desktop/task-authorizations/by-client-task/:clientTaskId", authRequired, asyncHandler(async (req, res) => {
   const auth = await dbGet(
     "SELECT * FROM task_authorizations WHERE user_id = ? AND client_task_id = ?",

@@ -15,6 +15,7 @@ export class TaskAuthorizationProvider {
     this.nativeCoreClient = nativeCoreClient;
     this.authMode = authMode;
     this.logger = logger;
+    this.nativeDeviceIdentity = null;
   }
 
   async authorizeTask({ clientTaskId, pluginId, taskType, inputs = [], selectedFields = [], filterState = {}, maxCount = null, requestedItems = null } = {}) {
@@ -31,10 +32,92 @@ export class TaskAuthorizationProvider {
       if (!this.nativeCoreClient) throw new Error("Native authorization core is unavailable; paid task was not started");
       const nativeResult = await this.nativeCoreClient.request("task.digest", descriptor);
       if (nativeResult?.taskDigest !== jsTaskDigest) throw new Error("Native task digest mismatch; paid task was not started");
-      // Ticket verification and handle issuance is intentionally required before
-      // acquiring a runnable authorization. Until the signed Ticket keyring and
-      // persistent native device state are bundled, this candidate fails closed.
-      throw new Error("Native Ticket verification handle is not available in this candidate; paid task was not started");
+
+      let authorization = null;
+      try {
+        if (!this.nativeDeviceIdentity) {
+          this.nativeDeviceIdentity = await this.nativeCoreClient.request("device.ensure", {});
+        }
+        const identity = this.nativeDeviceIdentity;
+        if (identity?.encryptionAlgorithm !== "HPKE-X25519-HKDF-SHA256-AES-256-GCM"
+          || typeof identity?.encryptionPublicKeyB64 !== "string"
+          || typeof identity?.protectedPrivateKeyB64 !== "string") {
+          throw new Error("Native device encryption identity is invalid");
+        }
+        const registeredDeviceKeyId = await this.authorizationGate.registerDeviceEncryptionKey({
+          user,
+          encryptionPublicKey: identity.encryptionPublicKeyB64,
+        });
+        authorization = await this.authorizationGate.acquireTaskAuthorization({
+          user, clientTaskId, pluginId, taskType, inputs, selectedFields, filterState, maxCount, requestedItems,
+          nativeTicketRequired: true,
+          deferStart: true,
+        });
+        if (!authorization?.authorized || !authorization?.ticket || !authorization?.ticketSignature) {
+          throw new Error("Cloud authorization did not return a complete signed Ticket");
+        }
+        if (authorization.deviceKeyId !== registeredDeviceKeyId) {
+          throw new Error("Authorization Ticket device binding does not match registered HPKE device identity");
+        }
+        const ticketHandle = await this.nativeCoreClient.request("ticket.verify", {
+          ticket: authorization.ticket,
+          signatureHex: authorization.ticketSignature,
+          expected: {
+            userId: Number(user.id),
+            deviceKeyId: authorization.deviceKeyId,
+            clientTaskId,
+            taskDigest: jsTaskDigest,
+            requestedItems: Number.isInteger(requestedItems) && requestedItems > 0 ? requestedItems : inputs.length,
+            clientVersion: "1.4.2",
+          },
+        });
+        if (!ticketHandle?.handle || ticketHandle?.authorization_id !== authorization.authorizationId) {
+          throw new Error("Native Ticket verification did not return a bound authorization handle");
+        }
+        const expected = {
+          authorizationId: authorization.authorizationId,
+          ticketJti: authorization.ticketJti,
+          deviceKeyId: authorization.deviceKeyId,
+          taskDigest: jsTaskDigest,
+          taskType,
+          clientVersion: "1.4.2",
+          coreVersion: "1.4.2",
+          coreProtocolVersion: 1,
+          releaseManifestKeyId: process.env.MAGIORIX_RELEASE_MANIFEST_KEY_ID || null,
+          ticketKeyId: authorization.ticketKeyId,
+          policyKeyId: process.env.MAGIORIX_POLICY_SIGNING_KEY_ID || "magiorix-policy-2026-v1",
+          policyVersion: authorization.policyVersion,
+        };
+        const bundle = await this.authorizationGate.requestStrategyBundle(expected);
+        const strategy = await this.nativeCoreClient.request("strategy.decrypt", {
+          bundle,
+          expected,
+          protectedPrivateKeyB64: identity.protectedPrivateKeyB64,
+        });
+        if (strategy?.authorizationId !== authorization.authorizationId
+          || strategy?.taskDigest !== jsTaskDigest
+          || strategy?.taskType !== taskType
+          || !Number.isInteger(strategy?.maxItems)
+          || strategy.maxItems <= 0) {
+          throw new Error("Native strategy decision binding is invalid");
+        }
+        await this.authorizationGate.startTaskAuthorization(authorization.authorizationId);
+        return {
+          ...authorization,
+          taskDescriptor: descriptor,
+          taskDigest: jsTaskDigest,
+          nativeAuthorizationHandle: ticketHandle.handle,
+          strategy,
+        };
+      } catch (error) {
+        if (authorization?.authorizationId) {
+          await this.authorizationGate.cancelTask({
+            clientTaskId,
+            reason: "native-required-authorization-or-strategy-rejected",
+          }).catch(() => {});
+        }
+        throw new Error(`Native required authorization rejected; paid task was not started: ${error.message}`);
+      }
     }
 
     const result = await this.authorizationGate.acquireTaskAuthorization({

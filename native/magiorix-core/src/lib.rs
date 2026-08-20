@@ -3,6 +3,12 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use hmac::{Hmac, Mac};
+use hpke::{
+    aead::{AeadTag, AesGcm256},
+    kdf::HkdfSha256,
+    kem::X25519HkdfSha256,
+    Deserializable, Kem as KemTrait, OpModeR, Serializable,
+};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -17,6 +23,9 @@ pub const PROTOCOL_VERSION: u16 = 1;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const RECEIPT_GENESIS_HASH: &str =
     "0000000000000000000000000000000000000000000000000000000000000000";
+pub const POLICY_PROTOCOL: &str = "magiorix-policy-hpke-v1";
+pub const POLICY_AEAD: &str = "AES-256-GCM";
+pub const MAX_STRATEGY_BUNDLE_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum CoreError {
@@ -46,6 +55,8 @@ pub enum CoreError {
     PgyPlan(&'static str),
     #[error("serialization failed")]
     Serialization,
+    #[error("strategy bundle validation failed: {0}")]
+    Strategy(&'static str),
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;
@@ -63,6 +74,16 @@ where
         return Err(CoreError::NonCanonicalFrame);
     }
     Ok(value)
+}
+
+fn hex_decode(value: &str) -> Option<Vec<u8>> {
+    if value.len() % 2 != 0 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    (0..value.len())
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&value[index..index + 2], 16).ok())
+        .collect()
 }
 
 pub fn sha256_hex(bytes: &[u8]) -> String {
@@ -274,6 +295,7 @@ impl TaskDescriptor {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct TicketPayload {
     pub version: String,
     pub kid: String,
@@ -288,8 +310,8 @@ pub struct TicketPayload {
     pub points_per_item: u32,
     pub policy_version: String,
     pub minimum_client_version: String,
-    pub issued_at_unix: i64,
-    pub expires_at_unix: i64,
+    pub issued_at: String,
+    pub expires_at: String,
     pub nonce: String,
 }
 
@@ -328,7 +350,7 @@ impl TicketVerifier {
     pub fn verify(
         &mut self,
         ticket: &TicketPayload,
-        signature_b64: &str,
+        signature_hex: &str,
         expected: &TicketBinding<'_>,
         now_unix: i64,
     ) -> CoreResult<AuthorizationHandle> {
@@ -336,15 +358,28 @@ impl TicketVerifier {
             .trusted_keys
             .get(&ticket.kid)
             .ok_or(CoreError::Ticket("untrusted kid"))?;
-        let signature_bytes = BASE64
-            .decode(signature_b64)
-            .map_err(|_| CoreError::Ticket("invalid signature encoding"))?;
+        let signature_bytes =
+            hex_decode(signature_hex).ok_or(CoreError::Ticket("invalid signature encoding"))?;
         let signature = Signature::from_slice(&signature_bytes)
             .map_err(|_| CoreError::Ticket("invalid signature"))?;
-        key.verify(&canonical_messagepack(ticket)?, &signature)
+        let signed_value = serde_json::to_value(ticket).map_err(|_| CoreError::Serialization)?;
+        key.verify(canonical_json(&signed_value)?.as_bytes(), &signature)
             .map_err(|_| CoreError::Ticket("signature mismatch"))?;
-        if ticket.expires_at_unix <= now_unix
-            || ticket.issued_at_unix > now_unix
+        let issued = time::OffsetDateTime::parse(
+            &ticket.issued_at,
+            &time::format_description::well_known::Rfc3339,
+        )
+        .map_err(|_| CoreError::Ticket("invalid issue time"))?
+        .unix_timestamp();
+        let expires = time::OffsetDateTime::parse(
+            &ticket.expires_at,
+            &time::format_description::well_known::Rfc3339,
+        )
+        .map_err(|_| CoreError::Ticket("invalid expiry time"))?
+        .unix_timestamp();
+        if expires <= now_unix
+            || issued > now_unix.saturating_add(60)
+            || expires <= issued
             || ticket.max_items == 0
         {
             return Err(CoreError::Ticket("expired or invalid time window"));
@@ -507,6 +542,418 @@ impl ReceiptEngine {
         state.previous_hash = receipt_hash;
         state.finalized = final_receipt;
         Ok(receipt)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StrategyBundle {
+    pub protocol: String,
+    pub authorization_id: String,
+    pub ticket_jti: String,
+    pub device_key_id: String,
+    pub task_digest: String,
+    pub task_type: String,
+    pub client_version: String,
+    pub core_version: String,
+    pub core_protocol_version: u16,
+    pub release_manifest_key_id: Option<String>,
+    pub ticket_key_id: String,
+    pub policy_key_id: String,
+    pub policy_version: String,
+    pub issued_at: String,
+    pub expires_at: String,
+    pub bundle_digest: String,
+    pub encapsulated_key: String,
+    pub encrypted_bundle: String,
+    pub bundle_signature: String,
+    pub key_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StrategyBinding {
+    pub protocol: String,
+    pub authorization_id: String,
+    pub ticket_jti: String,
+    pub device_key_id: String,
+    pub task_digest: String,
+    pub task_type: String,
+    pub client_version: String,
+    pub core_version: String,
+    pub core_protocol_version: u16,
+    pub release_manifest_key_id: Option<String>,
+    pub ticket_key_id: String,
+    pub policy_key_id: String,
+    pub policy_version: String,
+    pub issued_at: String,
+    pub expires_at: String,
+    pub bundle_digest: String,
+}
+
+impl From<&StrategyBundle> for StrategyBinding {
+    fn from(bundle: &StrategyBundle) -> Self {
+        Self {
+            protocol: bundle.protocol.clone(),
+            authorization_id: bundle.authorization_id.clone(),
+            ticket_jti: bundle.ticket_jti.clone(),
+            device_key_id: bundle.device_key_id.clone(),
+            task_digest: bundle.task_digest.clone(),
+            task_type: bundle.task_type.clone(),
+            client_version: bundle.client_version.clone(),
+            core_version: bundle.core_version.clone(),
+            core_protocol_version: bundle.core_protocol_version,
+            release_manifest_key_id: bundle.release_manifest_key_id.clone(),
+            ticket_key_id: bundle.ticket_key_id.clone(),
+            policy_key_id: bundle.policy_key_id.clone(),
+            policy_version: bundle.policy_version.clone(),
+            issued_at: bundle.issued_at.clone(),
+            expires_at: bundle.expires_at.clone(),
+            bundle_digest: bundle.bundle_digest.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StrategyExpectedBinding {
+    pub authorization_id: String,
+    pub ticket_jti: String,
+    pub device_key_id: String,
+    pub task_digest: String,
+    pub task_type: String,
+    pub client_version: String,
+    pub core_version: String,
+    pub core_protocol_version: u16,
+    pub release_manifest_key_id: Option<String>,
+    pub ticket_key_id: String,
+    pub policy_key_id: String,
+    pub policy_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StrategyPolicy {
+    pub policy_version: String,
+    pub task_type: String,
+    pub max_items: u32,
+    pub points_per_item: u32,
+    pub capabilities: StrategyCapabilities,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StrategyCapabilities {
+    pub export: bool,
+    pub resume: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StrategyDecision {
+    pub authorization_id: String,
+    pub task_digest: String,
+    pub task_type: String,
+    pub policy_version: String,
+    pub max_items: u32,
+    pub points_per_item: u32,
+    pub export_allowed: bool,
+    pub resume_allowed: bool,
+    pub expires_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct SignedStrategyEnvelope {
+    #[serde(flatten)]
+    binding: StrategyBinding,
+    encapsulated_key: String,
+    encrypted_bundle: String,
+}
+
+pub struct StrategyVerifier {
+    trusted_keys: BTreeMap<String, VerifyingKey>,
+}
+
+impl StrategyVerifier {
+    pub fn new(trusted_keys: BTreeMap<String, VerifyingKey>) -> Self {
+        Self { trusted_keys }
+    }
+
+    pub fn verify_and_decrypt(
+        &self,
+        bundle: &StrategyBundle,
+        expected: &StrategyExpectedBinding,
+        recipient_private_key: &[u8],
+        now_unix: i64,
+    ) -> CoreResult<StrategyDecision> {
+        if bundle.protocol != POLICY_PROTOCOL || bundle.core_protocol_version != PROTOCOL_VERSION {
+            return Err(CoreError::Strategy("unsupported policy protocol"));
+        }
+        if bundle.policy_key_id != bundle.key_id || bundle.policy_key_id != expected.policy_key_id {
+            return Err(CoreError::Strategy("unexpected policy key id"));
+        }
+        let key = self
+            .trusted_keys
+            .get(&bundle.key_id)
+            .ok_or(CoreError::Strategy("untrusted policy key"))?;
+        let binding = StrategyBinding::from(bundle);
+        let signed = SignedStrategyEnvelope {
+            binding: binding.clone(),
+            encapsulated_key: bundle.encapsulated_key.clone(),
+            encrypted_bundle: bundle.encrypted_bundle.clone(),
+        };
+        let signed_value = serde_json::to_value(signed).map_err(|_| CoreError::Serialization)?;
+        let signed_bytes = canonical_json(&signed_value)?.into_bytes();
+        let signature_bytes = BASE64
+            .decode(&bundle.bundle_signature)
+            .map_err(|_| CoreError::Strategy("invalid strategy signature encoding"))?;
+        let signature = Signature::from_slice(&signature_bytes)
+            .map_err(|_| CoreError::Strategy("invalid strategy signature"))?;
+        key.verify(&signed_bytes, &signature)
+            .map_err(|_| CoreError::Strategy("strategy signature mismatch"))?;
+        self.validate_binding(&binding, expected, now_unix)?;
+        if recipient_private_key.len() != 32 {
+            return Err(CoreError::Strategy("recipient private key is invalid"));
+        }
+        let mut key_bytes = recipient_private_key.to_vec();
+        let recipient_key = <X25519HkdfSha256 as KemTrait>::PrivateKey::from_bytes(&key_bytes)
+            .map_err(|_| CoreError::Strategy("recipient private key is malformed"))?;
+        key_bytes.zeroize();
+        let encapsulated = BASE64
+            .decode(&bundle.encapsulated_key)
+            .map_err(|_| CoreError::Strategy("encapsulated key encoding is invalid"))?;
+        if encapsulated.len() != 32 {
+            return Err(CoreError::Strategy("encapsulated key has invalid length"));
+        }
+        let encapped_key = <X25519HkdfSha256 as KemTrait>::EncappedKey::from_bytes(&encapsulated)
+            .map_err(|_| CoreError::Strategy("encapsulated key is malformed"))?;
+        let ciphertext = BASE64
+            .decode(&bundle.encrypted_bundle)
+            .map_err(|_| CoreError::Strategy("encrypted bundle encoding is invalid"))?;
+        if ciphertext.len() <= 16 || ciphertext.len() > MAX_STRATEGY_BUNDLE_BYTES {
+            return Err(CoreError::Strategy("encrypted bundle size is invalid"));
+        }
+        let context =
+            canonical_json(&serde_json::to_value(&binding).map_err(|_| CoreError::Serialization)?)?
+                .into_bytes();
+        let mut receiver = hpke::setup_receiver::<AesGcm256, HkdfSha256, X25519HkdfSha256>(
+            &OpModeR::Base,
+            &recipient_key,
+            &encapped_key,
+            &context,
+        )
+        .map_err(|_| CoreError::Strategy("HPKE receiver setup failed"))?;
+        let (encrypted, tag_bytes) = ciphertext.split_at(ciphertext.len() - 16);
+        let tag = AeadTag::<AesGcm256>::from_bytes(tag_bytes)
+            .map_err(|_| CoreError::Strategy("strategy authentication tag is invalid"))?;
+        let mut plaintext = encrypted.to_vec();
+        let open_result = receiver.open_in_place_detached(&mut plaintext, &context, &tag);
+        if open_result.is_err() {
+            plaintext.zeroize();
+            return Err(CoreError::Strategy("HPKE authentication failed"));
+        }
+        if sha256_hex(&plaintext) != bundle.bundle_digest {
+            plaintext.zeroize();
+            return Err(CoreError::Strategy("strategy plaintext digest mismatch"));
+        }
+        let parsed = serde_json::from_slice::<StrategyPolicy>(&plaintext)
+            .map_err(|_| CoreError::Strategy("strategy plaintext schema is invalid"));
+        plaintext.zeroize();
+        let policy = parsed?;
+        if policy.policy_version != binding.policy_version
+            || policy.task_type != binding.task_type
+            || policy.max_items == 0
+            || policy.points_per_item == 0
+        {
+            return Err(CoreError::Strategy("strategy plaintext binding mismatch"));
+        }
+        Ok(StrategyDecision {
+            authorization_id: binding.authorization_id,
+            task_digest: binding.task_digest,
+            task_type: binding.task_type,
+            policy_version: binding.policy_version,
+            max_items: policy.max_items,
+            points_per_item: policy.points_per_item,
+            export_allowed: policy.capabilities.export,
+            resume_allowed: policy.capabilities.resume,
+            expires_at: binding.expires_at,
+        })
+    }
+
+    fn validate_binding(
+        &self,
+        binding: &StrategyBinding,
+        expected: &StrategyExpectedBinding,
+        now_unix: i64,
+    ) -> CoreResult<()> {
+        if binding.protocol != POLICY_PROTOCOL
+            || binding.authorization_id != expected.authorization_id
+            || binding.ticket_jti != expected.ticket_jti
+            || binding.device_key_id != expected.device_key_id
+            || binding.task_digest != expected.task_digest
+            || binding.task_type != expected.task_type
+            || binding.client_version != expected.client_version
+            || binding.core_version != expected.core_version
+            || binding.core_protocol_version != expected.core_protocol_version
+            || binding.release_manifest_key_id != expected.release_manifest_key_id
+            || binding.ticket_key_id != expected.ticket_key_id
+            || binding.policy_key_id != expected.policy_key_id
+            || binding.policy_version != expected.policy_version
+        {
+            return Err(CoreError::Strategy("strategy binding mismatch"));
+        }
+        let issued = time::OffsetDateTime::parse(
+            &binding.issued_at,
+            &time::format_description::well_known::Rfc3339,
+        )
+        .map_err(|_| CoreError::Strategy("strategy issue time is invalid"))?
+        .unix_timestamp();
+        let expires = time::OffsetDateTime::parse(
+            &binding.expires_at,
+            &time::format_description::well_known::Rfc3339,
+        )
+        .map_err(|_| CoreError::Strategy("strategy expiry time is invalid"))?
+        .unix_timestamp();
+        if issued > now_unix.saturating_add(60) || expires <= now_unix || expires <= issued {
+            return Err(CoreError::Strategy("strategy time window is invalid"));
+        }
+        if binding.bundle_digest.len() != 64
+            || !binding
+                .bundle_digest
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+        {
+            return Err(CoreError::Strategy("strategy digest is invalid"));
+        }
+        Ok(())
+    }
+}
+
+pub fn generate_device_encryption_keypair() -> (Vec<u8>, Vec<u8>) {
+    let (private, public) = X25519HkdfSha256::gen_keypair(&mut rand_core::OsRng);
+    (private.to_bytes().to_vec(), public.to_bytes().to_vec())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceEncryptionIdentity {
+    pub encryption_public_key_b64: String,
+    pub protected_private_key_b64: String,
+    pub encryption_algorithm: String,
+    pub key_backend: String,
+}
+
+fn load_embedded_ed25519_keys(
+    config_variable: &str,
+    missing_message: &'static str,
+) -> CoreResult<BTreeMap<String, VerifyingKey>> {
+    let config = match config_variable {
+        "MAGIORIX_POLICY_PUBLIC_KEYS_JSON" => option_env!("MAGIORIX_POLICY_PUBLIC_KEYS_JSON"),
+        "MAGIORIX_TICKET_PUBLIC_KEYS_JSON" => option_env!("MAGIORIX_TICKET_PUBLIC_KEYS_JSON"),
+        _ => None,
+    }
+    .ok_or(CoreError::Ticket(missing_message))?;
+    let configured: BTreeMap<String, String> = serde_json::from_str(config)
+        .map_err(|_| CoreError::Ticket("embedded public-key configuration is invalid"))?;
+    if configured.is_empty() || configured.len() > 16 {
+        return Err(CoreError::Ticket(
+            "embedded public-key configuration is empty or oversized",
+        ));
+    }
+    let mut keys = BTreeMap::new();
+    for (key_id, raw_key_b64) in configured {
+        if key_id.is_empty()
+            || key_id.len() > 96
+            || !key_id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        {
+            return Err(CoreError::Ticket("embedded public key id is invalid"));
+        }
+        let raw_key = BASE64
+            .decode(raw_key_b64)
+            .map_err(|_| CoreError::Ticket("embedded public key encoding is invalid"))?;
+        let verifying_key = VerifyingKey::from_bytes(
+            raw_key
+                .as_slice()
+                .try_into()
+                .map_err(|_| CoreError::Ticket("embedded public key length is invalid"))?,
+        )
+        .map_err(|_| CoreError::Ticket("embedded public key is invalid"))?;
+        keys.insert(key_id, verifying_key);
+    }
+    Ok(keys)
+}
+
+pub fn embedded_ticket_verifier() -> CoreResult<TicketVerifier> {
+    Ok(TicketVerifier::new(load_embedded_ed25519_keys(
+        "MAGIORIX_TICKET_PUBLIC_KEYS_JSON",
+        "embedded Ticket trust configuration is missing",
+    )?))
+}
+
+pub fn embedded_strategy_verifier() -> CoreResult<StrategyVerifier> {
+    let keys = load_embedded_ed25519_keys(
+        "MAGIORIX_POLICY_PUBLIC_KEYS_JSON",
+        "embedded policy trust configuration is missing",
+    )
+    .map_err(|_| CoreError::Strategy("embedded policy trust configuration is invalid"))?;
+    Ok(StrategyVerifier::new(keys))
+}
+
+pub fn generate_dpapi_device_encryption_identity() -> CoreResult<DeviceEncryptionIdentity> {
+    #[cfg(windows)]
+    {
+        let (mut private, public) = generate_device_encryption_keypair();
+        let protected = dpapi::protect_current_user(&private)
+            .map_err(|_| CoreError::Strategy("recipient key DPAPI protect failed"));
+        private.zeroize();
+        let protected = protected?;
+        Ok(DeviceEncryptionIdentity {
+            encryption_public_key_b64: BASE64.encode(public),
+            protected_private_key_b64: BASE64.encode(protected),
+            encryption_algorithm: "HPKE-X25519-HKDF-SHA256-AES-256-GCM".to_string(),
+            key_backend: "dpapi-current-user".to_string(),
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        Err(CoreError::Strategy(
+            "device encryption backend is unavailable",
+        ))
+    }
+}
+
+pub fn decrypt_strategy_with_dpapi_key(
+    verifier: &StrategyVerifier,
+    bundle: &StrategyBundle,
+    expected: &StrategyExpectedBinding,
+    protected_private_key_b64: &str,
+    now_unix: i64,
+) -> CoreResult<StrategyDecision> {
+    #[cfg(windows)]
+    {
+        let protected = BASE64
+            .decode(protected_private_key_b64)
+            .map_err(|_| CoreError::Strategy("protected recipient key encoding is invalid"))?;
+        let mut private = dpapi::unprotect_current_user(&protected)
+            .map_err(|_| CoreError::Strategy("recipient key DPAPI unprotect failed"))?;
+        let result = verifier.verify_and_decrypt(bundle, expected, &private, now_unix);
+        private.zeroize();
+        result
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (
+            verifier,
+            bundle,
+            expected,
+            protected_private_key_b64,
+            now_unix,
+        );
+        Err(CoreError::Strategy(
+            "device encryption backend is unavailable",
+        ))
     }
 }
 
@@ -700,6 +1147,7 @@ impl Drop for SecretMaterial {
 mod tests {
     use super::*;
     use ed25519_dalek::SigningKey;
+    use hpke::OpModeS;
 
     #[test]
     fn frame_rejects_sequence_replay_and_hmac_tamper() {
@@ -753,15 +1201,20 @@ mod tests {
             points_per_item: 1,
             policy_version: "1".into(),
             minimum_client_version: "1.4.2".into(),
-            issued_at_unix: 100,
-            expires_at_unix: 200,
+            issued_at: "2026-08-20T00:00:00Z".into(),
+            expires_at: "2026-08-20T00:05:00Z".into(),
             nonce: "n".into(),
         };
-        let signature = BASE64.encode(
-            ticket_signer
-                .sign(&canonical_messagepack(&ticket).unwrap())
-                .to_bytes(),
-        );
+        let signature = ticket_signer
+            .sign(
+                canonical_json(&serde_json::to_value(&ticket).unwrap())
+                    .unwrap()
+                    .as_bytes(),
+            )
+            .to_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
         let binding = TicketBinding {
             user_id: 7,
             device_key_id: "device-1",
@@ -771,9 +1224,11 @@ mod tests {
             client_version: "1.4.2",
         };
         let mut verifier = TicketVerifier::new(keys);
-        let handle = verifier.verify(&ticket, &signature, &binding, 150).unwrap();
+        let handle = verifier
+            .verify(&ticket, &signature, &binding, 1_787_184_060)
+            .unwrap();
         assert_eq!(
-            verifier.verify(&ticket, &signature, &binding, 150),
+            verifier.verify(&ticket, &signature, &binding, 1_787_184_060),
             Err(CoreError::Ticket("ticket jti replay"))
         );
         let device = SigningKey::from_bytes(&[4_u8; 32]);
@@ -786,6 +1241,121 @@ mod tests {
         assert_eq!(
             receipts.append(handle.handle, 1, 0, "completed", false),
             Err(CoreError::ReceiptState)
+        );
+    }
+
+    #[test]
+    fn strategy_bundle_is_signed_bound_decrypted_and_tamper_rejected() {
+        let policy_signer = SigningKey::from_bytes(&[9_u8; 32]);
+        let mut trusted = BTreeMap::new();
+        trusted.insert("policy-key-1".to_string(), policy_signer.verifying_key());
+        let verifier = StrategyVerifier::new(trusted);
+        let (recipient_private, recipient_public) = generate_device_encryption_keypair();
+        let binding = StrategyBinding {
+            protocol: POLICY_PROTOCOL.to_string(),
+            authorization_id: "auth-1".to_string(),
+            ticket_jti: "ticket-jti-1".to_string(),
+            device_key_id: "device-1".to_string(),
+            task_digest: "a".repeat(64),
+            task_type: "pgy-kol.search".to_string(),
+            client_version: CORE_VERSION.to_string(),
+            core_version: CORE_VERSION.to_string(),
+            core_protocol_version: PROTOCOL_VERSION,
+            release_manifest_key_id: Some("release-key-1".to_string()),
+            ticket_key_id: "ticket-key-1".to_string(),
+            policy_key_id: "policy-key-1".to_string(),
+            policy_version: "policy-1".to_string(),
+            issued_at: "2026-08-20T00:00:00Z".to_string(),
+            expires_at: "2026-08-20T00:05:00Z".to_string(),
+            bundle_digest: String::new(),
+        };
+        let policy = StrategyPolicy {
+            policy_version: "policy-1".to_string(),
+            task_type: "pgy-kol.search".to_string(),
+            max_items: 20,
+            points_per_item: 3,
+            capabilities: StrategyCapabilities {
+                export: false,
+                resume: true,
+            },
+        };
+        let plaintext = canonical_json(&serde_json::to_value(&policy).unwrap())
+            .unwrap()
+            .into_bytes();
+        let mut binding = binding;
+        binding.bundle_digest = sha256_hex(&plaintext);
+        let context = canonical_json(&serde_json::to_value(&binding).unwrap())
+            .unwrap()
+            .into_bytes();
+        let recipient =
+            <X25519HkdfSha256 as KemTrait>::PublicKey::from_bytes(&recipient_public).unwrap();
+        let (encapped, mut sender) =
+            hpke::setup_sender::<AesGcm256, HkdfSha256, X25519HkdfSha256, _>(
+                &OpModeS::Base,
+                &recipient,
+                &context,
+                &mut rand_core::OsRng,
+            )
+            .unwrap();
+        let mut ciphertext = plaintext.clone();
+        let tag = sender
+            .seal_in_place_detached(&mut ciphertext, &context)
+            .unwrap();
+        ciphertext.extend_from_slice(&tag.to_bytes());
+        let unsigned = SignedStrategyEnvelope {
+            binding: binding.clone(),
+            encapsulated_key: BASE64.encode(encapped.to_bytes()),
+            encrypted_bundle: BASE64.encode(&ciphertext),
+        };
+        let signature_payload = canonical_json(&serde_json::to_value(&unsigned).unwrap()).unwrap();
+        let bundle = StrategyBundle {
+            protocol: binding.protocol.clone(),
+            authorization_id: binding.authorization_id.clone(),
+            ticket_jti: binding.ticket_jti.clone(),
+            device_key_id: binding.device_key_id.clone(),
+            task_digest: binding.task_digest.clone(),
+            task_type: binding.task_type.clone(),
+            client_version: binding.client_version.clone(),
+            core_version: binding.core_version.clone(),
+            core_protocol_version: binding.core_protocol_version,
+            release_manifest_key_id: binding.release_manifest_key_id.clone(),
+            ticket_key_id: binding.ticket_key_id.clone(),
+            policy_key_id: binding.policy_key_id.clone(),
+            policy_version: binding.policy_version.clone(),
+            issued_at: binding.issued_at.clone(),
+            expires_at: binding.expires_at.clone(),
+            bundle_digest: binding.bundle_digest.clone(),
+            encapsulated_key: unsigned.encapsulated_key,
+            encrypted_bundle: unsigned.encrypted_bundle,
+            bundle_signature: BASE64
+                .encode(policy_signer.sign(signature_payload.as_bytes()).to_bytes()),
+            key_id: "policy-key-1".to_string(),
+        };
+        let expected = StrategyExpectedBinding {
+            authorization_id: "auth-1".to_string(),
+            ticket_jti: "ticket-jti-1".to_string(),
+            device_key_id: "device-1".to_string(),
+            task_digest: "a".repeat(64),
+            task_type: "pgy-kol.search".to_string(),
+            client_version: CORE_VERSION.to_string(),
+            core_version: CORE_VERSION.to_string(),
+            core_protocol_version: PROTOCOL_VERSION,
+            release_manifest_key_id: Some("release-key-1".to_string()),
+            ticket_key_id: "ticket-key-1".to_string(),
+            policy_key_id: "policy-key-1".to_string(),
+            policy_version: "policy-1".to_string(),
+        };
+        let decision = verifier
+            .verify_and_decrypt(&bundle, &expected, &recipient_private, 1_787_184_060)
+            .unwrap();
+        assert_eq!(decision.max_items, 20);
+        assert!(!decision.export_allowed);
+        assert!(decision.resume_allowed);
+        let mut tampered = bundle;
+        tampered.task_digest = "b".repeat(64);
+        assert_eq!(
+            verifier.verify_and_decrypt(&tampered, &expected, &recipient_private, 1_787_184_060),
+            Err(CoreError::Strategy("strategy signature mismatch"))
         );
     }
 

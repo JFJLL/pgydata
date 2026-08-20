@@ -108,6 +108,47 @@ export class AuthorizationGate {
     return true;
   }
 
+  async registerDeviceEncryptionKey({ user, encryptionPublicKey } = {}) {
+    if (!user?.id) throw new Error("A signed-in user is required for device encryption registration");
+    if (typeof encryptionPublicKey !== "string" || !/^[A-Za-z0-9+/]+={0,2}$/.test(encryptionPublicKey)) {
+      throw new Error("Native device encryption public key is invalid");
+    }
+    const keyBytes = Buffer.from(encryptionPublicKey, "base64");
+    if (keyBytes.length !== 32) throw new Error("Native device encryption public key must be 32 bytes");
+    if (!this.apiClient || typeof this.apiClient.post !== "function") {
+      throw new Error("Task authorization API client is unavailable for device encryption registration");
+    }
+    const deviceKeyId = await this.ensureDeviceRegistered(user);
+    await this.apiClient.post("/api/desktop/devices/encryption-key", {
+      deviceKeyId,
+      encryptionPublicKey,
+    }, { headers: { "X-Magiorix-Client-Version": "1.4.2" } });
+    return deviceKeyId;
+  }
+
+  async startTaskAuthorization(authorizationId) {
+    if (!authorizationId || !this.apiClient || typeof this.apiClient.post !== "function") {
+      throw new Error("Task authorization API client is unavailable for task start");
+    }
+    return this.apiClient.post(
+      `/api/desktop/task-authorizations/${encodeURIComponent(authorizationId)}/start`,
+      {},
+      { headers: { "X-Magiorix-Client-Version": "1.4.2" } },
+    );
+  }
+
+  async requestStrategyBundle(context = {}) {
+    if (!this.apiClient || typeof this.apiClient.post !== "function") {
+      throw new Error("Task authorization API client is unavailable for strategy delivery");
+    }
+    const response = await this.apiClient.post(
+      "/api/desktop/strategy-bundles",
+      context,
+      { headers: { "X-Magiorix-Client-Version": "1.4.2" } },
+    );
+    return response?.data || response;
+  }
+
   async acquireTaskAuthorization({
     user,
     pluginId,
@@ -118,6 +159,8 @@ export class AuthorizationGate {
     filterState = {},
     maxCount = null,
     requestedItems = null,
+    nativeTicketRequired = false,
+    deferStart = false,
   }) {
     if (this.apiClient) {
       await this.flushPendingReceipts();
@@ -172,18 +215,21 @@ export class AuthorizationGate {
       const authData = res.data || res;
       const { authorizationId, ticket, ticketSignature, ticketKeyId } = authData;
 
-      // Verify Ticket
-      this.verifyTicket({
-        keyId: ticketKeyId,
-        signature: ticketSignature,
-        signedPayload: ticket,
-      }, {
-        userId: user?.id,
-        deviceKeyId,
-        taskDigest,
-        clientTaskId,
-        requestedItems: effectiveRequestedItems,
-      });
+      // JavaScript validation is shadow-only. Required mode verifies the identical
+      // canonical Ticket envelope in the native core before a task can start.
+      if (!nativeTicketRequired) {
+        this.verifyTicket({
+          keyId: ticketKeyId,
+          signature: ticketSignature,
+          signedPayload: ticket,
+        }, {
+          userId: user?.id,
+          deviceKeyId,
+          taskDigest,
+          clientTaskId,
+          requestedItems: effectiveRequestedItems,
+        });
+      }
 
       // Initialize receipt chain
       this.receiptService.createChain(authorizationId, ticket.jti);
@@ -198,14 +244,23 @@ export class AuthorizationGate {
       };
       this.activeAuthorizations.set(clientTaskId, record);
 
-      // Inform cloud of task start
-      await this.apiClient.post(`/api/desktop/task-authorizations/${authorizationId}/start`).catch(() => {});
+      // In required mode, parent code defers task start until native Ticket and
+      // strategy verification have both succeeded. This avoids consuming an
+      // authorization on an invalid or unavailable policy bundle.
+      if (!deferStart) {
+        await this.apiClient.post(`/api/desktop/task-authorizations/${authorizationId}/start`).catch(() => {});
+      }
 
       return {
         authorized: true,
         authorizationId,
         ticketJti: ticket.jti,
         taskDigest,
+        deviceKeyId,
+        ticket,
+        ticketSignature,
+        ticketKeyId,
+        policyVersion: ticket.policyVersion,
         mode: this.authMode,
       };
     } catch (err) {
