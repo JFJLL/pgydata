@@ -1323,6 +1323,27 @@ function createPaymentToken() {
   return crypto.randomBytes(32).toString("base64url");
 }
 
+const FIRST_RECHARGE_PROMO_CODE = "first_recharge_v1";
+
+function isFirstRechargePromoEnabled() {
+  return process.env.FIRST_RECHARGE_PROMO_ENABLED !== "0";
+}
+
+function calculateFirstRechargeBonus(amountCents, baseCount) {
+  if (!isFirstRechargePromoEnabled()) return 0;
+  if (Number(amountCents) < 5000) return 0;
+  return Math.min(300, Math.floor(Number(baseCount) * 0.20));
+}
+
+async function checkUserFirstRechargeEligible(userId, txOrDb) {
+  const db = txOrDb || database;
+  const paidRow = await db.get(
+    "SELECT COUNT(*) AS count FROM recharge_orders WHERE user_id = ? AND status = 1",
+    [userId],
+  );
+  return Number(paidRow?.count || 0) === 0;
+}
+
 function paymentOrderView(row) {
   if (!row) return null;
   const status = Number(row.status ?? 0);
@@ -1338,6 +1359,8 @@ function paymentOrderView(row) {
     amountYuan: Number.isFinite(amountCents) && amountCents > 0 ? amountCents / 100 : amount,
     baseCount: Number(row.baseCount ?? row.base_count ?? 0),
     giftCount: Number(row.giftCount ?? row.gift_count ?? 0),
+    promotionCode: row.promotionCode || row.promotion_code || null,
+    promotionCount: Number(row.promotionCount ?? row.promotion_count ?? 0),
     totalCount: Number(row.totalCount ?? row.total_count ?? 0),
     channel: row.channel || "alipay",
     status,
@@ -1361,15 +1384,41 @@ app.get("/api/shumiao/balance", authRequired, asyncHandler(async (req, res) => {
 }));
 
 app.get("/api/shumiao/packages", authRequired, asyncHandler(async (req, res) => {
+  const eligible = isFirstRechargePromoEnabled() && (await checkUserFirstRechargeEligible(req.user.id));
   const rows = await dbAll(
-    `SELECT id, id AS packageId, title, amount, amount_cents AS amountCents,
+    `SELECT id, id AS packageId, title, scene, recommended, amount, amount_cents AS amountCents,
             base_count AS baseCount, base_count AS shumiaoCount,
             gift_count AS giftCount, total_count AS totalCount
      FROM shumiao_packages
      WHERE enabled = 1
      ORDER BY sort_order ASC, amount ASC`,
   );
-  return success(res, rows);
+  const result = rows.map((pkg) => {
+    const baseCount = Number(pkg.baseCount || 0);
+    const giftCount = Number(pkg.giftCount || 0);
+    const regularTotalCount = baseCount + giftCount;
+    const promoCount = eligible ? calculateFirstRechargeBonus(pkg.amountCents, baseCount) : 0;
+    const payableTotalCount = regularTotalCount + promoCount;
+    return {
+      id: pkg.id,
+      packageId: pkg.id,
+      title: pkg.title,
+      scene: pkg.scene || "",
+      recommended: Boolean(pkg.recommended),
+      amount: Number(pkg.amount),
+      amountCents: Number(pkg.amountCents),
+      baseCount,
+      shumiaoCount: baseCount,
+      giftCount,
+      regularTotalCount,
+      totalCount: regularTotalCount,
+      promotionCode: promoCount > 0 ? FIRST_RECHARGE_PROMO_CODE : null,
+      promotionCount: promoCount,
+      payableTotalCount,
+      firstRechargeEligible: eligible,
+    };
+  });
+  return success(res, result);
 }));
 
 app.get("/api/shumiao/check-balance", authRequired, asyncHandler(async (req, res) => {
@@ -1472,7 +1521,9 @@ app.get("/api/shumiao/recharge-records", authRequired, asyncHandler(async (req, 
   const totalRow = await dbGet("SELECT COUNT(*) AS total FROM recharge_orders WHERE user_id = ?", [req.user.id]);
   const list = await dbAll(
     `SELECT order_no AS orderNo, package_id AS packageId, amount, amount_cents AS amountCents,
-            base_count AS baseCount, gift_count AS giftCount, total_count AS totalCount,
+            base_count AS baseCount, gift_count AS giftCount,
+            promotion_code AS promotionCode, promotion_count AS promotionCount,
+            total_count AS totalCount,
             channel, status, platform_transaction_id AS platformTransactionId,
             paid_at AS paidAt, credited_at AS creditedAt, expires_at AS expiresAt,
             last_query_at AS lastQueryAt, last_query_status AS lastQueryStatus,
@@ -1592,42 +1643,74 @@ app.post("/api/shumiao/recharge", authRequired, asyncHandler(async (req, res) =>
   if (!merchantId || !appId) {
     return fail(res, 503, channel === "wxpay" ? "微信支付配置未完成，请联系管理员" : "支付宝支付配置未完成，请联系管理员");
   }
-  await withTransaction(async (tx) => {
-    await tx.run(
-      `INSERT INTO recharge_orders
-        (order_no, user_id, package_id, amount, amount_cents, base_count, gift_count, total_count,
-         code_url, status, channel, payment_token_hash, payment_token_expires_at,
-         merchant_id, app_id, expires_at, query_attempts, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
-      [
-        orderNo,
-        req.user.id,
-        pkg.id,
-        Number(pkg.amount),
-        Number(pkg.amount_cents),
-        Number(pkg.base_count),
-        Number(pkg.gift_count),
-        Number(pkg.total_count),
-        "redacted",
-        ORDER_STATUS.PENDING,
-        channel,
-        paymentTokenHash,
-        expiresAt,
-        merchantId,
-        appId,
-        expiresAt,
-        createdAt,
-        createdAt,
-      ],
-    );
-  });
+
+  let finalPromotionCode = null;
+  let finalPromotionCount = 0;
+  let finalTotalCount = Number(pkg.base_count) + Number(pkg.gift_count);
+
+  try {
+    await withTransaction(async (tx) => {
+      const isEligible = isFirstRechargePromoEnabled() && (await checkUserFirstRechargeEligible(req.user.id, tx));
+      const promoBonus = isEligible ? calculateFirstRechargeBonus(pkg.amount_cents, pkg.base_count) : 0;
+      if (promoBonus > 0) {
+        const pendingPromo = await tx.get(
+          "SELECT order_no FROM recharge_orders WHERE user_id = ? AND promotion_code = ? AND status = 0",
+          [req.user.id, FIRST_RECHARGE_PROMO_CODE],
+        );
+        if (pendingPromo) {
+          throw new Error("ACTIVE_PROMO_ORDER_EXISTS:您已有待支付的首充优惠订单，请先完成或取消该订单");
+        }
+        finalPromotionCode = FIRST_RECHARGE_PROMO_CODE;
+        finalPromotionCount = promoBonus;
+        finalTotalCount = Number(pkg.base_count) + Number(pkg.gift_count) + promoBonus;
+      }
+
+      await tx.run(
+        `INSERT INTO recharge_orders
+          (order_no, user_id, package_id, amount, amount_cents, base_count, gift_count, promotion_code, promotion_count, total_count,
+           code_url, status, channel, payment_token_hash, payment_token_expires_at,
+           merchant_id, app_id, expires_at, query_attempts, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+        [
+          orderNo,
+          req.user.id,
+          pkg.id,
+          Number(pkg.amount),
+          Number(pkg.amount_cents),
+          Number(pkg.base_count),
+          Number(pkg.gift_count),
+          finalPromotionCode,
+          finalPromotionCount,
+          finalTotalCount,
+          "redacted",
+          ORDER_STATUS.PENDING,
+          channel,
+          paymentTokenHash,
+          expiresAt,
+          merchantId,
+          appId,
+          expiresAt,
+          createdAt,
+          createdAt,
+        ],
+      );
+    });
+  } catch (err) {
+    if (String(err.message).startsWith("ACTIVE_PROMO_ORDER_EXISTS:")) {
+      return fail(res, 409, err.message.replace("ACTIVE_PROMO_ORDER_EXISTS:", ""));
+    }
+    if (String(err.message).includes("UNIQUE constraint failed") || String(err.message).includes("idx_recharge_first_promo_claim")) {
+      return fail(res, 409, "首充优惠已被其他订单占用或正在处理中，请稍后重试");
+    }
+    throw err;
+  }
 
   const isWxpay = channel === "wxpay";
   let payUrl = `${BASE_URL}/pay/${paymentToken}`;
   let codeUrl = payUrl;
   let qrCode = "";
   if (isWxpay) {
-    const description = `积分充值 ${Number(pkg.total_count)} 积分`;
+    const description = `积分充值 ${finalTotalCount} 积分`;
     try {
       codeUrl = await wxpayGateway.createQrCode({
         orderNo,
@@ -1651,7 +1734,7 @@ app.post("/api/shumiao/recharge", authRequired, asyncHandler(async (req, res) =>
       qrCode = await alipayGateway.createQrCode({
         orderNo,
         amountCents: Number(pkg.amount_cents),
-        subject: `积分充值 ${Number(pkg.total_count)} 积分`,
+        subject: `积分充值 ${finalTotalCount} 积分`,
         expiresAt,
       });
     } catch (error) {
@@ -1673,7 +1756,11 @@ app.post("/api/shumiao/recharge", authRequired, asyncHandler(async (req, res) =>
     qrCode,
     amount: Number(pkg.amount_cents),
     amountCents: Number(pkg.amount_cents),
-    totalCount: Number(pkg.total_count),
+    baseCount: Number(pkg.base_count),
+    giftCount: Number(pkg.gift_count),
+    promotionCode: finalPromotionCode,
+    promotionCount: finalPromotionCount,
+    totalCount: finalTotalCount,
     channel,
     status: ORDER_STATUS.PENDING,
     expiresAt,
@@ -1683,7 +1770,9 @@ app.post("/api/shumiao/recharge", authRequired, asyncHandler(async (req, res) =>
 app.get("/api/shumiao/order/:orderNo", authRequired, asyncHandler(async (req, res) => {
   const order = await dbGet(
     `SELECT order_no AS orderNo, package_id AS packageId, amount, amount_cents AS amountCents,
-            base_count AS baseCount, gift_count AS giftCount, total_count AS totalCount,
+            base_count AS baseCount, gift_count AS giftCount,
+            promotion_code AS promotionCode, promotion_count AS promotionCount,
+            total_count AS totalCount,
             channel, status, platform_transaction_id AS platformTransactionId,
             paid_at AS paidAt, credited_at AS creditedAt, expires_at AS expiresAt,
             last_query_at AS lastQueryAt, last_query_status AS lastQueryStatus,
@@ -1694,7 +1783,7 @@ app.get("/api/shumiao/order/:orderNo", authRequired, asyncHandler(async (req, re
     [req.user.id, req.params.orderNo],
   );
   if (!order) return fail(res, 404, "订单不存在");
-  return success(res, order);
+  return success(res, paymentOrderView(order));
 }));
 
 app.post("/api/shumiao/order/:orderNo/query", authRequired, asyncHandler(async (req, res) => {

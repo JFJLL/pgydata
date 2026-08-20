@@ -1,0 +1,1 @@
+import{d as t}from"./index-B09sHfUO.js";const r=()=>t.get("/api/menus/tree"),s=e=>t.post("/api/menus",e),a=(e,n)=>t.put(`/api/menus/${e}`,n),p=e=>t.delete(`/api/menus/${e}`);export{s as c,p as d,r as g,a as u};

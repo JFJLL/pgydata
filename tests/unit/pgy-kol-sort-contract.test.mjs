@@ -10,7 +10,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 
 test("找博主前端：排序字段不再混入筛选查询请求", () => {
   const source = fs.readFileSync(path.join(root, "scripts", "pgy-kol-phase52-page-source.js"), "utf8");
-  const bundle = fs.readFileSync(path.join(root, "assets", "1.4.0", "assets", "index-B09sHfUO.js"), "utf8");
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, "app-source", "package.json"), "utf8"));
+  const bundle = fs.readFileSync(path.join(root, "assets", pkg.assetsVersion, "assets", "index-B09sHfUO.js"), "utf8");
   for (const content of [source, bundle]) {
     assert.doesNotMatch(content, /keyword:\"\",column:/, "默认筛选不能带排序字段");
     assert.doesNotMatch(content, /if\(f\.column\)out\.column/);

@@ -451,6 +451,7 @@
       + '      <div class="balance-value" id="balance-value">--<small>积分</small></div></div>'
       + '    <div class="balance-side"><b>账户服务</b><br>充值订单和消费明细均可随时查看</div>'
       + "  </div>"
+      + '  <div class="promo-banner-wrap" id="promo-banner-wrap"></div>'
       + '  <div class="section-head"><div><p class="kicker">选择套餐</p><h3 class="card-title">按你的使用节奏选择额度包</h3></div><p>确认订单前可随时返回重新选择</p></div>'
       + '  <div class="package-grid" id="package-grid"><div class="empty">正在加载套餐…</div></div>'
       + '  <div class="section-head orders-head"><div><p class="kicker">最近订单</p><h3 class="card-title">充值订单</h3></div><a href="#/records/recharge">查看全部记录 →</a></div>'
@@ -478,26 +479,52 @@
       }
       function renderPackages() {
         var grid = document.getElementById("package-grid");
+        var bannerWrap = document.getElementById("promo-banner-wrap");
         if (!grid) return;
         if (!packages.length) {
           grid.innerHTML = '<div class="empty">暂无可用套餐</div>';
+          if (bannerWrap) bannerWrap.innerHTML = "";
           return;
         }
-        grid.innerHTML = packages.map(function (pkg, index) {
+        var isEligible = Boolean(packages[0] && packages[0].firstRechargeEligible);
+        if (bannerWrap) {
+          bannerWrap.innerHTML = isEligible
+            ? '<div class="promo-banner"><span class="promo-tag">首充专享</span><span>首次充值 50 元及以上，再送基础积分 20%，最高再送 300 积分。</span></div>'
+            : "";
+        }
+        grid.innerHTML = packages.map(function (pkg) {
           var gift = Number(pkg.giftCount || 0);
-          var recommended = index === 1 && packages.length > 1;
-          var scene = index === 0 ? "轻量体验" : (recommended ? "高频推荐" : (index === packages.length - 1 ? "团队与高频使用" : "持续创作"));
-          var title = pkg.title || (scene + "额度包");
+          var promo = Number(pkg.promotionCount || 0);
+          var recommended = Boolean(pkg.recommended);
+          var scene = pkg.scene || "额度包";
+          var giftBadge = "";
+          if (pkg.firstRechargeEligible && (gift > 0 || promo > 0)) {
+            var totalBonus = gift + promo;
+            giftBadge = '<span class="package-gift">首充共赠 ' + fmtCount(totalBonus) + '</span>';
+          } else if (gift > 0) {
+            giftBadge = '<span class="package-gift">加赠 ' + fmtCount(gift) + '</span>';
+          }
+          var amountStr = (pkg.amountCents % 100 === 0) ? String(pkg.amountCents / 100) : fmtMoney(pkg.amountCents);
+          var metaHtml = "";
+          if (pkg.firstRechargeEligible && promo > 0) {
+            metaHtml = '<span>基础 ' + fmtCount(pkg.baseCount) + ' + 套餐加赠 ' + fmtCount(gift) + ' + 首充再赠 ' + fmtCount(promo) + '</span>';
+          } else if (gift > 0) {
+            metaHtml = '<span>基础 ' + fmtCount(pkg.baseCount) + ' + 加赠 ' + fmtCount(gift) + ' 积分</span>';
+          } else {
+            metaHtml = '<span>基础 ' + fmtCount(pkg.baseCount) + ' 积分</span>';
+          }
+          var payablePoints = fmtCount(pkg.payableTotalCount || pkg.totalCount);
+          var pointsLabel = (pkg.firstRechargeEligible && promo > 0) ? "首充到账积分" : "到账积分";
           return ''
             + '<button class="package-card' + (recommended ? ' recommended' : '') + '" type="button" data-plan="' + esc(pkg.id) + '">'
-            + (recommended ? '<span class="package-recommend">推荐选择</span>' : '')
-            + '<span class="package-scene">' + esc(scene) + '</span>'
-            + '<div class="package-title">' + esc(title) + '</div>'
-            + '<div class="package-amount"><span>¥</span>' + fmtMoney(pkg.amountCents) + '</div>'
-            + '<div class="package-credit"><strong>' + fmtCount(pkg.totalCount) + '</strong><span>到账积分</span></div>'
-            + '<div class="package-meta"><span>基础 ' + fmtCount(pkg.baseCount) + ' 积分</span>'
-            + (gift > 0 ? '<span>额外赠送 ' + fmtCount(gift) + ' 积分</span>' : '<span>支付成功后自动到账</span>')
+            + giftBadge
+            + '<div class="package-card-top">'
+            + '  <span class="package-scene">' + esc(scene) + '</span>'
+            + (recommended ? '  <span class="package-recommend">高频推荐</span>' : '')
             + '</div>'
+            + '<div class="package-amount"><span>¥</span>' + amountStr + '</div>'
+            + '<div class="package-credit"><strong>' + payablePoints + '</strong><span>' + pointsLabel + '</span></div>'
+            + '<div class="package-meta">' + metaHtml + '</div>'
             + '<span class="package-btn"><span>选择此套餐</span><b>→</b></span>'
             + "</button>";
         }).join("");
@@ -681,13 +708,17 @@
       apiGet("/api/shumiao/packages").then(function (rows) {
         pkg = (rows || []).find(function (p) { return String(p.id) === String(planId); });
         if (!pkg) throw new Error("套餐不存在或已下架");
+        var gift = Number(pkg.giftCount || 0);
+        var promo = Number(pkg.promotionCount || 0);
+        var arrivalPoints = fmtCount(pkg.payableTotalCount || pkg.totalCount);
         document.getElementById("checkout-info").innerHTML = ''
           + '<div class="info-rows">'
           + '  <div class="info-row"><span class="k">商品名称</span><span class="v">' + esc(pkg.title || pkg.id) + "</span></div>"
-          + '  <div class="info-row"><span class="k">支付金额</span><span class="v strong">¥' + fmtMoney(pkg.amountCents) + "</span></div>"
-          + '  <div class="info-row"><span class="k">基础积分</span><span class="v">' + fmtCount(pkg.baseCount) + "</span></div>"
-          + (Number(pkg.giftCount) > 0 ? '<div class="info-row"><span class="k">赠送积分</span><span class="v">' + fmtCount(pkg.giftCount) + "</span></div>" : "")
-          + '  <div class="info-row"><span class="k">到账积分</span><span class="v">' + fmtCount(pkg.totalCount) + "</span></div>"
+          + '  <div class="info-row"><span class="k">充值金额</span><span class="v strong">¥' + fmtMoney(pkg.amountCents) + "</span></div>"
+          + '  <div class="info-row"><span class="k">基础积分</span><span class="v">' + fmtCount(pkg.baseCount) + " 积分</span></div>"
+          + (gift > 0 ? '  <div class="info-row"><span class="k">套餐加赠</span><span class="v">' + fmtCount(gift) + " 积分</span></div>" : "")
+          + (promo > 0 ? '  <div class="info-row"><span class="k">首充加赠</span><span class="v" style="color:var(--brand);font-weight:700">+' + fmtCount(promo) + " 积分</span></div>" : "")
+          + '  <div class="info-row"><span class="k">本次到账积分</span><span class="v strong">' + arrivalPoints + " 积分</span></div>"
           + '  <div class="info-row"><span class="k">订单号</span><span class="v">支付时自动生成</span></div>'
           + '  <div class="info-row"><span class="k">有效期</span><span class="v">30 分钟</span></div>'
           + "</div>";

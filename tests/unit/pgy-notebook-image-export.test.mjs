@@ -198,7 +198,8 @@ test("蒲公英笔记图文与视频导出：封面图及多张笔记图独立�
 });
 
 test("前端模板名称弹窗：确保聚焦策略与防重复渲染逻辑完备", () => {
-  const selectorBundlePath = path.join(root, "assets", "1.4.0", "assets", "index-IS4kgrUy.js");
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, "app-source", "package.json"), "utf8"));
+  const selectorBundlePath = path.join(root, "assets", pkg.assetsVersion, "assets", "index-IS4kgrUy.js");
   const selectorSource = fs.readFileSync(selectorBundlePath, "utf8");
   assert.match(selectorSource, /disableEnforceFocus:!0,disableRestoreFocus:!0/, "SaveAs dialog must have disableEnforceFocus and disableRestoreFocus");
   assert.match(selectorSource, /maxWidth:"md",fullWidth:!0,disableEnforceFocus:!0/, "Field selector modal must have disableEnforceFocus");

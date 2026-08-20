@@ -183,3 +183,11 @@ test("payment external links stay behind the main-process HTTPS allowlist", () =
   const second = spawnSync(process.execPath, [runtimePatchScript], { cwd: projectRoot, encoding: "utf8" });
   assert.equal(second.status, 0, second.stderr || second.stdout);
 });
+
+test("active desktop bundle opens official website on logo click and web recharge on recharge click", () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, "app-source", "package.json"), "utf8"));
+  const activeMainBundle = fs.readFileSync(path.join(projectRoot, "assets", pkg.assetsVersion, "assets", "index-B09sHfUO.js"), "utf8");
+  assert.ok(activeMainBundle.includes('window.bridge?.system?.shell?.openSafeExternal?.("https://magiorix.red-magic.cn/recharge")'), "recharge button must open official web recharge center");
+  assert.ok(!activeMainBundle.includes('http://127.0.0.1:3050/recharge'), "recharge button must not point to local 3050 port");
+  assert.ok(activeMainBundle.includes('window.bridge?.system?.shell?.openSafeExternal?.("https://magiorix.red-magic.cn")'), "bottom left logo must open official website");
+});

@@ -97,11 +97,19 @@ test("1.2.0 migration upgrades legacy schema, preserves data, and is idempotent"
     assert.ok(smsColumns.some((column) => column.name === "code_hash"));
     assert.ok(smsColumns.some((column) => column.name === "source_ip_hash"));
     const orderColumns = await d.all("PRAGMA table_info(recharge_orders)");
-    for (const name of ["amount_cents", "channel", "payment_token_hash", "merchant_id", "app_id", "platform_transaction_id", "credited_at", "last_query_at", "query_attempts", "expiry_query_at", "manual_review_reason"]) {
+    for (const name of ["amount_cents", "channel", "payment_token_hash", "merchant_id", "app_id", "platform_transaction_id", "credited_at", "last_query_at", "query_attempts", "expiry_query_at", "manual_review_reason", "promotion_code", "promotion_count"]) {
       assert.ok(orderColumns.some((column) => column.name === name), `missing ${name}`);
     }
-    const packages = await d.all("SELECT id, amount_cents, base_count, gift_count, enabled FROM shumiao_packages ORDER BY sort_order, id");
-    assert.equal(packages.filter((row) => Number(row.enabled) === 1).length, 4);
+    const packageColumns = await d.all("PRAGMA table_info(shumiao_packages)");
+    assert.ok(packageColumns.some((c) => c.name === "scene"));
+    assert.ok(packageColumns.some((c) => c.name === "recommended"));
+
+    const packages = await d.all("SELECT id, scene, amount_cents, base_count, gift_count, total_count, recommended, enabled FROM shumiao_packages ORDER BY sort_order, id");
+    const enabledPkgs = packages.filter((row) => Number(row.enabled) === 1);
+    assert.equal(enabledPkgs.length, 5);
+    assert.deepEqual(enabledPkgs.map((p) => p.id), ["pkg_10", "pkg_50", "pkg_100", "pkg_500", "pkg_1000"]);
+    assert.equal(enabledPkgs.find((p) => p.id === "pkg_100").recommended, 1);
+    assert.equal(enabledPkgs.filter((p) => p.recommended === 1).length, 1);
     assert.equal(packages.find((row) => row.id === "legacy_pkg").enabled, 0);
     assert.equal((await d.get("SELECT amount_cents FROM shumiao_packages WHERE id = 'legacy_pkg'")).amount_cents, 990);
     const before = await d.get("SELECT COUNT(*) AS count FROM schema_migrations");

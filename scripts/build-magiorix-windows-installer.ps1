@@ -418,7 +418,9 @@ VIAddVersionKey /LANG=2052 "FileVersion" "$version"
 VIAddVersionKey /LANG=2052 "ProductVersion" "$version"
 VIAddVersionKey /LANG=2052 "InternalName" "$appDisplayName"
 VIAddVersionKey /LANG=2052 "OriginalFilename" "$setupFileName"
+!define APP_REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\magiorix"
 InstallDir "`$LOCALAPPDATA\Programs\$appInstallDirName"
+InstallDirRegKey HKCU "${APP_REG_KEY}" "InstallLocation"
 RequestExecutionLevel user
 ShowInstDetails show
 XPStyle on
@@ -436,8 +438,6 @@ SetCompressor /SOLID lzma
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_LANGUAGE "SimpChinese"
 
-!define APP_REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\magiorix"
-
 Var InstallLog
 Var AssetsRoot
 Var AssetsTarget
@@ -451,6 +451,13 @@ Function .onInit
   FileOpen `$0 "`$InstallLog" w
   FileWrite `$0 "magiorix installer log$\r$\n"
   FileClose `$0
+  ReadRegStr `$0 HKCU "${APP_REG_KEY}" "InstallLocation"
+  StrCmp `$0 "" no_existing_install
+    IfFileExists "`$0\*.*" 0 no_existing_install
+      StrCpy `$INSTDIR `$0
+      Push "已识别到现有安装目录：`$0"
+      Call Log
+  no_existing_install:
   Push "等待旧版 magiorix 进程退出"
   Call Log
   Call WaitForMagiorix

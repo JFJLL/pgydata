@@ -1,4 +1,4 @@
-const LATEST_SCHEMA_VERSION = 3;
+const LATEST_SCHEMA_VERSION = 4;
 
 const LEGACY_PACKAGE_IDS = new Set([
   "pkg_990",
@@ -286,6 +286,60 @@ async function applyVersion3(db) {
   await ensureColumn(db, "recharge_orders", "manual_review_reason", "TEXT");
 }
 
+async function applyVersion4(db, clock) {
+  for (const [column, definition] of [
+    ["scene", "TEXT"],
+    ["recommended", "INTEGER NOT NULL DEFAULT 0"],
+  ]) {
+    await ensureColumn(db, "shumiao_packages", column, definition);
+  }
+
+  for (const [column, definition] of [
+    ["promotion_code", "TEXT"],
+    ["promotion_count", "INTEGER NOT NULL DEFAULT 0"],
+  ]) {
+    await ensureColumn(db, "recharge_orders", column, definition);
+  }
+
+  const packageRows = [
+    ["pkg_10", "10元积分充值包", "轻量体验", 10, 1000, 50, 0, 50, 1, 0],
+    ["pkg_50", "50元积分充值包", "灵活补充", 50, 5000, 250, 30, 280, 2, 0],
+    ["pkg_100", "100元积分充值包", "高频推荐", 100, 10000, 500, 100, 600, 3, 1],
+    ["pkg_500", "500元积分充值包", "持续创作", 500, 50000, 2500, 800, 3300, 4, 0],
+    ["pkg_1000", "1000元积分充值包", "团队与高频使用", 1000, 100000, 5000, 2000, 7000, 5, 0],
+  ];
+  for (const [id, title, scene, amount, amountCents, baseCount, giftCount, totalCount, sortOrder, recommended] of packageRows) {
+    await db.run(
+      `INSERT INTO shumiao_packages
+        (id, title, scene, amount, amount_cents, base_count, gift_count, total_count, enabled, sort_order, recommended, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         title = excluded.title,
+         scene = excluded.scene,
+         amount = excluded.amount,
+         amount_cents = excluded.amount_cents,
+         base_count = excluded.base_count,
+         gift_count = excluded.gift_count,
+         total_count = excluded.total_count,
+         enabled = excluded.enabled,
+         sort_order = excluded.sort_order,
+         recommended = excluded.recommended`,
+      [id, title, scene, amount, amountCents, baseCount, giftCount, totalCount, 1, sortOrder, recommended, clock()],
+    );
+  }
+  await db.run(`
+    UPDATE shumiao_packages
+    SET enabled = 0
+    WHERE id NOT IN ('pkg_10', 'pkg_50', 'pkg_100', 'pkg_500', 'pkg_1000')
+  `);
+
+  await db.run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_recharge_first_promo_claim
+    ON recharge_orders(user_id, promotion_code)
+    WHERE promotion_code = 'first_recharge_v1' AND status IN (0, 1)
+  `);
+}
+
 async function runMigrations(db, options = {}) {
   const clock = options.clock || nowIso;
   await db.run("PRAGMA foreign_keys = ON");
@@ -315,6 +369,11 @@ async function runMigrations(db, options = {}) {
     if (Number(afterVersion2.version) < 3) {
       await applyVersion3(db);
       await db.run("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)", [3, "magiorix-1.2.0-reconciliation-hardening", clock()]);
+    }
+    const afterVersion3 = await db.get("SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations");
+    if (Number(afterVersion3.version) < 4) {
+      await applyVersion4(db, clock);
+      await db.run("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)", [4, "magiorix-1.4.1-recharge-packages-v2", clock()]);
     }
     await db.run("COMMIT");
   } catch (error) {

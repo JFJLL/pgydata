@@ -72,15 +72,15 @@ test("admin recharge statistics only count credited cents and expose created ord
 
     const unpaid = await create("pkg_10");
     const closed = await create("pkg_100");
-    const creditedTen = await create("pkg_10");
-    const creditedHundred = await create("pkg_100");
-    assert.equal((await requestJson(context.baseUrl, `/api/shumiao/order/${unpaid.orderNo}`, { headers })).body.data.status, 0);
-
     const closedResponse = await requestForm(
       context.baseUrl,
       "/api/shumiao/alipay/notify",
       notify(closed.orderNo, "TRADE-CLOSED-STAT", "100.00", "TRADE_CLOSED"),
     );
+    assert.equal(closedResponse.text, "success");
+    const creditedTen = await create("pkg_10");
+    const creditedHundred = await create("pkg_100");
+    assert.equal((await requestJson(context.baseUrl, `/api/shumiao/order/${unpaid.orderNo}`, { headers })).body.data.status, 0);
     assert.equal(closedResponse.text, "success");
     for (const [order, tradeNo, amount] of [
       [creditedTen, "TRADE-STAT-10", "10.00"],

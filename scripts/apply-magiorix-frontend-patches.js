@@ -1094,11 +1094,25 @@ replaceOnce(
 );
 
 // 头部「充值」按钮改为在系统浏览器打开网页充值中心（桌面端不再承载充值业务）。
-replaceOnce(
+replaceAnyOnce(
   mainBundle,
-  'const n=l=>{l.stopPropagation(),e("/shumiao/recharge")}',
-  'const n=l=>{l.stopPropagation(),window.bridge?.system?.shell?.openSafeExternal?.("http://127.0.0.1:3050/recharge")}',
+  [
+    'const n=l=>{l.stopPropagation(),e("/shumiao/recharge")}',
+    'const n=l=>{l.stopPropagation(),window.bridge?.system?.shell?.openSafeExternal?.("http://127.0.0.1:3050/recharge")}',
+  ],
+  'const n=l=>{l.stopPropagation(),window.bridge?.system?.shell?.openSafeExternal?.("https://magiorix.red-magic.cn/recharge")}',
   "header recharge opens browser",
+);
+
+// 左下角 Logo 图标点击在系统浏览器打开官网。
+replaceAnyOnce(
+  mainBundle,
+  [
+    'o.jsx(c2,{onClick:()=>{},sx:{width:36,height:36,borderRadius:1,mb:2,WebkitAppRegion:"no-drag",overflow:"hidden","&:hover":{opacity:.8}},children:o.jsx(x,{component:"img",src:ir,alt:"magiorix",sx:{width:36,height:36,borderRadius:1}})})',
+    'o.jsx(c2,{onClick:()=>{},sx:{width:36,height:36,borderRadius:1,mb:2,WebkitAppRegion:"no-drag",overflow:"hidden","&:hover":{opacity:.8},cursor:"pointer"},children:o.jsx(x,{component:"img",src:ir,alt:"magiorix",sx:{width:36,height:36,borderRadius:1}})})',
+  ],
+  'o.jsx(c2,{onClick:()=>{window.bridge?.system?.shell?.openSafeExternal?.("https://magiorix.red-magic.cn")},sx:{width:36,height:36,borderRadius:1,mb:2,WebkitAppRegion:"no-drag",overflow:"hidden","&:hover":{opacity:.8},cursor:"pointer"},children:o.jsx(x,{component:"img",src:ir,alt:"magiorix",sx:{width:36,height:36,borderRadius:1}})})',
+  "bottom left logo opens official website",
 );
 
 const pointsRechargeSource = String.raw`import{j as e,r}from"./mui-vendor-COdRvU8K.js";import{I as g,k as Y,M as Q,V as ne}from"./index-B09sHfUO.js";import{Q as WxQRCode}from"./index-C15bYgSC.js";
