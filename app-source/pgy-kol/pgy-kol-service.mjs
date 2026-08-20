@@ -116,6 +116,8 @@ export function createPgyKolService({
   logger = {},
   detail,
   detailPollIntervalMs = 2000,
+  authorizationProvider = null,
+  taskAuthMode = process.env.MAGIORIX_TASK_AUTH_MODE || "shadow",
 } = {}) {
   if (typeof transport !== "function") {
     throw new Error("[pgy-kol] transport 必填");
@@ -425,9 +427,27 @@ export function createPgyKolService({
     };
     const finalColumns = Array.isArray(fields) && fields.length > 0 ? fields : [];
     const checkpointTaskId = `pgykol-${Date.now().toString(36)}-${randomUUID().replace(/-/g, "").slice(0, 8)}`;
-    await taskStore.createTask({
+    if (taskAuthMode === "required" && !authorizationProvider) {
+      throw new Error("pgy-kol required task authorization provider is unavailable");
+    }    const taskAuthorization = authorizationProvider
+      ? await authorizationProvider.authorizeTask({
+          clientTaskId: checkpointTaskId,
+          pluginId: "pgy-kol",
+          taskType: "pgy-kol-search-batch",
+          inputs: [],
+          selectedFields: finalColumns,
+          filterState: normalized,
+          maxCount: Number.isInteger(maxCount) && maxCount > 0 ? maxCount : null,
+          requestedItems: Number.isInteger(maxCount) && maxCount > 0 ? maxCount : null,
+        })
+      : null;    await taskStore.createTask({
       taskId: checkpointTaskId,
-      filterState: normalized,
+      authorization: taskAuthorization ? {
+        authorizationId: taskAuthorization.authorizationId || null,
+        ticketJti: taskAuthorization.ticketJti || null,
+        clientTaskId: checkpointTaskId,
+        taskDigest: taskAuthorization.taskDigest || null,
+      } : null,      filterState: normalized,
       columns: finalColumns,
       fields: finalColumns,
       maxCount: Number.isInteger(maxCount) && maxCount > 0 ? maxCount : (Number.isInteger(state.maxCount) && state.maxCount > 0 ? state.maxCount : null),

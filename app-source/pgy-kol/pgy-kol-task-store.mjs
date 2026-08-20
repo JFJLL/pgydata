@@ -402,7 +402,9 @@ export class PgyKolTaskStore {
       if (input?.fileName !== undefined && input?.fileName !== null) {
         metadata.fileName = String(input.fileName);
       }
-      await fs
+      if (input?.authorization && typeof input.authorization === "object") {
+        metadata.authorization = clone(input.authorization);
+      }      await fs
         .writeFile(taskPaths.rows, "", { encoding: "utf8", flag: "wx" })
         .catch((error) => {
           if (error?.code !== "EEXIST") throw error;

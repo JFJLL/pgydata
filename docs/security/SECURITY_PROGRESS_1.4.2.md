@@ -123,3 +123,32 @@
 
 - **推送状态**: **未推送**
 - **原因**: GitHub 仓库当前为 **PUBLIC**，按安全红线要求，安全加固分支 `codex/security-hardening-1.4.2` 仅在本地提交，等待仓库改为 Private 后再行推送。
+
+## 阶段二：签名任务授权、积分预占与回执结算（Implementation Candidate）
+
+- **状态**：代码实现与定向回归测试完成；仅允许本地 Candidate 提交，**不得推送、不得发布、不得将生产模式切换为 required**。
+- **协议**：已重写 `docs/security/TASK_AUTHORIZATION_PROTOCOL_1.4.2.md`，明确渲染进程不可信、最小化上行数据、独立 Ticket Ed25519 密钥、canonical JSON、任务摘要、预占/结算状态机和 Receipt 链不变量。
+- **数据库迁移**：schema v5 新增 `desktop_devices`、`task_authorizations`、`credit_reservations`、`task_receipts`、`task_auth_audit_logs` 及其唯一索引。授权创建使用 `BEGIN IMMEDIATE TRANSACTION`，余额预占、授权创建与审计在同一事务中执行。
+- **服务端**：新增设备登记、授权创建/查询/start/heartbeat/complete/cancel 路径；Ticket 从 `MAGIORIX_TASK_TICKET_PRIVATE_KEY` 读取独立私钥；新增每用户创建授权限速、活跃设备检查、Receipt 签名/哈希/序列/链/计数校验、幂等完成及未启动过期释放处理。
+- **客户端**：新增 `TaskDescriptor`、`DeviceKeyManager`、`AuthorizationGate`、`TaskAuthorizationProvider`、`TaskReceiptService`。设备私钥优先由 Electron safeStorage 保护；最终 Receipt 可在断网时持久化且恢复网络后按队列顺序补交；队列只保存计数、标识和签名材料，不保存 URL、Cookie 或采集结果。
+- **入口接入**：pgy-kol 批量服务支持注入统一 `authorizationProvider`；授权 ID、Ticket JTI、clientTaskId 与 digest 会写入任务元数据；`required` 模式下缺少 Provider 直接拒绝启动，禁止回退到 legacy consume。其他采集入口尚需在下一阶段统一注入同一 Provider 后才可将生产模式提升为 `required`。
+- **环境示例**：`red-magic-api/.env.example` 增加 `MAGIORIX_TASK_AUTH_MODE`、独立 Ticket 私钥占位、key id、TTL 与限速配置说明；仓库未写入任何真实私钥、证书、Cookie、Token 或原始采集数据。
+
+### 阶段二验证记录
+
+| 验证项目 | 命令 | 结果 |
+| --- | --- | --- |
+| 静态检查 | `node tests/static-checks.mjs` | PASS |
+| PowerShell 语法 | `pwsh -NoProfile -File tests/check-powershell-syntax.ps1` | PASS |
+| 任务授权与回执 | `node --test tests/unit/task-*.test.mjs tests/unit/manifest-crypto.test.mjs tests/unit/ipc-sender-guard.test.mjs` | PASS，16 项 |
+| 回执队列恢复 | `node --test tests/unit/task-receipt-queue.test.mjs tests/unit/task-receipt-chain.test.mjs` | PASS，4 项 |
+| 后端回归 | `node --test red-magic-api/test/*.test.js` | PASS，54 项 |
+| pgy-kol 完整回归 | `node --test tests/unit/pgy-kol-*.test.mjs` | PASS，326 项 |
+| 差异质量 | `git diff --check` | PASS（仅 CRLF 规范化警告） |
+
+### 未解决风险
+
+1. 当前桌面端构建输入中，统一 Provider 已接入 pgy-kol 批量服务的依赖注入边界；蒲公英笔记、星图、抖音主页、调度器与历史任务继续逻辑尚未全部改由同一 Provider 实例构造。因此本阶段开发默认保持 `shadow`，且 `required` 对缺少 Provider 的 pgy-kol 任务失效关闭。
+2. 本地 Candidate 未配置真实 Ticket 私钥和 Windows Authenticode 证书，不能作为可发布构建物；生产密钥装载和证书签名必须在受保护 CI/发布环境中完成。
+3. 阶段三仍需将设备私钥保护、Ticket 验签与 Receipt 签名迁入 Rust 原生核心，并完成所有采集入口的生产级强制接入。
+

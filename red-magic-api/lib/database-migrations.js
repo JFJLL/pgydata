@@ -1,4 +1,4 @@
-const LATEST_SCHEMA_VERSION = 4;
+const LATEST_SCHEMA_VERSION = 5;
 
 const LEGACY_PACKAGE_IDS = new Set([
   "pkg_990",
@@ -340,6 +340,124 @@ async function applyVersion4(db, clock) {
   `);
 }
 
+async function applyVersion5(db, clock) {
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS desktop_devices (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      device_key_id TEXT NOT NULL,
+      signing_public_key TEXT NOT NULL,
+      signing_algorithm TEXT NOT NULL DEFAULT 'ed25519',
+      encryption_public_key TEXT,
+      key_backend TEXT NOT NULL DEFAULT 'safe-storage',
+      client_version TEXT NOT NULL,
+      device_name TEXT,
+      status TEXT NOT NULL DEFAULT 'ACTIVE',
+      first_seen_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(user_id, device_key_id)
+    )
+  `);
+  await db.run("CREATE INDEX IF NOT EXISTS idx_desktop_devices_user_device ON desktop_devices(user_id, device_key_id)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_desktop_devices_key ON desktop_devices(device_key_id)");
+
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS task_authorizations (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      device_id TEXT NOT NULL,
+      client_task_id TEXT NOT NULL,
+      task_type TEXT NOT NULL,
+      task_digest TEXT NOT NULL,
+      requested_items INTEGER NOT NULL,
+      authorized_items INTEGER NOT NULL,
+      points_per_item INTEGER NOT NULL DEFAULT 1,
+      reserved_points INTEGER NOT NULL,
+      settled_points INTEGER NOT NULL DEFAULT 0,
+      ticket_jti TEXT NOT NULL UNIQUE,
+      ticket_key_id TEXT NOT NULL,
+      ticket_expires_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'AUTHORIZED',
+      started_at TEXT,
+      completed_at TEXT,
+      cancelled_at TEXT,
+      review_reason TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (device_id) REFERENCES desktop_devices(id) ON DELETE CASCADE,
+      UNIQUE(user_id, client_task_id)
+    )
+  `);
+  await db.run("CREATE INDEX IF NOT EXISTS idx_task_auth_user_client_task ON task_authorizations(user_id, client_task_id)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_task_auth_ticket_jti ON task_authorizations(ticket_jti)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_task_auth_status_created ON task_authorizations(status, created_at)");
+
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS credit_reservations (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      authorization_id TEXT NOT NULL UNIQUE,
+      amount INTEGER NOT NULL,
+      settled_amount INTEGER NOT NULL DEFAULT 0,
+      released_amount INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'HELD',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (authorization_id) REFERENCES task_authorizations(id) ON DELETE CASCADE
+    )
+  `);
+  await db.run("CREATE INDEX IF NOT EXISTS idx_credit_reservations_user ON credit_reservations(user_id, status)");
+
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS task_receipts (
+      id TEXT PRIMARY KEY,
+      authorization_id TEXT NOT NULL,
+      ticket_jti TEXT NOT NULL,
+      sequence INTEGER NOT NULL,
+      previous_receipt_hash TEXT NOT NULL,
+      receipt_hash TEXT NOT NULL,
+      processed_count INTEGER NOT NULL,
+      success_count INTEGER NOT NULL,
+      failed_count INTEGER NOT NULL,
+      timestamp TEXT NOT NULL,
+      task_state TEXT NOT NULL,
+      is_final INTEGER NOT NULL DEFAULT 0,
+      device_key_id TEXT NOT NULL,
+      device_signature TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (authorization_id) REFERENCES task_authorizations(id) ON DELETE CASCADE,
+      UNIQUE(authorization_id, sequence),
+      UNIQUE(authorization_id, receipt_hash)
+    )
+  `);
+  await db.run("CREATE INDEX IF NOT EXISTS idx_task_receipts_auth_seq ON task_receipts(authorization_id, sequence)");
+
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS task_auth_audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      device_id TEXT,
+      authorization_id TEXT,
+      action TEXT NOT NULL,
+      task_type TEXT,
+      task_digest TEXT,
+      items_count INTEGER,
+      points_delta INTEGER,
+      status TEXT,
+      error_code TEXT,
+      ip_hash TEXT,
+      created_at TEXT NOT NULL
+    )
+  `);
+  await db.run("CREATE INDEX IF NOT EXISTS idx_task_auth_audit_user_created ON task_auth_audit_logs(user_id, created_at)");
+}
+
 async function runMigrations(db, options = {}) {
   const clock = options.clock || nowIso;
   await db.run("PRAGMA foreign_keys = ON");
@@ -374,6 +492,11 @@ async function runMigrations(db, options = {}) {
     if (Number(afterVersion3.version) < 4) {
       await applyVersion4(db, clock);
       await db.run("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)", [4, "magiorix-1.4.1-recharge-packages-v2", clock()]);
+    }
+    const afterVersion4 = await db.get("SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations");
+    if (Number(afterVersion4.version) < 5) {
+      await applyVersion5(db, clock);
+      await db.run("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)", [5, "magiorix-1.4.2-task-authorization-protocol", clock()]);
     }
     await db.run("COMMIT");
   } catch (error) {

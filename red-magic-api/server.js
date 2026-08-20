@@ -13,6 +13,7 @@ const { createSmsService, SmsServiceError } = require("./lib/sms-service");
 const { createAlipayGateway, isSuccessfulTradeStatus, normalizeNotification } = require("./lib/alipay-gateway");
 const { createWxpayGateway, normalizeNotification: normalizeWxpayNotification } = require("./lib/wxpay-gateway");
 const { ORDER_STATUS, SettlementError, settleRechargeOrder } = require("./lib/recharge-settlement");
+const { TaskAuthorizationService } = require("./lib/task-authorization-service");
 const {
   claimPendingOrder,
   centsFromAmount,
@@ -38,6 +39,14 @@ const RELEASE_MANIFEST_PATH = process.env.RELEASE_MANIFEST_PATH
   || path.join(__dirname, "public", "releases", "windows", "latest.json");
 const RELEASE_MANIFEST = loadReleaseManifest(RELEASE_MANIFEST_PATH);
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
+const taskAuthService = new TaskAuthorizationService({
+  db: {
+    get: dbGet,
+    all: dbAll,
+    run: dbRun,
+  },
+  clock: nowIso,
+});
 const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || "").trim();
 const ADMIN_PASSWORD_PLACEHOLDERS = new Set([
   "replace-me-with-a-long-random-password",
@@ -1431,6 +1440,115 @@ app.get("/api/shumiao/check-balance", authRequired, asyncHandler(async (req, res
     shortage: Math.max(0, count - balance),
     sufficient: balance >= count,
   });
+}));
+
+
+// ==================== 1.4.2 任务授权与设备登记 API ====================
+
+app.post("/api/desktop/devices/register", authRequired, asyncHandler(async (req, res) => {
+  const { deviceKeyId, signingPublicKey, clientVersion, deviceName } = req.body;
+  if (!deviceKeyId || !signingPublicKey) {
+    return fail(res, 400, "缺少设备公钥或标识");
+  }
+  const result = await taskAuthService.registerDevice({
+    userId: req.user.id,
+    deviceKeyId,
+    signingPublicKey,
+    clientVersion: clientVersion || req.get("x-magiorix-client-version") || "1.4.2",
+    deviceName,
+  });
+  return ok(res, result);
+}));
+
+app.get("/api/desktop/devices/current", authRequired, asyncHandler(async (req, res) => {
+  const deviceKeyId = req.query.deviceKeyId || req.get("x-device-key-id");
+  if (!deviceKeyId) return fail(res, 400, "缺少 deviceKeyId 参数");
+  const device = await taskAuthService.getDevice(req.user.id, deviceKeyId);
+  if (!device) return fail(res, 404, "设备未注册");
+  return ok(res, device);
+}));
+
+app.post("/api/desktop/devices/:id/revoke", authRequired, asyncHandler(async (req, res) => {
+  await dbRun(
+    "UPDATE desktop_devices SET status = 'REVOKED', revoked_at = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+    [nowIso(), nowIso(), req.params.id, req.user.id]
+  );
+  return ok(res, { revoked: true });
+}));
+
+app.post("/api/desktop/task-authorizations", authRequired, asyncHandler(async (req, res) => {
+  const { clientTaskId, deviceKeyId, taskType, taskDigest, requestedItems, clientVersion } = req.body;
+  if (!clientTaskId || !deviceKeyId || !taskType || !taskDigest || !requestedItems) {
+    return fail(res, 400, "缺少必填授权参数");
+  }
+  try {
+    const result = await taskAuthService.createAuthorization({
+      userId: req.user.id,
+      deviceKeyId,
+      clientTaskId,
+      taskType,
+      taskDigest,
+      requestedItems,
+      clientVersion: clientVersion || req.get("x-magiorix-client-version") || "1.4.2",
+      ipHash: logIpHash(req),
+    });
+    return ok(res, result);
+  } catch (err) {
+    if (err.statusCode) {
+      return fail(res, err.statusCode, err.message, { code: err.code });
+    }
+    throw err;
+  }
+}));
+
+app.get("/api/desktop/task-authorizations/by-client-task/:clientTaskId", authRequired, asyncHandler(async (req, res) => {
+  const auth = await dbGet(
+    "SELECT * FROM task_authorizations WHERE user_id = ? AND client_task_id = ?",
+    [req.user.id, req.params.clientTaskId]
+  );
+  if (!auth) return fail(res, 404, "未找到该任务授权");
+  return ok(res, auth);
+}));
+
+app.post("/api/desktop/task-authorizations/:id/start", authRequired, asyncHandler(async (req, res) => {
+  const result = await taskAuthService.startAuthorization({
+    userId: req.user.id,
+    authorizationId: req.params.id,
+  });
+  return ok(res, result);
+}));
+
+app.post("/api/desktop/task-authorizations/:id/heartbeat", authRequired, asyncHandler(async (req, res) => {
+  try {
+    const result = await taskAuthService.heartbeatAuthorization({
+      userId: req.user.id,
+      authorizationId: req.params.id,
+    });
+    return ok(res, result);
+  } catch (err) {
+    return fail(res, err.statusCode || 400, err.message, { code: err.code || "task-authorization-heartbeat-rejected" });
+  }
+}));
+
+app.post("/api/desktop/task-authorizations/:id/complete", authRequired, asyncHandler(async (req, res) => {
+  const finalReceipt = req.body.finalReceipt || req.body;
+  const result = await taskAuthService.completeAuthorization({
+    userId: req.user.id,
+    authorizationId: req.params.id,
+    finalReceipt,
+  });
+  return ok(res, result);
+}));
+
+app.post("/api/desktop/task-authorizations/:id/cancel", authRequired, asyncHandler(async (req, res) => {
+  const { finalReceipt, reason } = req.body;
+  const result = await taskAuthService.cancelAuthorization({
+    userId: req.user.id,
+    authorizationId: req.params.id,
+    finalReceipt,
+    reason,
+  });
+  return ok(res, result);
 }));
 
 app.post("/api/shumiao/consume", authRequired, asyncHandler(async (req, res) => {
