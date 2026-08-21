@@ -2,6 +2,18 @@ const TRUSTED_RELEASE_PUBLIC_KEYS = {
   "magiorix-release-2026-v1": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAMaMnU+xxOv30CKGTxMe6SPK9ay4eN6DgTh0l/xmLwko=\n-----END PUBLIC KEY-----\n",
 };
 
+function pgyCandidateTestReleasePublicKeys() {
+  if (process.env.MAGIORIX_CANDIDATE_TEST_MODE !== "1") return {};
+  const keyId = String(process.env.MAGIORIX_CANDIDATE_TEST_RELEASE_KEY_ID || "").trim();
+  const publicKey = String(process.env.MAGIORIX_CANDIDATE_TEST_RELEASE_PUBLIC_KEY || "").trim();
+  if (!keyId || !/^[A-Za-z0-9._-]{1,96}$/.test(keyId) || !publicKey.includes("BEGIN PUBLIC KEY")) {
+    throw new Error("Candidate test release trust root is missing or invalid");
+  }
+  return { [keyId]: `${publicKey}\n` };
+}
+function pgyActiveReleasePublicKeys() {
+  return { ...TRUSTED_RELEASE_PUBLIC_KEYS, ...pgyCandidateTestReleasePublicKeys() };
+}
 function pgyCanonicalJson(obj) {
   if (obj === null || typeof obj !== "object") return JSON.stringify(obj);
   if (Array.isArray(obj)) return "[" + obj.map(pgyCanonicalJson).join(",") + "]";
@@ -13,7 +25,7 @@ function pgyVerifyManifestSignature(manifest) {
   if (!manifest || typeof manifest !== "object") return false;
   const { keyId, signature, signedPayload } = manifest;
   if (!keyId || !signature || !signedPayload) return false;
-  const pubKey = TRUSTED_RELEASE_PUBLIC_KEYS[keyId];
+  const pubKey = pgyActiveReleasePublicKeys()[keyId];
   if (!pubKey) return false;
   const canonical = pgyCanonicalJson(signedPayload);
   try {
@@ -68,4 +80,3 @@ ye.on("browser-window-created", (event, window) => {
     });
   }
 });
-

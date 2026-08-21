@@ -206,11 +206,13 @@ pub struct TaskDescriptor {
     pub client_task_id: String,
     pub item_count: u32,
     pub input_merkle_root: String,
+    pub input_count: u32,
     pub selected_fields: Vec<String>,
     pub filter_state: BTreeMap<String, Value>,
     pub max_count: Option<u32>,
     pub account_source: String,
     pub pace_policy_id: String,
+    pub execution_options: BTreeMap<String, Value>,
     pub pricing_policy: PricingPolicy,
 }
 
@@ -258,6 +260,7 @@ impl TaskDescriptor {
             || self.task_type.is_empty()
             || self.client_task_id.is_empty()
             || self.item_count == 0
+            || (self.plugin_id == "pgy-kol" && self.input_count == 0 && self.max_count.is_none())
         {
             return Err(CoreError::Ticket(
                 "task descriptor identity or item count is missing",
@@ -330,6 +333,8 @@ pub struct AuthorizationHandle {
     pub handle: Uuid,
     pub authorization_id: String,
     pub ticket_jti: String,
+    // Carries the verified Ticket binding; it is public identity, never key material.
+    pub device_key_id: String,
     pub task_digest: String,
     pub max_items: u32,
 }
@@ -400,6 +405,7 @@ impl TicketVerifier {
             handle: Uuid::new_v4(),
             authorization_id: ticket.authorization_id.clone(),
             ticket_jti: ticket.jti.clone(),
+            device_key_id: ticket.device_key_id.clone(),
             task_digest: ticket.task_digest.clone(),
             max_items: ticket.max_items,
         })
@@ -407,6 +413,7 @@ impl TicketVerifier {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Receipt {
     pub authorization_id: String,
     pub ticket_jti: String,
@@ -419,7 +426,7 @@ pub struct Receipt {
     pub final_receipt: bool,
     pub device_key_id: String,
     pub receipt_hash: String,
-    pub device_signature_b64: String,
+    pub device_signature: String,
 }
 
 pub struct ReceiptEngine {
@@ -498,6 +505,7 @@ impl ReceiptEngine {
             .ok_or(CoreError::BudgetExceeded)?;
         state.sequence += 1;
         #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
         struct ReceiptBody<'a> {
             authorization_id: &'a str,
             ticket_jti: &'a str,
@@ -522,9 +530,9 @@ impl ReceiptEngine {
             final_receipt,
             device_key_id: &self.device_key_id,
         };
-        let canonical = canonical_messagepack(&body)?;
-        let receipt_hash = sha256_hex(&canonical);
-        let signature = BASE64.encode(self.signing_key.sign(&canonical).to_bytes());
+        let canonical = canonical_json(&serde_json::to_value(&body).map_err(|_| CoreError::Serialization)?)?;
+        let receipt_hash = sha256_hex(canonical.as_bytes());
+        let signature = BASE64.encode(self.signing_key.sign(canonical.as_bytes()).to_bytes());
         let receipt = Receipt {
             authorization_id: state.handle.authorization_id.clone(),
             ticket_jti: state.handle.ticket_jti.clone(),
@@ -537,7 +545,7 @@ impl ReceiptEngine {
             final_receipt,
             device_key_id: self.device_key_id.clone(),
             receipt_hash: receipt_hash.clone(),
-            device_signature_b64: signature,
+            device_signature: signature,
         };
         state.previous_hash = receipt_hash;
         state.finalized = final_receipt;
@@ -1045,6 +1053,12 @@ impl DeviceSigningKey {
         BASE64.encode(self.signing_key.sign(payload).to_bytes())
     }
 
+    /// This clone is intentionally only exposed to the native executable. It is
+    /// never serialized, passed through IPC, or returned to Electron JavaScript.
+    pub fn signing_key_clone(&self) -> SigningKey {
+        self.signing_key.clone()
+    }
+
     pub fn export_dpapi_protected(&self) -> CoreResult<Vec<u8>> {
         #[cfg(windows)]
         {
@@ -1366,12 +1380,14 @@ mod tests {
             task_type: "search".into(),
             client_task_id: "task".into(),
             item_count: 1,
+            input_count: 1,
             input_merkle_root: "a".repeat(64),
             selected_fields: vec!["b".into(), "a".into(), "a".into()],
             filter_state: BTreeMap::new(),
             max_count: Some(10),
             account_source: "default".into(),
             pace_policy_id: "default".into(),
+            execution_options: BTreeMap::new(),
             pricing_policy: PricingPolicy { points_per_item: 1 },
         }
         .canonicalize()

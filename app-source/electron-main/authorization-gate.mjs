@@ -50,16 +50,30 @@ export class AuthorizationGate {
     return deviceKeyId;
   }
 
-  async getNativeReceiptSigningMaterial({ deviceKeyId } = {}) {
-    await this.deviceKeyManager.initialize();
-    const actualDeviceKeyId = this.deviceKeyManager.getDeviceKeyId();
-    if (deviceKeyId && deviceKeyId !== actualDeviceKeyId) {
-      throw new Error("Authorization device key does not match the protected local signing key");
+  async registerNativeDeviceIdentity({ user, identity } = {}) {
+    if (!user?.id) throw new Error("A signed-in user is required for native device registration");
+    if (!identity?.deviceKeyId || typeof identity?.signingPublicKey !== "string"
+      || typeof identity?.encryptionPublicKeyB64 !== "string") {
+      throw new Error("Native device public identity is incomplete");
     }
-    return {
-      deviceKeyId: actualDeviceKeyId,
-      signingKeyB64: this.deviceKeyManager.exportReceiptSigningSeedB64(),
-    };
+    if (!this.apiClient || typeof this.apiClient.post !== "function") {
+      throw new Error("Task authorization API client is unavailable for native device registration");
+    }
+    await this.apiClient.post("/api/desktop/devices/register", {
+      deviceKeyId: identity.deviceKeyId,
+      signingPublicKey: identity.signingPublicKey,
+      clientVersion: "1.4.2",
+      deviceName: process.env.COMPUTERNAME || "Windows Desktop",
+      signingAlgorithm: "Ed25519",
+      keyBackend: identity.keyBackend || "dpapi-current-user",
+    }, { headers: { "X-Magiorix-Client-Version": "1.4.2" } });
+    const encryptionPublicKey = Buffer.from(identity.encryptionPublicKeyB64, "base64");
+    if (encryptionPublicKey.length !== 32) throw new Error("Native device encryption public key must be 32 bytes");
+    await this.apiClient.post("/api/desktop/devices/encryption-key", {
+      deviceKeyId: identity.deviceKeyId,
+      encryptionPublicKey: identity.encryptionPublicKeyB64,
+    }, { headers: { "X-Magiorix-Client-Version": "1.4.2" } });
+    return identity.deviceKeyId;
   }
 
   verifyTicket(ticketEnvelope, expected = {}) {
@@ -173,6 +187,7 @@ export class AuthorizationGate {
     requestedItems = null,
     nativeTicketRequired = false,
     deferStart = false,
+    nativeDeviceKeyId = null,
   }) {
     if (this.apiClient) {
       await this.flushPendingReceipts();
@@ -182,14 +197,13 @@ export class AuthorizationGate {
       taskType,
       clientTaskId,
       inputs,
+      itemCount: Number.isInteger(requestedItems) && requestedItems > 0 ? requestedItems : null,
       selectedFields,
       filterState,
       maxCount,
     });
     const taskDigest = computeTaskDigest(descriptor);
-    const effectiveRequestedItems = Number.isInteger(requestedItems) && requestedItems > 0
-      ? requestedItems
-      : descriptor.itemCount;
+    const effectiveRequestedItems = descriptor.itemCount;
     if (!Number.isInteger(effectiveRequestedItems) || effectiveRequestedItems <= 0) {
       throw new Error("A positive requested item count is required for task authorization");
     }
@@ -203,7 +217,7 @@ export class AuthorizationGate {
       };
     }
 
-    const deviceKeyId = await this.ensureDeviceRegistered(user);
+    const deviceKeyId = nativeDeviceKeyId || await this.ensureDeviceRegistered(user);
 
     try {
       if (!this.apiClient) {
@@ -243,8 +257,8 @@ export class AuthorizationGate {
         });
       }
 
-      // Initialize receipt chain
-      this.receiptService.createChain(authorizationId, ticket.jti);
+      // Shadow mode retains the compatibility receipt queue; required mode only accepts native receipts.
+      if (!nativeTicketRequired) this.receiptService.createChain(authorizationId, ticket.jti);
 
       const record = {
         authorizationId,
@@ -289,14 +303,14 @@ export class AuthorizationGate {
     }
   }
 
-  async completeTask({ clientTaskId, successCount, failedCount, totalCount }) {
+  async completeTask({ clientTaskId, successCount, failedCount, totalCount, nativeReceipt = null }) {
     const auth = this.activeAuthorizations.get(clientTaskId);
     if (!auth) return { settled: false, reason: "authorization-not-found" };
 
     const success = Number(successCount || 0);
     const failed = Number(failedCount || 0);
     const processed = totalCount == null ? success + failed : Number(totalCount);
-    const finalReceipt = this.receiptService.generateReceipt(auth.authorizationId, {
+    const finalReceipt = nativeReceipt || this.receiptService.generateReceipt(auth.authorizationId, {
       processedCount: processed,
       successCount: success,
       failedCount: failed,
@@ -317,6 +331,7 @@ export class AuthorizationGate {
         clientTaskId,
         authorizationId: auth.authorizationId,
         receipt: finalReceipt,
+        native: Boolean(nativeReceipt),
       });
       this.logger.warn?.("[AuthorizationGate] Final Receipt queued for retry:", err.message);
       return {
@@ -334,13 +349,13 @@ export class AuthorizationGate {
   async flushPendingReceipts() {
     return this.receiptService.flushPendingFinalReceipts();
   }
-  async cancelTask({ clientTaskId, successCount = 0, failedCount = 0, reason = "user-cancel" }) {
+  async cancelTask({ clientTaskId, successCount = 0, failedCount = 0, nativeReceipt = null, reason = "user-cancel" }) {
     const auth = this.activeAuthorizations.get(clientTaskId);
     if (!auth || !auth.authorizationId) return;
 
     try {
-      let finalReceipt = null;
-      if (successCount > 0 || failedCount > 0) {
+      let finalReceipt = nativeReceipt;
+      if (!finalReceipt && (successCount > 0 || failedCount > 0)) {
         finalReceipt = this.receiptService.generateReceipt(auth.authorizationId, {
           processedCount: successCount + failedCount,
           successCount,

@@ -114,7 +114,7 @@ function timingSafeEqual(left, right) {
   return Buffer.isBuffer(left) && Buffer.isBuffer(right) && left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
-export function verifyNativeCoreFile({ corePath, installRoot, expectedSha256, allowUnsignedLocal = false, isPackaged = false }) {
+export function verifyNativeCoreFile({ corePath, installRoot, expectedSha256, expectedCoreVersion = NATIVE_CORE_VERSION, expectedProtocolVersion = NATIVE_CORE_PROTOCOL_VERSION, allowUnsignedLocal = false, isPackaged = false }) {
   if (!path.isAbsolute(corePath) || !path.isAbsolute(installRoot)) throw new Error("Native core path must be absolute");
   const root = fs.realpathSync.native(installRoot);
   const actual = fs.realpathSync.native(corePath);
@@ -122,17 +122,15 @@ export function verifyNativeCoreFile({ corePath, installRoot, expectedSha256, al
   if (relative.startsWith("..") || path.isAbsolute(relative) || fs.lstatSync(corePath).isSymbolicLink()) throw new Error("Native core is outside the installation directory");
   const digest = crypto.createHash("sha256").update(fs.readFileSync(actual)).digest("hex").toUpperCase();
   if (!/^[A-F0-9]{64}$/.test(String(expectedSha256 || "").toUpperCase()) || digest !== String(expectedSha256).toUpperCase()) throw new Error("Native core SHA-256 verification failed");
-  if (isPackaged && !allowUnsignedLocal) {
-    // Authenticode validation is performed by the fixed release build pipeline before startup.
-    // The sidecar client cannot accept a caller-supplied verification command or executable path.
-    return { path: actual, sha256: digest, authenticodeRequired: true };
+  if (expectedCoreVersion !== NATIVE_CORE_VERSION || expectedProtocolVersion !== NATIVE_CORE_PROTOCOL_VERSION) {
+    throw new Error("Native core manifest version or protocol is incompatible");
   }
-  return { path: actual, sha256: digest, authenticodeRequired: false };
+  return { path: actual, sha256: digest, authenticodeRequired: Boolean(isPackaged && !allowUnsignedLocal) };
 }
 
 export class NativeCoreClient {
-  constructor({ corePath, installRoot, expectedSha256, allowUnsignedLocal = false, isPackaged = false, logger = console, timeoutMs = 8_000 } = {}) {
-    this.options = { corePath, installRoot, expectedSha256, allowUnsignedLocal, isPackaged, logger, timeoutMs };
+  constructor({ corePath, installRoot, expectedSha256, expectedCoreVersion = NATIVE_CORE_VERSION, expectedProtocolVersion = NATIVE_CORE_PROTOCOL_VERSION, expectedPublisherSubject = null, expectedThumbprint = null, allowUnsignedLocal = false, isPackaged = false, logger = console, timeoutMs = 8_000 } = {}) {
+    this.options = { corePath, installRoot, expectedSha256, expectedCoreVersion, expectedProtocolVersion, expectedPublisherSubject, expectedThumbprint, allowUnsignedLocal, isPackaged, logger, timeoutMs };
     this.child = null; this.secret = null; this.sequence = 1; this.pending = new Map(); this.stdout = Buffer.alloc(0);
   }
 
@@ -141,11 +139,17 @@ export class NativeCoreClient {
     if (process.platform === "win32" && !this.options.allowUnsignedLocal) {
       const signature = spawnSync(
         "powershell.exe",
-        ["-NoProfile", "-NonInteractive", "-Command", "(Get-AuthenticodeSignature -LiteralPath $args[0]).Status", verified.corePath],
+        ["-NoProfile", "-NonInteractive", "-Command", "$s=Get-AuthenticodeSignature -LiteralPath $args[0]; @{Status=[string]$s.Status;Subject=[string]$s.SignerCertificate.Subject;Thumbprint=[string]$s.SignerCertificate.Thumbprint}|ConvertTo-Json -Compress", verified.path],
         { encoding: "utf8", windowsHide: true },
       );
-      if (signature.status !== 0 || signature.stdout.trim() !== "Valid") {
-        throw new Error("Native core Authenticode verification failed");
+      let details = null;
+      try { details = JSON.parse(signature.stdout || "{}"); } catch { /* rejected below */ }
+      if (signature.status !== 0 || details?.Status !== "Valid") throw new Error("Native core Authenticode verification failed");
+      if (this.options.expectedPublisherSubject && details.Subject !== this.options.expectedPublisherSubject) {
+        throw new Error("Native core Authenticode publisher subject mismatch");
+      }
+      if (this.options.expectedThumbprint && String(details.Thumbprint || "").replace(/\s/g, "").toUpperCase() !== String(this.options.expectedThumbprint).replace(/\s/g, "").toUpperCase()) {
+        throw new Error("Native core Authenticode certificate thumbprint mismatch");
       }
     }
     this.secret = crypto.randomBytes(32);

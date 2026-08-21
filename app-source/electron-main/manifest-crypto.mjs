@@ -34,7 +34,16 @@
    };
  }
  
- export function verifySignedEnvelope(envelope, customPublicKeys = null) {
+ function candidateTestPublicKeys() {
+  if (process.env.MAGIORIX_CANDIDATE_TEST_MODE !== "1") return {};
+  const keyId = String(process.env.MAGIORIX_CANDIDATE_TEST_RELEASE_KEY_ID || "").trim();
+  const publicKey = String(process.env.MAGIORIX_CANDIDATE_TEST_RELEASE_PUBLIC_KEY || "").trim();
+  if (!keyId || !/^[A-Za-z0-9._-]{1,96}$/.test(keyId) || !publicKey.includes("BEGIN PUBLIC KEY")) {
+    throw new Error("Candidate test release trust root is missing or invalid");
+  }
+  return { [keyId]: `${publicKey}\n` };
+}
+export function verifySignedEnvelope(envelope, customPublicKeys = null) {
    if (!envelope || typeof envelope !== "object") {
      return { valid: false, reason: "Envelope is not an object" };
    }
@@ -42,7 +51,7 @@
    if (!keyId || keyId === "unsigned-local" || !signature) {
      return { valid: false, reason: "Envelope is unsigned or unsigned-local", isUnsigned: true };
    }
-   const publicKeys = customPublicKeys || TRUSTED_PUBLIC_KEYS;
+   const publicKeys = customPublicKeys || { ...TRUSTED_PUBLIC_KEYS, ...candidateTestPublicKeys() };
    const pubKey = publicKeys[keyId];
    if (!pubKey) {
      return { valid: false, reason: `Unknown keyId: ${keyId}` };

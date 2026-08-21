@@ -16,6 +16,16 @@ function hashSha256(text) {
   return crypto.createHash("sha256").update(String(text), "utf8").digest("hex");
 }
 
+function normalizeEd25519PublicKey(value) {
+  const text = String(value || "").trim();
+  if (text.includes("BEGIN PUBLIC KEY")) return text;
+  const raw = Buffer.from(text, "base64");
+  if (raw.length !== 32) throw new Error("Device Ed25519 public key must be PEM or 32-byte base64");
+  const spki = Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), raw]);
+  const encoded = spki.toString("base64").match(/.{1,64}/g).join("\n");
+  return `-----BEGIN PUBLIC KEY-----\n${encoded}\n-----END PUBLIC KEY-----\n`;
+}
+
 class TaskAuthorizationService {
   constructor({ db, ticketPrivateKey = null, ticketKeyId = DEFAULT_TICKET_KEY_ID, ticketTtlMinutes = 15, clock = nowIso } = {}) {
     this.db = db;
@@ -33,6 +43,7 @@ class TaskAuthorizationService {
       throw new Error("Missing required device registration parameters");
     }
     const now = this.clock();
+    const normalizedSigningPublicKey = normalizeEd25519PublicKey(signingPublicKey);
     const existing = await this.db.get(
       "SELECT * FROM desktop_devices WHERE user_id = ? AND device_key_id = ?",
       [userId, deviceKeyId]
@@ -46,7 +57,7 @@ class TaskAuthorizationService {
         `UPDATE desktop_devices
          SET signing_public_key = ?, client_version = ?, device_name = ?, last_seen_at = ?, updated_at = ?
          WHERE id = ?`,
-        [signingPublicKey, clientVersion, deviceName, now, now, existing.id]
+        [normalizedSigningPublicKey, clientVersion, deviceName, now, now, existing.id]
       );
       return { deviceId: existing.id, status: existing.status };
     }
@@ -56,7 +67,7 @@ class TaskAuthorizationService {
       `INSERT INTO desktop_devices
        (id, user_id, device_key_id, signing_public_key, signing_algorithm, client_version, device_name, status, first_seen_at, last_seen_at, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'ed25519', ?, ?, 'ACTIVE', ?, ?, ?, ?)`,
-      [deviceId, userId, deviceKeyId, signingPublicKey, clientVersion, deviceName, now, now, now, now]
+      [deviceId, userId, deviceKeyId, normalizedSigningPublicKey, clientVersion, deviceName, now, now, now, now]
     );
     return { deviceId, status: "ACTIVE" };
   }
@@ -320,16 +331,20 @@ class TaskAuthorizationService {
       throw new Error("Receipt hash verification failed" );
     }
 
-    if (typeof deviceSignature !== "string" || !/^[a-f0-9]{128}$/i.test(deviceSignature)) {
-      throw new Error("Invalid device signature encoding on final receipt");
+    if (typeof deviceSignature !== "string") {
+      throw new Error("Missing device signature on final receipt");
     }
+    const signatureBytes = /^[a-f0-9]{128}$/i.test(deviceSignature)
+      ? Buffer.from(deviceSignature, "hex")
+      : Buffer.from(deviceSignature, "base64");
+    if (signatureBytes.length !== 64) throw new Error("Invalid device signature encoding on final receipt");
     {
       try {
         const isDeviceSigValid = crypto.verify(
           null,
           Buffer.from(receiptCanonical, "utf8"),
           device.signing_public_key,
-          Buffer.from(deviceSignature, "hex")
+          signatureBytes
         );
         if (!isDeviceSigValid) {
           throw new Error("Invalid device signature on final receipt");

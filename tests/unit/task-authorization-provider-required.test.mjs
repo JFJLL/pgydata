@@ -13,10 +13,11 @@ function makeGate() {
   };
   const gate = new AuthorizationGate({ deviceKeyManager, apiClient: null, authMode: "required", logger: {} });
   const state = { registered: 0, acquired: 0, started: 0, cancelled: 0, requested: 0 };
-  gate.registerDeviceEncryptionKey = async ({ encryptionPublicKey }) => {
+  gate.registerNativeDeviceIdentity = async ({ identity }) => {
     state.registered += 1;
-    assert.equal(Buffer.from(encryptionPublicKey, "base64").length, 32);
-    return "device-1";
+    assert.equal(identity.deviceKeyId, "device-1");
+    assert.equal(Buffer.from(identity.encryptionPublicKeyB64, "base64").length, 32);
+    assert.equal(typeof identity.signingPublicKey, "string");
   };
   gate.acquireTaskAuthorization = async ({ nativeTicketRequired, deferStart, clientTaskId, taskType, requestedItems }) => {
     state.acquired += 1;
@@ -49,13 +50,6 @@ function makeGate() {
     assert.equal(clientTaskId, "task-1");
     assert.equal(reason, "native-required-authorization-or-strategy-rejected");
   };
-  gate.getNativeReceiptSigningMaterial = async ({ deviceKeyId }) => {
-    assert.equal(deviceKeyId, "device-1");
-    return {
-      deviceKeyId: "device-1",
-      signingKeyB64: Buffer.alloc(32, 9).toString("base64"),
-    };
-  };
   return { gate, state };
 }
 
@@ -65,9 +59,10 @@ function makeNativeClient({ rejectStrategy = false } = {}) {
       if (command === "task.digest") return { taskDigest: computeTaskDigest(payload) };
       if (command === "device.ensure") {
         return {
+          deviceKeyId: "device-1",
+          signingPublicKey: Buffer.alloc(32, 3).toString("base64"),
           encryptionAlgorithm: "HPKE-X25519-HKDF-SHA256-AES-256-GCM",
           encryptionPublicKeyB64: Buffer.alloc(32, 7).toString("base64"),
-          protectedPrivateKeyB64: "dpapi-protected-opaque",
         };
       }
       if (command === "ticket.verify") {
@@ -76,15 +71,14 @@ function makeNativeClient({ rejectStrategy = false } = {}) {
         return { handle: "native-handle-1", authorization_id: "auth-1" };
       }
       if (command === "receipt.begin") {
-        assert.equal(payload.deviceKeyId, "device-1");
-        assert.equal(payload.signingKeyB64, Buffer.alloc(32, 9).toString("base64"));
+        assert.deepEqual(Object.keys(payload).sort(), ["authorizationHandle"]);
         assert.equal(payload.authorizationHandle.handle, "native-handle-1");
         return { started: true };
       }
       if (command === "strategy.decrypt") {
         if (rejectStrategy) throw new Error("strategy signature mismatch");
         assert.equal(payload.expected.authorizationId, "auth-1");
-        assert.equal(payload.protectedPrivateKeyB64, "dpapi-protected-opaque");
+        assert.deepEqual(Object.keys(payload).sort(), ["bundle", "expected"]);
         return {
           authorizationId: "auth-1",
           taskDigest: payload.expected.taskDigest,

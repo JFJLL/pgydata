@@ -1,9 +1,9 @@
 import { AuthorizationGate } from "./authorization-gate.mjs";
-import { buildTaskDescriptor, computeTaskDigest } from "./task-descriptor.mjs";
+import { buildTaskDescriptor, computeTaskDigest, normalizeTaskInputs } from "./task-descriptor.mjs";
 
 /**
- * Main-process-only task authorization adapter. Required mode never verifies a
- * Ticket or permits a paid task with JavaScript-only state.
+ * Main-process-only paid-task adapter. Required mode treats the Rust core as the
+ * sole authority for Ticket verification, device signing and receipt counters.
  */
 export class TaskAuthorizationProvider {
   constructor({ authorizationGate, getCurrentUser, nativeCoreClient = null, authMode = "shadow", logger = {} } = {}) {
@@ -16,15 +16,35 @@ export class TaskAuthorizationProvider {
     this.authMode = authMode;
     this.logger = logger;
     this.nativeDeviceIdentity = null;
+    this.activeRequiredTasks = new Map();
   }
 
-  async authorizeTask({ clientTaskId, pluginId, taskType, inputs = [], selectedFields = [], filterState = {}, maxCount = null, requestedItems = null } = {}) {
+  async #currentUser() {
     const user = await this.getCurrentUser();
-    if (!user?.id) throw new Error("A signed-in user is required for task authorization");
+    if (!user?.id || !Number.isFinite(Number(user.id))) throw new Error("A signed-in user is required for task authorization");
+    if (user.expiresAt && new Date(user.expiresAt).getTime() <= Date.now()) {
+      throw new Error("The authenticated user session has expired");
+    }
+    return user;
+  }
+
+  async authorizeTask({
+    clientTaskId, pluginId, taskType, inputs = [], selectedFields = [], filterState = {},
+    maxCount = null, requestedItems = null, pendingChargeCount = 0, accountSource = "default",
+    pacePolicyId = "default", executionOptions = {},
+  } = {}) {
+    const user = await this.#currentUser();
+    const normalizedInputs = normalizeTaskInputs(inputs);
+    const pending = Number.isInteger(pendingChargeCount) && pendingChargeCount > 0 ? pendingChargeCount : 0;
+    const effectiveRequestedItems = Number.isInteger(requestedItems) && requestedItems > 0
+      ? requestedItems
+      : normalizedInputs.length - pending;
+    if (!Number.isInteger(effectiveRequestedItems) || effectiveRequestedItems <= 0) {
+      throw new Error("No uncharged task items remain for authorization");
+    }
     const descriptor = buildTaskDescriptor({
-      pluginId, taskType, clientTaskId, inputs,
-      itemCount: Number.isInteger(requestedItems) && requestedItems > 0 ? requestedItems : inputs.length,
-      selectedFields, filterState, maxCount,
+      pluginId, taskType, clientTaskId, inputs: normalizedInputs, itemCount: effectiveRequestedItems,
+      selectedFields, filterState, maxCount, accountSource, pacePolicyId, executionOptions,
     });
     const jsTaskDigest = computeTaskDigest(descriptor);
 
@@ -35,103 +55,73 @@ export class TaskAuthorizationProvider {
 
       let authorization = null;
       try {
-        if (!this.nativeDeviceIdentity) {
-          this.nativeDeviceIdentity = await this.nativeCoreClient.request("device.ensure", {});
-        }
+        if (!this.nativeDeviceIdentity) this.nativeDeviceIdentity = await this.nativeCoreClient.request("device.ensure", {});
         const identity = this.nativeDeviceIdentity;
-        if (identity?.encryptionAlgorithm !== "HPKE-X25519-HKDF-SHA256-AES-256-GCM"
+        if (!identity?.deviceKeyId || typeof identity?.signingPublicKey !== "string"
           || typeof identity?.encryptionPublicKeyB64 !== "string"
-          || typeof identity?.protectedPrivateKeyB64 !== "string") {
-          throw new Error("Native device encryption identity is invalid");
+          || identity?.encryptionAlgorithm !== "HPKE-X25519-HKDF-SHA256-AES-256-GCM") {
+          throw new Error("Native device public identity is invalid");
         }
-        const registeredDeviceKeyId = await this.authorizationGate.registerDeviceEncryptionKey({
-          user,
-          encryptionPublicKey: identity.encryptionPublicKeyB64,
-        });
+        await this.authorizationGate.registerNativeDeviceIdentity({ user, identity });
         authorization = await this.authorizationGate.acquireTaskAuthorization({
-          user, clientTaskId, pluginId, taskType, inputs, selectedFields, filterState, maxCount, requestedItems,
-          nativeTicketRequired: true,
-          deferStart: true,
+          user, clientTaskId, pluginId, taskType, inputs: normalizedInputs, selectedFields, filterState,
+          maxCount, requestedItems: effectiveRequestedItems, nativeTicketRequired: true, deferStart: true,
+          nativeDeviceKeyId: identity.deviceKeyId,
         });
         if (!authorization?.authorized || !authorization?.ticket || !authorization?.ticketSignature) {
           throw new Error("Cloud authorization did not return a complete signed Ticket");
         }
-        if (authorization.deviceKeyId !== registeredDeviceKeyId) {
-          throw new Error("Authorization Ticket device binding does not match registered HPKE device identity");
+        if (authorization.deviceKeyId !== identity.deviceKeyId) {
+          throw new Error("Authorization Ticket device binding does not match the current native device identity");
         }
         const ticketHandle = await this.nativeCoreClient.request("ticket.verify", {
           ticket: authorization.ticket,
           signatureHex: authorization.ticketSignature,
           expected: {
-            userId: Number(user.id),
-            deviceKeyId: authorization.deviceKeyId,
-            clientTaskId,
-            taskDigest: jsTaskDigest,
-            requestedItems: Number.isInteger(requestedItems) && requestedItems > 0 ? requestedItems : inputs.length,
-            clientVersion: "1.4.2",
+            userId: Number(user.id), deviceKeyId: authorization.deviceKeyId, clientTaskId,
+            taskDigest: jsTaskDigest, requestedItems: effectiveRequestedItems, clientVersion: "1.4.2",
           },
         });
         if (!ticketHandle?.handle || ticketHandle?.authorization_id !== authorization.authorizationId) {
           throw new Error("Native Ticket verification did not return a bound authorization handle");
         }
         const expected = {
-          authorizationId: authorization.authorizationId,
-          ticketJti: authorization.ticketJti,
-          deviceKeyId: authorization.deviceKeyId,
-          taskDigest: jsTaskDigest,
-          taskType,
-          clientVersion: "1.4.2",
-          coreVersion: "1.4.2",
-          coreProtocolVersion: 1,
+          authorizationId: authorization.authorizationId, ticketJti: authorization.ticketJti,
+          deviceKeyId: authorization.deviceKeyId, taskDigest: jsTaskDigest, taskType,
+          clientVersion: "1.4.2", coreVersion: "1.4.2", coreProtocolVersion: 1,
           releaseManifestKeyId: process.env.MAGIORIX_RELEASE_MANIFEST_KEY_ID || null,
           ticketKeyId: authorization.ticketKeyId,
           policyKeyId: process.env.MAGIORIX_POLICY_SIGNING_KEY_ID || "magiorix-policy-2026-v1",
           policyVersion: authorization.policyVersion,
         };
         const bundle = await this.authorizationGate.requestStrategyBundle(expected);
-        const strategy = await this.nativeCoreClient.request("strategy.decrypt", {
-          bundle,
-          expected,
-          protectedPrivateKeyB64: identity.protectedPrivateKeyB64,
-        });
+        const strategy = await this.nativeCoreClient.request("strategy.decrypt", { bundle, expected });
         if (strategy?.authorizationId !== authorization.authorizationId
-          || strategy?.taskDigest !== jsTaskDigest
-          || strategy?.taskType !== taskType
-          || !Number.isInteger(strategy?.maxItems)
-          || strategy.maxItems <= 0) {
-          throw new Error("Native strategy decision binding is invalid");
+          || strategy?.taskDigest !== jsTaskDigest || strategy?.taskType !== taskType
+          || !Number.isInteger(strategy?.maxItems) || strategy.maxItems < effectiveRequestedItems) {
+          throw new Error("Native strategy decision binding or budget is invalid");
         }
-        const receiptSigningMaterial = await this.authorizationGate.getNativeReceiptSigningMaterial({
-          deviceKeyId: authorization.deviceKeyId,
-        });
-        await this.nativeCoreClient.request("receipt.begin", {
-          authorizationHandle: ticketHandle,
-          ...receiptSigningMaterial,
-        });
+        await this.nativeCoreClient.request("receipt.begin", { authorizationHandle: ticketHandle });
         await this.authorizationGate.startTaskAuthorization(authorization.authorizationId);
-        return {
-          ...authorization,
-          taskDescriptor: descriptor,
-          taskDigest: jsTaskDigest,
-          nativeAuthorizationHandle: ticketHandle.handle,
-          strategy,
+        const context = {
+          authorizationId: authorization.authorizationId, nativeAuthorizationHandle: ticketHandle.handle,
+          userId: Number(user.id), maxItems: strategy.maxItems, processed: 0, finalized: false,
         };
+        this.activeRequiredTasks.set(clientTaskId, context);
+        return { ...authorization, taskDescriptor: descriptor, taskDigest: jsTaskDigest, ...context, strategy };
       } catch (error) {
         if (authorization?.authorizationId) {
-          await this.authorizationGate.cancelTask({
-            clientTaskId,
-            reason: "native-required-authorization-or-strategy-rejected",
-          }).catch(() => {});
+          await this.authorizationGate.cancelTask({ clientTaskId, reason: "native-required-authorization-or-strategy-rejected" }).catch(() => {});
         }
         throw new Error(`Native required authorization rejected; paid task was not started: ${error.message}`);
       }
     }
 
     const result = await this.authorizationGate.acquireTaskAuthorization({
-      user, clientTaskId, pluginId, taskType, inputs, selectedFields, filterState, maxCount, requestedItems,
+      user, clientTaskId, pluginId, taskType, inputs: normalizedInputs, selectedFields, filterState,
+      maxCount, requestedItems: effectiveRequestedItems,
     });
     if (!result?.authorized) throw new Error("Task authorization was rejected");
-
     if (this.nativeCoreClient) {
       try {
         const nativeResult = await this.nativeCoreClient.request("task.digest", descriptor);
@@ -143,12 +133,47 @@ export class TaskAuthorizationProvider {
     return { ...result, taskDescriptor: descriptor, taskDigest: jsTaskDigest };
   }
 
-  async completeTask({ clientTaskId, successCount, failedCount, totalCount }) {
-    return this.authorizationGate.completeTask({ clientTaskId, successCount, failedCount, totalCount });
+  async recordItemOutcome({ clientTaskId, success = false, failed = false, taskState = "running" } = {}) {
+    const context = this.activeRequiredTasks.get(clientTaskId);
+    if (!context) return null;
+    if (context.finalized) throw new Error("Task receipt is already finalized");
+    const successDelta = success ? 1 : 0;
+    const failedDelta = failed ? 1 : 0;
+    if (successDelta + failedDelta !== 1) throw new Error("Exactly one terminal item outcome is required");
+    if (context.processed >= context.maxItems) throw new Error("Native task budget is exhausted");
+    const receipt = await this.nativeCoreClient.request("receipt.append", {
+      handleId: context.nativeAuthorizationHandle, successDelta, failedDelta, taskState,
+    });
+    context.processed = Number(receipt?.processedCount);
+    return receipt;
   }
 
-  async cancelTask({ clientTaskId, successCount = 0, failedCount = 0, reason = "user-cancel" }) {
-    return this.authorizationGate.cancelTask({ clientTaskId, successCount, failedCount, reason });
+  async completeTask({ clientTaskId }) {
+    const context = this.activeRequiredTasks.get(clientTaskId);
+    if (!context) return this.authorizationGate.completeTask({ clientTaskId });
+    const finalReceipt = await this.nativeCoreClient.request("receipt.finalize", {
+      handleId: context.nativeAuthorizationHandle, taskState: "completed",
+    });
+    context.finalized = true;
+    try {
+      return await this.authorizationGate.completeTask({ clientTaskId, nativeReceipt: finalReceipt });
+    } finally {
+      this.activeRequiredTasks.delete(clientTaskId);
+    }
+  }
+
+  async cancelTask({ clientTaskId, reason = "user-cancel" } = {}) {
+    const context = this.activeRequiredTasks.get(clientTaskId);
+    if (!context) return this.authorizationGate.cancelTask({ clientTaskId, reason });
+    const finalReceipt = await this.nativeCoreClient.request("receipt.finalize", {
+      handleId: context.nativeAuthorizationHandle, taskState: "cancelled",
+    });
+    context.finalized = true;
+    try {
+      return await this.authorizationGate.cancelTask({ clientTaskId, nativeReceipt: finalReceipt, reason });
+    } finally {
+      this.activeRequiredTasks.delete(clientTaskId);
+    }
   }
 
   async flushPendingReceipts() {

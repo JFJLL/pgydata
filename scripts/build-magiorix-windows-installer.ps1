@@ -26,20 +26,13 @@ $appId = "magiorix-desktop"
 $sourceAppDir = Join-Path $projectRoot "runtime\magiorix-desktop"
 $coreBuildScript = Join-Path $projectRoot "scripts\build-magiorix-core.ps1"
 if (-not (Test-Path -LiteralPath $coreBuildScript -PathType Leaf)) { throw "Native core build script is missing: $coreBuildScript" }
-& $coreBuildScript
 $coreRuntimeDir = Join-Path $sourceAppDir "resources"
+# Compile to a controlled staging location. Core signing and metadata generation happen only after the installer payload exists.
+& $coreBuildScript -StagingDirectory $coreRuntimeDir
 $coreExePath = Join-Path $coreRuntimeDir "magiorix-core.exe"
-$coreMetadataPath = Join-Path $coreRuntimeDir "magiorix-core.metadata.json"
-if (-not (Test-Path -LiteralPath $coreExePath -PathType Leaf) -or -not (Test-Path -LiteralPath $coreMetadataPath -PathType Leaf)) {
-  throw "Required native core payload is missing after build"
+if (-not (Test-Path -LiteralPath $coreExePath -PathType Leaf)) {
+  throw "Required native core executable is missing after build"
 }
-$coreMetadata = Get-Content -Raw -LiteralPath $coreMetadataPath | ConvertFrom-Json
-if ($coreMetadata.coreVersion -ne $version -or [int]$coreMetadata.coreProtocolVersion -ne 1 -or [string]::IsNullOrWhiteSpace($coreMetadata.coreSha256)) {
-  throw "Native core metadata is incomplete or incompatible with the 1.4.2 candidate"
-}
-if ($coreMetadata.authenticode -eq "unsigned-local") { throw "Candidate native core must not be unsigned-local" }
-$coreActualHash = (Get-FileHash -LiteralPath $coreExePath -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($coreActualHash -ne ([string]$coreMetadata.coreSha256).ToLowerInvariant()) { throw "Native core SHA256 does not match metadata" }
 $sourceAssetsDir = Join-Path $projectRoot "assets\$assetsVersion"
 $appSourceDir = Join-Path $projectRoot "app-source"
 $outDir = Join-Path $projectRoot "desktop-versions\$platform\$version"
@@ -391,7 +384,7 @@ foreach ($file in $rootFiles) {
 }
 
 New-Item -ItemType Directory -Force -Path (Join-Path $payloadAppDir "resources") | Out-Null
-foreach ($file in @("app.asar", "app-update.yml", "elevate.exe", "pgy-chart-renderer.exe", $appIconResource)) {
+foreach ($file in @("app.asar", "app-update.yml", "elevate.exe", "pgy-chart-renderer.exe", "magiorix-core.exe", $appIconResource)) {
   $source = if ($file -eq "app.asar") { $asarOut } else { Join-Path $sourceResourcesDir $file }
   if (-not (Test-Path -LiteralPath $source)) {
     throw "Required resource file not found: $source"
@@ -434,6 +427,23 @@ foreach ($bin in $binariesToSign) {
     if ($status -ne "unsigned-local") { $codesignStatus = $status }
   }
 }
+$corePayloadPath = Join-Path $payloadAppDir "resources\magiorix-core.exe"
+if (-not (Test-Path -LiteralPath $corePayloadPath -PathType Leaf)) { throw "Core is missing from the installer payload after copy" }
+$coreSignature = Get-AuthenticodeSignature -LiteralPath $corePayloadPath
+if ($coreSignature.Status -ne 'Valid') { throw "Candidate native core Authenticode verification failed after signing: $($coreSignature.Status)" }
+$coreMetadataPayloadPath = Join-Path $payloadAppDir "resources\magiorix-core.metadata.json"
+$coreManifestWriter = Join-Path $PSScriptRoot "write-signed-core-manifest.mjs"
+if (-not (Test-Path -LiteralPath $coreManifestWriter -PathType Leaf)) { throw "Signed core manifest writer is missing: $coreManifestWriter" }
+$coreSubject = [string]$coreSignature.SignerCertificate.Subject
+$coreThumbprint = [string]$coreSignature.SignerCertificate.Thumbprint
+Invoke-CheckedProcess -FilePath $node.Source -Arguments @($coreManifestWriter, $corePayloadPath, $coreMetadataPayloadPath, $version, '1.4.2', '1', $coreSubject, $coreThumbprint) -WorkingDirectory $projectRoot
+if (-not (Test-Path -LiteralPath $coreMetadataPayloadPath -PathType Leaf)) { throw "Core metadata is missing from the installer payload after signing" }
+$corePayloadHash = (Get-FileHash -LiteralPath $corePayloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$coreMetadata = Get-Content -Raw -LiteralPath $coreMetadataPayloadPath | ConvertFrom-Json
+if ($coreMetadata.coreVersion -ne '1.4.2' -or [int]$coreMetadata.coreProtocolVersion -ne 1 -or ([string]$coreMetadata.coreSha256).ToLowerInvariant() -ne $corePayloadHash) {
+  throw "Signed core metadata does not bind the signed payload core"
+}
+Write-Output "Verified signed payload core SHA256: $corePayloadHash"
 
 New-Item -ItemType Directory -Force -Path (Join-Path $payloadAppDir "locales") | Out-Null
 foreach ($file in @("zh-CN.pak", "en-US.pak")) {

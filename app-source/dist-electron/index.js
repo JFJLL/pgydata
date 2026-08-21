@@ -35,7 +35,7 @@ const pgyRawIpcHandle = F.handle.bind(F);
 const pgyRawIpcOn = F.on.bind(F);
 function pgyGuardSensitiveIpc(channel, listener) {
   return (event, ...args) => {
-    pgyValidateIpcSender(event, { BrowserWindow: Dt });
+    pgyRequiredValidateIpcSender(event, { BrowserWindow: Dt, allowedFilePath: Oe(Ae.getCurrentAssetsPath(), "index.html") });
     return listener(event, ...args);
   };
 }
@@ -43,13 +43,32 @@ F.handle = (channel, listener) => pgyRawIpcHandle(channel, pgyGuardSensitiveIpc(
 F.on = (channel, listener) => pgyRawIpcOn(channel, pgyGuardSensitiveIpc(channel, listener));
 const PGY_REQUIRED_TASK_AUTH_MODE = "required";
 let pgyRequiredAuthorizationProviderPromise = null;
+let pgyRequiredAuthenticatedUser = null;
 const pgyRequiredApiClient = {
-  async post(url, data) {
+  async post(url, data, options = {}) {
     if (!gt || typeof gt.request !== "function") throw new Error("Required task authorization API is unavailable");
-    const response = await gt.request({ method: "POST", url, data, timeout: 15000 });
+    const response = await gt.request({ method: "POST", url, data, timeout: 15000, ...options });
+    return response?.data ?? response;
+  },
+  async get(url, options = {}) {
+    if (!gt || typeof gt.request !== "function") throw new Error("Required task authorization API is unavailable");
+    const response = await gt.request({ method: "GET", url, timeout: 15000, ...options });
     return response?.data ?? response;
   },
 };
+async function pgyGetAuthenticatedUser() {
+  try {
+    const payload = await pgyRequiredApiClient.get("/api/desktop/me", { headers: { "X-Magiorix-Client-Version": "1.4.2" } });
+    const user = payload?.user || payload?.data || payload;
+    const id = Number(user?.id ?? user?.userId);
+    if (!Number.isFinite(id) || id <= 0) throw new Error("Authenticated /api/desktop/me response has no valid user id");
+    pgyRequiredAuthenticatedUser = { id, expiresAt: user?.expiresAt || user?.sessionExpiresAt || null };
+    return pgyRequiredAuthenticatedUser;
+  } catch (error) {
+    pgyRequiredAuthenticatedUser = null;
+    throw new Error(`Authenticated user validation failed: ${error.message}`);
+  }
+}
 async function pgyGetRequiredAuthorizationProvider() {
   if (pgyRequiredAuthorizationProviderPromise) return pgyRequiredAuthorizationProviderPromise;
   pgyRequiredAuthorizationProviderPromise = (async () => {
@@ -59,14 +78,20 @@ async function pgyGetRequiredAuthorizationProvider() {
       throw new Error("Required native authorization core or metadata is missing");
     }
     const metadata = JSON.parse(pgyRequiredFs.readFileSync(metadataPath, "utf8"));
-    const expectedSha256 = String(metadata.sha256 || metadata.coreSha256 || "").toLowerCase();
-    if (!/^[a-f0-9]{64}$/.test(expectedSha256)) throw new Error("Native core metadata SHA-256 is invalid");
+    const envelope = metadata.signedCoreManifest || metadata.coreManifest;
+    const verifiedManifest = pgyVerifySignedEnvelope(envelope);
+    if (!verifiedManifest?.valid) throw new Error(`Native core signed manifest verification failed: ${verifiedManifest?.reason || "invalid"}`);
+    const trustedCore = verifiedManifest.payload;
+    const expectedSha256 = String(trustedCore.sha256 || trustedCore.coreSha256 || "").toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(expectedSha256)) throw new Error("Native core signed manifest SHA-256 is invalid");
+    if (trustedCore.coreVersion !== "1.4.2" || Number(trustedCore.coreProtocolVersion) !== 1) throw new Error("Native core signed manifest version is incompatible");
+    // Required mode reserves this object only for protected retry-queue storage.
+    // It is deliberately not initialized, so no device private key enters Electron JS.
     const deviceKeyManager = new PgyRequiredDeviceKeyManager({ baseDir: pgyUserDataDir, requireProtectedStorage: true });
-    await deviceKeyManager.initialize();
-    const nativeCoreClient = new PgyRequiredNativeCoreClient({ corePath, installRoot: process.resourcesPath, expectedSha256, allowUnsignedLocal: false });
+    const nativeCoreClient = new PgyRequiredNativeCoreClient({ corePath, installRoot: process.resourcesPath, expectedSha256, expectedCoreVersion: trustedCore.coreVersion, expectedProtocolVersion: Number(trustedCore.coreProtocolVersion), expectedPublisherSubject: trustedCore.authenticodeSubject || null, expectedThumbprint: trustedCore.authenticodeThumbprint || null, allowUnsignedLocal: false, isPackaged: true });
     await nativeCoreClient.start();
     const authorizationGate = new PgyRequiredAuthorizationGate({ deviceKeyManager, apiClient: pgyRequiredApiClient, authMode: PGY_REQUIRED_TASK_AUTH_MODE, logger: Qe });
-    return new PgyRequiredTaskAuthorizationProvider({ authorizationGate, getCurrentUser: () => null, nativeCoreClient, authMode: PGY_REQUIRED_TASK_AUTH_MODE, allowUnsignedLocal: false, isPackaged: true });
+    return new PgyRequiredTaskAuthorizationProvider({ authorizationGate, getCurrentUser: pgyGetAuthenticatedUser, nativeCoreClient, authMode: PGY_REQUIRED_TASK_AUTH_MODE });
   })().catch((error) => {
     pgyRequiredAuthorizationProviderPromise = null;
     throw error;
@@ -77,20 +102,31 @@ async function pgyStartRequiredTask(payload) {
   const clientTaskId = String(payload?.taskId || payload?.clientTaskId || "");
   if (!clientTaskId) throw new Error("Required task authorization needs a stable client task id");
   const provider = await pgyGetRequiredAuthorizationProvider();
-  await provider.authorizeTask({
+  const urls = Array.isArray(payload?.urls) ? payload.urls : (Array.isArray(payload?.inputs) ? payload.inputs : []);
+  const pendingCharges = Array.isArray(payload?.pendingCharges)
+    ? payload.pendingCharges.filter((entry) => entry && entry.status === "pending" && entry.taskId === clientTaskId).length
+    : 0;
+  const authorization = await provider.authorizeTask({
     clientTaskId,
     pluginId: String(payload?.pluginId || payload?.platform || "pgy"),
     taskType: String(payload?.taskType || payload?.type || "pgy-collection"),
-    inputs: Array.isArray(payload?.inputs) ? payload.inputs : [payload],
-    selectedFilters: Array.isArray(payload?.selectedFilters) ? payload.selectedFilters : (Array.isArray(payload?.filters) ? payload.filters : []),
-    requestedItems: Number.isInteger(payload?.requestedItems) ? payload.requestedItems : (Number.isInteger(payload?.maxItems) ? payload.maxItems : null),
+    inputs: urls,
+    selectedFields: Array.isArray(payload?.selectedFields) ? payload.selectedFields : (Array.isArray(payload?.fields) ? payload.fields : []),
+    filterState: payload?.filterState || payload?.filters || {},
+    maxCount: Number.isInteger(payload?.maxCount) ? payload.maxCount : (Number.isInteger(payload?.maxItems) ? payload.maxItems : null),
+    pendingChargeCount: pendingCharges,
+    accountSource: payload?.accountSource || "default",
+    pacePolicyId: payload?.pacePolicyId || "default",
+    executionOptions: payload?.executionOptions || {},
   });
-  return ge.startTask(payload);
+  const boundedUrls = urls.slice(0, authorization.maxItems);
+  return ge.startTask({ ...payload, urls: boundedUrls, inputs: boundedUrls, pgyAuthorization: authorization });
 }
 const pgyRequiredAuthorizationProvider = Object.freeze({
   authorizeTask: (...args) => pgyGetRequiredAuthorizationProvider().then((provider) => provider.authorizeTask(...args)),
   completeTask: (...args) => pgyGetRequiredAuthorizationProvider().then((provider) => provider.completeTask(...args)),
   cancelTask: (...args) => pgyGetRequiredAuthorizationProvider().then((provider) => provider.cancelTask(...args)),
+  recordItemOutcome: (...args) => pgyGetRequiredAuthorizationProvider().then((provider) => provider.recordItemOutcome(...args)),
   flushPendingReceipts: (...args) => pgyGetRequiredAuthorizationProvider().then((provider) => provider.flushPendingReceipts(...args)),
 });
 try {
@@ -17143,15 +17179,16 @@ class Xd {
       ue.info(`[task=${t}] 开始采集原始第 ${pgyItemIndex + 1} 条，当前 ${m + 1}/${pgyUrls.length} plugin=${n} taskType=${s} url=${String(f).slice(0, 180)}`);
       if (pgyPending) {
         try {
-          const v = await Le.get().consumeShumiaoForItem(e, m, pgyItemIndex);
-          await pgyCollectionHistory.recordSuccess(t, pgyItemIndex, pgyPending.row, v, pgyPending.sourceUrl || f);
+          // A legitimate pending charge predates this authorization. It is restored
+          // to history but must not consume the new Ticket or native receipt budget.
+          await pgyCollectionHistory.recordSuccess(t, pgyItemIndex, pgyPending.row, null, pgyPending.sourceUrl || f);
           l.successCount++, this.sendToRenderer(W.task.itemResult, {
             taskId: t,
             inputType: l.inputType,
             index: pgyItemIndex,
             status: "success",
             data: pgyPending.row,
-            balanceAfter: v,
+            balanceAfter: null,
             recoveredPendingCharge: !0
           });
           continue;
@@ -17160,7 +17197,7 @@ class Xd {
             taskId: t,
             message: v instanceof Error ? v.message : String(v),
             errorCategory: "balance",
-            errorCategoryLabel: "扣费确认失败"
+            errorCategoryLabel: "原生回执确认失败"
           });
           break;
         }
@@ -17188,16 +17225,17 @@ class Xd {
           y.status = "error", y.data = null, y.errorMessage = "安全验证超时或用户取消验证";
         }
         let S = !1, C = null;
-        if (y.status === "success")
-          try {
+        try {
+          if (y.status === "success") {
             await pgyCollectionHistory.recordPendingCharge(t, pgyItemIndex, y.data, f);
-            const x = await Le.get().consumeShumiaoForItem(e, m, pgyItemIndex);
-            C = x;
-            await pgyCollectionHistory.recordSuccess(t, pgyItemIndex, y.data, x, f);
-            ue.info(`[task=${t}] 单条积分扣减完成 originalIndex=${pgyItemIndex + 1} balance=${x}`);
-          } catch (x) {
-            S = !0, pgyInterrupted = !0, y.status = "error", y.data = null, y.errorMessage = x instanceof Error ? x.message : String(x), y.errorCode = "SHUMIAO_CONSUME_FAILED";
+            await pgyRequiredAuthorizationProvider.recordItemOutcome({ clientTaskId: t, success: true, taskState: "running" });
+            await pgyCollectionHistory.recordSuccess(t, pgyItemIndex, y.data, null, f);
+          } else {
+            await pgyRequiredAuthorizationProvider.recordItemOutcome({ clientTaskId: t, failed: true, taskState: "running" });
           }
+        } catch (x) {
+          S = !0, pgyInterrupted = !0, y.status = "error", y.data = null, y.errorMessage = x instanceof Error ? x.message : String(x), y.errorCode = "NATIVE_RECEIPT_APPEND_FAILED";
+        }
         const b = this.classifyFailure(y.errorCode, y.errorMessage, y.errorDetails);
         y.status !== "success" && !S && await pgyCollectionHistory.recordFailure(t, pgyItemIndex, { errorCode: y.errorCode, errorMessage: y.errorMessage, errorCategory: b.code });
         b.code === "auth" && (pgyAuthExpired = !0);
@@ -17237,6 +17275,7 @@ class Xd {
         const y = this.classifyFailure("UNKNOWN_ERROR", v instanceof Error ? v.message : String(v));
         ue.error(`[task=${t}] 采集原始第 ${pgyItemIndex + 1} 条异常 plugin=${n} url=${String(f).slice(0, 180)}`, v);
         await pgyCollectionHistory.recordFailure(t, pgyItemIndex, { errorCode: "UNKNOWN_ERROR", errorMessage: v instanceof Error ? v.message : String(v), errorCategory: y.code });
+        try { await pgyRequiredAuthorizationProvider.recordItemOutcome({ clientTaskId: t, failed: true, taskState: "running" }); } catch (x) { pgyInterrupted = !0, ue.error(`[task=${t}] 原生回执追加失败`, x); }
         y.code === "auth" && (pgyAuthExpired = !0);
         l.errorCount++, this.sendToRenderer(W.task.itemResult, {
           taskId: t,
@@ -17281,6 +17320,14 @@ class Xd {
       }
     }
     this.scrapeWindowManager.closeWindow(p);
+    try {
+      l.cancelled || pgyAuthExpired || pgyInterrupted
+        ? await pgyRequiredAuthorizationProvider.cancelTask({ clientTaskId: t, reason: l.cancelled ? "user-cancel" : "execution-interrupted" })
+        : await pgyRequiredAuthorizationProvider.completeTask({ clientTaskId: t });
+    } catch (v) {
+      pgyInterrupted = !0;
+      ue.error(`[task=${t}] 原生最终回执提交失败`, v);
+    }
     const pgyFinalStatus = l.cancelled ? "cancelled" : pgyAuthExpired ? "auth_expired" : pgyInterrupted ? "interrupted" : "completed";
     await pgyCollectionHistory.setStatus(t, pgyFinalStatus);
     const h = Date.now() - l.startTime;

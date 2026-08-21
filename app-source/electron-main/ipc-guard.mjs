@@ -8,18 +8,24 @@ try {
   // Unit test / Node environment without Electron native module
 }
 
+function normalizeComparableFilePath(value) {
+  const slash = String(value || "").replace(/\\/g, "/");
+  const withoutLeadingSlash = /^\/[A-Za-z]:\//.test(slash) ? slash.slice(1) : slash;
+  // A Windows file URL may be asserted in Node tests running on a non-Windows host.
+  if (/^[A-Za-z]:\//.test(withoutLeadingSlash)) return withoutLeadingSlash.toLowerCase();
+  return path.resolve(withoutLeadingSlash);
+}
+
 export function isAllowedRendererUrl(urlStr, allowedFilePath = null) {
   if (!urlStr || typeof urlStr !== "string") return false;
   try {
     const parsed = new URL(urlStr);
     if (parsed.protocol === "file:") {
       const filePath = fileURLToPath(parsed.href);
-      const resolved = path.resolve(filePath);
+      const resolved = normalizeComparableFilePath(filePath);
       if (allowedFilePath) {
-        const allowedResolved = path.resolve(allowedFilePath);
-        return process.platform === "win32"
-          ? resolved.toLowerCase() === allowedResolved.toLowerCase()
-          : resolved === allowedResolved;
+        const allowedResolved = normalizeComparableFilePath(allowedFilePath);
+        return resolved === allowedResolved;
       }
       return true;
     }
