@@ -29,3 +29,11 @@ Electron’s advisory states that applications using the relevant fuses have no 
 
 [1]: https://github.com/electron/electron/security/advisories/GHSA-vmqv-hx8q-j7mg "Electron GHSA-vmqv-hx8q-j7mg"
 [2]: https://www.electronjs.org/docs/latest/tutorial/asar-integrity "Electron ASAR Integrity"
+
+## Final CI evidence — Run 32447202962
+
+The final security candidate workflow for commit `de124f1466b9c4403c1d6c1dfe60f105bb277b52` completed successfully. The `backend-and-node`, `desktop-security`, `native-core`, and `windows-candidate-integrity` jobs all passed. The backend job completed the serial API suite and the required-entry, IPC Guard, packaged manifest fail-closed, and formatting checks. The Windows native job completed `Cargo test locked` and the unsigned local candidate build. The desktop job completed the targeted release-blocker security unit-test set, including the required authorization provider assertion that protected device signing material initializes `receipt.begin` before cloud task start. The candidate-integrity job validated PE Integrity writer syntax, Windows build-script syntax, and the Electron runtime version floor.
+
+The native receipt runtime is now initialized only after required authorization succeeds. The protected local Ed25519 device key is exported in memory as a 32-byte seed across the authenticated native session, bound to the authorization device key ID, and used to initialize `ReceiptEngine` before `receipt.append` or `receipt.finalize` are accepted. This is an implementation path, not a documentation-only assertion.
+
+Release state remains unchanged: `releaseReady` is **false**. `latest.json` was not modified. No release was published, no promotion was performed, and no 1.4.1 artifact was overwritten.

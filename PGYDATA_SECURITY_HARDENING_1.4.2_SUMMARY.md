@@ -26,3 +26,9 @@ The Rust sidecar now contains `receipt.append` and `receipt.finalize` command pa
 ## Remaining release gates
 
 The branch is **not release-ready**. A normal push will trigger the new Windows CI workflow, but the following are mandatory before a release decision: Rust build and tests, signed core validation, actual Candidate build, Authenticode verification, native receipt restart/replay tests, real SQLite lifecycle test, signed-manifest hostile tests, and normal/tampered Candidate startup checks. The project security documentation must be updated again with immutable output paths, hashes, CI run ID, and test results after those executions.
+
+## Final CI evidence — Run 32447202962
+
+Commit `de124f1466b9c4403c1d6c1dfe60f105bb277b52` completed the final GitHub Actions security candidate workflow successfully. All four jobs passed: backend and Node checks, Windows desktop security tests, Windows native-core locked tests and candidate build, and Windows candidate-integrity checks. The implemented receipt path now uses required authorization to retrieve protected device-bound Ed25519 material, starts `ReceiptEngine` through the authenticated native `receipt.begin` command, and routes `receipt.append` and `receipt.finalize` to that initialized engine.
+
+The branch remains a non-published candidate. `releaseReady` is **false**. `latest.json` was not modified; no Release, promotion, or overwrite of any 1.4.1 artifact occurred.

@@ -18,3 +18,9 @@
 | Device-key protected storage unavailable | Required initialization rejects and legacy plaintext record is revoked | Implemented; packaged Windows test still required. |
 
 The next hostile-test run must preserve the exact Candidate binary, the pre- and post-tamper SHA-256 values, resource dump, fuse evidence, Authenticode status, native-core metadata, and process exit status. No release is authorized based solely on the static or unit-level checks documented above.
+
+## Final CI evidence — Run 32447202962
+
+The final candidate workflow passed the hostile-path enforcement checks. The backend gate confirmed that required-entry coverage, IPC sender guard coverage, and the packaged manifest fail-closed path are present. The native gate compiled and tested the locked Rust dependency graph and built the Windows core candidate. The desktop gate executed the release-blocker security tests serially on Windows; this set covers sender validation, manifest integrity, native core client protections, Electron fuse and tamper safeguards, required authorization, and receipt-chain persistence. The authorization provider test additionally verifies that `receipt.begin` receives the protected device-bound signing material before cloud task start.
+
+No hostile-path result changes the release boundary: `releaseReady` is **false**, `latest.json` was not changed, and no release or promotion operation was performed.

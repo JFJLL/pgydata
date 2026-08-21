@@ -34,3 +34,9 @@ Electron requires the ASAR header hash to be written to the Windows `Integrity` 
 
 [1]: https://www.electronjs.org/docs/latest/tutorial/asar-integrity "Electron ASAR Integrity"
 [2]: https://github.com/electron/electron/security/advisories/GHSA-vmqv-hx8q-j7mg "Electron GHSA-vmqv-hx8q-j7mg"
+
+## Final CI evidence — Run 32447202962
+
+The final branch candidate at commit `de124f1466b9c4403c1d6c1dfe60f105bb277b52` passed all four GitHub Actions jobs: `backend-and-node`, `desktop-security`, `native-core`, and `windows-candidate-integrity`. The passing candidate includes the Electron 35.7.5 runtime floor check, PE Integrity resource writer syntax check, Windows build-script syntax check, Rust locked tests and native candidate build, serial backend API verification, and targeted desktop release-blocker unit tests.
+
+This evidence does not authorize publication. `releaseReady` remains **false** pending the separately required signed Windows Candidate and actual installed-package launch verification. `latest.json` remains unmodified; no Release was created, no artifact was promoted, and no 1.4.1 artifact was changed.
