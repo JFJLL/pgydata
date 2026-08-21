@@ -1079,7 +1079,7 @@ pub mod dpapi {
 
     unsafe fn consume(blob: CRYPT_INTEGER_BLOB) -> Vec<u8> {
         let result = slice::from_raw_parts(blob.pbData, blob.cbData as usize).to_vec();
-        LocalFree(blob.pbData as isize);
+        LocalFree(blob.pbData as *mut core::ffi::c_void);
         result
     }
 
