@@ -8,7 +8,7 @@ use magiorix_core::{
     canonical_messagepack, decode_canonical_messagepack, decrypt_strategy_with_dpapi_key,
     embedded_strategy_verifier, embedded_ticket_verifier, encode_length_prefixed,
     generate_dpapi_device_encryption_identity, plan_pgy_kol, CoreError, PgyPlanInput, SecureFrame,
-    SessionGuard, StrategyBundle, StrategyExpectedBinding, TaskDescriptor, TicketBinding,
+    ReceiptEngine, SessionGuard, StrategyBundle, StrategyExpectedBinding, TaskDescriptor, TicketBinding,
     TicketPayload, TicketVerifier, CORE_VERSION, MAX_FRAME_BYTES, PROTOCOL_VERSION,
 };
 use serde::{Deserialize, Serialize};
@@ -59,6 +59,7 @@ struct TicketExpectedBinding {
 #[derive(Default)]
 struct CoreRuntime {
     ticket_verifier: Option<TicketVerifier>,
+    receipt_engine: Option<ReceiptEngine>,
 }
 
 fn current_unix_time() -> Result<i64, CoreError> {
