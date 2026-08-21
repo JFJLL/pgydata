@@ -1065,19 +1065,19 @@ pub mod dpapi {
     use std::{ptr, slice};
     use windows_sys::Win32::{
         Security::Cryptography::{
-            CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, DATA_BLOB,
+            CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPTOAPI_BLOB,
         },
-        System::Memory::LocalFree,
+        Foundation::LocalFree,
     };
 
-    fn blob(bytes: &[u8]) -> DATA_BLOB {
-        DATA_BLOB {
+    fn blob(bytes: &[u8]) -> CRYPTOAPI_BLOB {
+        CRYPTOAPI_BLOB {
             cbData: bytes.len() as u32,
             pbData: bytes.as_ptr() as *mut u8,
         }
     }
 
-    unsafe fn consume(blob: DATA_BLOB) -> Vec<u8> {
+    unsafe fn consume(blob: CRYPTOAPI_BLOB) -> Vec<u8> {
         let result = slice::from_raw_parts(blob.pbData, blob.cbData as usize).to_vec();
         LocalFree(blob.pbData as isize);
         result
@@ -1088,7 +1088,7 @@ pub mod dpapi {
             return Err(CoreError::Ticket("device key material is empty"));
         }
         let input = blob(plaintext);
-        let mut output = DATA_BLOB {
+        let mut output = CRYPTOAPI_BLOB {
             cbData: 0,
             pbData: ptr::null_mut(),
         };
@@ -1114,7 +1114,7 @@ pub mod dpapi {
             return Err(CoreError::Ticket("protected device key material is empty"));
         }
         let input = blob(ciphertext);
-        let mut output = DATA_BLOB {
+        let mut output = CRYPTOAPI_BLOB {
             cbData: 0,
             pbData: ptr::null_mut(),
         };

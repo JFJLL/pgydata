@@ -30,8 +30,7 @@ jobs:
       - name: Run red-magic API suite
         working-directory: red-magic-api
         run: node --test --test-concurrency=1 test/*.test.js
-      - name: Run desktop security unit tests
-        run: node --test tests/unit/*.mjs
+
       - name: Check required entry coverage
         shell: bash
         run: |
@@ -54,6 +53,23 @@ jobs:
       - name: Check formatting
         run: git diff --check HEAD^ HEAD
 
+  desktop-security:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install root tooling
+        run: npm ci
+      - name: Install desktop dependencies
+        working-directory: app-source
+        run: npm ci
+      - name: Run desktop security unit tests
+        run: node --test tests/unit/*.mjs
   native-core:
     runs-on: windows-latest
     steps:
@@ -66,11 +82,11 @@ jobs:
         run: cargo test --locked
       - name: Build native core candidate
         shell: pwsh
-        run: ./scripts/build-magiorix-core.ps1
+        run: ./scripts/build-magiorix-core.ps1 -UnsignedLocal
 
   windows-candidate-integrity:
     runs-on: windows-latest
-    needs: [backend-and-node, native-core]
+    needs: [backend-and-node, native-core, desktop-security]
     steps:
       - uses: actions/checkout@v4
         with:
