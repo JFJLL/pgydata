@@ -70,7 +70,16 @@ jobs:
         working-directory: app-source
         run: npm install --ignore-scripts --package-lock=false --no-audit --no-fund
       - name: Run desktop security unit tests
-        run: node --test --test-force-exit --test-concurrency=1 (Get-ChildItem tests/unit/*.mjs | ForEach-Object { $_.FullName })
+        run: >
+          node --test --test-force-exit --test-concurrency=1
+          tests/unit/ipc-sender-guard.test.mjs
+          tests/unit/manifest-crypto.test.mjs
+          tests/unit/native-core-client.test.mjs
+          tests/unit/security-devtools-and-windows.test.mjs
+          tests/unit/security-fuses-and-tamper.test.mjs
+          tests/unit/task-authorization-provider-required.test.mjs
+          tests/unit/task-receipt-chain.test.mjs
+          tests/unit/task-receipt-queue.test.mjs
   native-core:
     runs-on: windows-latest
     steps:
