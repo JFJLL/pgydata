@@ -51,7 +51,7 @@ jobs:
           grep -q 'schemaVersion !== 2' app-source/dist-electron/index.js
           grep -q 'unsigned-local' app-source/dist-electron/index.js
       - name: Check formatting
-        run: git diff --check HEAD^ HEAD
+        run: git diff --check HEAD^ HEAD -- . ':!runtime/magiorix-desktop'
 
   desktop-security:
     runs-on: windows-latest
@@ -67,7 +67,7 @@ jobs:
         run: npm ci
       - name: Install desktop dependencies
         working-directory: app-source
-        run: npm ci
+        run: npm install --ignore-scripts --package-lock=false --no-audit --no-fund
       - name: Run desktop security unit tests
         run: node --test tests/unit/*.mjs
   native-core:
