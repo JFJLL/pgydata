@@ -29,7 +29,7 @@ jobs:
         run: npm ci
       - name: Run red-magic API suite
         working-directory: red-magic-api
-        run: npm test
+        run: node --test --test-concurrency=1 test/*.test.js
       - name: Run desktop security unit tests
         run: node --test tests/unit/*.mjs
       - name: Check required entry coverage
