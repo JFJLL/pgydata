@@ -17,7 +17,7 @@ export class AuthorizationGate {
   }) {
     this.deviceKeyManager = deviceKeyManager;
     this.apiClient = apiClient;
-    this.authMode = process.env.MAGIORIX_TASK_AUTH_MODE || authMode;
+    this.authMode = authMode;
     this.logger = logger;
     this.trustedPublicKeys = trustedPublicKeys;
     this.receiptService = new TaskReceiptService({ deviceKeyManager, apiClient });

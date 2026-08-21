@@ -5,7 +5,8 @@
   "license": "UNLICENSED",
   "devDependencies": {
     "@electron/asar": "^3.3.0",
-    "@electron/fuses": "^1.8.0"
+    "@electron/fuses": "^1.8.0",
+    "electron": "^35.7.5",
+    "resedit": "^3.0.2"
   }
 }
-

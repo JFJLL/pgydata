@@ -1,4 +1,11 @@
-var br = Object.defineProperty;
+import { validateIpcSender as pgyRequiredValidateIpcSender } from "../electron-main/ipc-guard.mjs";
+import { verifySignedEnvelope as pgyVerifySignedEnvelope } from "../electron-main/manifest-crypto.mjs";
+import { DeviceKeyManager as PgyRequiredDeviceKeyManager } from "../electron-main/device-key-manager.mjs";
+import { NativeCoreClient as PgyRequiredNativeCoreClient } from "../electron-main/native-core-client.mjs";
+import { AuthorizationGate as PgyRequiredAuthorizationGate } from "../electron-main/authorization-gate.mjs";
+import { TaskAuthorizationProvider as PgyRequiredTaskAuthorizationProvider } from "../electron-main/task-authorization-provider.mjs";
+import pgyRequiredFs from "fs";
+import pgyRequiredPath from "path";var br = Object.defineProperty;
 var wr = (a, e, t) => e in a ? br(a, e, { enumerable: !0, configurable: !0, writable: !0, value: t }) : a[e] = t;
 var w = (a, e, t) => wr(a, typeof e != "symbol" ? e + "" : e, t);
 import { ipcMain as F, BrowserWindow as Dt, app as ye, screen as Gi, shell as Ji, dialog as Ki, net as Jt, Notification as Et, session as Pn, nativeImage as PgyNativeImage } from "electron";
@@ -24,6 +31,68 @@ import io from "http2";
 import Pr from "assert";
 import $r from "tty";
 const pgyUserDataDir = Oe(ye.getPath("appData"), "magiorix-desktop");
+const pgyRawIpcHandle = F.handle.bind(F);
+const pgyRawIpcOn = F.on.bind(F);
+function pgyGuardSensitiveIpc(channel, listener) {
+  return (event, ...args) => {
+    pgyValidateIpcSender(event, { BrowserWindow: Dt });
+    return listener(event, ...args);
+  };
+}
+F.handle = (channel, listener) => pgyRawIpcHandle(channel, pgyGuardSensitiveIpc(channel, listener));
+F.on = (channel, listener) => pgyRawIpcOn(channel, pgyGuardSensitiveIpc(channel, listener));
+const PGY_REQUIRED_TASK_AUTH_MODE = "required";
+let pgyRequiredAuthorizationProviderPromise = null;
+const pgyRequiredApiClient = {
+  async post(url, data) {
+    if (!gt || typeof gt.request !== "function") throw new Error("Required task authorization API is unavailable");
+    const response = await gt.request({ method: "POST", url, data, timeout: 15000 });
+    return response?.data ?? response;
+  },
+};
+async function pgyGetRequiredAuthorizationProvider() {
+  if (pgyRequiredAuthorizationProviderPromise) return pgyRequiredAuthorizationProviderPromise;
+  pgyRequiredAuthorizationProviderPromise = (async () => {
+    const corePath = pgyRequiredPath.join(process.resourcesPath, "magiorix-core.exe");
+    const metadataPath = pgyRequiredPath.join(process.resourcesPath, "magiorix-core.metadata.json");
+    if (!pgyRequiredFs.existsSync(corePath) || !pgyRequiredFs.existsSync(metadataPath)) {
+      throw new Error("Required native authorization core or metadata is missing");
+    }
+    const metadata = JSON.parse(pgyRequiredFs.readFileSync(metadataPath, "utf8"));
+    const expectedSha256 = String(metadata.sha256 || metadata.coreSha256 || "").toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(expectedSha256)) throw new Error("Native core metadata SHA-256 is invalid");
+    const deviceKeyManager = new PgyRequiredDeviceKeyManager({ baseDir: pgyUserDataDir, requireProtectedStorage: true });
+    await deviceKeyManager.initialize();
+    const nativeCoreClient = new PgyRequiredNativeCoreClient({ corePath, installRoot: process.resourcesPath, expectedSha256, allowUnsignedLocal: false });
+    await nativeCoreClient.start();
+    const authorizationGate = new PgyRequiredAuthorizationGate({ deviceKeyManager, apiClient: pgyRequiredApiClient, authMode: PGY_REQUIRED_TASK_AUTH_MODE, logger: Qe });
+    return new PgyRequiredTaskAuthorizationProvider({ authorizationGate, getCurrentUser: () => null, nativeCoreClient, authMode: PGY_REQUIRED_TASK_AUTH_MODE, allowUnsignedLocal: false, isPackaged: true });
+  })().catch((error) => {
+    pgyRequiredAuthorizationProviderPromise = null;
+    throw error;
+  });
+  return pgyRequiredAuthorizationProviderPromise;
+}
+async function pgyStartRequiredTask(payload) {
+  const clientTaskId = String(payload?.taskId || payload?.clientTaskId || "");
+  if (!clientTaskId) throw new Error("Required task authorization needs a stable client task id");
+  const provider = await pgyGetRequiredAuthorizationProvider();
+  await provider.authorizeTask({
+    clientTaskId,
+    pluginId: String(payload?.pluginId || payload?.platform || "pgy"),
+    taskType: String(payload?.taskType || payload?.type || "pgy-collection"),
+    inputs: Array.isArray(payload?.inputs) ? payload.inputs : [payload],
+    selectedFilters: Array.isArray(payload?.selectedFilters) ? payload.selectedFilters : (Array.isArray(payload?.filters) ? payload.filters : []),
+    requestedItems: Number.isInteger(payload?.requestedItems) ? payload.requestedItems : (Number.isInteger(payload?.maxItems) ? payload.maxItems : null),
+  });
+  return ge.startTask(payload);
+}
+const pgyRequiredAuthorizationProvider = Object.freeze({
+  authorizeTask: (...args) => pgyGetRequiredAuthorizationProvider().then((provider) => provider.authorizeTask(...args)),
+  completeTask: (...args) => pgyGetRequiredAuthorizationProvider().then((provider) => provider.completeTask(...args)),
+  cancelTask: (...args) => pgyGetRequiredAuthorizationProvider().then((provider) => provider.cancelTask(...args)),
+  flushPendingReceipts: (...args) => pgyGetRequiredAuthorizationProvider().then((provider) => provider.flushPendingReceipts(...args)),
+});
 try {
   ye.setName("magiorix"), ye.setPath("userData", pgyUserDataDir);
 } catch {
@@ -568,6 +637,20 @@ function pgyHashFile(a) {
   return no.createHash("sha256").update(Qi(a)).digest("hex");
 }
 function pgyVerifyAssets(a) {
+  const pgyManifestPath = Oe(a, "integrity-manifest.json");
+  if (!kt(pgyManifestPath)) throw new Error("资源被修改或损坏：缺少完整性校验文件 integrity-manifest.json");
+  const pgyManifest = JSON.parse(Qi(pgyManifestPath, "utf8"));
+  const pgyIsExplicitLocalDevelopment = !ye.isPackaged;
+  if (pgyManifest.schemaVersion !== 2) throw new Error("资源完整性清单 schemaVersion 必须为 2");
+  if (!pgyIsExplicitLocalDevelopment) {
+    if (!pgyManifest.keyId || pgyManifest.keyId === "unsigned-local") throw new Error("正式 Candidate 不接受 unsigned-local 资源清单");
+    if (typeof pgyManifest.signature !== "string" || pgyManifest.signature.length === 0) throw new Error("正式 Candidate 资源清单缺少签名");
+    if (!pgyManifest.signedPayload || typeof pgyManifest.signedPayload !== "object") throw new Error("正式 Candidate 资源清单缺少 signedPayload");
+    const pgyManifestResult = pgyVerifySignedEnvelope(pgyManifest);
+    if (!pgyManifestResult.valid) throw new Error(`资源完整性清单验签失败：${pgyManifestResult.reason}`);
+    const expectedResourceVersion = pgyRequiredPath.basename(a);
+    if (pgyManifest.version !== expectedResourceVersion || pgyManifestResult.payload?.version !== expectedResourceVersion) throw new Error("资源完整性清单版本与当前资源版本不一致");
+  }
   const e = Oe(a, "integrity-manifest.json");
   if (!kt(e))
     throw new Error("资源被修改或损坏：缺少完整性校验文件 integrity-manifest.json");
@@ -23534,7 +23617,7 @@ function vf(a) {
       }
     }
   ), F.on(W.task.start, (e, t) => {
-    pgyCollectionHistory.createTask(t).then(() => ge.startTask(t)).catch(async (n) => {
+    pgyCollectionHistory.createTask(t).then(() => pgyStartRequiredTask(t)).catch(async (n) => {
       Qe.error("任务启动失败:", n);
       await pgyCollectionHistory.setStatus(t.taskId, "interrupted").catch(() => {});
     });
@@ -23566,7 +23649,7 @@ function vf(a) {
       return { ok: !0, remaining: 0, completed: !0 };
     }
     await pgyCollectionHistory.setStatus(t.taskId, "running");
-    ge.startTask({ ...n.payload, pendingCharges: n.pendingCharges }).catch(async (s) => {
+    pgyStartRequiredTask({ ...n.payload, pendingCharges: n.pendingCharges }).catch(async (s) => {
       Qe.error("历史任务继续失败:", s);
       await pgyCollectionHistory.setStatus(t.taskId, "interrupted").catch(() => {});
     });
@@ -23574,6 +23657,8 @@ function vf(a) {
   }), F.handle(W.history.migrateLegacy, async (e, t) => pgyCollectionHistory.importLegacyHistory(t?.history));
   try {
     pgyKolService = createPgyKolService({
+      authorizationProvider: pgyRequiredAuthorizationProvider,
+      taskAuthMode: PGY_REQUIRED_TASK_AUTH_MODE,
       transport: (opts) => gt.request({ ...opts, timeout: opts.timeoutMs }),
       getHeaders: () => {
         const pgyPlugin = ge.getPlugin("pgy");

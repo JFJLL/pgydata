@@ -111,9 +111,11 @@ class StrategyBundleService {
     };
     const signed = signPayload(envelope, this.policyPrivateKey, this.policyKeyId);
     await this.db.run(
-      `INSERT INTO task_auth_audit_logs (user_id, device_id, authorization_id, action, task_type, task_digest, item_count, detail, created_at)
-       VALUES (?, ?, ?, 'STRATEGY_BUNDLE', ?, ?, 0, ?, ?)`,
-      [userId, auth.device_id, authorizationId, taskType, taskDigest, JSON.stringify({ policyKeyId: this.policyKeyId, policyVersion, bundleDigest }), issuedAt],
+      `INSERT INTO task_auth_audit_logs (
+        user_id, device_id, authorization_id, action, task_type, task_digest,
+        items_count, points_delta, status, error_code, ip_hash, created_at
+      ) VALUES (?, ?, ?, 'STRATEGY_BUNDLE', ?, ?, 0, 0, 'ok', NULL, NULL, ?)`,
+      [userId, deviceKeyId, authorizationId, taskType, taskDigest, issuedAt],
     );
     return { ...envelope, bundleSignature: Buffer.from(signed.signature, "hex").toString("base64"), keyId: signed.keyId };
   }

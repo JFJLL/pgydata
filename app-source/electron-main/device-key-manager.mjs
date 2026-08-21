@@ -11,9 +11,10 @@ try {
 }
 
 export class DeviceKeyManager {
-  constructor({ baseDir = null, keyFileName = "device-identity.json" } = {}) {
+  constructor({ baseDir = null, keyFileName = "device-identity.json", requireProtectedStorage = false } = {}) {
     this.baseDir = baseDir;
     this.keyFilePath = baseDir ? path.join(baseDir, keyFileName) : null;
+    this.requireProtectedStorage = requireProtectedStorage;
     this.deviceKeyId = null;
     this.publicKeyPem = null;
     this.privateKeyPem = null;
@@ -22,6 +23,9 @@ export class DeviceKeyManager {
 
   async initialize() {
     if (this.initialized) return;
+    if (this.requireProtectedStorage && (!electronSafeStorage || !electronSafeStorage.isEncryptionAvailable())) {
+      throw new Error("Protected device-key storage is required but unavailable" );
+    }
 
     if (this.keyFilePath && fs.existsSync(this.keyFilePath)) {
       try {
@@ -32,6 +36,10 @@ export class DeviceKeyManager {
           const decrypted = electronSafeStorage.decryptString(Buffer.from(raw.encryptedPrivateKey, "base64"));
           privPem = decrypted;
         } else if (raw.privateKeyPem) {
+          if (this.requireProtectedStorage) {
+            fs.rmSync(this.keyFilePath, { force: true });
+            throw new Error("Revoked legacy plaintext device key; initialize a new protected identity" );
+          }
           privPem = raw.privateKeyPem;
         }
 
@@ -69,6 +77,9 @@ export class DeviceKeyManager {
         const encrypted = electronSafeStorage.encryptString(privPem);
         record.encryptedPrivateKey = encrypted.toString("base64");
       } else {
+        if (this.requireProtectedStorage) {
+          throw new Error("Protected device-key storage is required but unavailable");
+        }
         record.privateKeyPem = privPem;
       }
 

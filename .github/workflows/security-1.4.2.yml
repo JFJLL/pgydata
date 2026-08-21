@@ -1,0 +1,95 @@
+name: Security 1.4.2 Candidate Gates
+
+on:
+  push:
+    branches:
+      - codex/security-hardening-1.4.2
+  pull_request:
+    branches:
+      - codex/security-hardening-1.4.2
+
+permissions:
+  contents: read
+
+jobs:
+  backend-and-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install root tooling
+        run: npm ci
+      - name: Install API dependencies
+        working-directory: red-magic-api
+        run: npm ci
+      - name: Run red-magic API suite
+        working-directory: red-magic-api
+        run: npm test
+      - name: Run desktop security unit tests
+        run: node --test tests/unit/*.mjs
+      - name: Check required entry coverage
+        shell: bash
+        run: |
+          test "$(grep -c 'PGY_REQUIRED_TASK_AUTH_MODE = "required"' app-source/dist-electron/index.js)" -eq 1
+          ! grep -q 'process.env.MAGIORIX_TASK_AUTH_MODE' app-source/electron-main/authorization-gate.mjs
+          grep -q 'pgyStartRequiredTask(t)' app-source/dist-electron/index.js
+          grep -q 'authorizationProvider: pgyRequiredAuthorizationProvider' app-source/dist-electron/index.js
+      - name: Check IPC guard coverage
+        shell: bash
+        run: |
+          grep -q 'pgyRawIpcHandle' app-source/dist-electron/index.js
+          grep -q 'pgyRequiredValidateIpcSender' app-source/dist-electron/index.js
+          grep -q 'validateIpcSender' app-source/electron-main/ipc-guard.mjs
+      - name: Check manifest fail-closed path
+        shell: bash
+        run: |
+          grep -q 'pgyManifestResult = pgyVerifySignedEnvelope' app-source/dist-electron/index.js
+          grep -q 'schemaVersion !== 2' app-source/dist-electron/index.js
+          grep -q 'unsigned-local' app-source/dist-electron/index.js
+      - name: Check formatting
+        run: git diff --check HEAD^ HEAD
+
+  native-core:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cargo test locked
+        working-directory: native/magiorix-core
+        run: cargo test --locked
+      - name: Build native core candidate
+        shell: pwsh
+        run: ./scripts/build-magiorix-core.ps1
+
+  windows-candidate-integrity:
+    runs-on: windows-latest
+    needs: [backend-and-node, native-core]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install tooling
+        run: npm ci
+      - name: Validate PE Integrity writer syntax
+        run: node --check scripts/write-asar-integrity-resource.mjs
+      - name: Validate Windows build script syntax
+        shell: pwsh
+        run: |
+          [void][scriptblock]::Create((Get-Content -Raw scripts/build-magiorix-windows-installer.ps1))
+          [void][scriptblock]::Create((Get-Content -Raw scripts/sync-electron-runtime.ps1))
+      - name: Verify Electron version floor
+        shell: pwsh
+        run: |
+          $v = (Get-Content -Raw runtime/magiorix-desktop/electron-version.txt).Trim()
+          if ($v -ne '35.7.5') { throw "Expected patched Electron 35.7.5, got $v" }

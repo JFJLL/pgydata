@@ -175,9 +175,31 @@ fn dispatch(frame: &SecureFrame, runtime: &mut CoreRuntime) -> Result<(Value, bo
                 false,
             ))
         }
-        "receipt.append" | "receipt.finalize" => {
-            // Receipt state persistence is not initialized until the device signing backend is bound.
-            Err(CoreError::InvalidHandle)
+        "receipt.append" => {
+            let request: ReceiptAppendRequest = serde_json::from_value(frame.payload.clone())
+                .map_err(|_| CoreError::InvalidFrame)?;
+            let receipt = runtime
+                .receipt_engine
+                .as_mut()
+                .ok_or(CoreError::InvalidHandle)?
+                .append(
+                    request.handle_id,
+                    request.success_delta,
+                    request.failed_delta,
+                    &request.task_state,
+                    false,
+                )?;
+            Ok((serde_json::to_value(receipt).map_err(|_| CoreError::Serialization)?, false))
+        }
+        "receipt.finalize" => {
+            let request: ReceiptFinalizeRequest = serde_json::from_value(frame.payload.clone())
+                .map_err(|_| CoreError::InvalidFrame)?;
+            let receipt = runtime
+                .receipt_engine
+                .as_mut()
+                .ok_or(CoreError::InvalidHandle)?
+                .append(request.handle_id, 0, 0, &request.task_state, true)?;
+            Ok((serde_json::to_value(receipt).map_err(|_| CoreError::Serialization)?, false))
         }
         "shutdown" => Ok((json!({"stopping": true}), true)),
         _ => Err(CoreError::UnknownCommand),

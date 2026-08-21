@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 
 export const NATIVE_CORE_PROTOCOL_VERSION = 1;
 export const NATIVE_CORE_VERSION = "1.4.2";
@@ -138,6 +138,16 @@ export class NativeCoreClient {
 
   async start() {
     const verified = verifyNativeCoreFile(this.options);
+    if (process.platform === "win32" && !this.options.allowUnsignedLocal) {
+      const signature = spawnSync(
+        "powershell.exe",
+        ["-NoProfile", "-NonInteractive", "-Command", "(Get-AuthenticodeSignature -LiteralPath $args[0]).Status", verified.corePath],
+        { encoding: "utf8", windowsHide: true },
+      );
+      if (signature.status !== 0 || signature.stdout.trim() !== "Valid") {
+        throw new Error("Native core Authenticode verification failed");
+      }
+    }
     this.secret = crypto.randomBytes(32);
     this.child = spawn(verified.path, [], { stdio: ["pipe", "pipe", "pipe"], shell: false, windowsHide: true });
     this.child.stderr.on("data", () => this.options.logger.warn?.("[native-core] sidecar emitted a redacted diagnostic"));

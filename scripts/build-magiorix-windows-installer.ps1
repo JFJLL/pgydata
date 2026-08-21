@@ -24,6 +24,22 @@ if ($assetsVersion -notmatch '^\d+\.\d+\.\d+$') {
 $platform = "windows"
 $appId = "magiorix-desktop"
 $sourceAppDir = Join-Path $projectRoot "runtime\magiorix-desktop"
+$coreBuildScript = Join-Path $projectRoot "scripts\build-magiorix-core.ps1"
+if (-not (Test-Path -LiteralPath $coreBuildScript -PathType Leaf)) { throw "Native core build script is missing: $coreBuildScript" }
+& $coreBuildScript
+$coreRuntimeDir = Join-Path $sourceAppDir "resources"
+$coreExePath = Join-Path $coreRuntimeDir "magiorix-core.exe"
+$coreMetadataPath = Join-Path $coreRuntimeDir "magiorix-core.metadata.json"
+if (-not (Test-Path -LiteralPath $coreExePath -PathType Leaf) -or -not (Test-Path -LiteralPath $coreMetadataPath -PathType Leaf)) {
+  throw "Required native core payload is missing after build"
+}
+$coreMetadata = Get-Content -Raw -LiteralPath $coreMetadataPath | ConvertFrom-Json
+if ($coreMetadata.coreVersion -ne $version -or [int]$coreMetadata.coreProtocolVersion -ne 1 -or [string]::IsNullOrWhiteSpace($coreMetadata.coreSha256)) {
+  throw "Native core metadata is incomplete or incompatible with the 1.4.2 candidate"
+}
+if ($coreMetadata.authenticode -eq "unsigned-local") { throw "Candidate native core must not be unsigned-local" }
+$coreActualHash = (Get-FileHash -LiteralPath $coreExePath -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($coreActualHash -ne ([string]$coreMetadata.coreSha256).ToLowerInvariant()) { throw "Native core SHA256 does not match metadata" }
 $sourceAssetsDir = Join-Path $projectRoot "assets\$assetsVersion"
 $appSourceDir = Join-Path $projectRoot "app-source"
 $outDir = Join-Path $projectRoot "desktop-versions\$platform\$version"
@@ -393,6 +409,10 @@ if ($sourceAsarHash -ne $payloadAsarHash) {
 }
 Write-Output "Verified installer payload app.asar SHA256: $payloadAsarHash"
 
+$integrityResourceScript = Join-Path $PSScriptRoot "write-asar-integrity-resource.mjs"
+if (-not (Test-Path -LiteralPath $integrityResourceScript -PathType Leaf)) { throw "ASAR Integrity writer is missing: $integrityResourceScript" }
+Write-Output "Writing ElectronAsar Integrity PE resource..."
+Invoke-CheckedProcess -FilePath $node.Source -Arguments @($integrityResourceScript, (Join-Path $payloadAppDir $installedExeName), $payloadAsar) -WorkingDirectory $projectRoot
 Write-Output "Applying Electron Fuses to payload executable..."
 Invoke-CheckedProcess -FilePath $node.Source -Arguments @((Join-Path $PSScriptRoot "apply-electron-fuses.js"), (Join-Path $payloadAppDir $installedExeName)) -WorkingDirectory $projectRoot
 # Fuses are applied to the payload executable that gets packaged and distributed
@@ -404,7 +424,8 @@ Write-Output "Signing payload binaries..."
 $binariesToSign = @(
   (Join-Path $payloadAppDir $installedExeName),
   (Join-Path $payloadAppDir "resources\pgy-chart-renderer.exe"),
-  (Join-Path $payloadAppDir "resources\elevate.exe")
+  (Join-Path $payloadAppDir "resources\elevate.exe"),
+  (Join-Path $payloadAppDir "resources\magiorix-core.exe")
 )
 $binariesToSign += (Get-ChildItem -LiteralPath $payloadAppDir -Filter *.dll | ForEach-Object { $_.FullName })
 foreach ($bin in $binariesToSign) {

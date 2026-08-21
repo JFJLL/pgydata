@@ -1,17 +1,20 @@
-# 1.4.2 受限对抗测试记录
+# 1.4.2 Hostile-Test Record
 
-本记录仅覆盖本产品在本地测试夹具中的拒绝行为；不包含可复用于其他软件的攻击代码、扫描器或绕过工具。
+> This is an evidence log, not a completion claim. A test is recorded as passed only where it has been executed successfully.
 
-| 编号 | 场景 | 预期安全结果 | 验证方式 | 结果 |
-|---|---|---|---|---|
-| HT-01 | 策略包签名被替换 | 原生核心在解密前拒绝 | `strategy_bundle_is_signed_bound_decrypted_and_tamper_rejected` | 通过 |
-| HT-02 | 策略密文或 AAD 绑定被修改 | HPKE AES-256-GCM 认证失败，不输出策略正文 | Rust 原生核心单元测试 | 通过 |
-| HT-03 | Ticket 签名编码或载荷被修改 | canonical JSON/Ed25519 校验失败 | Rust Ticket 单元测试 | 通过 |
-| HT-04 | Ticket jti 重放 | 同一侧车会话内拒绝第二次验证 | Rust Ticket 单元测试 | 通过 |
-| HT-05 | required 模式缺少原生核心 | 不创建或启动付费任务 | `TaskAuthorizationProvider` 门禁 | 通过 |
-| HT-06 | required 模式策略验证失败 | 取消待启动授权，不调用 start | `task-authorization-provider-required.test.mjs` | 通过 |
-| HT-07 | 核心文件 SHA-256 不匹配 | 侧车客户端拒绝启动 | `native-core-client.test.mjs` | 通过 |
-| HT-08 | ASAR 或 Fuse 被篡改 | Electron Fuse/完整性测试失败 | `security-fuses-and-tamper.test.mjs` | 通过 |
-| HT-09 | 生产构建配置为 off/shadow | 构建前失败 | `build-magiorix-core.ps1` 负向测试 | 通过 |
+| Scenario | Expected outcome | Evidence status |
+|---|---|---|
+| Unsigned or unknown signed envelope | Rejected | Passed by manifest unit tests. |
+| Packaged unsigned-local manifest | Rejected | Implemented in packaged entry; Candidate execution still required. |
+| Missing signature, altered key ID, outer signed payload, recomputed file hashes | Rejected | Fail-closed path implemented; Candidate hostile tests still required. |
+| Direct collection start and history resume | Required authorization precedes engine start | Implemented through `pgyStartRequiredTask`; authenticated Candidate exercise still required. |
+| pgy-kol creation | Required provider is explicitly supplied | Implemented statically; Candidate exercise still required. |
+| IPC from missing sender, destroyed contents, unauthorized window, subframe or invalid URL | Rejected | IPC guard unit test passed; all entry registrations are wrapped. |
+| Native-core executable hash mismatch | Rejected before start | Existing client unit test passed. |
+| Native-core Authenticode not Valid | Rejected before start | Implemented; requires signed Windows Candidate test. |
+| Receipt append/finalize invalid handle | Rejected | Sidecar command routing changed; Cargo test is pending Windows CI. |
+| ASAR normal startup, data tamper, header tamper, app.asar replacement, resources/app fallback | Only normal signed app.asar starts | Not executed; required Windows Candidate test. |
+| PE `Integrity/ElectronAsar` resource format | Contains `resources\\app.asar`, `sha256`, and a 64-hex header hash | Passed on an external executable copy using the writer and verifier scripts. |
+| Device-key protected storage unavailable | Required initialization rejects and legacy plaintext record is revoked | Implemented; packaged Windows test still required. |
 
-> 结论：required 路径不允许 JS 验签、旧 consume 或 shadow/off 回退。生产候选仍须在受控环境中提供两个**公钥**信任根，并完成签名和安装包验证。
+The next hostile-test run must preserve the exact Candidate binary, the pre- and post-tamper SHA-256 values, resource dump, fuse evidence, Authenticode status, native-core metadata, and process exit status. No release is authorized based solely on the static or unit-level checks documented above.
