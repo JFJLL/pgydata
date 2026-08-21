@@ -56,6 +56,22 @@ struct TicketExpectedBinding {
     client_version: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReceiptAppendRequest {
+    handle_id: Uuid,
+    success_delta: u32,
+    failed_delta: u32,
+    task_state: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReceiptFinalizeRequest {
+    handle_id: Uuid,
+    task_state: String,
+}
+
 #[derive(Default)]
 struct CoreRuntime {
     ticket_verifier: Option<TicketVerifier>,
