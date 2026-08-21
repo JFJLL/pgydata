@@ -534,3 +534,109 @@ body{background:#f8f8fa;color:#211c20}
   .checkout-grid{grid-template-columns:1fr}
   .checkout-return{margin-bottom:12px}
 }
+
+/* ---------- 1.4.1 桌面端套餐积分层级 ---------- */
+/* 默认保留原有移动端卡片；仅宽屏显示新的常规/额外积分层级和悬停明细。 */
+.package-desktop-gift,
+.package-desktop-credit,
+.package-desktop-points,
+.package-hover-details{display:none}
+
+@media (min-width:681px){
+  .package-mobile-gift,
+  .package-mobile-credit,
+  .package-mobile-meta{display:none}
+
+  .package-card{
+    min-height:282px;
+    overflow:visible;
+  }
+  .package-card:hover,
+  .package-card:focus-visible{z-index:4}
+  .package-card:focus-visible{outline:3px solid rgba(216,68,68,.26);outline-offset:3px}
+
+  .package-desktop-gift{
+    display:block;
+    right:13px;
+    transform:rotate(1.4deg);
+  }
+  .package-card-top{margin-bottom:0}
+  .package-amount{margin-top:13px}
+
+  .package-desktop-credit{
+    display:grid;
+    gap:2px;
+    margin-top:10px;
+    padding-top:10px;
+    border-top:1px solid #e9e1de;
+  }
+  .package-desktop-credit>span{
+    color:#8f8783;
+    font-size:10px;
+    font-weight:700;
+  }
+  .package-desktop-credit strong{
+    color:var(--brand);
+    font-size:33px;
+    font-weight:800;
+    line-height:1.08;
+    letter-spacing:-1.4px;
+  }
+  .package-desktop-credit small{
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:0;
+  }
+
+  .package-desktop-points{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:5px;
+    min-height:31px;
+    margin-top:10px;
+    padding:6px 7px;
+    border-top:1px solid #fbede9;
+    border-bottom:1px solid #fbede9;
+    background:#fffaf8;
+    color:#706864;
+    font-size:11px;
+    font-weight:700;
+    white-space:nowrap;
+  }
+  .package-desktop-points>b{color:#d25b50;font-size:13px}
+  .package-desktop-points small{color:#968d88;font-size:10px;font-weight:500}
+  .package-desktop-points .extra{color:#e14a43}
+  .package-desktop-points .extra small{color:#d35e56}
+  .package-desktop-points.muted{justify-content:flex-start;color:#796f6b}
+
+  .package-hover-details{
+    display:flex;
+    align-items:center;
+    min-height:30px;
+    margin-top:5px;
+    padding:4px 7px;
+    gap:6px;
+    border:1px solid #f1d9d3;
+    border-radius:7px;
+    background:#fffdfa;
+    color:#7d6768;
+    font-size:10px;
+    line-height:1.3;
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+    transform:translateY(2px);
+    transition:opacity .15s ease,transform .15s ease,visibility .15s ease;
+  }
+  .package-hover-title{display:none}
+  .package-hover-details>span{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+  .package-hover-details>span+span:before{color:#c7a6a0;content:"·"}
+  .package-hover-details b{color:var(--brand);font-size:10px}
+  .package-card.has-extra:hover .package-hover-details,
+  .package-card.has-extra:focus-visible .package-hover-details{
+    opacity:1;
+    visibility:visible;
+    transform:translateY(0);
+  }
+}
