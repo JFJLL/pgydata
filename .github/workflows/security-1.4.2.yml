@@ -70,7 +70,7 @@ jobs:
         working-directory: app-source
         run: npm install --ignore-scripts --package-lock=false --no-audit --no-fund
       - name: Run desktop security unit tests
-        run: node --test tests/unit/*.mjs
+        run: node --test --test-force-exit --test-concurrency=1 (Get-ChildItem tests/unit/*.mjs | ForEach-Object { $_.FullName })
   native-core:
     runs-on: windows-latest
     steps:
