@@ -4,6 +4,7 @@ use std::{
 };
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use ed25519_dalek::SigningKey;
 use magiorix_core::{
     canonical_messagepack, decode_canonical_messagepack, decrypt_strategy_with_dpapi_key,
     embedded_strategy_verifier, embedded_ticket_verifier, encode_length_prefixed,
@@ -72,10 +73,19 @@ struct ReceiptFinalizeRequest {
     task_state: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReceiptBeginRequest {
+    authorization_handle: magiorix_core::AuthorizationHandle,
+    device_key_id: String,
+    signing_key_b64: String,
+}
+
 #[derive(Default)]
 struct CoreRuntime {
     ticket_verifier: Option<TicketVerifier>,
     receipt_engine: Option<ReceiptEngine>,
+    receipt_device_key_id: Option<String>,
 }
 
 fn current_unix_time() -> Result<i64, CoreError> {
@@ -191,6 +201,31 @@ fn dispatch(frame: &SecureFrame, runtime: &mut CoreRuntime) -> Result<(Value, bo
                 serde_json::to_value(handle).map_err(|_| CoreError::Serialization)?,
                 false,
             ))
+        }
+        "receipt.begin" => {
+            let request: ReceiptBeginRequest = serde_json::from_value(frame.payload.clone())
+                .map_err(|_| CoreError::InvalidFrame)?;
+            let seed = BASE64
+                .decode(request.signing_key_b64)
+                .map_err(|_| CoreError::InvalidFrame)?;
+            let signing_seed: [u8; 32] = seed
+                .try_into()
+                .map_err(|_| CoreError::InvalidFrame)?;
+            if let Some(receipts) = runtime.receipt_engine.as_mut() {
+                if runtime.receipt_device_key_id.as_deref() != Some(request.device_key_id.as_str()) {
+                    return Err(CoreError::InvalidHandle);
+                }
+                receipts.begin(request.authorization_handle);
+            } else {
+                let mut receipts = ReceiptEngine::new(
+                    request.device_key_id.clone(),
+                    SigningKey::from_bytes(&signing_seed),
+                );
+                receipts.begin(request.authorization_handle);
+                runtime.receipt_engine = Some(receipts);
+                runtime.receipt_device_key_id = Some(request.device_key_id);
+            }
+            Ok((json!({"started": true}), false))
         }
         "receipt.append" => {
             let request: ReceiptAppendRequest = serde_json::from_value(frame.payload.clone())

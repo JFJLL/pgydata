@@ -49,6 +49,13 @@ function makeGate() {
     assert.equal(clientTaskId, "task-1");
     assert.equal(reason, "native-required-authorization-or-strategy-rejected");
   };
+  gate.getNativeReceiptSigningMaterial = async ({ deviceKeyId }) => {
+    assert.equal(deviceKeyId, "device-1");
+    return {
+      deviceKeyId: "device-1",
+      signingKeyB64: Buffer.alloc(32, 9).toString("base64"),
+    };
+  };
   return { gate, state };
 }
 
@@ -67,6 +74,12 @@ function makeNativeClient({ rejectStrategy = false } = {}) {
         assert.equal(payload.expected.deviceKeyId, "device-1");
         assert.equal(payload.expected.clientTaskId, "task-1");
         return { handle: "native-handle-1", authorization_id: "auth-1" };
+      }
+      if (command === "receipt.begin") {
+        assert.equal(payload.deviceKeyId, "device-1");
+        assert.equal(payload.signingKeyB64, Buffer.alloc(32, 9).toString("base64"));
+        assert.equal(payload.authorizationHandle.handle, "native-handle-1");
+        return { started: true };
       }
       if (command === "strategy.decrypt") {
         if (rejectStrategy) throw new Error("strategy signature mismatch");

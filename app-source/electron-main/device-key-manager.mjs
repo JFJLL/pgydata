@@ -99,6 +99,20 @@ export class DeviceKeyManager {
     return this.publicKeyPem;
   }
 
+  exportReceiptSigningSeedB64() {
+    if (!this.initialized || !this.privateKeyPem) {
+      throw new Error("DeviceKeyManager is not initialized");
+    }
+    const key = crypto.createPrivateKey(this.privateKeyPem);
+    const jwk = key.export({ format: "jwk" });
+    if (jwk.kty !== "OKP" || jwk.crv !== "Ed25519" || typeof jwk.d !== "string") {
+      throw new Error("Device signing key is not an Ed25519 private key");
+    }
+    const seed = Buffer.from(jwk.d, "base64url");
+    if (seed.length !== 32) throw new Error("Device Ed25519 signing seed must be 32 bytes");
+    return seed.toString("base64");
+  }
+
   sign(content) {
     if (!this.initialized) throw new Error("DeviceKeyManager is not initialized");
     const buf = Buffer.isBuffer(content) ? content : Buffer.from(String(content), "utf8");

@@ -101,6 +101,13 @@ export class TaskAuthorizationProvider {
           || strategy.maxItems <= 0) {
           throw new Error("Native strategy decision binding is invalid");
         }
+        const receiptSigningMaterial = await this.authorizationGate.getNativeReceiptSigningMaterial({
+          deviceKeyId: authorization.deviceKeyId,
+        });
+        await this.nativeCoreClient.request("receipt.begin", {
+          authorizationHandle: ticketHandle,
+          ...receiptSigningMaterial,
+        });
         await this.authorizationGate.startTaskAuthorization(authorization.authorizationId);
         return {
           ...authorization,

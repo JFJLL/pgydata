@@ -50,6 +50,18 @@ export class AuthorizationGate {
     return deviceKeyId;
   }
 
+  async getNativeReceiptSigningMaterial({ deviceKeyId } = {}) {
+    await this.deviceKeyManager.initialize();
+    const actualDeviceKeyId = this.deviceKeyManager.getDeviceKeyId();
+    if (deviceKeyId && deviceKeyId !== actualDeviceKeyId) {
+      throw new Error("Authorization device key does not match the protected local signing key");
+    }
+    return {
+      deviceKeyId: actualDeviceKeyId,
+      signingKeyB64: this.deviceKeyManager.exportReceiptSigningSeedB64(),
+    };
+  }
+
   verifyTicket(ticketEnvelope, expected = {}) {
     if (!ticketEnvelope || typeof ticketEnvelope !== "object") {
       throw new Error("Missing ticket envelope");

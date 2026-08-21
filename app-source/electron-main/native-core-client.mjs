@@ -9,7 +9,7 @@ export const MAX_NATIVE_CORE_FRAME_BYTES = 1024 * 1024;
 
 const ALLOWED_COMMANDS = new Set([
   "health", "device.ensure", "device.rotate", "ticket.verify", "task.digest",
-  "task.plan", "receipt.append", "receipt.finalize", "strategy.decrypt", "shutdown",
+  "task.plan", "receipt.begin", "receipt.append", "receipt.finalize", "strategy.decrypt", "shutdown",
 ]);
 
 function compareUtf8(left, right) {
