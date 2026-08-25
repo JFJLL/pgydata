@@ -137,6 +137,28 @@ ADMIN_PASSWORD=
 
 登录后可以搜索用户，并通过“加减积分”按钮给用户增加或扣减积分。客户端不再使用原首页仪表盘，登录后会直接进入蒲公英采集页面。
 
+
+### 数据中心与产品分析
+
+`/admin` 已升级为 **magiorix 运营与产品数据中心**。管理员登录后可按最近 7、30、90 天或最多 366 天的自定义日期范围查看数据总览、用户分析、功能分析、充值与积分、系统质量、用户管理和流水记录。页面不依赖第三方图表库，使用原生 SVG 与 CSS 渲染趋势和分布。
+
+所有新增统计统一按 **UTC+8 / 中国标准时间** 划分自然日，统计范围为开始日含、结束日含。核心口径如下：有效活跃用户、DAU、WAU、MAU 均以 `consume_records` 中发生过有效消费的去重用户计算，而不是以尚未过期的登录 token 代替活跃；有效任务以同一用户同一 `task_id` 聚合，无任务标识的历史消费记录各计一项；成功采集量为消费记录的 `SUM(count)`。新用户已激活表示注册后曾发生有效消费，不表示严格 24 小时激活。D1、D7、D30 留存按 UTC+8 注册 cohort 和对应日的有效消费计算，只展示已经成熟的 cohort；没有成熟样本时返回空值而不是 0%。
+
+管理员专用分析接口均要求 Bearer 管理员会话，并统一支持 `range=7d|30d|90d` 或 `from=YYYY-MM-DD&to=YYYY-MM-DD`：
+
+- `GET /api/admin/analytics/overview`：核心 KPI、上一等长周期对比和日趋势。
+- `GET /api/admin/analytics/users`：用户、激活、DAU/WAU/MAU、留存和增长趋势。
+- `GET /api/admin/analytics/usage`：历史核心采集使用、功能和输入来源，以及新增产品事件摘要。
+- `GET /api/admin/analytics/finance`：已到账充值收入、创建 cohort 支付转化、渠道、套餐、首充优惠和积分流向。
+- `GET /api/admin/analytics/system`：事件覆盖时间、客户端版本、任务/更新结果和支付异常。
+- `GET /api/admin/users/:id/analytics`：不含密码、token、Cookie 或支付密钥的用户数据详情。
+
+真正的充值收入只统计 `status = CREDITED` 且 `credited_at` 存在的订单；AOV 为已到账收入除以已到账订单数，ARPPU 为已到账收入除以付费用户数。支付转化以订单 `created_at` cohort 为分母、该 cohort 最终已到账订单为分子。首次付费用户与复购付费用户按历史已到账订单顺序识别；首充优惠使用是独立指标。系统不展示缺少成本依据的虚假“利润”或“佣金”。
+
+数据库 schema 已升级到 **v5**。迁移会为 `consume_records` 增加 `plugin_id`、`task_type`、`planned_count`、`valid_count`，并从历史 `detail_json` 安全回填；无法解析的 JSON 保持 NULL，不会阻断迁移或改变既有积分/流水。迁移同时新增 `client_events` 及消费、用户、订单、事件分析索引。
+
+客户端可向受登录保护的 `POST /api/analytics/events` 小批量提交最多 20 条白名单事件。第一版仅允许软件启动、任务开始/完成/失败/取消、导出完成、充值打开、更新成功/失败等明确字段；接口不接受 Cookie、token、密码、采集 URL、Excel 内容、用户内容、设备指纹、请求响应原文或任意 `meta_json`。客户端应异步最佳努力上报：埋点失败绝不影响采集、积分扣费、充值、登录、导出、启动或更新。产品事件统计会返回 `coverageStartAt`，并仅从埋点客户端版本开始累计。
+
 ## Nginx 配置
 
 参考 `deploy-nginx.conf.example`，复制到服务器 Nginx 配置目录，例如：

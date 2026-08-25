@@ -16480,13 +16480,16 @@ const W = {
       validCount: Array.isArray(e.urls) ? e.urls.length : 0,
       itemIndex: o + 1,
       url: s
-    }, i = await this.request("POST", "/api/shumiao/consume", {
+    };
+    if (o === 0) this.reportAnalyticsEvent("task_start", { module: e.pluginId || "collection", pluginId: e.pluginId, taskType: e.taskType, taskId: e.taskId, inputType: e.inputType, itemCount: Number(e.totalRows || e.urls?.length || 0) });
+    const i = await this.request("POST", "/api/shumiao/consume", {
       count: 1,
       taskId: e.taskId,
       itemIndex: o + 1,
       remark: `采集成功扣减 1 积分`,
       detail: r
     });
+    if (o + 1 >= Number(e.totalRows || e.urls?.length || 0)) this.reportAnalyticsEvent("task_complete", { module: e.pluginId || "collection", pluginId: e.pluginId, taskType: e.taskType, taskId: e.taskId, inputType: e.inputType, itemCount: Number(e.totalRows || e.urls?.length || 0), successCount: Number(e.totalRows || e.urls?.length || 0) });
     return Number(i.data?.balance ?? 0);
   }
   /**
@@ -16589,6 +16592,13 @@ const W = {
     return { list: [], take: null, totalCount: null };
   }
   // ===== 内部：发请求 =====
+  reportAnalyticsEvent(eventName, fields = {}) {
+    if (!this.isAuthenticated() || !this.baseUrl || !this.token) return;
+    const eventId = "evt_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 12);
+    const event = { eventId, eventName, platform: process.platform, ...fields };
+    // Best effort only: telemetry is never awaited by collection or payment work.
+    void this.request("POST", "/api/analytics/events", { events: [event] }).catch((error) => Wt.debug("analytics event ignored:", error?.message || error));
+  }
   async request(e, t, n) {
     if (!this.baseUrl)
       throw new Error("SchedulerApi: baseUrl 未设置");
@@ -23449,6 +23459,7 @@ function vf(a) {
     }
   ), F.on(W.task.start, (e, t) => {
     pgyCollectionHistory.createTask(t).then(() => ge.startTask(t)).catch(async (n) => {
+      try { Le.get().reportAnalyticsEvent("task_failed", { module: t.pluginId || "collection", pluginId: t.pluginId, taskType: t.taskType, taskId: t.taskId, inputType: t.inputType, errorCode: "START_FAILED" }); } catch {}
       Qe.error("任务启动失败:", n);
       await pgyCollectionHistory.setStatus(t.taskId, "interrupted").catch(() => {});
     });
@@ -23459,6 +23470,7 @@ function vf(a) {
     ge.resumeTask(t.taskId);
     pgyKolService && pgyKolService.forwardScraperTaskControl && pgyKolService.forwardScraperTaskControl(t.taskId, "resume").catch(() => {});
   }), F.on(W.task.cancel, (e, t) => {
+    try { Le.get().reportAnalyticsEvent("task_cancelled", { module: t.pluginId || "collection", pluginId: t.pluginId, taskType: t.taskType, taskId: t.taskId, inputType: t.inputType }); } catch {}
     ge.cancelTask(t.taskId);
     pgyKolService && pgyKolService.forwardScraperTaskControl && pgyKolService.forwardScraperTaskControl(t.taskId, "cancel").catch(() => {});
   }), F.handle(W.export.toExcel, async (e, t) => ff(t)), F.handle(W.history.list, async () => pgyCollectionHistory.listTasks()), F.handle(W.history.exportTask, async (e, t) => {
@@ -23472,7 +23484,9 @@ function vf(a) {
     }
     if (s.length === 0)
       throw new Error("该任务暂无可导出的成功内容");
-    return ff(buildCollectionHistoryExportPayload(n, s));
+    const exported = await ff(buildCollectionHistoryExportPayload(n, s));
+    try { Le.get().reportAnalyticsEvent("export_complete", { module: n.pluginId || "collection", pluginId: n.pluginId, taskType: n.taskType, taskId: n.taskId, inputType: n.inputType, itemCount: s.length, successCount: s.length }); } catch {}
+    return exported;
   }), F.handle(W.history.resumeTask, async (e, t) => {
     const n = await pgyCollectionHistory.getResumePlan(t.taskId);
     if (n.payload.urls.length === 0) {

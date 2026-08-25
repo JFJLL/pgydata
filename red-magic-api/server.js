@@ -9,6 +9,15 @@ const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
 const { loadReleaseManifest, normalizeSha256 } = require("./lib/release-manifest");
 const { runMigrations } = require("./lib/database-migrations");
+const {
+  parseAnalyticsPeriod,
+  queryFinanceAnalytics,
+  queryOverview,
+  querySystemAnalytics,
+  queryUsageAnalytics,
+  queryUserAnalyticsDetail,
+  queryUsersAnalytics,
+} = require("./lib/admin-analytics");
 const { createSmsService, SmsServiceError } = require("./lib/sms-service");
 const { createAlipayGateway, isSuccessfulTradeStatus, normalizeNotification } = require("./lib/alipay-gateway");
 const { createWxpayGateway, normalizeNotification: normalizeWxpayNotification } = require("./lib/wxpay-gateway");
@@ -291,6 +300,28 @@ function normalizeTaskId(value) {
   return taskId ? truncateString(taskId, 128) : "";
 }
 
+const CLIENT_EVENT_NAMES = new Set(["app_open", "task_start", "task_complete", "task_failed", "task_cancelled", "export_complete", "recharge_open", "update_success", "update_failed"]);
+const CLIENT_EVENT_FIELDS = new Set(["eventId", "eventName", "sessionId", "appVersion", "platform", "module", "pluginId", "taskType", "taskId", "inputType", "itemCount", "successCount", "errorCount", "durationMs", "errorCode"]);
+function normalizeEventText(value, maxLength, name, required = false) {
+  if (value === undefined || value === null || value === "") { if (required) throw new Error(name + " 不能为空"); return null; }
+  if (typeof value !== "string") throw new Error(name + " 必须是字符串");
+  const text = value.trim(); if (!text) { if (required) throw new Error(name + " 不能为空"); return null; }
+  if (text.length > maxLength) throw new Error(name + " 长度不能超过 " + maxLength); return text;
+}
+function normalizeEventInteger(value, name, maxValue) {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number(value); if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0 || parsed > maxValue) throw new Error(name + " 必须是 0 到 " + maxValue + " 的整数"); return parsed;
+}
+/* Telemetry has no free-form metadata field: only explicit allowlisted fields are persisted. */
+function normalizeClientEvent(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("事件必须是对象");
+  for (const key of Object.keys(raw)) if (!CLIENT_EVENT_FIELDS.has(key)) throw new Error("不允许的事件字段：" + key);
+  const eventId = normalizeEventText(raw.eventId, 128, "eventId", true);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(eventId)) throw new Error("eventId 格式无效");
+  const eventName = normalizeEventText(raw.eventName, 32, "eventName", true);
+  if (!CLIENT_EVENT_NAMES.has(eventName)) throw new Error("eventName 不在白名单中");
+  return { eventId, eventName, sessionId: normalizeEventText(raw.sessionId, 128, "sessionId"), appVersion: normalizeEventText(raw.appVersion, 64, "appVersion"), platform: normalizeEventText(raw.platform, 32, "platform"), module: normalizeEventText(raw.module, 64, "module"), pluginId: normalizeEventText(raw.pluginId, 64, "pluginId"), taskType: normalizeEventText(raw.taskType, 64, "taskType"), taskId: normalizeEventText(raw.taskId, 128, "taskId"), inputType: normalizeEventText(raw.inputType, 32, "inputType"), itemCount: normalizeEventInteger(raw.itemCount, "itemCount", 1000000000), successCount: normalizeEventInteger(raw.successCount, "successCount", 1000000000), errorCount: normalizeEventInteger(raw.errorCount, "errorCount", 1000000000), durationMs: normalizeEventInteger(raw.durationMs, "durationMs", 86400000), errorCode: normalizeEventText(raw.errorCode, 64, "errorCode") };
+}
 function normalizeConsumeTaskIdentity(body = {}) {
   const rawDetail = body.detail && typeof body.detail === "object" ? body.detail : null;
   const taskId = normalizeTaskId(body.taskId ?? rawDetail?.taskId);
@@ -340,6 +371,14 @@ function normalizeConsumeDetail(body = {}) {
   };
 }
 
+function extractConsumeAnalyticsFields(body = {}) {
+  const raw = body.detail || body.details || body.taskDetail || null;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { pluginId: null, taskType: null, plannedCount: null, validCount: null };
+  const text = (value, maxLength) => { const result = String(value || "").trim(); return result ? truncateString(result, maxLength) : null; };
+  const count = (value, fallback) => { const result = Number(value ?? fallback); return Number.isFinite(result) && result >= 0 ? Math.min(1000000000, Math.floor(result)) : null; };
+  const rows = Array.isArray(raw.sourceRows) ? raw.sourceRows : Array.isArray(raw.urls) ? raw.urls : [];
+  return { pluginId: text(raw.pluginId, 64), taskType: text(raw.taskType, 64), plannedCount: count(raw.totalRows, rows.length), validCount: count(raw.validCount, Array.isArray(raw.urls) ? raw.urls.length : 0) };
+}
 function normalizeTransactionView(value) {
   const view = String(value || "tasks").trim().toLowerCase();
   if (view === "legacy" || view === "all") return view;
@@ -1437,6 +1476,7 @@ app.post("/api/shumiao/consume", authRequired, asyncHandler(async (req, res) => 
   const count = parsePositiveAmount(req.body.count ?? req.body.amount ?? req.body.quantity);
   if (!count) return fail(res, 400, "扣费数量不能为空");
   const detail = normalizeConsumeDetail(req.body);
+  const consumeAnalytics = extractConsumeAnalyticsFields(req.body);
   const taskIdentity = normalizeConsumeTaskIdentity(req.body);
   if (taskIdentity.invalid) return fail(res, 400, "携带 taskId 时 itemIndex 必须为正整数");
 
@@ -1483,8 +1523,8 @@ app.post("/api/shumiao/consume", authRequired, asyncHandler(async (req, res) => 
     );
     await tx.run(
       `INSERT INTO consume_records
-        (user_id, count, balance_after, remark, detail_type, detail_summary, detail_json, task_id, item_index, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (user_id, count, balance_after, remark, detail_type, detail_summary, detail_json, task_id, item_index, plugin_id, task_type, planned_count, valid_count, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.user.id,
         count,
@@ -1495,6 +1535,10 @@ app.post("/api/shumiao/consume", authRequired, asyncHandler(async (req, res) => 
         detail.detailJson,
         taskIdentity.taskId,
         taskIdentity.itemIndex,
+        consumeAnalytics.pluginId,
+        consumeAnalytics.taskType,
+        consumeAnalytics.plannedCount,
+        consumeAnalytics.validCount,
         createdAt,
       ],
     );
@@ -1515,6 +1559,20 @@ app.post("/api/shumiao/consume", authRequired, asyncHandler(async (req, res) => 
   return success(res, result);
 }));
 
+app.post("/api/analytics/events", authRequired, asyncHandler(async (req, res) => {
+  const rawEvents = req.body?.events;
+  if (!Array.isArray(rawEvents) || rawEvents.length === 0) return fail(res, 400, "events 必须是非空数组");
+  if (rawEvents.length > 20) return fail(res, 400, "单次最多上报 20 个事件");
+  let events; try { events = rawEvents.map(normalizeClientEvent); } catch (error) { return fail(res, 400, error.message || "事件格式无效"); }
+  const createdAt = nowIso(); let inserted = 0;
+  await withTransaction(async (tx) => {
+    for (const event of events) {
+      const result = await tx.run("INSERT OR IGNORE INTO client_events (event_id, user_id, event_name, session_id, app_version, platform, module, plugin_id, task_type, task_id, input_type, item_count, success_count, error_count, duration_ms, error_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [event.eventId, req.user.id, event.eventName, event.sessionId, event.appVersion, event.platform, event.module, event.pluginId, event.taskType, event.taskId, event.inputType, event.itemCount, event.successCount, event.errorCount, event.durationMs, event.errorCode, createdAt]);
+      inserted += Number(result.changes || 0);
+    }
+  });
+  return success(res, { accepted: events.length, inserted, duplicated: events.length - inserted });
+}));
 app.get("/api/shumiao/recharge-records", authRequired, asyncHandler(async (req, res) => {
   const { page, pageSize } = parsePageParams(req.query);
   const offset = (page - 1) * pageSize;
@@ -2054,6 +2112,15 @@ app.post("/api/admin/login", asyncHandler(async (req, res) => {
   });
 }));
 
+function adminAnalyticsRequest(req, res, callback) {
+  let period; try { period = parseAnalyticsPeriod(req.query); } catch (error) { return fail(res, 400, error.message || "统计日期范围无效"); }
+  return callback(period);
+}
+app.get("/api/admin/analytics/overview", adminRequired, asyncHandler(async (req, res) => adminAnalyticsRequest(req, res, async (period) => success(res, await queryOverview(database, period)))));
+app.get("/api/admin/analytics/users", adminRequired, asyncHandler(async (req, res) => adminAnalyticsRequest(req, res, async (period) => success(res, await queryUsersAnalytics(database, period)))));
+app.get("/api/admin/analytics/usage", adminRequired, asyncHandler(async (req, res) => adminAnalyticsRequest(req, res, async (period) => success(res, await queryUsageAnalytics(database, period)))));
+app.get("/api/admin/analytics/finance", adminRequired, asyncHandler(async (req, res) => adminAnalyticsRequest(req, res, async (period) => success(res, await queryFinanceAnalytics(database, period)))));
+app.get("/api/admin/analytics/system", adminRequired, asyncHandler(async (req, res) => adminAnalyticsRequest(req, res, async (period) => success(res, await querySystemAnalytics(database, period)))));
 app.get("/api/admin/overview", adminRequired, asyncHandler(async (req, res) => {
   const today = startOfDay();
   const tomorrow = addDays(today, 1);
@@ -2095,6 +2162,15 @@ app.get("/api/admin/users", adminRequired, asyncHandler(async (req, res) => {
        u.last_active_at AS lastActiveAt,
        u.created_at AS createdAt,
        u.updated_at AS updatedAt,
+       (SELECT MAX(c.created_at) FROM consume_records c WHERE c.user_id = u.id) AS lastEffectiveUse,
+       (SELECT COUNT(*) FROM (
+          SELECT c.task_id AS taskIdentity FROM consume_records c WHERE c.user_id = u.id AND c.task_id IS NOT NULL AND TRIM(c.task_id) <> '' GROUP BY c.task_id
+          UNION ALL
+          SELECT 'legacy:' || c.id AS taskIdentity FROM consume_records c WHERE c.user_id = u.id AND (c.task_id IS NULL OR TRIM(c.task_id) = '')
+        )) AS effectiveTasks,
+       (SELECT COALESCE(SUM(c.count), 0) FROM consume_records c WHERE c.user_id = u.id) AS collectedItems,
+       (SELECT COALESCE(SUM(r.amount_cents), 0) FROM recharge_orders r WHERE r.user_id = u.id AND r.status = 1 AND r.credited_at IS NOT NULL) AS totalRechargeCents,
+       (SELECT COUNT(*) FROM recharge_orders r WHERE r.user_id = u.id AND r.status = 1 AND r.credited_at IS NOT NULL) AS rechargeCount,
        COALESCE(a.balance, 0) AS balance
      FROM users u
      LEFT JOIN shumiao_accounts a ON a.user_id = u.id
@@ -2108,6 +2184,10 @@ app.get("/api/admin/users", adminRequired, asyncHandler(async (req, res) => {
     list: rows.map((row) => ({
       ...row,
       balance: Number(row.balance || 0),
+      effectiveTasks: Number(row.effectiveTasks || 0),
+      collectedItems: Number(row.collectedItems || 0),
+      totalRechargeYuan: centsToYuan(row.totalRechargeCents),
+      rechargeCount: Number(row.rechargeCount || 0),
     })),
     total: Number(total.count || 0),
     page,
@@ -2115,6 +2195,13 @@ app.get("/api/admin/users", adminRequired, asyncHandler(async (req, res) => {
   });
 }));
 
+app.get("/api/admin/users/:id/analytics", adminRequired, asyncHandler(async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId <= 0) return fail(res, 400, "用户不存在");
+  const detail = await queryUserAnalyticsDetail(database, userId);
+  if (!detail) return fail(res, 404, "用户不存在");
+  return success(res, detail);
+}));
 app.post("/api/admin/users/:id/add-points", adminRequired, asyncHandler(async (req, res) => {
   const userId = Number(req.params.id);
   const delta = parseAdjustmentAmount(req.body.delta ?? req.body.count ?? req.body.amount ?? req.body.points);
