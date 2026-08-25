@@ -59,3 +59,11 @@ test("stable start event id is identical after simulated process restart", () =>
   assert.equal(first[0].options.eventId, "task-start:restart-safe");
   assert.equal(second[0].options.eventId, first[0].options.eventId);
 });
+
+
+test("production wiring forwards lifecycle options to SchedulerApi without field-only fallback", async () => {
+  const fs = await import("node:fs/promises");
+  const source = await fs.readFile(new URL("../dist-electron/index.js", import.meta.url), "utf8");
+  assert.match(source, /const pgyTaskAnalytics = createTaskAnalyticsLifecycleReporter\(\s*\(eventName, fields, options\) => \{\s*try \{\s*Le\.get\(\)\.reportAnalyticsEvent\(eventName, fields, options\);\s*\} catch \{\}\s*\}\s*\);/s);
+  assert.doesNotMatch(source, /const pgyTaskAnalytics = createTaskAnalyticsLifecycleReporter\(\s*\(eventName, fields\) => \{\s*try \{\s*Le\.get\(\)\.reportAnalyticsEvent\(eventName, fields\);/s);
+});

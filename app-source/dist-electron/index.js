@@ -30,7 +30,13 @@ try {
 } catch {
 }
 const pgyCollectionHistory = new CollectionHistoryStore({ baseDir: Oe(pgyUserDataDir, "collection-history"), retentionDays: 90 });
-const pgyTaskAnalytics = createTaskAnalyticsLifecycleReporter((eventName, fields) => { try { Le.get().reportAnalyticsEvent(eventName, fields); } catch {} });
+const pgyTaskAnalytics = createTaskAnalyticsLifecycleReporter(
+  (eventName, fields, options) => {
+    try {
+      Le.get().reportAnalyticsEvent(eventName, fields, options);
+    } catch {}
+  }
+);
 import Dr from "os";
 import et, { brotliDecompressSync as Lr, gunzipSync as Nr } from "zlib";
 import { EventEmitter as Or } from "events";
