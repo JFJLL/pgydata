@@ -355,7 +355,9 @@ async function queryRetention(db, period, now) {
 }
 
 async function queryUsersAnalytics(db, period, now = new Date()) {
-  const today = dayStart(now);
+  // DAU/WAU/MAU anchor to the selected period's final UTC+8 day, capped at today's UTC+8 day.
+  const currentDay = dayStart(now); const requestedAnchor = dayStart(addDays(new Date(period.endAt), -1));
+  const today = requestedAnchor > currentDay ? currentDay : requestedAnchor;
   const [counts, activation, dau, wau, mau, retention, newTrend, activeTrend] = await Promise.all([
     db.get("SELECT COUNT(*) AS totalUsers, COALESCE(SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END), 0) AS activeAccounts, COALESCE(SUM(CASE WHEN status <> 1 THEN 1 ELSE 0 END), 0) AS deletedUsers FROM users"),
     db.get(`/* Activation means any later effective collection; it is not a 24-hour activation rate. */
@@ -370,6 +372,7 @@ async function queryUsersAnalytics(db, period, now = new Date()) {
   const newUsers = number(activation.newUsers);
   return {
     period,
+    activityAnchorDate: dayKey(today),
     totalUsers: number(counts.totalUsers),
     activeAccounts: number(counts.activeAccounts),
     deletedUsers: number(counts.deletedUsers),
@@ -411,15 +414,17 @@ async function queryEventAnalytics(db, period) {
     return { available: false, coverageStartAt: null, capabilities, appOpens: null, tasksStarted: null, tasksCompleted: null, tasksFailed: null, tasksCancelled: null, exportsCompleted: null, updateSuccess: null, updateFailures: null, taskSuccessRate: null, taskFailureRate: null, byModule: null, byAppVersion: null };
   }
   const [events, byModule, byAppVersion] = await Promise.all([
-    db.get(`SELECT COALESCE(SUM(CASE WHEN event_name = 'app_open' THEN 1 ELSE 0 END), 0) AS appOpens, COALESCE(SUM(CASE WHEN event_name = 'task_start' THEN 1 ELSE 0 END), 0) AS tasksStarted, COALESCE(SUM(CASE WHEN event_name = 'task_complete' THEN 1 ELSE 0 END), 0) AS tasksCompleted, COALESCE(SUM(CASE WHEN event_name = 'task_failed' THEN 1 ELSE 0 END), 0) AS tasksFailed, COALESCE(SUM(CASE WHEN event_name = 'task_cancelled' THEN 1 ELSE 0 END), 0) AS tasksCancelled, COALESCE(SUM(CASE WHEN event_name = 'export_complete' THEN 1 ELSE 0 END), 0) AS exportsCompleted, COALESCE(SUM(CASE WHEN event_name = 'update_success' THEN 1 ELSE 0 END), 0) AS updateSuccess, COALESCE(SUM(CASE WHEN event_name = 'update_failed' THEN 1 ELSE 0 END), 0) AS updateFailures FROM client_events WHERE created_at >= ? AND created_at < ?`, [period.startAt, period.endAt]),
+    db.get(`SELECT COALESCE(SUM(CASE WHEN event_name = 'app_open' THEN 1 ELSE 0 END), 0) AS appOpens, COALESCE(SUM(CASE WHEN event_name = 'task_start' THEN 1 ELSE 0 END), 0) AS tasksStarted, COALESCE(SUM(CASE WHEN event_name = 'task_complete' THEN 1 ELSE 0 END), 0) AS tasksCompleted, COALESCE(SUM(CASE WHEN event_name = 'task_failed' THEN 1 ELSE 0 END), 0) AS tasksFailed, COALESCE(SUM(CASE WHEN event_name = 'task_cancelled' THEN 1 ELSE 0 END), 0) AS tasksCancelled, COALESCE(SUM(CASE WHEN event_name = 'export_complete' THEN 1 ELSE 0 END), 0) AS exportsCompleted, COALESCE(SUM(CASE WHEN event_name = 'update_success' THEN 1 ELSE 0 END), 0) AS updateSuccess, COALESCE(SUM(CASE WHEN event_name = 'update_failed' THEN 1 ELSE 0 END), 0) AS updateFailures, COALESCE(SUM(CASE WHEN event_name IN ('task_complete', 'task_failed', 'task_cancelled') AND success_count IS NOT NULL AND error_count IS NOT NULL THEN success_count ELSE 0 END), 0) AS terminalSuccessCount, COALESCE(SUM(CASE WHEN event_name IN ('task_complete', 'task_failed', 'task_cancelled') AND success_count IS NOT NULL AND error_count IS NOT NULL THEN error_count ELSE 0 END), 0) AS terminalErrorCount FROM client_events WHERE created_at >= ? AND created_at < ?`, [period.startAt, period.endAt]),
     db.all("SELECT COALESCE(NULLIF(module, ''), 'other') AS module, COUNT(*) AS events, COUNT(DISTINCT user_id) AS users FROM client_events WHERE event_name IN ('task_start', 'task_complete', 'task_failed', 'task_cancelled') AND created_at >= ? AND created_at < ? GROUP BY module ORDER BY events DESC", [period.startAt, period.endAt]),
     db.all("SELECT COALESCE(NULLIF(app_version, ''), 'unknown') AS appVersion, COUNT(*) AS events, COUNT(DISTINCT user_id) AS users FROM client_events WHERE event_name IN ('task_start', 'task_complete', 'task_failed', 'task_cancelled') AND created_at >= ? AND created_at < ? GROUP BY appVersion ORDER BY users DESC, events DESC", [period.startAt, period.endAt]),
   ]);
-  const completed = lifecycleReadable ? number(events.tasksCompleted) : null; const failed = lifecycleReadable ? number(events.tasksFailed) : null; const cancelled = lifecycleReadable ? number(events.tasksCancelled) : null; const terminal = completed === null ? 0 : completed + failed + cancelled;
+  const completed = lifecycleReadable ? number(events.tasksCompleted) : null; const failed = lifecycleReadable ? number(events.tasksFailed) : null; const cancelled = lifecycleReadable ? number(events.tasksCancelled) : null; const terminal = completed === null ? 0 : completed + failed + cancelled; const itemSuccess = lifecycleReadable ? number(events.terminalSuccessCount) : null; const itemError = lifecycleReadable ? number(events.terminalErrorCount) : null; const itemTerminal = itemSuccess === null ? 0 : itemSuccess + itemError;
   return {
     available: capabilities.taskLifecycle.available, coverageStartAt: capabilities.taskLifecycle.coverageStartAt, capabilities,
     appOpens: appOpenReadable ? number(events.appOpens) : null, tasksStarted: lifecycleReadable ? number(events.tasksStarted) : null, tasksCompleted: completed, tasksFailed: failed, tasksCancelled: cancelled, exportsCompleted: exportReadable ? number(events.exportsCompleted) : null, updateSuccess: updateReadable ? number(events.updateSuccess) : null, updateFailures: updateReadable ? number(events.updateFailures) : null,
-    taskSuccessRate: terminal > 0 ? Number(((completed / terminal) * 100).toFixed(1)) : null, taskFailureRate: terminal > 0 ? Number(((failed / terminal) * 100).toFixed(1)) : null,
+    // Completion means the task lifecycle reached completed; it is intentionally distinct from item-level success.
+    taskCompletionRate: terminal > 0 ? Number(((completed / terminal) * 100).toFixed(1)) : null, taskSuccessRate: terminal > 0 ? Number(((completed / terminal) * 100).toFixed(1)) : null, taskFailureRate: terminal > 0 ? Number(((failed / terminal) * 100).toFixed(1)) : null,
+    itemSuccessRate: itemTerminal > 0 ? Number(((itemSuccess / itemTerminal) * 100).toFixed(1)) : null,
     byModule: lifecycleReadable ? byModule.map((row) => ({ module: row.module, events: number(row.events), users: number(row.users) })) : null, byAppVersion: lifecycleReadable ? byAppVersion.map((row) => ({ appVersion: row.appVersion, events: number(row.events), users: number(row.users) })) : null,
   };
 }
@@ -479,9 +484,12 @@ async function querySystemAnalytics(db, period, now = new Date()) {
     period,
     analyticsCoverage: { available: events.available, coverageStartAt: events.coverageStartAt, capabilities: events.capabilities },
     appVersions: events.byAppVersion,
+    appOpens: events.appOpens,
     taskFailures: events.tasksFailed,
     taskCancellations: events.tasksCancelled,
+    taskCompletionRate: events.taskCompletionRate,
     taskSuccessRate: events.taskSuccessRate,
+    itemSuccessRate: events.itemSuccessRate,
     updateSuccess: events.updateSuccess,
     updateFailures: events.updateFailures,
     payment: Object.fromEntries(Object.entries(payment).map(([key, value]) => [key, number(value)])),
@@ -495,13 +503,13 @@ async function queryUserAnalyticsDetail(db, userId) {
     db.get(`SELECT MAX(created_at) AS lastEffectiveUse, ${taskCountSql()} AS effectiveTasks, COALESCE(SUM(count), 0) AS collectedItems, COALESCE(SUM(count), 0) AS consumedPoints FROM consume_records WHERE user_id = ?`, [userId]),
     db.get(`SELECT COUNT(DISTINCT ${daySql("created_at")}) AS count FROM consume_records WHERE user_id = ? AND created_at >= ?`, [userId, addDays(dayStart(), -29).toISOString()]),
     db.get("SELECT COALESCE(SUM(amount_cents), 0) AS revenueCents, COUNT(*) AS count, MIN(credited_at) AS firstRechargeAt, MAX(credited_at) AS lastRechargeAt FROM recharge_orders WHERE user_id = ? AND status = ? AND credited_at IS NOT NULL", [userId, CREDITED_STATUS]),
-    db.get("SELECT plugin_id AS pluginId, task_type AS taskType, COALESCE(SUM(count), 0) AS items FROM consume_records WHERE user_id = ? GROUP BY plugin_id, task_type ORDER BY items DESC LIMIT 1", [userId]),
+    db.get(`SELECT CASE WHEN LOWER(COALESCE(plugin_id, '')) = 'pgy' AND LOWER(COALESCE(task_type, '')) = 'blogger' THEN 'pgy-blogger' WHEN LOWER(COALESCE(plugin_id, '')) = 'pgy' AND LOWER(COALESCE(task_type, '')) IN ('blog', 'note') THEN 'pgy-note' WHEN LOWER(COALESCE(plugin_id, '')) = 'starmap' AND LOWER(COALESCE(task_type, '')) = 'blogger' THEN 'starmap-blogger' WHEN LOWER(COALESCE(plugin_id, '')) = 'pgy-kol' THEN 'pgy-kol' ELSE 'other:' || LOWER(COALESCE(NULLIF(plugin_id, ''), 'unknown')) || ':' || LOWER(COALESCE(NULLIF(task_type, ''), 'unknown')) END AS featureKey, CASE WHEN LOWER(COALESCE(plugin_id, '')) = 'pgy' AND LOWER(COALESCE(task_type, '')) = 'blogger' THEN '蒲公英博主采集' WHEN LOWER(COALESCE(plugin_id, '')) = 'pgy' AND LOWER(COALESCE(task_type, '')) IN ('blog', 'note') THEN '蒲公英笔记采集' WHEN LOWER(COALESCE(plugin_id, '')) = 'starmap' AND LOWER(COALESCE(task_type, '')) = 'blogger' THEN '星图主页采集' WHEN LOWER(COALESCE(plugin_id, '')) = 'pgy-kol' THEN '找博主' ELSE '其他 / ' || LOWER(COALESCE(NULLIF(plugin_id, ''), 'unknown')) || ' · ' || LOWER(COALESCE(NULLIF(task_type, ''), 'unknown')) END AS featureLabel, COALESCE(SUM(count), 0) AS items FROM consume_records WHERE user_id = ? GROUP BY featureKey, featureLabel ORDER BY items DESC LIMIT 1`, [userId]),
     db.all("SELECT task_id AS taskId, plugin_id AS pluginId, task_type AS taskType, detail_type AS inputType, SUM(count) AS items, MIN(created_at) AS startedAt, MAX(created_at) AS finishedAt FROM consume_records WHERE user_id = ? GROUP BY CASE WHEN task_id IS NULL OR TRIM(task_id) = '' THEN 'legacy:' || id ELSE task_id END ORDER BY finishedAt DESC LIMIT 10", [userId]),
     db.all("SELECT order_no AS orderNo, package_id AS packageId, channel, amount_cents AS amountCents, credited_at AS creditedAt FROM recharge_orders WHERE user_id = ? AND status = ? AND credited_at IS NOT NULL ORDER BY credited_at DESC LIMIT 10", [userId, CREDITED_STATUS]),
   ]);
   return {
     user: { ...user, balance: number(user.balance) },
-    usage: { lastEffectiveUse: usage.lastEffectiveUse || null, activeDaysLast30: number(activeDays.count), effectiveTasks: number(usage.effectiveTasks), collectedItems: number(usage.collectedItems), consumedPoints: number(usage.consumedPoints), mostUsedFeature: topFeature ? { ...feature(topFeature.pluginId, topFeature.taskType), items: number(topFeature.items) } : null },
+    usage: { lastEffectiveUse: usage.lastEffectiveUse || null, activeDaysLast30: number(activeDays.count), effectiveTasks: number(usage.effectiveTasks), collectedItems: number(usage.collectedItems), consumedPoints: number(usage.consumedPoints), mostUsedFeature: topFeature ? { key: topFeature.featureKey, label: topFeature.featureLabel, items: number(topFeature.items) } : null },
     recharge: { totalYuan: yuan(recharge.revenueCents), count: number(recharge.count), firstRechargeAt: recharge.firstRechargeAt || null, lastRechargeAt: recharge.lastRechargeAt || null },
     recentTasks: recentTasks.map((row) => ({ ...row, items: number(row.items), feature: feature(row.pluginId, row.taskType) })),
     recentRecharge: recentRecharge.map((row) => ({ ...row, amountYuan: yuan(row.amountCents) })),
