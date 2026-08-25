@@ -16592,9 +16592,11 @@ const W = {
     return { list: [], take: null, totalCount: null };
   }
   // ===== 内部：发请求 =====
-  reportAnalyticsEvent(eventName, fields = {}) {
+  reportAnalyticsEvent(eventName, fields = {}, options = {}) {
     if (!this.isAuthenticated() || !this.baseUrl || !this.token) return;
-    const eventId = "evt_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 12);
+    const suppliedEventId = typeof options?.eventId === "string" ? options.eventId.trim() : "";
+    // Keep the existing random fallback for all callers while accepting only the API-safe deterministic lifecycle id form.
+    const eventId = /^[A-Za-z0-9:_-]{8,128}$/.test(suppliedEventId) ? suppliedEventId : "evt_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 12);
     // App version is assigned only here so callers cannot accidentally emit unknown/stale versions.
     const event = { ...fields, eventId, eventName, platform: process.platform, appVersion: ye.getVersion() };
     // Best effort only: telemetry is never awaited by collection, payment, export, auth or update work.

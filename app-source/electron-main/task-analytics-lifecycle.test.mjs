@@ -6,38 +6,56 @@ function task(overrides = {}) {
   return { taskId: "task-lifecycle-1", pluginId: "pgy", taskType: "blogger", inputType: "xlsx", total: 5, ...overrides };
 }
 
-test("ordinary task lifecycle emits one start and uses persisted partial terminal counts", () => {
-  const events = [];
-  const lifecycle = createTaskAnalyticsLifecycleReporter((eventName, fields) => events.push({ eventName, fields }));
-  lifecycle.start(task());
-  lifecycle.start(task());
-  lifecycle.start(task({ resume: true }));
-  lifecycle.terminal(task(), { status: "completed", total: 5, successCount: 3, failedCount: 2 });
+function reporter(events) {
+  return createTaskAnalyticsLifecycleReporter((eventName, fields, options) => events.push({ eventName, fields, options }));
+}
+
+test("ordinary task start/retry/completed emits exactly one deterministic start and terminal", () => {
+  const events = []; const lifecycle = reporter(events);
+  lifecycle.start(task()); lifecycle.start(task()); lifecycle.terminal(task(), { status: "completed", total: 5, successCount: 3, failedCount: 2 }); lifecycle.terminal(task(), { status: "completed", total: 5, successCount: 3, failedCount: 2 });
   assert.deepEqual(events.map((event) => event.eventName), ["task_start", "task_complete"]);
+  assert.equal(events[0].options.eventId, "task-start:task-lifecycle-1");
+  assert.equal(events[1].options.eventId, "task-terminal:task-lifecycle-1");
   assert.deepEqual(events[1].fields, { module: "pgy", pluginId: "pgy", taskType: "blogger", taskId: "task-lifecycle-1", inputType: "xlsx", itemCount: 5, successCount: 3, errorCount: 2 });
 });
 
-test("ordinary task lifecycle does not infer completion from final item and distinguishes failure/cancel", () => {
-  const failed = [];
-  const failedLifecycle = createTaskAnalyticsLifecycleReporter((name, fields) => failed.push({ name, fields }));
-  failedLifecycle.start(task({ taskId: "task-failed" }));
-  failedLifecycle.terminal(task({ taskId: "task-failed" }), { status: "interrupted", total: 4, successCount: 1, failedCount: 1 });
-  failedLifecycle.terminal(task({ taskId: "task-failed" }), { status: "completed", total: 4, successCount: 4, failedCount: 0 });
-  assert.deepEqual(failed.map((event) => event.name), ["task_start", "task_failed"]);
-  assert.equal(failed[1].fields.errorCode, "INTERRUPTED");
-
-  const cancelled = [];
-  const cancelledLifecycle = createTaskAnalyticsLifecycleReporter((name) => cancelled.push(name));
-  cancelledLifecycle.start(task({ taskId: "task-cancelled" }));
-  cancelledLifecycle.terminal(task({ taskId: "task-cancelled" }), { status: "cancelled", total: 4, successCount: 2, failedCount: 1 });
-  assert.deepEqual(cancelled, ["task_start", "task_cancelled"]);
+test("first successful admission may be a resume and must still emit task_start", () => {
+  const events = []; const lifecycle = reporter(events);
+  lifecycle.start(task({ taskId: "admission-later", resume: true }));
+  assert.deepEqual(events.map((event) => event.eventName), ["task_start"]);
+  assert.equal(events[0].options.eventId, "task-start:admission-later");
 });
 
-test("ordinary task lifecycle leaves paused and auth-expired without false terminal analytics", () => {
-  const events = [];
-  const lifecycle = createTaskAnalyticsLifecycleReporter((name) => events.push(name));
-  lifecycle.start(task({ taskId: "task-paused" }));
-  assert.equal(lifecycle.terminal(task({ taskId: "task-paused" }), { status: "paused", total: 1, successCount: 0, failedCount: 0 }), false);
-  assert.equal(lifecycle.terminal(task({ taskId: "task-paused" }), { status: "auth_expired", total: 1, successCount: 0, failedCount: 0 }), false);
-  assert.deepEqual(events, ["task_start"]);
+test("paused and auth-expired are recoverable and later completion keeps one start and one complete", () => {
+  for (const status of ["paused", "auth_expired"]) {
+    const events = []; const lifecycle = reporter(events); const item = task({ taskId: `recover-${status}` });
+    lifecycle.start(item); assert.equal(lifecycle.terminal(item, { status, total: 5, successCount: 1, failedCount: 0 }), false);
+    lifecycle.start({ ...item, resume: true }); lifecycle.terminal(item, { status: "completed", total: 5, successCount: 5, failedCount: 0 });
+    assert.deepEqual(events.map((event) => event.eventName), ["task_start", "task_complete"]);
+  }
+});
+
+test("interrupted is recoverable and never creates task_failed before a later complete", () => {
+  const events = []; const lifecycle = reporter(events); const item = task({ taskId: "recover-interrupted" });
+  lifecycle.start(item); assert.equal(lifecycle.terminal(item, { status: "interrupted", total: 5, successCount: 1, failedCount: 1 }), false);
+  lifecycle.start({ ...item, resume: true }); lifecycle.terminal(item, { status: "completed", total: 5, successCount: 4, failedCount: 1 });
+  assert.deepEqual(events.map((event) => event.eventName), ["task_start", "task_complete"]);
+});
+
+test("unrecovered interrupted remains non-terminal and a real failed state is terminal", () => {
+  const interrupted = []; const interruptedLifecycle = reporter(interrupted); const interruptedTask = task({ taskId: "stays-interrupted" });
+  interruptedLifecycle.start(interruptedTask); interruptedLifecycle.terminal(interruptedTask, { status: "interrupted", total: 1, successCount: 0, failedCount: 1 });
+  assert.deepEqual(interrupted.map((event) => event.eventName), ["task_start"]);
+
+  const failed = []; const failedLifecycle = reporter(failed); const failedTask = task({ taskId: "actually-failed" });
+  failedLifecycle.start(failedTask); failedLifecycle.terminal(failedTask, { status: "failed", total: 1, successCount: 0, failedCount: 1 });
+  assert.deepEqual(failed.map((event) => event.eventName), ["task_start", "task_failed"]);
+  assert.equal(failed[1].options.eventId, "task-terminal:actually-failed");
+});
+
+test("stable start event id is identical after simulated process restart", () => {
+  const first = []; reporter(first).start(task({ taskId: "restart-safe" }));
+  const second = []; reporter(second).start(task({ taskId: "restart-safe", resume: true }));
+  assert.equal(first[0].options.eventId, "task-start:restart-safe");
+  assert.equal(second[0].options.eventId, first[0].options.eventId);
 });
