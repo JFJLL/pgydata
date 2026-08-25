@@ -114,6 +114,7 @@ export function createPgyKolService({
   exporter,
   taskBudgets,
   logger = {},
+  analytics,
   detail,
   detailPollIntervalMs = 2000,
 } = {}) {
@@ -121,6 +122,8 @@ export function createPgyKolService({
     throw new Error("[pgy-kol] transport 必填");
   }
   const request = new PgySessionRequest({ transport, getHeaders, sign, logger });
+  // Analytics is an optional best-effort callback; it never controls a task state.
+  const reportAnalytics = (eventName, fields = {}) => { try { if (typeof analytics === "function") analytics({ eventName, module: "pgy-kol", ...fields }); } catch {} };
   const lkgStore = baseDir ? createJsonLkgStore({ baseDir }) : null;
   const schema = new PgyFilterSchema({ request, lkgStore });
   const builder = new PgyPayloadBuilder({ schema });
@@ -443,10 +446,15 @@ export function createPgyKolService({
     if (detailMode === true && finalColumns.length > 0 && detail && typeof detail.create === "function") {
       detailTaskId = await createSearchBatchDetail(checkpointTaskId, finalColumns);
     }
+    reportAnalytics("task_start", { taskId: checkpointTaskId, itemCount: Number.isInteger(maxCount) && maxCount > 0 ? maxCount : null });
     const loop = ensureBatchRunner().start(checkpointTaskId);
     if (loop !== undefined && loop !== null && typeof loop.then === "function") {
       loop
-        .then(() => settleSearchBatchAfterDiscovery(checkpointTaskId))
+        .then(async () => {
+          await settleSearchBatchAfterDiscovery(checkpointTaskId);
+          const finished = await taskStore.getTask(checkpointTaskId).catch(() => null);
+          reportAnalytics("task_complete", { taskId: checkpointTaskId, itemCount: Number(finished?.counts?.total || 0), successCount: Number(finished?.counts?.success || 0), errorCount: Number(finished?.counts?.failed || 0) });
+        })
         .catch((err) => {
           logger.error &&
             logger.error(
@@ -456,6 +464,7 @@ export function createPgyKolService({
               ),
             );
           taskStore.setStatus(checkpointTaskId, "failed").catch(() => {});
+          reportAnalytics("task_failed", { taskId: checkpointTaskId, errorCode: "SEARCH_BATCH_FAILED" });
         });
     }
     // 快速列表导出时，对外 ID 即 checkpoint ID，因此进度、完成事件、暂停/取消和
@@ -1411,6 +1420,7 @@ export function createPgyKolService({
     if (!task) {
       throw new Error("任务不存在");
     }
+    reportAnalytics("task_cancelled", { taskId });
     // 两阶段任务：取消作用于当前阶段。发现阶段：停止发现循环并直接收口详情任务；
     // 详情阶段：取消详情任务。
     if (task.detailTaskId) {
@@ -1552,8 +1562,11 @@ export function createPgyKolService({
       }
       const payload = buildCollectionHistoryExportPayload(detailTask, rows);
       if (typeof exporter === "function") {
-        return exporter(payload);
+        const output = await exporter(payload);
+        reportAnalytics("export_complete", { taskId, itemCount: rows.length, successCount: rows.length });
+        return output;
       }
+      reportAnalytics("export_complete", { taskId, itemCount: rows.length, successCount: rows.length });
       return payload;
     }
     const rows = await taskStore.getRows(taskId);
@@ -1571,8 +1584,11 @@ export function createPgyKolService({
       : Object.assign({}, task, { columns: task.fields });
     const payload = buildPgyKolBatchExportPayload(exportTask, sourceRows);
     if (typeof exporter === "function") {
-      return exporter(payload);
+      const output = await exporter(payload);
+      reportAnalytics("export_complete", { taskId, itemCount: sourceRows.length, successCount: sourceRows.length });
+      return output;
     }
+    reportAnalytics("export_complete", { taskId, itemCount: sourceRows.length, successCount: sourceRows.length });
     return payload;
   }
 

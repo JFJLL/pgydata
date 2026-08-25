@@ -23515,6 +23515,7 @@ function vf(a) {
       baseDir: Oe(ye.getPath("userData"), "pgy-kol-schema"),
       taskBaseDir: Oe(ye.getPath("userData"), "pgy-kol-tasks"),
       exporter: (payload) => ff(payload),
+      analytics: (event) => { try { Le.get().reportAnalyticsEvent(event.eventName, event); } catch {} },
       // 两阶段采集：详情阶段复用现有 pgy/blogger 详情采集器（同一 CollectionHistoryStore
       // 与 ScraperOrchestrator），不复制其请求/字段解析/图表/导出逻辑。
       detail: {
