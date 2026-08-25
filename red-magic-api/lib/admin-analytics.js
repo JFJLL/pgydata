@@ -337,7 +337,8 @@ async function queryOverview(db, period) {
 async function queryRetention(db, period, now) {
   const retention = {};
   for (const [key, days] of [["d1", 1], ["d7", 7], ["d30", 30]]) {
-    const matureThrough = dayKey(addDays(dayStart(now), -days));
+    // A Dn target day must have fully ended; a cohort whose target is today is not mature yet.
+    const matureThrough = dayKey(addDays(dayStart(now), -(days + 1)));
     const row = await db.get(`
       SELECT COUNT(*) AS cohortSize,
              COALESCE(SUM(CASE WHEN EXISTS (
@@ -385,41 +386,59 @@ async function queryUsersAnalytics(db, period, now = new Date()) {
 }
 
 async function queryEventAnalytics(db, period) {
-  const coverage = await db.get("SELECT MIN(created_at) AS coverageStartAt FROM client_events");
-  if (!coverage || !coverage.coverageStartAt) return { available: false, coverageStartAt: null };
+  const capabilityRows = await db.all(`
+    SELECT CASE
+      WHEN event_name IN ('task_start', 'task_complete', 'task_failed', 'task_cancelled') THEN 'taskLifecycle'
+      WHEN event_name = 'export_complete' THEN 'export'
+      WHEN event_name = 'app_open' THEN 'appOpen'
+      WHEN event_name = 'recharge_open' THEN 'rechargeOpen'
+      WHEN event_name IN ('update_success', 'update_failed') THEN 'update'
+    END AS capability, MIN(created_at) AS coverageStartAt
+    FROM client_events GROUP BY capability
+  `);
+  const rowsByCapability = new Map(capabilityRows.filter((row) => row.capability).map((row) => [row.capability, row]));
+  const capability = (name) => {
+    const row = rowsByCapability.get(name);
+    if (!row) return { available: false, coverageStartAt: null, periodStatus: 'unavailable' };
+    const coverageStart = new Date(row.coverageStartAt); const periodStart = new Date(period.startAt); const periodEnd = new Date(period.endAt);
+    const periodStatus = periodEnd <= coverageStart ? 'before' : periodStart < coverageStart ? 'partial' : 'covered';
+    return { available: true, coverageStartAt: row.coverageStartAt, periodStatus };
+  };
+  const capabilities = { taskLifecycle: capability('taskLifecycle'), export: capability('export'), appOpen: capability('appOpen'), rechargeOpen: capability('rechargeOpen'), update: capability('update') };
+  const canRead = (entry) => entry.available && entry.periodStatus !== 'before';
+  const lifecycleReadable = canRead(capabilities.taskLifecycle); const exportReadable = canRead(capabilities.export); const appOpenReadable = canRead(capabilities.appOpen); const updateReadable = canRead(capabilities.update);
+  if (!capabilities.taskLifecycle.available && !capabilities.export.available && !capabilities.appOpen.available && !capabilities.rechargeOpen.available && !capabilities.update.available) {
+    return { available: false, coverageStartAt: null, capabilities, appOpens: null, tasksStarted: null, tasksCompleted: null, tasksFailed: null, tasksCancelled: null, exportsCompleted: null, updateSuccess: null, updateFailures: null, taskSuccessRate: null, taskFailureRate: null, byModule: null, byAppVersion: null };
+  }
   const [events, byModule, byAppVersion] = await Promise.all([
-    db.get(`SELECT
-      COALESCE(SUM(CASE WHEN event_name = 'app_open' THEN 1 ELSE 0 END), 0) AS appOpens,
-      COALESCE(SUM(CASE WHEN event_name = 'task_start' THEN 1 ELSE 0 END), 0) AS tasksStarted,
-      COALESCE(SUM(CASE WHEN event_name = 'task_complete' THEN 1 ELSE 0 END), 0) AS tasksCompleted,
-      COALESCE(SUM(CASE WHEN event_name = 'task_failed' THEN 1 ELSE 0 END), 0) AS tasksFailed,
-      COALESCE(SUM(CASE WHEN event_name = 'task_cancelled' THEN 1 ELSE 0 END), 0) AS tasksCancelled,
-      COALESCE(SUM(CASE WHEN event_name = 'export_complete' THEN 1 ELSE 0 END), 0) AS exportsCompleted
-      FROM client_events WHERE created_at >= ? AND created_at < ?`, [period.startAt, period.endAt]),
-    db.all("SELECT COALESCE(NULLIF(module, ''), 'other') AS module, COUNT(*) AS events, COUNT(DISTINCT user_id) AS users FROM client_events WHERE created_at >= ? AND created_at < ? GROUP BY module ORDER BY events DESC", [period.startAt, period.endAt]),
-    db.all("SELECT COALESCE(NULLIF(app_version, ''), 'unknown') AS appVersion, COUNT(*) AS events, COUNT(DISTINCT user_id) AS users FROM client_events WHERE created_at >= ? AND created_at < ? GROUP BY appVersion ORDER BY users DESC, events DESC", [period.startAt, period.endAt]),
+    db.get(`SELECT COALESCE(SUM(CASE WHEN event_name = 'app_open' THEN 1 ELSE 0 END), 0) AS appOpens, COALESCE(SUM(CASE WHEN event_name = 'task_start' THEN 1 ELSE 0 END), 0) AS tasksStarted, COALESCE(SUM(CASE WHEN event_name = 'task_complete' THEN 1 ELSE 0 END), 0) AS tasksCompleted, COALESCE(SUM(CASE WHEN event_name = 'task_failed' THEN 1 ELSE 0 END), 0) AS tasksFailed, COALESCE(SUM(CASE WHEN event_name = 'task_cancelled' THEN 1 ELSE 0 END), 0) AS tasksCancelled, COALESCE(SUM(CASE WHEN event_name = 'export_complete' THEN 1 ELSE 0 END), 0) AS exportsCompleted, COALESCE(SUM(CASE WHEN event_name = 'update_success' THEN 1 ELSE 0 END), 0) AS updateSuccess, COALESCE(SUM(CASE WHEN event_name = 'update_failed' THEN 1 ELSE 0 END), 0) AS updateFailures FROM client_events WHERE created_at >= ? AND created_at < ?`, [period.startAt, period.endAt]),
+    db.all("SELECT COALESCE(NULLIF(module, ''), 'other') AS module, COUNT(*) AS events, COUNT(DISTINCT user_id) AS users FROM client_events WHERE event_name IN ('task_start', 'task_complete', 'task_failed', 'task_cancelled') AND created_at >= ? AND created_at < ? GROUP BY module ORDER BY events DESC", [period.startAt, period.endAt]),
+    db.all("SELECT COALESCE(NULLIF(app_version, ''), 'unknown') AS appVersion, COUNT(*) AS events, COUNT(DISTINCT user_id) AS users FROM client_events WHERE event_name IN ('task_start', 'task_complete', 'task_failed', 'task_cancelled') AND created_at >= ? AND created_at < ? GROUP BY appVersion ORDER BY users DESC, events DESC", [period.startAt, period.endAt]),
   ]);
-  const completed = number(events.tasksCompleted);
-  const failed = number(events.tasksFailed);
-  const cancelled = number(events.tasksCancelled);
-  const terminal = completed + failed + cancelled;
+  const completed = lifecycleReadable ? number(events.tasksCompleted) : null; const failed = lifecycleReadable ? number(events.tasksFailed) : null; const cancelled = lifecycleReadable ? number(events.tasksCancelled) : null; const terminal = completed === null ? 0 : completed + failed + cancelled;
   return {
-    available: true,
-    coverageStartAt: coverage.coverageStartAt,
-    appOpens: number(events.appOpens), tasksStarted: number(events.tasksStarted), tasksCompleted: completed,
-    tasksFailed: failed, tasksCancelled: cancelled, exportsCompleted: number(events.exportsCompleted),
-    taskSuccessRate: terminal > 0 ? Number(((completed / terminal) * 100).toFixed(1)) : null,
-    taskFailureRate: terminal > 0 ? Number(((failed / terminal) * 100).toFixed(1)) : null,
-    byModule: byModule.map((row) => ({ module: row.module, events: number(row.events), users: number(row.users) })),
-    byAppVersion: byAppVersion.map((row) => ({ appVersion: row.appVersion, events: number(row.events), users: number(row.users) })),
+    available: capabilities.taskLifecycle.available, coverageStartAt: capabilities.taskLifecycle.coverageStartAt, capabilities,
+    appOpens: appOpenReadable ? number(events.appOpens) : null, tasksStarted: lifecycleReadable ? number(events.tasksStarted) : null, tasksCompleted: completed, tasksFailed: failed, tasksCancelled: cancelled, exportsCompleted: exportReadable ? number(events.exportsCompleted) : null, updateSuccess: updateReadable ? number(events.updateSuccess) : null, updateFailures: updateReadable ? number(events.updateFailures) : null,
+    taskSuccessRate: terminal > 0 ? Number(((completed / terminal) * 100).toFixed(1)) : null, taskFailureRate: terminal > 0 ? Number(((failed / terminal) * 100).toFixed(1)) : null,
+    byModule: lifecycleReadable ? byModule.map((row) => ({ module: row.module, events: number(row.events), users: number(row.users) })) : null, byAppVersion: lifecycleReadable ? byAppVersion.map((row) => ({ appVersion: row.appVersion, events: number(row.events), users: number(row.users) })) : null,
   };
 }
-
 async function queryUsageAnalytics(db, period) {
   const [summary, grouped, inputTypes, trend, eventAnalytics] = await Promise.all([
     usageSummary(db, period.startAt, period.endAt),
-    db.all(`SELECT plugin_id AS pluginId, task_type AS taskType, COUNT(DISTINCT user_id) AS users, ${taskCountSql()} AS tasks, COALESCE(SUM(count), 0) AS items, COALESCE(SUM(count), 0) AS points FROM consume_records WHERE created_at >= ? AND created_at < ? GROUP BY plugin_id, task_type`, [period.startAt, period.endAt]),
-    db.all(`SELECT COALESCE(NULLIF(detail_type, ''), 'unknown') AS inputType, COUNT(DISTINCT user_id) AS users, ${taskCountSql()} AS tasks, COALESCE(SUM(count), 0) AS items FROM consume_records WHERE created_at >= ? AND created_at < ? GROUP BY inputType`, [period.startAt, period.endAt]),
+    db.all(`SELECT
+      CASE WHEN LOWER(COALESCE(plugin_id, '')) = 'pgy' AND LOWER(COALESCE(task_type, '')) = 'blogger' THEN 'pgy-blogger'
+           WHEN LOWER(COALESCE(plugin_id, '')) = 'pgy' AND LOWER(COALESCE(task_type, '')) IN ('blog', 'note') THEN 'pgy-note'
+           WHEN LOWER(COALESCE(plugin_id, '')) = 'starmap' AND LOWER(COALESCE(task_type, '')) = 'blogger' THEN 'starmap-blogger'
+           WHEN LOWER(COALESCE(plugin_id, '')) = 'pgy-kol' THEN 'pgy-kol'
+           ELSE 'other:' || LOWER(COALESCE(NULLIF(plugin_id, ''), 'unknown')) || ':' || LOWER(COALESCE(NULLIF(task_type, ''), 'unknown')) END AS featureKey,
+      CASE WHEN LOWER(COALESCE(plugin_id, '')) = 'pgy' AND LOWER(COALESCE(task_type, '')) = 'blogger' THEN '蒲公英博主采集'
+           WHEN LOWER(COALESCE(plugin_id, '')) = 'pgy' AND LOWER(COALESCE(task_type, '')) IN ('blog', 'note') THEN '蒲公英笔记采集'
+           WHEN LOWER(COALESCE(plugin_id, '')) = 'starmap' AND LOWER(COALESCE(task_type, '')) = 'blogger' THEN '星图主页采集'
+           WHEN LOWER(COALESCE(plugin_id, '')) = 'pgy-kol' THEN '找博主'
+           ELSE '其他 / ' || LOWER(COALESCE(NULLIF(plugin_id, ''), 'unknown')) || ' · ' || LOWER(COALESCE(NULLIF(task_type, ''), 'unknown')) END AS featureLabel,
+      COUNT(DISTINCT user_id) AS users, ${taskCountSql()} AS tasks, COALESCE(SUM(count), 0) AS items, COALESCE(SUM(count), 0) AS points
+      FROM consume_records WHERE created_at >= ? AND created_at < ? GROUP BY featureKey, featureLabel`, [period.startAt, period.endAt]),    db.all(`SELECT COALESCE(NULLIF(detail_type, ''), 'unknown') AS inputType, COUNT(DISTINCT user_id) AS users, ${taskCountSql()} AS tasks, COALESCE(SUM(count), 0) AS items FROM consume_records WHERE created_at >= ? AND created_at < ? GROUP BY inputType`, [period.startAt, period.endAt]),
     usageTrend(db, period),
     queryEventAnalytics(db, period),
   ]);
@@ -429,9 +448,10 @@ async function queryUsageAnalytics(db, period) {
     coreCollection: {
       effectiveUsers: number(summary.effectiveUsers), effectiveTasks: number(summary.effectiveTasks), collectedItems, consumedPoints: number(summary.consumedPoints),
       avgItemsPerTask: number(summary.effectiveTasks) > 0 ? Number((collectedItems / number(summary.effectiveTasks)).toFixed(2)) : null,
+      // SQL groups at canonical feature grain, so pgy:blog / pgy:note are one row and users stay distinct.
       byFeature: grouped.map((row) => {
-        const mapped = feature(row.pluginId, row.taskType); const items = number(row.items); const tasks = number(row.tasks);
-        return { featureKey: mapped.key, featureLabel: mapped.label, users: number(row.users), tasks, items, points: number(row.points), share: collectedItems > 0 ? Number(((items / collectedItems) * 100).toFixed(1)) : 0, avgItemsPerTask: tasks > 0 ? Number((items / tasks).toFixed(2)) : null };
+        const items = number(row.items); const tasks = number(row.tasks);
+        return { featureKey: row.featureKey, featureLabel: row.featureLabel, users: number(row.users), tasks, items, points: number(row.points), share: collectedItems > 0 ? Number(((items / collectedItems) * 100).toFixed(1)) : 0, avgItemsPerTask: tasks > 0 ? Number((items / tasks).toFixed(2)) : null };
       }).sort((left, right) => right.items - left.items),
       byInputType: inputTypes.map((row) => ({ inputType: row.inputType, users: number(row.users), tasks: number(row.tasks), items: number(row.items) })),
       trend,
@@ -457,13 +477,13 @@ async function querySystemAnalytics(db, period, now = new Date()) {
   ]);
   return {
     period,
-    analyticsCoverage: { available: events.available, coverageStartAt: events.coverageStartAt },
-    appVersions: events.available ? events.byAppVersion : null,
-    taskFailures: events.available ? events.tasksFailed : null,
-    taskCancellations: events.available ? events.tasksCancelled : null,
-    taskSuccessRate: events.available ? events.taskSuccessRate : null,
-    updateSuccess: events.available ? await countEvent(db, "update_success", period) : null,
-    updateFailures: events.available ? await countEvent(db, "update_failed", period) : null,
+    analyticsCoverage: { available: events.available, coverageStartAt: events.coverageStartAt, capabilities: events.capabilities },
+    appVersions: events.byAppVersion,
+    taskFailures: events.tasksFailed,
+    taskCancellations: events.tasksCancelled,
+    taskSuccessRate: events.taskSuccessRate,
+    updateSuccess: events.updateSuccess,
+    updateFailures: events.updateFailures,
     payment: Object.fromEntries(Object.entries(payment).map(([key, value]) => [key, number(value)])),
   };
 }

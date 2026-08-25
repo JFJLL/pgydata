@@ -124,6 +124,12 @@ export function createPgyKolService({
   const request = new PgySessionRequest({ transport, getHeaders, sign, logger });
   // Analytics is an optional best-effort callback; it never controls a task state.
   const reportAnalytics = (eventName, fields = {}) => { try { if (typeof analytics === "function") analytics({ eventName, module: "pgy-kol", ...fields }); } catch {} };
+  const terminalAnalyticsTasks = new Set();
+  const reportTerminalAnalytics = (eventName, taskId, fields = {}) => {
+    if (!taskId || terminalAnalyticsTasks.has(taskId)) return;
+    terminalAnalyticsTasks.add(taskId);
+    reportAnalytics(eventName, { taskId, ...fields });
+  };
   const lkgStore = baseDir ? createJsonLkgStore({ baseDir }) : null;
   const schema = new PgyFilterSchema({ request, lkgStore });
   const builder = new PgyPayloadBuilder({ schema });
@@ -453,7 +459,23 @@ export function createPgyKolService({
         .then(async () => {
           await settleSearchBatchAfterDiscovery(checkpointTaskId);
           const finished = await taskStore.getTask(checkpointTaskId).catch(() => null);
-          reportAnalytics("task_complete", { taskId: checkpointTaskId, itemCount: Number(finished?.counts?.total || 0), successCount: Number(finished?.counts?.success || 0), errorCount: Number(finished?.counts?.failed || 0) });
+          if (!finished) return;
+          // Fast-list counts are raw/unique/dup/missingUid; unique is the only defensible successful-result metric.
+          if (finished.status === "completed") {
+            reportTerminalAnalytics("task_complete", checkpointTaskId, {
+              itemCount: Number(finished.counts?.unique || 0),
+              successCount: Number(finished.counts?.unique || 0),
+              errorCount: null,
+            });
+          } else if (finished.status === "cancelled") {
+            reportTerminalAnalytics("task_cancelled", checkpointTaskId, {
+              itemCount: Number(finished.counts?.unique || 0),
+              successCount: Number(finished.counts?.unique || 0),
+              errorCount: null,
+            });
+          } else if (finished.status === "failed") {
+            reportTerminalAnalytics("task_failed", checkpointTaskId, { errorCode: "SEARCH_BATCH_FAILED" });
+          }
         })
         .catch((err) => {
           logger.error &&
@@ -464,7 +486,7 @@ export function createPgyKolService({
               ),
             );
           taskStore.setStatus(checkpointTaskId, "failed").catch(() => {});
-          reportAnalytics("task_failed", { taskId: checkpointTaskId, errorCode: "SEARCH_BATCH_FAILED" });
+          reportTerminalAnalytics("task_failed", checkpointTaskId, { errorCode: "SEARCH_BATCH_FAILED" });
         });
     }
     // 快速列表导出时，对外 ID 即 checkpoint ID，因此进度、完成事件、暂停/取消和
@@ -872,6 +894,22 @@ export function createPgyKolService({
     const parentStatus = statusMap[detailTask.status] || "failed";
     await taskStore.setStatus(taskId, parentStatus).catch(() => {});
     const parent = await taskStore.getTask(taskId).catch(() => null);
+    // Detail mode uses CollectionHistoryStore's real detail task counts; never mix them with fast-list counts.
+    if (parentStatus === "completed") {
+      reportTerminalAnalytics("task_complete", taskId, {
+        itemCount: Number(detailTask.total || 0),
+        successCount: Number(detailTask.successCount || 0),
+        errorCount: Number(detailTask.failedCount || 0),
+      });
+    } else if (parentStatus === "cancelled") {
+      reportTerminalAnalytics("task_cancelled", taskId, {
+        itemCount: Number(detailTask.total || 0),
+        successCount: Number(detailTask.successCount || 0),
+        errorCount: Number(detailTask.failedCount || 0),
+      });
+    } else if (parentStatus === "failed") {
+      reportTerminalAnalytics("task_failed", taskId, { errorCode: "DETAIL_TASK_FAILED" });
+    }
     emitBatchEvent({
       taskId,
       type: "done",
@@ -1420,7 +1458,6 @@ export function createPgyKolService({
     if (!task) {
       throw new Error("任务不存在");
     }
-    reportAnalytics("task_cancelled", { taskId });
     // 两阶段任务：取消作用于当前阶段。发现阶段：停止发现循环并直接收口详情任务；
     // 详情阶段：取消详情任务。
     if (task.detailTaskId) {

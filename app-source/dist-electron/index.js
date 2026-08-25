@@ -3,6 +3,7 @@ var wr = (a, e, t) => e in a ? br(a, e, { enumerable: !0, configurable: !0, writ
 var w = (a, e, t) => wr(a, typeof e != "symbol" ? e + "" : e, t);
 import { ipcMain as F, BrowserWindow as Dt, app as ye, screen as Gi, shell as Ji, dialog as Ki, net as Jt, Notification as Et, session as Pn, nativeImage as PgyNativeImage } from "electron";
 import { CollectionHistoryStore, isCollectionTaskExportReady } from "../electron-main/collection-history-store.mjs";
+import { createTaskAnalyticsLifecycleReporter } from "../electron-main/task-analytics-lifecycle.mjs";
 import { buildCollectionHistoryExportPayload } from "../electron-main/collection-export-headers.mjs";
 import { createPgyKolService, registerPgyKolIpc } from "../pgy-kol/pgy-kol-service.mjs";
 import { redactLocalPathText as pgyRedactLocalPath } from "../pgy-kol/pgy-session-request.mjs";
@@ -29,6 +30,7 @@ try {
 } catch {
 }
 const pgyCollectionHistory = new CollectionHistoryStore({ baseDir: Oe(pgyUserDataDir, "collection-history"), retentionDays: 90 });
+const pgyTaskAnalytics = createTaskAnalyticsLifecycleReporter((eventName, fields) => { try { Le.get().reportAnalyticsEvent(eventName, fields); } catch {} });
 import Dr from "os";
 import et, { brotliDecompressSync as Lr, gunzipSync as Nr } from "zlib";
 import { EventEmitter as Or } from "events";
@@ -16481,7 +16483,6 @@ const W = {
       itemIndex: o + 1,
       url: s
     };
-    if (o === 0) this.reportAnalyticsEvent("task_start", { module: e.pluginId || "collection", pluginId: e.pluginId, taskType: e.taskType, taskId: e.taskId, inputType: e.inputType, itemCount: Number(e.totalRows || e.urls?.length || 0) });
     const i = await this.request("POST", "/api/shumiao/consume", {
       count: 1,
       taskId: e.taskId,
@@ -16489,7 +16490,6 @@ const W = {
       remark: `采集成功扣减 1 积分`,
       detail: r
     });
-    if (o + 1 >= Number(e.totalRows || e.urls?.length || 0)) this.reportAnalyticsEvent("task_complete", { module: e.pluginId || "collection", pluginId: e.pluginId, taskType: e.taskType, taskId: e.taskId, inputType: e.inputType, itemCount: Number(e.totalRows || e.urls?.length || 0), successCount: Number(e.totalRows || e.urls?.length || 0) });
     return Number(i.data?.balance ?? 0);
   }
   /**
@@ -16595,9 +16595,12 @@ const W = {
   reportAnalyticsEvent(eventName, fields = {}) {
     if (!this.isAuthenticated() || !this.baseUrl || !this.token) return;
     const eventId = "evt_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 12);
-    const event = { eventId, eventName, platform: process.platform, ...fields };
-    // Best effort only: telemetry is never awaited by collection or payment work.
-    void this.request("POST", "/api/analytics/events", { events: [event] }).catch((error) => Wt.debug("analytics event ignored:", error?.message || error));
+    // App version is assigned only here so callers cannot accidentally emit unknown/stale versions.
+    const event = { ...fields, eventId, eventName, platform: process.platform, appVersion: ye.getVersion() };
+    // Best effort only: telemetry is never awaited by collection, payment, export, auth or update work.
+    void this.request("POST", "/api/analytics/events", { events: [event] }).catch((error) => {
+      Wt.debug("analytics event ignored:", error?.message || error);
+    });
   }
   async request(e, t, n) {
     if (!this.baseUrl)
@@ -16954,6 +16957,8 @@ class Xd {
       }
       return;
     }
+    // Start is emitted after the task is admitted, never from a single successful charge; resume stays the same lifecycle.
+    pgyTaskAnalytics.start({ taskId: t, pluginId: n, taskType: s, inputType: l.inputType, total: l.total, resume: e.resume === true });
     const p = `scrape-${t}`, d = this.scrapeWindowManager.createWindow(p, {
       url: u.baseUrl,
       show: !1,
@@ -17124,6 +17129,9 @@ class Xd {
     this.scrapeWindowManager.closeWindow(p);
     const pgyFinalStatus = l.cancelled ? "cancelled" : pgyAuthExpired ? "auth_expired" : pgyInterrupted ? "interrupted" : "completed";
     await pgyCollectionHistory.setStatus(t, pgyFinalStatus);
+    const pgyFinalTask = await pgyCollectionHistory.getTask(t).catch(() => null);
+    // Terminal analytics reads CollectionHistoryStore after status persistence; partial success uses its actual counters.
+    pgyTaskAnalytics.terminal({ taskId: t, pluginId: n, taskType: s, inputType: l.inputType, total: l.total }, pgyFinalTask);
     const h = Date.now() - l.startTime;
     ue.info(`[task=${t}] 采集任务结束 plugin=${n} taskType=${s} cancelled=${l.cancelled} success=${l.successCount} error=${l.errorCount} durationMs=${h}`);
     l.cancelled ? this.sendToRenderer(W.task.complete, {
@@ -23459,7 +23467,6 @@ function vf(a) {
     }
   ), F.on(W.task.start, (e, t) => {
     pgyCollectionHistory.createTask(t).then(() => ge.startTask(t)).catch(async (n) => {
-      try { Le.get().reportAnalyticsEvent("task_failed", { module: t.pluginId || "collection", pluginId: t.pluginId, taskType: t.taskType, taskId: t.taskId, inputType: t.inputType, errorCode: "START_FAILED" }); } catch {}
       Qe.error("任务启动失败:", n);
       await pgyCollectionHistory.setStatus(t.taskId, "interrupted").catch(() => {});
     });
@@ -23470,7 +23477,6 @@ function vf(a) {
     ge.resumeTask(t.taskId);
     pgyKolService && pgyKolService.forwardScraperTaskControl && pgyKolService.forwardScraperTaskControl(t.taskId, "resume").catch(() => {});
   }), F.on(W.task.cancel, (e, t) => {
-    try { Le.get().reportAnalyticsEvent("task_cancelled", { module: t.pluginId || "collection", pluginId: t.pluginId, taskType: t.taskType, taskId: t.taskId, inputType: t.inputType }); } catch {}
     ge.cancelTask(t.taskId);
     pgyKolService && pgyKolService.forwardScraperTaskControl && pgyKolService.forwardScraperTaskControl(t.taskId, "cancel").catch(() => {});
   }), F.handle(W.export.toExcel, async (e, t) => ff(t)), F.handle(W.history.list, async () => pgyCollectionHistory.listTasks()), F.handle(W.history.exportTask, async (e, t) => {
