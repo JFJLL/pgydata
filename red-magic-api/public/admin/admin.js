@@ -227,7 +227,16 @@
       e.stopPropagation();
       const isOpen = wrapper.classList.contains("open");
       document.querySelectorAll(".custom-select.open").forEach((el) => el.classList.remove("open"));
-      if (!isOpen) wrapper.classList.add("open");
+      if (!isOpen) {
+        const rect = trigger.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        if (spaceBelow < 170 || wrapper.closest(".pager")) {
+          wrapper.classList.add("drop-up");
+        } else {
+          wrapper.classList.remove("drop-up");
+        }
+        wrapper.classList.add("open");
+      }
     });
 
     selectEl.addEventListener("change", syncOptions);
