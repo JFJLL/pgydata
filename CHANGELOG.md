@@ -2,11 +2,16 @@
 
 本文件保存版本历史、发布记录、安装包路径与校验信息，不放长期维护规则。
 
-## 1.4.1 (Candidate)
+## 1.4.1 (Release)
 
 - 修复：软件头部充值按钮跳转链接由本地调试端口 `http://127.0.0.1:3050/recharge` 修正为正式线上网页充值中心 `https://magiorix.red-magic.cn/recharge`。
 - 新增：左侧主导航栏底部 Logo 图标添加点击事件与手型悬浮样式，点击后在系统默认浏览器中打开官网 `https://magiorix.red-magic.cn`。
 - 升级：桌面端版本、前端资源版本与服务端版本同步升级至 `1.4.1`。
+- 新增：管理后台数据分析中心（`/admin`）视觉与交互重构（响应式单调三次样条趋势图、数据点吸附提示窗、全局自定义下拉菜单、支付漏斗对齐、用户与流水表格最大高度滚动窗口、积分调整弹窗、401 自动退回登录页）。
+- 优化：网页充值中心（`/recharge`）视觉重构（积分置顶大字号展示、原始积分+加赠积分拆解明细、金额下置小字号、移除多余卡片与文案、增加官方 Favicon）。
+- 本地安装包：`desktop-versions/windows/1.4.1/magiorix-desktop-1.4.1-windows.exe`（SHA256：`a8aabf16a870398a711c88a6f81b90d6af6fa2da55f4ff845ae04bbac4cbfa53`）。
+- 本地资源包：`red-magic-api/public/assets/desktop/1.4.1/assets.zip`（SHA256：`06c3ca6b3dddba273a5eaa19c6f8653e7f3527f13683bb08d77e96f2d0835e64`）。
+- 发布状态：已晋升发布（`latest.json` 已更新，服务端接口已就绪，OSS 安装包与资源包校验一致）。
 
 ## 1.3.5 (Candidate)
 
