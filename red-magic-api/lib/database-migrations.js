@@ -1,4 +1,4 @@
-const LATEST_SCHEMA_VERSION = 4;
+const LATEST_SCHEMA_VERSION = 5;
 
 const LEGACY_PACKAGE_IDS = new Set([
   "pkg_990",
@@ -340,6 +340,81 @@ async function applyVersion4(db, clock) {
   `);
 }
 
+
+function analyticsText(value, maxLength = 64) {
+  const text = String(value || "").trim();
+  return text ? text.slice(0, maxLength) : null;
+}
+
+function analyticsNonNegativeInteger(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.min(1000000000, Math.floor(parsed));
+}
+
+/**
+ * v5 keeps historical JSON intact but promotes analytics fields into indexed
+ * columns. Invalid legacy JSON is ignored so migration cannot lose data.
+ */
+async function applyVersion5(db) {
+  for (const [column, definition] of [
+    ["plugin_id", "TEXT"],
+    ["task_type", "TEXT"],
+    ["planned_count", "INTEGER"],
+    ["valid_count", "INTEGER"],
+  ]) {
+    await ensureColumn(db, "consume_records", column, definition);
+  }
+
+  const legacyRows = await db.all(
+    "SELECT id, detail_json AS detailJson FROM consume_records "
+    + "WHERE detail_json IS NOT NULL AND TRIM(detail_json) <> '' "
+    + "AND (plugin_id IS NULL OR task_type IS NULL OR planned_count IS NULL OR valid_count IS NULL)",
+  );
+  for (const row of legacyRows) {
+    let detail;
+    try {
+      detail = JSON.parse(row.detailJson);
+    } catch {
+      continue;
+    }
+    if (!detail || typeof detail !== "object" || Array.isArray(detail)) continue;
+    await db.run(
+      "UPDATE consume_records SET plugin_id = COALESCE(plugin_id, ?), "
+      + "task_type = COALESCE(task_type, ?), planned_count = COALESCE(planned_count, ?), "
+      + "valid_count = COALESCE(valid_count, ?) WHERE id = ?",
+      [
+        analyticsText(detail.pluginId),
+        analyticsText(detail.taskType),
+        analyticsNonNegativeInteger(detail.totalRows),
+        analyticsNonNegativeInteger(detail.validCount),
+        row.id,
+      ],
+    );
+  }
+
+  await db.run(
+    "CREATE TABLE IF NOT EXISTS client_events ("
+    + "id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL, user_id INTEGER NOT NULL, "
+    + "event_name TEXT NOT NULL, session_id TEXT, app_version TEXT, platform TEXT, module TEXT, "
+    + "plugin_id TEXT, task_type TEXT, task_id TEXT, input_type TEXT, item_count INTEGER, "
+    + "success_count INTEGER, error_count INTEGER, duration_ms INTEGER, error_code TEXT, "
+    + "created_at TEXT NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, "
+    + "UNIQUE(user_id, event_id))",
+  );
+
+  await db.run("CREATE INDEX IF NOT EXISTS idx_consume_records_created_at ON consume_records(created_at)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_consume_records_user_created ON consume_records(user_id, created_at)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_consume_records_feature_created ON consume_records(plugin_id, task_type, created_at)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_recharge_orders_created_at ON recharge_orders(created_at)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_recharge_orders_status_credited ON recharge_orders(status, credited_at)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_recharge_orders_channel_created_status ON recharge_orders(channel, created_at, status)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_client_events_user_created ON client_events(user_id, created_at)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_client_events_name_created ON client_events(event_name, created_at)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_client_events_version_created ON client_events(app_version, created_at)");
+}
+
 async function runMigrations(db, options = {}) {
   const clock = options.clock || nowIso;
   await db.run("PRAGMA foreign_keys = ON");
@@ -374,7 +449,12 @@ async function runMigrations(db, options = {}) {
     if (Number(afterVersion3.version) < 4) {
       await applyVersion4(db, clock);
       await db.run("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)", [4, "magiorix-1.4.1-recharge-packages-v2", clock()]);
+    }    const afterVersion4 = await db.get("SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations");
+    if (Number(afterVersion4.version) < 5) {
+      await applyVersion5(db);
+      await db.run("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)", [5, "admin-analytics-center-v1", clock()]);
     }
+
     await db.run("COMMIT");
   } catch (error) {
     await db.run("ROLLBACK").catch(() => {});

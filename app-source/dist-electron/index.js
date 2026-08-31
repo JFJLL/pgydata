@@ -3,6 +3,7 @@ var wr = (a, e, t) => e in a ? br(a, e, { enumerable: !0, configurable: !0, writ
 var w = (a, e, t) => wr(a, typeof e != "symbol" ? e + "" : e, t);
 import { ipcMain as F, BrowserWindow as Dt, app as ye, screen as Gi, shell as Ji, dialog as Ki, net as Jt, Notification as Et, session as Pn, nativeImage as PgyNativeImage } from "electron";
 import { CollectionHistoryStore, isCollectionTaskExportReady } from "../electron-main/collection-history-store.mjs";
+import { createTaskAnalyticsLifecycleReporter } from "../electron-main/task-analytics-lifecycle.mjs";
 import { buildCollectionHistoryExportPayload } from "../electron-main/collection-export-headers.mjs";
 import { createPgyKolService, registerPgyKolIpc } from "../pgy-kol/pgy-kol-service.mjs";
 import { redactLocalPathText as pgyRedactLocalPath } from "../pgy-kol/pgy-session-request.mjs";
@@ -29,6 +30,13 @@ try {
 } catch {
 }
 const pgyCollectionHistory = new CollectionHistoryStore({ baseDir: Oe(pgyUserDataDir, "collection-history"), retentionDays: 90 });
+const pgyTaskAnalytics = createTaskAnalyticsLifecycleReporter(
+  (eventName, fields, options) => {
+    try {
+      Le.get().reportAnalyticsEvent(eventName, fields, options);
+    } catch {}
+  }
+);
 import Dr from "os";
 import et, { brotliDecompressSync as Lr, gunzipSync as Nr } from "zlib";
 import { EventEmitter as Or } from "events";
@@ -16480,7 +16488,8 @@ const W = {
       validCount: Array.isArray(e.urls) ? e.urls.length : 0,
       itemIndex: o + 1,
       url: s
-    }, i = await this.request("POST", "/api/shumiao/consume", {
+    };
+    const i = await this.request("POST", "/api/shumiao/consume", {
       count: 1,
       taskId: e.taskId,
       itemIndex: o + 1,
@@ -16589,6 +16598,18 @@ const W = {
     return { list: [], take: null, totalCount: null };
   }
   // ===== 内部：发请求 =====
+  reportAnalyticsEvent(eventName, fields = {}, options = {}) {
+    if (!this.isAuthenticated() || !this.baseUrl || !this.token) return;
+    const suppliedEventId = typeof options?.eventId === "string" ? options.eventId.trim() : "";
+    // Keep the existing random fallback for all callers while accepting only the API-safe deterministic lifecycle id form.
+    const eventId = /^[A-Za-z0-9:_-]{8,128}$/.test(suppliedEventId) ? suppliedEventId : "evt_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 12);
+    // App version is assigned only here so callers cannot accidentally emit unknown/stale versions.
+    const event = { ...fields, eventId, eventName, platform: process.platform, appVersion: ye.getVersion() };
+    // Best effort only: telemetry is never awaited by collection, payment, export, auth or update work.
+    void this.request("POST", "/api/analytics/events", { events: [event] }).catch((error) => {
+      Wt.debug("analytics event ignored:", error?.message || error);
+    });
+  }
   async request(e, t, n) {
     if (!this.baseUrl)
       throw new Error("SchedulerApi: baseUrl 未设置");
@@ -16944,6 +16965,8 @@ class Xd {
       }
       return;
     }
+    // Start is emitted after the task is admitted, never from a single successful charge; resume stays the same lifecycle.
+    pgyTaskAnalytics.start({ taskId: t, pluginId: n, taskType: s, inputType: l.inputType, total: l.total, resume: e.resume === true });
     const p = `scrape-${t}`, d = this.scrapeWindowManager.createWindow(p, {
       url: u.baseUrl,
       show: !1,
@@ -17114,6 +17137,9 @@ class Xd {
     this.scrapeWindowManager.closeWindow(p);
     const pgyFinalStatus = l.cancelled ? "cancelled" : pgyAuthExpired ? "auth_expired" : pgyInterrupted ? "interrupted" : "completed";
     await pgyCollectionHistory.setStatus(t, pgyFinalStatus);
+    const pgyFinalTask = await pgyCollectionHistory.getTask(t).catch(() => null);
+    // Terminal analytics reads CollectionHistoryStore after status persistence; partial success uses its actual counters.
+    pgyTaskAnalytics.terminal({ taskId: t, pluginId: n, taskType: s, inputType: l.inputType, total: l.total }, pgyFinalTask);
     const h = Date.now() - l.startTime;
     ue.info(`[task=${t}] 采集任务结束 plugin=${n} taskType=${s} cancelled=${l.cancelled} success=${l.successCount} error=${l.errorCount} durationMs=${h}`);
     l.cancelled ? this.sendToRenderer(W.task.complete, {
@@ -23472,7 +23498,9 @@ function vf(a) {
     }
     if (s.length === 0)
       throw new Error("该任务暂无可导出的成功内容");
-    return ff(buildCollectionHistoryExportPayload(n, s));
+    const exported = await ff(buildCollectionHistoryExportPayload(n, s));
+    try { Le.get().reportAnalyticsEvent("export_complete", { module: n.pluginId || "collection", pluginId: n.pluginId, taskType: n.taskType, taskId: n.taskId, inputType: n.inputType, itemCount: s.length, successCount: s.length }); } catch {}
+    return exported;
   }), F.handle(W.history.resumeTask, async (e, t) => {
     const n = await pgyCollectionHistory.getResumePlan(t.taskId);
     if (n.payload.urls.length === 0) {
@@ -23501,6 +23529,7 @@ function vf(a) {
       baseDir: Oe(ye.getPath("userData"), "pgy-kol-schema"),
       taskBaseDir: Oe(ye.getPath("userData"), "pgy-kol-tasks"),
       exporter: (payload) => ff(payload),
+      analytics: (event) => { try { Le.get().reportAnalyticsEvent(event.eventName, event); } catch {} },
       // 两阶段采集：详情阶段复用现有 pgy/blogger 详情采集器（同一 CollectionHistoryStore
       // 与 ScraperOrchestrator），不复制其请求/字段解析/图表/导出逻辑。
       detail: {

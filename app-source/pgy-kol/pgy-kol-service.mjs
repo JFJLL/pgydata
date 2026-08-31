@@ -13,6 +13,7 @@
 import { randomUUID } from "node:crypto";
 
 import { PgySessionRequest, redactLocalPathText, PGY_ORIGIN } from "./pgy-session-request.mjs";
+import { settlePgyKolBatchAnalytics } from "./pgy-kol-batch-analytics.mjs";
 import {
   PgyFilterSchema,
   SCHEMA_VERSION,
@@ -114,6 +115,7 @@ export function createPgyKolService({
   exporter,
   taskBudgets,
   logger = {},
+  analytics,
   detail,
   detailPollIntervalMs = 2000,
 } = {}) {
@@ -121,6 +123,20 @@ export function createPgyKolService({
     throw new Error("[pgy-kol] transport 必填");
   }
   const request = new PgySessionRequest({ transport, getHeaders, sign, logger });
+  // Analytics is an optional best-effort callback; it never controls a task state.
+  const reportAnalytics = (eventName, fields = {}) => { try { if (typeof analytics === "function") analytics({ eventName, module: "pgy-kol", ...fields }); } catch {} };
+  const terminalAnalyticsTasks = new Set();
+  const reportTerminalAnalytics = (eventName, taskId, fields = {}) => {
+    if (!taskId || terminalAnalyticsTasks.has(taskId)) return;
+    terminalAnalyticsTasks.add(taskId);
+    reportAnalytics(eventName, { taskId, ...fields });
+  };
+  const settleSearchBatchAnalytics = (taskId) => settlePgyKolBatchAnalytics({
+    taskId,
+    settle: settleSearchBatchAfterDiscovery,
+    getTask: (id) => taskStore.getTask(id).catch(() => null),
+    reportTerminal: reportTerminalAnalytics,
+  });
   const lkgStore = baseDir ? createJsonLkgStore({ baseDir }) : null;
   const schema = new PgyFilterSchema({ request, lkgStore });
   const builder = new PgyPayloadBuilder({ schema });
@@ -443,10 +459,11 @@ export function createPgyKolService({
     if (detailMode === true && finalColumns.length > 0 && detail && typeof detail.create === "function") {
       detailTaskId = await createSearchBatchDetail(checkpointTaskId, finalColumns);
     }
+    reportAnalytics("task_start", { taskId: checkpointTaskId, itemCount: Number.isInteger(maxCount) && maxCount > 0 ? maxCount : null });
     const loop = ensureBatchRunner().start(checkpointTaskId);
     if (loop !== undefined && loop !== null && typeof loop.then === "function") {
       loop
-        .then(() => settleSearchBatchAfterDiscovery(checkpointTaskId))
+        .then(() => settleSearchBatchAnalytics(checkpointTaskId))
         .catch((err) => {
           logger.error &&
             logger.error(
@@ -456,6 +473,7 @@ export function createPgyKolService({
               ),
             );
           taskStore.setStatus(checkpointTaskId, "failed").catch(() => {});
+          reportTerminalAnalytics("task_failed", checkpointTaskId, { errorCode: "SEARCH_BATCH_FAILED" });
         });
     }
     // 快速列表导出时，对外 ID 即 checkpoint ID，因此进度、完成事件、暂停/取消和
@@ -863,6 +881,22 @@ export function createPgyKolService({
     const parentStatus = statusMap[detailTask.status] || "failed";
     await taskStore.setStatus(taskId, parentStatus).catch(() => {});
     const parent = await taskStore.getTask(taskId).catch(() => null);
+    // Detail mode uses CollectionHistoryStore's real detail task counts; never mix them with fast-list counts.
+    if (parentStatus === "completed") {
+      reportTerminalAnalytics("task_complete", taskId, {
+        itemCount: Number(detailTask.total || 0),
+        successCount: Number(detailTask.successCount || 0),
+        errorCount: Number(detailTask.failedCount || 0),
+      });
+    } else if (parentStatus === "cancelled") {
+      reportTerminalAnalytics("task_cancelled", taskId, {
+        itemCount: Number(detailTask.total || 0),
+        successCount: Number(detailTask.successCount || 0),
+        errorCount: Number(detailTask.failedCount || 0),
+      });
+    } else if (parentStatus === "failed") {
+      reportTerminalAnalytics("task_failed", taskId, { errorCode: "DETAIL_TASK_FAILED" });
+    }
     emitBatchEvent({
       taskId,
       type: "done",
@@ -1375,7 +1409,7 @@ export function createPgyKolService({
   function attachResumeLoopCatch(loopPromise, taskId) {
     if (loopPromise && typeof loopPromise.then === "function") {
       void loopPromise
-        .then(() => settleSearchBatchAfterDiscovery(taskId))
+        .then(() => settleSearchBatchAnalytics(taskId))
         .catch((err) => {
           logger.error &&
             logger.error(
@@ -1384,7 +1418,7 @@ export function createPgyKolService({
                 redactLocalPathText(err instanceof Error ? err.message : String(err)),
               ),
             );
-          taskStore.setStatus(taskId, "failed").catch(() => {});
+          void taskStore.setStatus(taskId, "failed").then(() => reportTerminalAnalytics("task_failed", taskId, { errorCode: "SEARCH_BATCH_RESUME_FAILED" })).catch(() => {});
           // 发现失败时详情任务必须结束，否则其循环会一直等待追加（僵尸任务）。
           settleDetailOnCheckpointFailure(taskId).catch(() => {});
         });
@@ -1552,8 +1586,11 @@ export function createPgyKolService({
       }
       const payload = buildCollectionHistoryExportPayload(detailTask, rows);
       if (typeof exporter === "function") {
-        return exporter(payload);
+        const output = await exporter(payload);
+        reportAnalytics("export_complete", { taskId, itemCount: rows.length, successCount: rows.length });
+        return output;
       }
+      reportAnalytics("export_complete", { taskId, itemCount: rows.length, successCount: rows.length });
       return payload;
     }
     const rows = await taskStore.getRows(taskId);
@@ -1571,8 +1608,11 @@ export function createPgyKolService({
       : Object.assign({}, task, { columns: task.fields });
     const payload = buildPgyKolBatchExportPayload(exportTask, sourceRows);
     if (typeof exporter === "function") {
-      return exporter(payload);
+      const output = await exporter(payload);
+      reportAnalytics("export_complete", { taskId, itemCount: sourceRows.length, successCount: sourceRows.length });
+      return output;
     }
+    reportAnalytics("export_complete", { taskId, itemCount: sourceRows.length, successCount: sourceRows.length });
     return payload;
   }
 
