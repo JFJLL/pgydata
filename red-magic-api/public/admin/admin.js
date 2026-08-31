@@ -109,7 +109,7 @@
       .join("");
 
     el.innerHTML = `
-      <svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img">
+      <svg class="chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img">
         <g>${grid}</g>
         <polygon class="chart-area" points="${area}"/>
         <polyline class="chart-line" points="${line}"/>
@@ -129,11 +129,18 @@
     function onMove(e) {
       const rect = svg.getBoundingClientRect();
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const svgX = ((clientX - rect.left) / rect.width) * width;
-      const ratio = (svgX - pad.l) / (width - pad.l - pad.r);
-      const rawIdx = Math.round(ratio * (rows.length - 1));
-      const idx = Math.min(Math.max(0, rawIdx), rows.length - 1);
-      const pt = points[idx];
+      const mouseXInSvg = Math.max(0, Math.min(width, ((clientX - rect.left) / rect.width) * width));
+
+      let closestIdx = 0;
+      let minDistance = Infinity;
+      for (let i = 0; i < points.length; i++) {
+        const dist = Math.abs(points[i][0] - mouseXInSvg);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestIdx = i;
+        }
+      }
+      const pt = points[closestIdx];
       if (!pt) return;
 
       cursorLine.setAttribute("x1", pt[0]);
@@ -144,14 +151,21 @@
       highlightDot.setAttribute("cy", pt[1]);
       highlightDot.style.display = "block";
 
-      const valFormatted = Number(values[idx]).toLocaleString("zh-CN", { minimumFractionDigits: unit === " 元" ? 2 : 0, maximumFractionDigits: 2 });
-      tooltip.innerHTML = `<div class="tooltip-date">${escape(rows[idx].day)}</div><div class="tooltip-value">${escape(valFormatted)}${unit}</div>`;
+      const valFormatted = Number(values[closestIdx]).toLocaleString("zh-CN", { minimumFractionDigits: unit === " 元" ? 2 : 0, maximumFractionDigits: 2 });
+      tooltip.innerHTML = `<div class="tooltip-date">${escape(rows[closestIdx].day)}</div><div class="tooltip-value">${escape(valFormatted)}${unit}</div>`;
       tooltip.classList.add("visible");
 
-      const pctX = (pt[0] / width) * 100;
-      const pctY = (pt[1] / height) * 100;
-      tooltip.style.left = `${pctX}%`;
-      tooltip.style.top = `${pctY}%`;
+      const screenX = (pt[0] / width) * rect.width;
+      const screenY = (pt[1] / height) * rect.height;
+      tooltip.style.left = `${screenX}px`;
+      tooltip.style.top = `${screenY}px`;
+      if (screenX < 60) {
+        tooltip.style.transform = "translate(0, -125%)";
+      } else if (screenX > rect.width - 60) {
+        tooltip.style.transform = "translate(-100%, -125%)";
+      } else {
+        tooltip.style.transform = "translate(-50%, -125%)";
+      }
     }
 
     function onLeave() {
