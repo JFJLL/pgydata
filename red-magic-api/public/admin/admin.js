@@ -59,6 +59,10 @@
     if (state.token) headers.Authorization = `Bearer ${state.token}`;
     const response = await fetch(path, { ...options, headers });
     const body = await response.json().catch(() => ({}));
+    if (response.status === 401 || body.code === 401) {
+      logout(body.message || "管理员登录已过期，请重新登录");
+      throw new Error(body.message || "管理员登录已过期");
+    }
     if (!response.ok || body.code !== 200) throw new Error(body.message || "请求失败");
     return body.data;
   }
@@ -466,12 +470,13 @@
     } catch (error) { $("loginMessage").textContent = error.message; }
     finally { $("loginBtn").disabled = false; }
   }
-  function logout() {
+  function logout(message = "") {
     state.token = "";
     state.cache.clear();
     localStorage.removeItem("magiorixAdminToken");
     $("adminView").classList.add("hidden");
     $("loginView").classList.remove("hidden");
+    if (message && $("loginMessage")) $("loginMessage").textContent = message;
   }
 
   $("loginForm").addEventListener("submit", login);
@@ -608,6 +613,6 @@
   if (state.token) {
     $("loginView").classList.add("hidden");
     $("adminView").classList.remove("hidden");
-    loadView().catch(() => logout());
+    loadView().catch(() => logout("管理员登录已过期，请重新登录"));
   }
 })();
