@@ -23,9 +23,9 @@
   const $ = (id) => document.getElementById(id);
   const VIEW_META = {
     overview: ["magiorix 数据中心", "最近 30 天核心经营与产品使用数据"],
-    usersAnalytics: ["用户分析", "用户增长、核心活跃和成熟 cohort 留存"],
+    usersAnalytics: ["用户分析", "用户增长、核心活跃与按批次留存分析"],
     usage: ["功能分析", "核心采集历史与新增产品事件数据"],
-    finance: ["充值与积分", "已到账收入、订单创建 cohort 与积分流向"],
+    finance: ["充值与积分", "已到账收入、订单创建批次转化与积分流向"],
     system: ["系统质量", "任务、更新与支付状态的轻量质量视图"],
     userManagement: ["用户管理", "保留搜索、积分调整与密码重置能力"],
     transactions: ["流水记录", "按任务汇总的有效采集消耗记录"],
@@ -320,7 +320,7 @@
       const features = usage.coreCollection.byFeature.map((row) => `<tr><td>${escape(row.featureLabel)}</td><td>${integer(row.users)}</td><td>${integer(row.tasks)}</td><td>${integer(row.items)}</td><td>${integer(row.points)}</td><td><div class="progress"><span style="width:${Math.min(100, row.share)}%"></span></div> ${row.share}%</td></tr>`).join("");
       $("overviewFeatures").innerHTML = htmlTable(["功能", "使用用户", "任务", "采集量", "积分", "占比"], features);
       const r = finance.recharge, alipay = r.byChannel.find((x) => x.channel === "alipay"), wxpay = r.byChannel.find((x) => x.channel === "wxpay");
-      $("overviewFinance").innerHTML = `<div class="metric-list"><div><span>创建订单</span><strong>${integer(r.createdOrders)}</strong></div><div><span>到账订单</span><strong>${integer(r.creditedOrders)}</strong></div><div><span>支付转化</span><strong>${percent(r.paymentConversionRate)}</strong></div><div><span>支付宝收入</span><strong>${money(alipay?.revenueYuan)}</strong></div><div><span>微信收入</span><strong>${money(wxpay?.revenueYuan)}</strong></div><div><span>AOV / ARPPU</span><strong>${r.aovYuan === null ? "-" : money(r.aovYuan)} / ${r.arppuYuan === null ? "-" : money(r.arppuYuan)}</strong></div></div>`;
+      $("overviewFinance").innerHTML = `<div class="metric-list"><div><span>创建订单</span><strong>${integer(r.createdOrders)}</strong></div><div><span>到账订单</span><strong>${integer(r.creditedOrders)}</strong></div><div><span>支付转化</span><strong>${percent(r.paymentConversionRate)}</strong></div><div><span>支付宝收入</span><strong>${money(alipay?.revenueYuan)}</strong></div><div><span>微信收入</span><strong>${money(wxpay?.revenueYuan)}</strong></div><div><span>笔均充值 / 人均充值</span><strong>${r.aovYuan === null ? "-" : money(r.aovYuan)} / ${r.arppuYuan === null ? "-" : money(r.arppuYuan)}</strong></div></div>`;
       setStatus("overviewStatus", "", "");
     } catch (error) { setStatus("overviewStatus", "error", `数据总览加载失败：${error.message}`); }
   }
@@ -328,10 +328,10 @@
     setStatus("usersAnalyticsStatus", "loading", "正在加载用户分析…");
     try {
       const data = await cached("usersAnalytics", force);
-      $("usersAnalyticsKpis").innerHTML = [miniCard("总用户", integer(data.totalUsers)), miniCard("正常账号", integer(data.activeAccounts)), miniCard("注销账号", integer(data.deletedUsers)), miniCard("DAU", integer(data.dau), `截至 ${data.activityAnchorDate || data.period?.to || "-"}`), miniCard("WAU", integer(data.wau), `截至 ${data.activityAnchorDate || data.period?.to || "-"}`), miniCard("MAU", integer(data.mau), `截至 ${data.activityAnchorDate || data.period?.to || "-"}`)].join("");
+      $("usersAnalyticsKpis").innerHTML = [miniCard("总用户", integer(data.totalUsers)), miniCard("正常账号", integer(data.activeAccounts)), miniCard("注销账号", integer(data.deletedUsers)), miniCard("日活跃用户 (DAU)", integer(data.dau), `截至 ${data.activityAnchorDate || data.period?.to || "-"}`), miniCard("周活跃用户 (WAU)", integer(data.wau), `截至 ${data.activityAnchorDate || data.period?.to || "-"}`), miniCard("月活跃用户 (MAU)", integer(data.mau), `截至 ${data.activityAnchorDate || data.period?.to || "-"}`)].join("");
       lineChart("newUserChart", data.newUserTrend.map((row) => ({ day: row.day, value: row.newUsers })));
       lineChart("activeUserChart", data.effectiveActiveTrend);
-      $("retentionCards").innerHTML = [miniCard("新用户已激活率", percent(data.activationRate), `已激活 ${integer(data.activatedNewUsers)} / 新增 ${integer(data.newUsers)}`), ...[["D1", data.retention.d1], ["D7", data.retention.d7], ["D30", data.retention.d30]].map(([name, item]) => miniCard(name, percent(item.value), item.value === null ? "样本不足" : `${integer(item.retainedUsers)} / ${integer(item.cohortSize)}`))].join("");
+      $("retentionCards").innerHTML = [miniCard("新用户已激活率", percent(data.activationRate), `已激活 ${integer(data.activatedNewUsers)} / 新增 ${integer(data.newUsers)}`), ...[["次日留存", data.retention.d1], ["7日留存", data.retention.d7], ["30日留存", data.retention.d30]].map(([name, item]) => miniCard(name, percent(item.value), item.value === null ? "样本不足" : `${integer(item.retainedUsers)} / ${integer(item.cohortSize)}`))].join("");
       setStatus("usersAnalyticsStatus", "", "");
     } catch (error) { setStatus("usersAnalyticsStatus", "error", `用户分析加载失败：${error.message}`); }
   }
@@ -361,14 +361,14 @@
     setStatus("financeStatus", "loading", "正在加载充值与积分…");
     try {
       const data = await cached("finance", force), r = data.recharge, p = data.points;
-      $("financeKpis").innerHTML = [miniCard("已到账充值收入", money(r.revenueYuan)), miniCard("付费用户", integer(r.payers)), miniCard("期间到账订单", integer(r.creditedOrders)), miniCard("AOV", r.aovYuan === null ? "-" : money(r.aovYuan)), miniCard("ARPPU", r.arppuYuan === null ? "-" : money(r.arppuYuan)), miniCard("首次付费用户", integer(r.firstTimePayers)), miniCard("复购付费用户", integer(r.repeatPayers))].join("");
+      $("financeKpis").innerHTML = [miniCard("已到账充值收入", money(r.revenueYuan)), miniCard("付费用户", integer(r.payers)), miniCard("期间到账订单", integer(r.creditedOrders)), miniCard("笔均金额 (客单价)", r.aovYuan === null ? "-" : money(r.aovYuan)), miniCard("人均充值 (ARPPU)", r.arppuYuan === null ? "-" : money(r.arppuYuan)), miniCard("首次付费用户", integer(r.firstTimePayers)), miniCard("复购付费用户", integer(r.repeatPayers))].join("");
       
       const width = Math.max(r.createdOrders, 1);
       const funnelStages = [
         { label: "创建订单", count: r.createdOrders, color: "var(--red)", widthPct: 100, tag: "100%" },
-        { label: "已到账 (Cohort)", count: r.creditedCreatedOrders, color: "var(--green)", widthPct: Math.min(100, Math.max(3, (r.creditedCreatedOrders / width) * 100)), tag: percent(r.paymentConversionRate) },
-        { label: "待支付 (Pending)", count: r.pendingOrders, color: "var(--orange)", widthPct: Math.min(100, Math.max(3, (r.pendingOrders / width) * 100)), tag: percent((r.pendingOrders / width) * 100) },
-        { label: "已关闭 (Closed)", count: r.closedOrders, color: "#8d959f", widthPct: Math.min(100, Math.max(3, (r.closedOrders / width) * 100)), tag: percent((r.closedOrders / width) * 100) },
+        { label: "创建批次已到账", count: r.creditedCreatedOrders, color: "var(--green)", widthPct: Math.min(100, Math.max(3, (r.creditedCreatedOrders / width) * 100)), tag: percent(r.paymentConversionRate) },
+        { label: "待支付", count: r.pendingOrders, color: "var(--orange)", widthPct: Math.min(100, Math.max(3, (r.pendingOrders / width) * 100)), tag: percent((r.pendingOrders / width) * 100) },
+        { label: "已关闭", count: r.closedOrders, color: "#8d959f", widthPct: Math.min(100, Math.max(3, (r.closedOrders / width) * 100)), tag: percent((r.closedOrders / width) * 100) },
       ];
       $("paymentFunnel").innerHTML = `
         <div class="funnel-container">
@@ -382,18 +382,18 @@
         </div>
         <div class="funnel-footer">
           <div class="funnel-rate-box">
-            <span class="funnel-rate-label">创建 Cohort 转化率</span>
+            <span class="funnel-rate-label">创建批次转化率</span>
             <strong class="funnel-rate-val">${percent(r.paymentConversionRate)}</strong>
           </div>
-          <p class="funnel-note">按选定周期内创建的订单跟踪最终支付结果；期间到账订单与收入按实际 credited_at 统计。</p>
+          <p class="funnel-note">按选定周期内创建的订单跟踪最终支付结果；期间到账订单与收入按实际到账时间（credited_at）统计。</p>
         </div>
       `;
 
       $("pointsPanel").innerHTML = [["当前全站积分余额", integer(p.totalCurrentBalance)], ["期间消耗", integer(p.consumed)], ["充值基础积分", integer(p.creditedBase)], ["套餐赠送", integer(p.creditedGift)], ["活动赠送", integer(p.creditedPromotion)], ["后台加积分", integer(p.adminAdded)], ["后台扣积分", integer(p.adminDeducted)]].map(([name, value]) => `<div><span>${name}</span><strong>${value}</strong></div>`).join("");
-      $("channelTable").innerHTML = htmlTable(["渠道", "创建订单", "创建 cohort 已到账", "创建 cohort 转化率", "期间到账订单", "期间收入", "期间付费用户", "期间 AOV"], r.byChannel.map((row) => `<tr><td>${escape(row.label)}</td><td>${integer(row.createdOrders)}</td><td>${integer(row.creditedCreatedOrders)}</td><td>${percent(row.paymentConversionRate)}</td><td>${integer(row.creditedOrders)}</td><td>${money(row.revenueYuan)}</td><td>${integer(row.payers)}</td><td>${row.aovYuan === null ? "-" : money(row.aovYuan)}</td></tr>`).join(""));
-      $("packageTable").innerHTML = htmlTable(["套餐", "创建订单", "创建 cohort 已到账", "创建 cohort 转化率", "期间到账订单", "期间收入", "期间付费用户", "期间 AOV", "基础积分", "套餐赠送", "活动赠送"], r.byPackage.map((row) => `<tr><td>${escape(row.packageLabel)}</td><td>${integer(row.createdOrders)}</td><td>${integer(row.creditedCreatedOrders)}</td><td>${percent(row.paymentConversionRate)}</td><td>${integer(row.creditedOrders)}</td><td>${money(row.revenueYuan)}</td><td>${integer(row.payers)}</td><td>${row.aovYuan === null ? "-" : money(row.aovYuan)}</td><td>${integer(row.basePoints)}</td><td>${integer(row.giftPoints)}</td><td>${integer(row.promotionPoints)}</td></tr>`).join(""));
+      $("channelTable").innerHTML = htmlTable(["渠道", "创建订单", "创建批次已到账", "创建批次转化率", "期间到账订单", "期间收入", "期间付费用户", "期间客单价"], r.byChannel.map((row) => `<tr><td>${escape(row.label)}</td><td>${integer(row.createdOrders)}</td><td>${integer(row.creditedCreatedOrders)}</td><td>${percent(row.paymentConversionRate)}</td><td>${integer(row.creditedOrders)}</td><td>${money(row.revenueYuan)}</td><td>${integer(row.payers)}</td><td>${row.aovYuan === null ? "-" : money(row.aovYuan)}</td></tr>`).join(""));
+      $("packageTable").innerHTML = htmlTable(["套餐", "创建订单", "创建批次已到账", "创建批次转化率", "期间到账订单", "期间收入", "期间付费用户", "期间客单价", "基础积分", "套餐赠送", "活动赠送"], r.byPackage.map((row) => `<tr><td>${escape(row.packageLabel)}</td><td>${integer(row.createdOrders)}</td><td>${integer(row.creditedCreatedOrders)}</td><td>${percent(row.paymentConversionRate)}</td><td>${integer(row.creditedOrders)}</td><td>${money(row.revenueYuan)}</td><td>${integer(row.payers)}</td><td>${row.aovYuan === null ? "-" : money(row.aovYuan)}</td><td>${integer(row.basePoints)}</td><td>${integer(row.giftPoints)}</td><td>${integer(row.promotionPoints)}</td></tr>`).join(""));
       const promo = r.firstRechargePromo;
-      $("promoPanel").innerHTML = [miniCard("优惠创建订单", integer(promo.createdOrders)), miniCard("期间到账订单", integer(promo.creditedOrders)), miniCard("使用优惠用户", integer(promo.users)), miniCard("额外首充积分", integer(promo.extraPoints)), miniCard("优惠创建 cohort 转化", percent(promo.paymentConversionRate))].join("");
+      $("promoPanel").innerHTML = [miniCard("优惠创建订单", integer(promo.createdOrders)), miniCard("期间到账订单", integer(promo.creditedOrders)), miniCard("使用优惠用户", integer(promo.users)), miniCard("额外首充积分", integer(promo.extraPoints)), miniCard("优惠批次转化率", percent(promo.paymentConversionRate))].join("");
       setStatus("financeStatus", "", "");
     } catch (error) { setStatus("financeStatus", "error", `充值与积分加载失败：${error.message}`); }
   }
@@ -403,8 +403,8 @@
       const data = await cached("system", force), caps = data.analyticsCoverage?.capabilities || {}; const lifecycle = caps.taskLifecycle, appOpen = caps.appOpen, update = caps.update;
       const metric = (name, value, formatter = integer) => `<div><span>${name}</span><strong>${metricValue(value, formatter)}</strong></div>`;
       const lifecycleHtml = lifecycle?.available ? `<div class="event-cover">${escape(coverageText(lifecycle, "任务生命周期"))}</div><div class="event-grid">${metric("任务失败", lifecycle.periodStatus === "before" ? null : data.taskFailures)}${metric("任务取消", lifecycle.periodStatus === "before" ? null : data.taskCancellations)}${metric("任务完成率", lifecycle.periodStatus === "before" ? null : data.taskCompletionRate, percent)}${metric("条目成功率", lifecycle.periodStatus === "before" ? null : data.itemSuccessRate, percent)}</div>${data.appVersions ? `<h3>客户端版本分布</h3>${htmlTable(["版本", "用户", "事件"], data.appVersions.map((row) => `<tr><td>${escape(row.appVersion)}</td><td>${integer(row.users)}</td><td>${integer(row.events)}</td></tr>`).join(""))}` : ""}` : `<div class="event-cover">任务生命周期尚未采集。</div>`;
-      const payment = data.payment;
-      $("systemContent").innerHTML = `${lifecycleHtml}<div class="detail-section"><h3>软件启动与更新</h3><div class="event-cover">${escape(coverageText(appOpen, "软件启动"))}。${escape(coverageText(update, "更新"))}。</div><div class="event-grid">${metric("软件启动", appOpen?.periodStatus === "before" ? null : data.appOpens)}${metric("更新成功", update?.periodStatus === "before" ? null : data.updateSuccess)}${metric("更新失败", update?.periodStatus === "before" ? null : data.updateFailures)}</div></div><div class="detail-section"><h3>当前支付异常快照</h3><p class="event-cover">不受上方历史日期范围影响。</p><div class="mini-kpi-grid">${miniCard("当前待支付", integer(payment.pendingOrders))}${miniCard("当前超时 Pending", integer(payment.stalePendingOrders), "使用订单实际 expires_at 判断")}${miniCard("当前查询错误状态", integer(payment.queryErrors))}${miniCard("当前人工复核", integer(payment.manualReviewOrders))}</div></div>`;
+    const payment = data.payment;
+      $("systemContent").innerHTML = `${lifecycleHtml}<div class="detail-section"><h3>软件启动与更新</h3><div class="event-cover">${escape(coverageText(appOpen, "软件启动"))}。${escape(coverageText(update, "更新"))}。</div><div class="event-grid">${metric("软件启动", appOpen?.periodStatus === "before" ? null : data.appOpens)}${metric("更新成功", update?.periodStatus === "before" ? null : data.updateSuccess)}${metric("更新失败", update?.periodStatus === "before" ? null : data.updateFailures)}</div></div><div class="detail-section"><h3>当前支付异常快照</h3><p class="event-cover">不受上方历史日期范围影响。</p><div class="mini-kpi-grid">${miniCard("当前待支付", integer(payment.pendingOrders))}${miniCard("当前超时未支付", integer(payment.stalePendingOrders), "使用订单实际过期时间判断")}${miniCard("当前查询错误状态", integer(payment.queryErrors))}${miniCard("当前人工复核", integer(payment.manualReviewOrders))}</div></div>`;
       setStatus("systemStatus", "", "");
     } catch (error) { setStatus("systemStatus", "error", `系统质量加载失败：${error.message}`); }
   }

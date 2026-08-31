@@ -10,6 +10,7 @@ const FEATURES = new Map([
   ["pgy:blogger", { key: "pgy-blogger", label: "蒲公英博主采集" }],
   ["pgy:blog", { key: "pgy-note", label: "蒲公英笔记采集" }],
   ["pgy:note", { key: "pgy-note", label: "蒲公英笔记采集" }],
+  ["pgy:notebook", { key: "pgy-note", label: "蒲公英笔记采集" }],
   ["starmap:blogger", { key: "starmap-blogger", label: "星图主页采集" }],
   ["pgy-kol:", { key: "pgy-kol", label: "找博主" }],
 ]);
@@ -105,7 +106,7 @@ function feature(pluginId, taskType) {
 function channelLabel(channel) {
   if (channel === "alipay") return "支付宝";
   if (channel === "wxpay") return "微信支付";
-  return "legacy / 其他";
+  return "历史 / 其他";
 }
 
 function kpi(value, previousValue) {
