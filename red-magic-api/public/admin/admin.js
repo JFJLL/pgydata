@@ -84,38 +84,84 @@
     $(id).innerHTML = `<div class="chart-empty">${escape(text)}</div>`;
   }
 
+  function monotoneCubicPath(points) {
+    const n = points.length;
+    if (n === 0) return "";
+    if (n === 1) return `M ${points[0][0].toFixed(1)} ${points[0][1].toFixed(1)}`;
+    if (n === 2) return `M ${points[0][0].toFixed(1)} ${points[0][1].toFixed(1)} L ${points[1][0].toFixed(1)} ${points[1][1].toFixed(1)}`;
+    const d = [];
+    for (let i = 0; i < n - 1; i++) {
+      d.push((points[i + 1][1] - points[i][1]) / (points[i + 1][0] - points[i][0]));
+    }
+    const m = [d[0]];
+    for (let i = 1; i < n - 1; i++) {
+      if (d[i - 1] * d[i] <= 0) m.push(0);
+      else m.push((d[i - 1] + d[i]) / 2);
+    }
+    m.push(d[n - 2]);
+    let path = `M ${points[0][0].toFixed(1)} ${points[0][1].toFixed(1)}`;
+    for (let i = 0; i < n - 1; i++) {
+      const dx = (points[i + 1][0] - points[i][0]) / 3;
+      const cp1x = points[i][0] + dx;
+      const cp1y = points[i][1] + m[i] * dx;
+      const cp2x = points[i + 1][0] - dx;
+      const cp2y = points[i + 1][1] - m[i + 1] * dx;
+      path += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${points[i + 1][0].toFixed(1)} ${points[i + 1][1].toFixed(1)}`;
+    }
+    return path;
+  }
+
   function lineChart(id, rows, unit = "") {
     const el = $(id);
     if (!el) return;
-    if (!rows || rows.length === 0 || rows.every((row) => Number(row.value || 0) === 0)) return renderEmpty(id);
-    const width = 720, height = 220, pad = { l: 48, r: 16, t: 20, b: 34 }, values = rows.map((row) => Number(row.value || 0));
+    if (!rows || rows.length === 0 || rows.every((row) => Number(row.value || 0) === 0)) {
+      el._chartData = null;
+      return renderEmpty(id);
+    }
+    el._chartData = { rows, unit };
+    const width = Math.max(300, el.clientWidth || 720);
+    const height = 230;
+    const pad = { l: 48, r: 18, t: 24, b: 32 };
+    const values = rows.map((row) => Number(row.value || 0));
     const max = Math.max(...values, 1), min = Math.min(...values, 0), span = Math.max(max - min, 1);
     const point = (value, index) => [
       pad.l + (index * (width - pad.l - pad.r)) / Math.max(rows.length - 1, 1),
       pad.t + (max - value) * (height - pad.t - pad.b) / span,
     ];
     const points = values.map(point);
-    const line = points.map((p) => p.join(",")).join(" ");
-    const area = `${pad.l},${height - pad.b} ${line} ${width - pad.r},${height - pad.b}`;
-    const grid = [0, .5, 1].map((ratio) => {
+    const smoothLine = monotoneCubicPath(points);
+    const smoothArea = `${smoothLine} L ${points[points.length - 1][0].toFixed(1)} ${height - pad.b} L ${points[0][0].toFixed(1)} ${height - pad.b} Z`;
+
+    const grid = [0, 0.5, 1].map((ratio) => {
       const y = pad.t + ratio * (height - pad.t - pad.b);
       const value = max - ratio * span;
-      return `<line class="chart-grid" x1="${pad.l}" x2="${width - pad.r}" y1="${y}" y2="${y}"/><text class="chart-label" x="2" y="${y + 4}">${escape(Number(value).toLocaleString("zh-CN", { maximumFractionDigits: 1 }))}${unit}</text>`;
+      return `<line class="chart-grid" x1="${pad.l}" x2="${width - pad.r}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="chart-label" x="${pad.l - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end">${escape(Number(value).toLocaleString("zh-CN", { maximumFractionDigits: 1 }))}${unit}</text>`;
     }).join("");
-    const dots = points.map((p, index) => `<circle class="chart-point" cx="${p[0]}" cy="${p[1]}" r="3.5" data-idx="${index}"></circle>`).join("");
-    const xLabels = [0, Math.floor((rows.length - 1) / 2), rows.length - 1]
-      .filter((v, i, a) => a.indexOf(v) === i)
-      .map((index) => `<text class="chart-label" text-anchor="middle" x="${points[index][0]}" y="${height - 8}">${rows[index].day.slice(5)}</text>`)
-      .join("");
 
+    const dots = points.map((p, index) => `<circle class="chart-point" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" data-idx="${index}"></circle>`).join("");
+
+    const labelCount = Math.min(rows.length, width < 480 ? 3 : 5);
+    const step = (rows.length - 1) / Math.max(1, labelCount - 1);
+    const xLabelIndices = [];
+    for (let k = 0; k < labelCount; k++) xLabelIndices.push(Math.round(k * step));
+    const uniqueXIndices = Array.from(new Set(xLabelIndices));
+    const xLabels = uniqueXIndices.map((index) => `<text class="chart-label" text-anchor="middle" x="${points[index][0].toFixed(1)}" y="${height - 10}">${rows[index].day.slice(5)}</text>`).join("");
+
+    const gradId = `grad_${id}_${Date.now()}`;
     el.innerHTML = `
-      <svg class="chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img">
+      <svg class="chart-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img">
+        <defs>
+          <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#c74444" stop-opacity="0.22"/>
+            <stop offset="100%" stop-color="#c74444" stop-opacity="0.01"/>
+          </linearGradient>
+        </defs>
         <g>${grid}</g>
-        <polygon class="chart-area" points="${area}"/>
-        <polyline class="chart-line" points="${line}"/>
+        <path d="${smoothArea}" fill="url(#${gradId})"/>
+        <path class="chart-line" d="${smoothLine}"/>
         <line class="chart-cursor-line" x1="0" x2="0" y1="${pad.t}" y2="${height - pad.b}" style="display:none;"/>
         ${dots}
-        <circle class="chart-highlight-dot" cx="0" cy="0" r="5" style="display:none;"/>
+        <circle class="chart-highlight-dot" cx="0" cy="0" r="5.5" style="display:none;"/>
         ${xLabels}
       </svg>
       <div class="chart-tooltip"></div>
@@ -143,12 +189,12 @@
       const pt = points[closestIdx];
       if (!pt) return;
 
-      cursorLine.setAttribute("x1", pt[0]);
-      cursorLine.setAttribute("x2", pt[0]);
+      cursorLine.setAttribute("x1", pt[0].toFixed(1));
+      cursorLine.setAttribute("x2", pt[0].toFixed(1));
       cursorLine.style.display = "block";
 
-      highlightDot.setAttribute("cx", pt[0]);
-      highlightDot.setAttribute("cy", pt[1]);
+      highlightDot.setAttribute("cx", pt[0].toFixed(1));
+      highlightDot.setAttribute("cy", pt[1].toFixed(1));
       highlightDot.style.display = "block";
 
       const valFormatted = Number(values[closestIdx]).toLocaleString("zh-CN", { minimumFractionDigits: unit === " 元" ? 2 : 0, maximumFractionDigits: 2 });
@@ -159,9 +205,9 @@
       const screenY = (pt[1] / height) * rect.height;
       tooltip.style.left = `${screenX}px`;
       tooltip.style.top = `${screenY}px`;
-      if (screenX < 60) {
+      if (screenX < 80) {
         tooltip.style.transform = "translate(0, -125%)";
-      } else if (screenX > rect.width - 60) {
+      } else if (screenX > rect.width - 80) {
         tooltip.style.transform = "translate(-100%, -125%)";
       } else {
         tooltip.style.transform = "translate(-50%, -125%)";
@@ -620,6 +666,19 @@
     if (!e.target.closest(".custom-select")) {
       document.querySelectorAll(".custom-select.open").forEach((el) => el.classList.remove("open"));
     }
+  });
+
+  // 窗口大小变化时自适应重绘图表，保持精确像素比例与文字清晰度
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      document.querySelectorAll(".chart-slot").forEach((slot) => {
+        if (slot._chartData && slot.offsetParent !== null) {
+          lineChart(slot.id, slot._chartData.rows, slot._chartData.unit);
+        }
+      });
+    }, 150);
   });
 
   initAllCustomSelects();
