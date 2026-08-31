@@ -48,6 +48,34 @@ test("GET /recharge/ (with trailing slash) serves the recharge center too", asyn
   });
 });
 
+test("Recharge frontend contracts enforce clean card layout, credit first, and amount second", async () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const appJs = fs.readFileSync(path.join(__dirname, "../public/recharge/app.js"), "utf8");
+  const styleCss = fs.readFileSync(path.join(__dirname, "../public/recharge/style.css"), "utf8");
+
+  // 1. Removed unnecessary clutter cards and notes
+  assert.doesNotMatch(appJs, /recharge-head-note/);
+  assert.doesNotMatch(appJs, /balance-side/);
+  assert.doesNotMatch(appJs, /确认订单前可随时返回重新选择/);
+  assert.doesNotMatch(appJs, /package-title/);
+
+  // 2. Package cards render credit (pointsDisplay) BEFORE amount (amountFormatted)
+  const creditIndex = appJs.indexOf("<div class=\"package-credit\"><strong>' + pointsDisplay");
+  const amountIndex = appJs.indexOf("<div class=\"package-amount\"><span>¥</span>' + amountFormatted");
+  assert.ok(creditIndex > 0, "package-credit should be present");
+  assert.ok(amountIndex > 0, "package-amount should be present");
+  assert.ok(creditIndex < amountIndex, "package-credit must precede package-amount");
+
+  // 3. Points formatting is base + extra when extra > 0, otherwise base
+  assert.match(appJs, /extra > 0/);
+  assert.ok(appJs.includes("fmtCount(pkg.baseCount) + '+' + fmtCount(extra)"));
+
+  // 4. CSS typography hierarchy: package-credit is larger (28px) than package-amount (15px)
+  assert.ok(styleCss.includes(".package-credit strong{font-size:28px"));
+  assert.ok(styleCss.includes(".package-amount{margin-top:6px;color:#2c2022;font-size:15px"));
+});
+
 test("GET /pay/return renders the polling result page", async () => {
   await withServer({}, {}, async (context) => {
     const returned = await fetch(`${context.baseUrl}/pay/return?out_trade_no=RM-X`);

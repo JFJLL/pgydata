@@ -137,10 +137,10 @@ async function seedLegacyDatabase(dbPath) {
        VALUES (1, ?, ?, ?), (1, ?, ?, ?)`,
       [
         "user-token-a",
-        "2026-08-20T08:00:00.000Z",
+        "2099-01-01T00:00:00.000Z",
         createdAt,
         "user-token-b",
-        "2026-08-20T08:00:00.000Z",
+        "2099-01-01T00:00:00.000Z",
         createdAt,
       ],
     );

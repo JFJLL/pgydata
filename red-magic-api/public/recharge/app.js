@@ -438,25 +438,23 @@
     });
   }
 
-  // ---------- 充值首页 ----------
-  function viewRecharge(params) {
-    var html = shell("recharge", ''
-      + '  <div class="page-head recharge-head">'
-      + '    <div><p class="kicker">账户额度</p><h1 class="page-title">充值中心</h1>'
-      + '    <p class="page-sub">为 magiorix 账户补充服务额度；数据采集与内容创作仍在桌面端主应用中完成。</p></div>'
-      + '    <div class="recharge-head-note"><span>安全支付</span><b>支付完成后自动到账</b></div>'
-      + '  </div>'
-      + '  <div class="balance-card">'
-      + '    <div><div class="balance-label">当前可用额度</div>'
-      + '      <div class="balance-value" id="balance-value">--<small>积分</small></div></div>'
-      + '    <div class="balance-side"><b>账户服务</b><br>充值订单和消费明细均可随时查看</div>'
-      + "  </div>"
-      + '  <div class="promo-banner-wrap" id="promo-banner-wrap"></div>'
-      + '  <div class="section-head"><div><p class="kicker">选择套餐</p><h3 class="card-title">按你的使用节奏选择额度包</h3></div><p>确认订单前可随时返回重新选择</p></div>'
-      + '  <div class="package-grid" id="package-grid"><div class="empty">正在加载套餐…</div></div>'
-      + '  <div class="section-head orders-head"><div><p class="kicker">最近订单</p><h3 class="card-title">充值订单</h3></div><a href="#/records/recharge">查看全部记录 →</a></div>'
-      + '  <div class="card orders-card"><div id="recent-orders"><div class="empty">正在加载…</div></div></div>'
-    );
+ // ---------- 充值首页 ----------
+ function viewRecharge(params) {
+   var html = shell("recharge", ''
+     + '  <div class="page-head recharge-head">'
+     + '    <div><p class="kicker">账户额度</p><h1 class="page-title">充值中心</h1>'
+     + '    <p class="page-sub">为 magiorix 账户补充服务额度；数据采集与内容创作仍在桌面端主应用中完成。</p></div>'
+     + '  </div>'
+     + '  <div class="balance-card">'
+     + '    <div><div class="balance-label">当前可用额度</div>'
+     + '      <div class="balance-value" id="balance-value">--<small>积分</small></div></div>'
+     + "  </div>"
+     + '  <div class="promo-banner-wrap" id="promo-banner-wrap"></div>'
+      + '  <div class="section-head"><div><p class="kicker">选择套餐</p><h3 class="card-title">按你的使用节奏选择额度包</h3></div></div>'
+     + '  <div class="package-grid" id="package-grid"><div class="empty">正在加载套餐…</div></div>'
+     + '  <div class="section-head orders-head"><div><p class="kicker">最近订单</p><h3 class="card-title">充值订单</h3></div><a href="#/records/recharge">查看全部记录 →</a></div>'
+     + '  <div class="card orders-card"><div id="recent-orders"><div class="empty">正在加载…</div></div></div>'
+   );
 
     mount(html, function (root) {
       bindLogout(root);
@@ -492,58 +490,47 @@
             ? '<div class="promo-banner"><span class="promo-tag">首充专享</span><span>首次充值 50 元及以上，再送基础积分 20%，最高再送 300 积分。</span></div>'
             : "";
         }
-        grid.innerHTML = packages.map(function (pkg) {
-          var gift = Number(pkg.giftCount || 0);
-          var promo = Number(pkg.promotionCount || 0);
-          var isFirstRecharge = Boolean(pkg.firstRechargeEligible);
-          var extra = gift + (isFirstRecharge ? promo : 0);
-          var recommended = Boolean(pkg.recommended);
-          var scene = pkg.scene || "额度包";
-          var mobileGiftBadge = "";
-          var desktopGiftBadge = "";
+       grid.innerHTML = packages.map(function (pkg) {
+         var gift = Number(pkg.giftCount || 0);
+         var promo = Number(pkg.promotionCount || 0);
+         var isFirstRecharge = Boolean(pkg.firstRechargeEligible);
+         var extra = gift + (isFirstRecharge ? promo : 0);
+         var recommended = Boolean(pkg.recommended);
+         var scene = pkg.scene || "额度包";
+          var giftBadge = "";
           if (isFirstRecharge && (gift > 0 || promo > 0)) {
-            mobileGiftBadge = '<span class="package-gift package-mobile-gift">首充共赠 ' + fmtCount(gift + promo) + '</span>';
-            desktopGiftBadge = '<span class="package-gift package-desktop-gift">首充多得 +' + fmtCount(extra) + '</span>';
+            giftBadge = '<span class="package-gift">首充共赠 ' + fmtCount(gift + promo) + '</span>';
           } else if (gift > 0) {
-            mobileGiftBadge = '<span class="package-gift package-mobile-gift">加赠 ' + fmtCount(gift) + '</span>';
-            desktopGiftBadge = '<span class="package-gift package-desktop-gift">套餐加赠 +' + fmtCount(gift) + '</span>';
+            giftBadge = '<span class="package-gift">加赠 ' + fmtCount(gift) + '</span>';
           }
-          var amountStr = (pkg.amountCents % 100 === 0) ? String(pkg.amountCents / 100) : fmtMoney(pkg.amountCents);
-          var mobileMetaHtml = "";
+          var amountFormatted = fmtMoney(pkg.amountCents);
+          var pointsDisplay = extra > 0
+            ? (fmtCount(pkg.baseCount) + '+' + fmtCount(extra))
+            : fmtCount(pkg.baseCount);
+          var pointsLabel = (isFirstRecharge && promo > 0) ? "首充到账积分" : "到账积分";
+
+          var metaHtml = "";
           if (isFirstRecharge && promo > 0) {
-            mobileMetaHtml = '<span>基础 ' + fmtCount(pkg.baseCount) + ' + 套餐加赠 ' + fmtCount(gift) + ' + 首充再赠 ' + fmtCount(promo) + '</span>';
+            metaHtml = '<span>基础 ' + fmtCount(pkg.baseCount) + ' 积分</span>'
+              + (gift > 0 ? '<span>套餐加赠 ' + fmtCount(gift) + ' 积分</span>' : '')
+              + '<span>首充再赠 ' + fmtCount(promo) + ' 积分</span>';
           } else if (gift > 0) {
-            mobileMetaHtml = '<span>基础 ' + fmtCount(pkg.baseCount) + ' + 加赠 ' + fmtCount(gift) + ' 积分</span>';
+            metaHtml = '<span>基础 ' + fmtCount(pkg.baseCount) + ' 积分</span>'
+              + '<span>额外赠送 ' + fmtCount(gift) + ' 积分</span>';
           } else {
-            mobileMetaHtml = '<span>基础 ' + fmtCount(pkg.baseCount) + ' 积分</span>';
-          }
-          var payablePoints = fmtCount(pkg.payableTotalCount || pkg.totalCount);
-          var mobilePointsLabel = (isFirstRecharge && promo > 0) ? "首充到账积分" : "到账积分";
-          var desktopPointsLabel = isFirstRecharge ? "首充预计到账" : "到账积分";
-          var desktopPointsHtml = extra > 0
-            ? '<div class="package-desktop-points"><span>' + fmtCount(pkg.baseCount) + '<small> 常规积分</small></span><b>+</b><span class="extra">' + fmtCount(extra) + '<small> 额外积分</small></span></div>'
-            : '<div class="package-desktop-points muted"><span>' + fmtCount(pkg.baseCount) + '<small> 常规积分</small></span></div>';
-          var desktopDetailsHtml = "";
-          if (extra > 0) {
-            desktopDetailsHtml = '<div class="package-hover-details"><div class="package-hover-title">额外积分明细</div>'
-              + (gift > 0 ? '<span>套餐加赠 <b>+' + fmtCount(gift) + ' 积分</b></span>' : '')
-              + (isFirstRecharge && promo > 0 ? '<span>首充加赠 <b>+' + fmtCount(promo) + ' 积分</b></span>' : '')
-              + '</div>';
+            metaHtml = '<span>基础 ' + fmtCount(pkg.baseCount) + ' 积分</span>'
+              + '<span>支付成功后自动到账</span>';
           }
           return ''
-            + '<button class="package-card' + (recommended ? ' recommended' : '') + (extra > 0 ? ' has-extra' : '') + '" type="button" data-plan="' + esc(pkg.id) + '">'
-            + mobileGiftBadge
-            + desktopGiftBadge
+            + '<button class="package-card' + (recommended ? ' recommended' : '') + '" type="button" data-plan="' + esc(pkg.id) + '">'
+            + giftBadge
             + '<div class="package-card-top">'
             + '  <span class="package-scene">' + esc(scene) + '</span>'
-            + (recommended ? '  <span class="package-recommend">高频推荐</span>' : '')
+            + (recommended ? '  <span class="package-recommend">推荐选择</span>' : '')
             + '</div>'
-            + '<div class="package-amount"><span>¥</span>' + amountStr + '</div>'
-            + '<div class="package-credit package-mobile-credit"><strong>' + payablePoints + '</strong><span>' + mobilePointsLabel + '</span></div>'
-            + '<div class="package-meta package-mobile-meta">' + mobileMetaHtml + '</div>'
-            + '<div class="package-desktop-credit"><span>' + desktopPointsLabel + '</span><strong>' + payablePoints + '<small> 积分</small></strong></div>'
-            + desktopPointsHtml
-            + desktopDetailsHtml
+            + '<div class="package-credit"><strong>' + pointsDisplay + '</strong><span>' + pointsLabel + '</span></div>'
+            + '<div class="package-amount"><span>¥</span>' + amountFormatted + '</div>'
+            + '<div class="package-meta">' + metaHtml + '</div>'
             + '<span class="package-btn"><span>选择此套餐</span><b>→</b></span>'
             + "</button>";
         }).join("");
