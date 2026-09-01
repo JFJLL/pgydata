@@ -310,7 +310,7 @@ if (!fs.readFileSync(mainBundle, "utf8").includes('field:"recentNoteInteractionM
   replaceOnce(
     mainBundle,
     '{field:"impMedianBusiness90",headerName:"曝光中位数(合作90天)",width:180}',
-    '{field:"impMedianBusiness90",headerName:"曝光中位数(合作90天)",width:180},{field:"recentNoteInteractionMedian",headerName:"近期笔记波动中位数",width:190}',
+    '{field:"impMedianBusiness90",headerName:"曝光中位数(合作90天)",width:180},{field:"mCpuvBusiness90",headerName:"外溢进店中位数(合作90天)",width:190},{field:"recentNoteInteractionMedian",headerName:"近期笔记波动中位数",width:190}',
     "add recent note interaction median grid column after business-90",
   );
 }
@@ -318,7 +318,7 @@ if (!fs.readFileSync(mainBundle, "utf8").includes('{group:"近期笔记波动",l
   replaceOnce(
     mainBundle,
     '{group:"合作90天",label:"曝光中位数",key:"impMedianBusiness90"}',
-    '{group:"合作90天",label:"曝光中位数",key:"impMedianBusiness90"},{group:"近期笔记波动",label:"中位数",key:"recentNoteInteractionMedian"}',
+    '{group:"合作90天",label:"曝光中位数",key:"impMedianBusiness90"},{group:"合作90天",label:"外溢进店中位数",key:"mCpuvBusiness90"},{group:"近期笔记波动",label:"中位数",key:"recentNoteInteractionMedian"}',
     "add recent note interaction median export header after business-90",
   );
 }
@@ -326,8 +326,23 @@ if (!fs.readFileSync(mainBundle, "utf8").includes('groupKey:"recent-note-fluctua
   replaceOnce(
     mainBundle,
     '{key:"impMedianBusiness90",label:"曝光中位数"}]},{groupKey:"fans-core"',
-    '{key:"impMedianBusiness90",label:"曝光中位数"}]},{groupKey:"recent-note-fluctuation",groupLabel:"近期笔记波动",description:"近期笔记互动量波动中位数",fields:[{key:"recentNoteInteractionMedian",label:"中位数",defaultSelected:!0}]},{groupKey:"fans-core"',
+    '{key:"impMedianBusiness90",label:"曝光中位数"},{key:"mCpuvBusiness90",label:"外溢进店中位数",defaultSelected:!0}]},{groupKey:"recent-note-fluctuation",groupLabel:"近期笔记波动",description:"近期笔记互动量波动中位数",fields:[{key:"recentNoteInteractionMedian",label:"中位数",defaultSelected:!0}]},{groupKey:"fans-core"',
     "add recent note interaction median selector group after business-90",
+  );
+}
+
+if (!fs.readFileSync(urlValidatorBundle, "utf8").includes("blogger:15")) {
+  replaceOnce(
+    urlValidatorBundle,
+    'const Q={pgy:{blogger:2.3,notebook:1.5},starmap:{blogger:23},douyin:{blogger:6}}',
+    'const Q={pgy:{blogger:15,notebook:4},starmap:{blogger:22},douyin:{blogger:8}}',
+    "update base task pace constants",
+  );
+  replaceOnce(
+    urlValidatorBundle,
+    'if(e==="pgy"&&o==="blogger")return 2.3+(r>0?.4:0)+(l?.1:0);return((Q[e]??{})[o])??2',
+    'if(e==="pgy"&&o==="blogger")return 12+(r*.6)+(l?1.5:0);if(e==="pgy"&&o==="notebook")return 4;return((Q[e]??{})[o])??10',
+    "update realistic task duration estimation formula",
   );
 }
 

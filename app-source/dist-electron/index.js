@@ -17029,7 +17029,7 @@ class Xd {
           platform: u.platforms[0],
           fields: l.fields,
           requestCaptcha: async (b) => (v = !0, this.handleUploadCaptcha(b))
-        }), n === "pgy" ? 9e4 : 12e4, `${n}.${s}.item`);
+        }), 12e4, `${n}.${s}.item`);
         if (!v && this.isCaptchaInWindow(d)) {
           if ((await this.handleUploadCaptcha({
             window: d,
@@ -18044,6 +18044,7 @@ const dm = {
     "picture3sViewRateBusiness90",
     "mEngagementNumBusiness90",
     "impMedianBusiness90",
+    "mCpuvBusiness90",
     "interactRate"
   ],
   fansSummary: ["activeFansRate", "fansIncreaseNum", "fansGrowthRate", "engageFansRate", "bloggerOverviewChart"],
@@ -18319,8 +18320,11 @@ import json
 import math
 import os
 import re
+import socket
 import sys
 import urllib.request
+
+socket.setdefaulttimeout(2.0)
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
@@ -19450,6 +19454,7 @@ def main():
                 errors[field] = str(exc)
     output = json.dumps({"ok": True, "paths": paths, "errors": errors}, ensure_ascii=False)
     sys.stdout.buffer.write((output + "\n").encode("utf-8"))
+    sys.stdout.buffer.flush()
 
 
 if __name__ == "__main__":
@@ -19510,7 +19515,7 @@ function pgySpawnChartRenderer(a, e, t) {
       o += p.toString("utf8");
     }), c.on("close", (p) => {
       p === 0 ? u(null) : u(new Error(`renderer exit ${p}: ${o.slice(0, 1200)}`));
-    }), c.stdin.end(e);
+    }), c.stdin.end(Buffer.from(e, "utf8"));
   });
 }
 function pgySpawnPythonChart(a, e, t, n) {
@@ -19552,7 +19557,7 @@ function pgySpawnPythonChart(a, e, t, n) {
 }
 async function pgyRenderChartsWithPython(a) {
   if (!a.length) return {};
-  const e = JSON.stringify({ charts: a }), t = Math.max(15e3, 5e3 + a.length * 4e3), n = [];
+  const e = JSON.stringify({ charts: a }), t = Math.min(20e3, Math.max(10e3, 3e3 + a.length * 1500)), n = [];
   for (const s of pgyChartRendererCandidates())
     try {
       j.info(`[pgy-chart] 调用内置绘图程序: ${s}, charts=${a.length}, timeout=${t}`);
@@ -19565,7 +19570,7 @@ async function pgyRenderChartsWithPython(a) {
     }
   for (const s of pgyPythonCandidates())
     try {
-      const i = await pgySpawnPythonChart(s.cmd, s.args, e, t), o = JSON.parse(i.trim().split(/\r?\n/).pop() || "{}");
+      const i = await pgySpawnPythonChart(s.cmd, s.args, e, 8e3), o = JSON.parse(i.trim().split(/\r?\n/).pop() || "{}");
       if (o && o.ok)
         return o.errors && Object.keys(o.errors).length && j.warn(`[pgy-chart] Python 部分图表生成失败: ${JSON.stringify(o.errors)}`), o.paths ?? {};
       n.push(`${s.cmd}: invalid response`);
@@ -20767,6 +20772,7 @@ class hm {
       picture3sViewRateBusiness90: u.picture3sViewRate + "%",
       mEngagementNumBusiness90: u.mEngagementNum,
       impMedianBusiness90: u.impMedian,
+      mCpuvBusiness90: u.mCpuv ?? u.overflowNum ?? u.mCpuv90d ?? u.cpuvMedian ?? u.overflowMedian ?? u.overflow ?? "无",
       // 粉丝核心数据
       activeFansRate: l.activeFansRate + "%",
       fansIncreaseNum: l.fansIncreaseNum,

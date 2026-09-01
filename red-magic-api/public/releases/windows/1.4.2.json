@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "channel": "stable",
+  "desktop": {
+    "version": "1.4.2",
+    "fileName": "magiorix-desktop-1.4.2-windows.exe",
+    "downloadUrl": "https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-1.4.2-windows.exe",
+    "size": 106064547,
+    "sha256": "A7D6EB10EADA4ABE8F0F5CFE89DF2246525B8B2295426733D770E5DAD65453EF"
+  },
+  "assets": {
+    "version": "1.4.2",
+    "fileName": "magiorix-desktop-1.4.2-assets.zip",
+    "downloadUrl": "https://magiorix.red-magic.cn/assets/desktop/1.4.2/assets.zip",
+    "size": 2590704,
+    "sha256": "C89018D0A35C8591059935649842FBA3A0A0B30111EBA6CDD46F1B22E8D3A88E"
+  },
+  "releaseNotes": [
+    "magiorix 1.4.2 update"
+  ],
+  "generatedAt": "2026-09-01T07:18:19.6699324Z"
+}

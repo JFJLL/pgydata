@@ -2236,7 +2236,7 @@ main = main
     /import urllib\.request\r?\n(?:import urllib\.request\r?\n)+/,
     "import urllib.request\n",
   );
-if (!/import os\r?\nimport re\r?\nimport sys/.test(main)) {
+if (!main.includes("import re")) {
   main = replaceOnce(
     main,
     `import os

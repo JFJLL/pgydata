@@ -5,8 +5,11 @@ import json
 import math
 import os
 import re
+import socket
 import sys
 import urllib.request
+
+socket.setdefaulttimeout(2.0)
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
@@ -1136,6 +1139,7 @@ def main():
                 errors[field] = str(exc)
     output = json.dumps({"ok": True, "paths": paths, "errors": errors}, ensure_ascii=False)
     sys.stdout.buffer.write((output + "\n").encode("utf-8"))
+    sys.stdout.buffer.flush()
 
 
 if __name__ == "__main__":

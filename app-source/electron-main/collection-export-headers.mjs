@@ -91,6 +91,7 @@ const PGY_BLOGGER_EXPORT_HEADERS = Object.freeze([
   { group: "合作90天", label: "图文3s阅读率", key: "picture3sViewRateBusiness90" },
   { group: "合作90天", label: "互动中位数", key: "mEngagementNumBusiness90" },
   { group: "合作90天", label: "曝光中位数", key: "impMedianBusiness90" },
+  { group: "合作90天", label: "外溢进店中位数", key: "mCpuvBusiness90" },
   { group: "近期笔记波动", label: "中位数", key: "recentNoteInteractionMedian" },
   { group: "粉丝核心数据", label: "活跃粉丝占比", key: "activeFansRate" },
   { group: "粉丝核心数据", label: "粉丝增量", key: "fansIncreaseNum" },

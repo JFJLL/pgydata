@@ -2,6 +2,16 @@
 
 本文件保存版本历史、发布记录、安装包路径与校验信息，不放长期维护规则。
 
+## 1.4.2 (Candidate)
+
+- 优化：修复预估采集时间计算模型（蒲公英博主主页由旧的 2.3s/条校准为更贴近真实网络与绘图开销的 15~20s/条，蒲公英笔记校准为 4s/条）。
+- 新增：蒲公英博主主页采集增加「90天合作笔记图文+视频的外溢进店中位数」（mCpuvBusiness90）字段采集与 Excel 导出支持。
+- 修复：内置绘图子进程增加全局网络 2.0s 严格超时与标准输出即时 Flush，避免挂起超时；渲染超时自动回退毫秒级 JS 兜底。
+- 升级：桌面端版本、前端资源版本与服务端版本同步升级至 1.4.2。
+- 本地安装包：desktop-versions/windows/1.4.2/magiorix-desktop-1.4.2-windows.exe（SHA256：a7d6eb10eada4abe8f0f5cfe89df2246525b8b2295426733d770e5dad65453ef）。
+- 本地资源包：red-magic-api/public/assets/desktop/1.4.2/assets.zip（SHA256：c89018d0a35c8591059935649842fba3a0a0b30111eba6cdd46f1b22e8d3a88e）。
+- 发布状态：已生成本地不可变版本 manifest（red-magic-api/public/releases/windows/1.4.2.json）。
+
 ## 1.4.1 (Release)
 
 - 修复：软件头部充值按钮跳转链接由本地调试端口 `http://127.0.0.1:3050/recharge` 修正为正式线上网页充值中心 `https://magiorix.red-magic.cn/recharge`。
