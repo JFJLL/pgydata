@@ -1,4 +1,4 @@
-var br = Object.defineProperty;
+﻿var br = Object.defineProperty;
 var wr = (a, e, t) => e in a ? br(a, e, { enumerable: !0, configurable: !0, writable: !0, value: t }) : a[e] = t;
 var w = (a, e, t) => wr(a, typeof e != "symbol" ? e + "" : e, t);
 import { ipcMain as F, BrowserWindow as Dt, app as ye, screen as Gi, shell as Ji, dialog as Ki, net as Jt, Notification as Et, session as Pn, nativeImage as PgyNativeImage } from "electron";
@@ -16987,14 +16987,16 @@ class Xd {
     for (let m = 0; await (async () => { for (;;) { if (l.cancelled) return !1; if (l.paused) { await this.waitForResume(l); if (l.cancelled) return !1; } while (m < pgyUrls.length && pgyTerminal.has(pgySourceIndexes[m] ?? m)) { l.current = m + 1; m += 1; } if (m < pgyUrls.length) return !0; const live = await pgyCollectionHistory.getTask(t).catch(() => null); if (!live || live.inputType !== "search-batch") return !1; if (Array.isArray(live.urls) && live.urls.length > pgyUrls.length) { pgyUrls = live.urls.map((u) => String(u ?? "")); pgyTerminal = new Set((await pgyCollectionHistory.getTerminalIndexes(t).catch(() => [])) || []); l.total = Number.isFinite(live.total) ? live.total : pgyUrls.length; continue; } if (live.discoveryClosed === true) return !1; await new Promise((r) => setTimeout(r, 500)); } })(); m++) {
       const f = pgyUrls[m], pgyItemIndex = pgySourceIndexes[m] ?? m, pgyPending = pgyPendingCharges.get(pgyItemIndex);
       l.current = m + 1;
+      const startPct = Math.max(0, Math.round(m / l.total * 100));
       this.sendToRenderer(W.task.progress, {
         taskId: t,
         inputType: l.inputType,
         current: l.current,
         total: l.total,
-        percent: Math.max(0, Math.round(m / l.total * 100))
+        percent: startPct
       });
       ue.info(`[task=${t}] 开始采集原始第 ${pgyItemIndex + 1} 条，当前 ${m + 1}/${pgyUrls.length} plugin=${n} taskType=${s} url=${String(f).slice(0, 180)}`);
+      let progressTimer = null;
       if (pgyPending) {
         try {
           const v = await Le.get().consumeShumiaoForItem(e, m, pgyItemIndex);
@@ -17020,6 +17022,21 @@ class Xd {
         }
       }
       try {
+        const itemStartTime = Date.now();
+        const estItemDuration = (n === "pgy" && s === "blogger") ? (Array.isArray(l.fields) && l.fields.length > 0 ? Math.max(8000, l.fields.length * 500) : 18000) : (n === "pgy" && s === "notebook" ? 4000 : 10000);
+        progressTimer = setInterval(() => {
+          if (l.cancelled || l.paused) return;
+          const elapsed = Date.now() - itemStartTime;
+          const fraction = Math.min(0.92, elapsed / estItemDuration);
+          const currentPercent = Math.min(99, Math.round(((m + fraction) / l.total) * 100));
+          this.sendToRenderer(W.task.progress, {
+            taskId: t,
+            inputType: l.inputType,
+            current: l.current,
+            total: l.total,
+            percent: currentPercent
+          });
+        }, 800);
         let v = !1;
         const y = await pgyTimeout(u.scrapeItem(f, s, {
           window: d,
@@ -17112,9 +17129,11 @@ class Xd {
           break;
         }
       }
-      const g = Math.round(l.current / l.total * 100);
+      if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+      const g = Math.round((m + 1) / l.total * 100);
       this.sendToRenderer(W.task.progress, {
         taskId: t,
+        inputType: l.inputType,
         current: l.current,
         total: l.total,
         percent: g
@@ -17702,8 +17721,16 @@ const Re = "https://pgy.xiaohongshu.com", Yd = `${Re}/api/solar/user/info`, Qd =
   daily90: (a) => `${Re}/api/solar/kol/data_v3/notes_rate?userId=${a}&business=0&noteType=3&dateType=2&advertiseSwitch=1`,
   /** 合作笔记近30天 */
   business30: (a) => `${Re}/api/solar/kol/data_v3/notes_rate?userId=${a}&business=1&noteType=3&dateType=1&advertiseSwitch=1`,
+  /** 合作图文笔记近30天 */
+  business30Picture: (a) => `${Re}/api/solar/kol/data_v3/notes_rate?userId=${a}&business=1&noteType=1&dateType=1&advertiseSwitch=1`,
+  /** 合作视频笔记近30天 */
+  business30Video: (a) => `${Re}/api/solar/kol/data_v3/notes_rate?userId=${a}&business=1&noteType=2&dateType=1&advertiseSwitch=1`,
   /** 合作笔记近90天 */
   business90: (a) => `${Re}/api/solar/kol/data_v3/notes_rate?userId=${a}&business=1&noteType=3&dateType=2&advertiseSwitch=1`,
+  /** 合作图文笔记近90天 */
+  business90Picture: (a) => `${Re}/api/solar/kol/data_v3/notes_rate?userId=${a}&business=1&noteType=1&dateType=2&advertiseSwitch=1`,
+  /** 合作视频笔记近90天 */
+  business90Video: (a) => `${Re}/api/solar/kol/data_v3/notes_rate?userId=${a}&business=1&noteType=2&dateType=2&advertiseSwitch=1`,
   /** 粉丝核心数据 */
   fansSummary: (a) => `${Re}/api/solar/kol/data_v3/fans_summary?userId=${a}`,
   /** 数据概览汇总（网页数据概览卡片同源接口） */
@@ -17722,7 +17749,11 @@ const Re = "https://pgy.xiaohongshu.com", Yd = `${Re}/api/solar/user/info`, Qd =
   "daily30Video",
   "daily90",
   "business30",
+  "business30Picture",
+  "business30Video",
   "business90",
+  "business90Picture",
+  "business90Video",
   "fansSummary",
   "overviewSummary",
   "fansProfile",
@@ -18032,8 +18063,11 @@ const dm = {
     "picture3sViewRateBusiness30",
     "mEngagementNumBusiness30",
     "impMedianBusiness30",
+    "mCpuvBusiness30",
     "interactRate"
   ],
+  business30Picture: ["mCpuvBusiness30Picture"],
+  business30Video: ["mCpuvBusiness30Video"],
   business90: [
     "noteNumberBusiness90",
     "thousandLikePercentBusiness90",
@@ -18047,6 +18081,8 @@ const dm = {
     "mCpuvBusiness90",
     "interactRate"
   ],
+  business90Picture: ["mCpuvBusiness90Picture"],
+  business90Video: ["mCpuvBusiness90Video"],
   fansSummary: ["activeFansRate", "fansIncreaseNum", "fansGrowthRate", "engageFansRate", "bloggerOverviewChart"],
   overviewSummary: ["bloggerOverviewChart"],
   fansProfile: [
@@ -20762,6 +20798,9 @@ class hm {
       picture3sViewRateBusiness30: c.picture3sViewRate + "%",
       mEngagementNumBusiness30: c.mEngagementNum,
       impMedianBusiness30: c.impMedian,
+      mCpuvBusiness30: c.mCpuv ?? c.overflowNum ?? c.mCpuv30d ?? c.cpuvMedian ?? c.overflowMedian ?? c.overflow ?? "无",
+      mCpuvBusiness30Picture: ((t.business30Picture == null ? void 0 : t.business30Picture.data) ?? {}).mCpuv ?? ((t.business30Picture == null ? void 0 : t.business30Picture.data) ?? {}).overflowNum ?? ((t.business30Picture == null ? void 0 : t.business30Picture.data) ?? {}).mCpuv30d ?? ((t.business30Picture == null ? void 0 : t.business30Picture.data) ?? {}).cpuvMedian ?? ((t.business30Picture == null ? void 0 : t.business30Picture.data) ?? {}).overflowMedian ?? ((t.business30Picture == null ? void 0 : t.business30Picture.data) ?? {}).overflow ?? "无",
+      mCpuvBusiness30Video: ((t.business30Video == null ? void 0 : t.business30Video.data) ?? {}).mCpuv ?? ((t.business30Video == null ? void 0 : t.business30Video.data) ?? {}).overflowNum ?? ((t.business30Video == null ? void 0 : t.business30Video.data) ?? {}).mCpuv30d ?? ((t.business30Video == null ? void 0 : t.business30Video.data) ?? {}).cpuvMedian ?? ((t.business30Video == null ? void 0 : t.business30Video.data) ?? {}).overflowMedian ?? ((t.business30Video == null ? void 0 : t.business30Video.data) ?? {}).overflow ?? "无",
       // 合作90天
       noteNumberBusiness90: u.noteNumber,
       thousandLikePercentBusiness90: u.thousandLikePercent + "%",
@@ -20773,6 +20812,8 @@ class hm {
       mEngagementNumBusiness90: u.mEngagementNum,
       impMedianBusiness90: u.impMedian,
       mCpuvBusiness90: u.mCpuv ?? u.overflowNum ?? u.mCpuv90d ?? u.cpuvMedian ?? u.overflowMedian ?? u.overflow ?? "无",
+      mCpuvBusiness90Picture: ((t.business90Picture == null ? void 0 : t.business90Picture.data) ?? {}).mCpuv ?? ((t.business90Picture == null ? void 0 : t.business90Picture.data) ?? {}).overflowNum ?? ((t.business90Picture == null ? void 0 : t.business90Picture.data) ?? {}).mCpuv90d ?? ((t.business90Picture == null ? void 0 : t.business90Picture.data) ?? {}).cpuvMedian ?? ((t.business90Picture == null ? void 0 : t.business90Picture.data) ?? {}).overflowMedian ?? ((t.business90Picture == null ? void 0 : t.business90Picture.data) ?? {}).overflow ?? "无",
+      mCpuvBusiness90Video: ((t.business90Video == null ? void 0 : t.business90Video.data) ?? {}).mCpuv ?? ((t.business90Video == null ? void 0 : t.business90Video.data) ?? {}).overflowNum ?? ((t.business90Video == null ? void 0 : t.business90Video.data) ?? {}).mCpuv90d ?? ((t.business90Video == null ? void 0 : t.business90Video.data) ?? {}).cpuvMedian ?? ((t.business90Video == null ? void 0 : t.business90Video.data) ?? {}).overflowMedian ?? ((t.business90Video == null ? void 0 : t.business90Video.data) ?? {}).overflow ?? "无",
       // 粉丝核心数据
       activeFansRate: l.activeFansRate + "%",
       fansIncreaseNum: l.fansIncreaseNum,

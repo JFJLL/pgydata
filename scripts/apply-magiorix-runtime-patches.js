@@ -1,4 +1,4 @@
-const fs = require("fs");
+﻿const fs = require("fs");
 const path = require("path");
 
 const projectRoot = process.env.MAGIORIX_PATCH_PROJECT_ROOT
@@ -2043,6 +2043,53 @@ main = replaceOnce(
     "pgy typed daily note endpoint list",
   );
 
+if (!main.includes("business30Picture:")) {
+  main = replaceOnce(
+    main,
+    `  /** 合作笔记近30天 */\n  business30: (a) => \`\${Re}/api/solar/kol/data_v3/notes_rate?userId=\${a}&business=1&noteType=3&dateType=1&advertiseSwitch=1\`,\n  /** 合作笔记近90天 */\n  business90: (a) => \`\${Re}/api/solar/kol/data_v3/notes_rate?userId=\${a}&business=1&noteType=3&dateType=2&advertiseSwitch=1\`,`,
+    `  /** 合作笔记近30天 */\n  business30: (a) => \`\${Re}/api/solar/kol/data_v3/notes_rate?userId=\${a}&business=1&noteType=3&dateType=1&advertiseSwitch=1\`,\n  /** 合作图文笔记近30天 */\n  business30Picture: (a) => \`\${Re}/api/solar/kol/data_v3/notes_rate?userId=\${a}&business=1&noteType=1&dateType=1&advertiseSwitch=1\`,\n  /** 合作视频���记近30天 */\n  business30Video: (a) => \`\${Re}/api/solar/kol/data_v3/notes_rate?userId=\${a}&business=1&noteType=2&dateType=1&advertiseSwitch=1\`,\n  /** 合作笔记近90天 */\n  business90: (a) => \`\${Re}/api/solar/kol/data_v3/notes_rate?userId=\${a}&business=1&noteType=3&dateType=2&advertiseSwitch=1\`,\n  /** 合作图文笔记近90天 */\n  business90Picture: (a) => \`\${Re}/api/solar/kol/data_v3/notes_rate?userId=\${a}&business=1&noteType=1&dateType=2&advertiseSwitch=1\`,\n  /** 合作视频笔记近90天 */\n  business90Video: (a) => \`\${Re}/api/solar/kol/data_v3/notes_rate?userId=\${a}&business=1&noteType=2&dateType=2&advertiseSwitch=1\`,`,
+    "pgy typed coop note endpoints",
+  );
+  main = replaceOnce(
+    main,
+    `  "business30",\n  "business90",`,
+    `  "business30",\n  "business30Picture",\n  "business30Video",\n  "business90",\n  "business90Picture",\n  "business90Video",`,
+    "pgy typed coop note endpoint list",
+  );
+}
+if (!main.includes('business30Picture: ["mCpuvBusiness30Picture"]')) {
+  main = replaceOnce(
+    main,
+    `    "impMedianBusiness30",
+    "interactRate"
+  ],
+  business90: [`,
+    `    "impMedianBusiness30",
+    "mCpuvBusiness30",
+    "interactRate"
+  ],
+  business30Picture: ["mCpuvBusiness30Picture"],
+  business30Video: ["mCpuvBusiness30Video"],
+  business90: [`,
+    "pgy typed coop 30d field dependencies",
+  );
+  main = replaceOnce(
+    main,
+    `    "impMedianBusiness90",
+    "interactRate"
+  ],
+  fansSummary: [`,
+    `    "impMedianBusiness90",
+    "mCpuvBusiness90",
+    "interactRate"
+  ],
+  business90Picture: ["mCpuvBusiness90Picture"],
+  business90Video: ["mCpuvBusiness90Video"],
+  fansSummary: [`,
+    "pgy typed coop 90d field dependencies",
+  );
+}
+
 // 基线 bundle（1.2.0 发布）已含 typed 日常图字段依赖，仅更早原始 bundle 才需扩展。
 const hasTypedDailyNoteDeps = main.includes(
   'dailyNotePicturePerformanceChart: ["dailyNotePicturePerformanceChart"]',
@@ -3729,19 +3776,22 @@ main = replaceOnce(
 
 // 3) 运行中任务事件携带 inputType（progress/itemResult/complete，共 5 处 +
 // reconcile 块 1 处已在上方 reconcile 补丁内处理）。
-main = replaceOnce(
-  main,
-  `      l.current = m + 1;
+if (main.includes(`taskId: t,
+        current: l.current,`)) {
+  main = replaceOnce(
+    main,
+    `      l.current = m + 1;
       this.sendToRenderer(W.task.progress, {
         taskId: t,
         current: l.current,`,
-  `      l.current = m + 1;
+    `      l.current = m + 1;
       this.sendToRenderer(W.task.progress, {
         taskId: t,
         inputType: l.inputType,
         current: l.current,`,
-  "progress event carries inputType",
-);
+    "progress event carries inputType",
+  );
+}
 main = replaceOnce(
   main,
   `        y.status === "success" ? l.successCount++ : l.errorCount++, this.sendToRenderer(W.task.itemResult, {

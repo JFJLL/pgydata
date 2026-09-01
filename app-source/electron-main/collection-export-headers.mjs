@@ -1,4 +1,4 @@
-// 历史任务导出使用的规范两行表头 Schema。
+﻿// 历史任务导出使用的规范两行表头 Schema。
 // 与前端正常导出（mode: "two-row"）使用的表头保持一致；来源见 assets/<version> 前端构建产物。
 // 该模块由主进程 history.exportTask 处理器使用，用于补齐历史导出丢失的 mode/headers。
 
@@ -82,6 +82,9 @@ const PGY_BLOGGER_EXPORT_HEADERS = Object.freeze([
   { group: "合作30天", label: "图文3s阅读率", key: "picture3sViewRateBusiness30" },
   { group: "合作30天", label: "互动中位数", key: "mEngagementNumBusiness30" },
   { group: "合作30天", label: "曝光中位数", key: "impMedianBusiness30" },
+  { group: "合作30天", label: "外溢进店中位数(图文+视频)", key: "mCpuvBusiness30" },
+  { group: "合作30天", label: "外溢进店中位数(图文)", key: "mCpuvBusiness30Picture" },
+  { group: "合作30天", label: "外溢进店中位数(视频)", key: "mCpuvBusiness30Video" },
   { group: "合作90天", label: "发布笔记数", key: "noteNumberBusiness90" },
   { group: "合作90天", label: "千赞比例", key: "thousandLikePercentBusiness90" },
   { group: "合作90天", label: "百赞比例", key: "hundredLikePercentBusiness90" },
@@ -91,7 +94,9 @@ const PGY_BLOGGER_EXPORT_HEADERS = Object.freeze([
   { group: "合作90天", label: "图文3s阅读率", key: "picture3sViewRateBusiness90" },
   { group: "合作90天", label: "互动中位数", key: "mEngagementNumBusiness90" },
   { group: "合作90天", label: "曝光中位数", key: "impMedianBusiness90" },
-  { group: "合作90天", label: "外溢进店中位数", key: "mCpuvBusiness90" },
+  { group: "合作90天", label: "外溢进店中位数(图文+视频)", key: "mCpuvBusiness90" },
+  { group: "合作90天", label: "外溢进店中位数(图文)", key: "mCpuvBusiness90Picture" },
+  { group: "合作90天", label: "外溢进店中位数(视频)", key: "mCpuvBusiness90Video" },
   { group: "近期笔记波动", label: "中位数", key: "recentNoteInteractionMedian" },
   { group: "粉丝核心数据", label: "活跃粉丝占比", key: "activeFansRate" },
   { group: "粉丝核心数据", label: "粉丝增量", key: "fansIncreaseNum" },

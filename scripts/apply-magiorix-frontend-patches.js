@@ -1,4 +1,4 @@
-const fs = require("fs");
+﻿const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
@@ -306,28 +306,52 @@ for (const [from, to] of [
   replaceAllIfExists(urlValidatorBundle, from, to);
 }
 
-if (!fs.readFileSync(mainBundle, "utf8").includes('field:"recentNoteInteractionMedian"')) {
+if (!fs.readFileSync(mainBundle, "utf8").includes('field:"mCpuvBusiness30"')) {
+  replaceOnce(
+    mainBundle,
+    '{field:"impMedianBusiness30",headerName:"曝光中位数(合作30天)",width:180},',
+    '{field:"impMedianBusiness30",headerName:"曝光中位数(合作30天)",width:180},{field:"mCpuvBusiness30",headerName:"外溢进店中位数(图文+视频)",width:190},{field:"mCpuvBusiness30Picture",headerName:"外溢进店中位数(图文)",width:190},{field:"mCpuvBusiness30Video",headerName:"外溢进店中位数(视频)",width:190},',
+    "add coop 30d cpuv grid columns",
+  );
+}
+if (!fs.readFileSync(mainBundle, "utf8").includes('field:"mCpuvBusiness90Picture"')) {
   replaceOnce(
     mainBundle,
     '{field:"impMedianBusiness90",headerName:"曝光中位数(合作90天)",width:180}',
-    '{field:"impMedianBusiness90",headerName:"曝光中位数(合作90天)",width:180},{field:"mCpuvBusiness90",headerName:"外溢进店中位数(合作90天)",width:190},{field:"recentNoteInteractionMedian",headerName:"近期笔记波动中位数",width:190}',
-    "add recent note interaction median grid column after business-90",
+    '{field:"impMedianBusiness90",headerName:"曝光中位数(合作90天)",width:180},{field:"mCpuvBusiness90",headerName:"外溢进店中位数(图文+视频)",width:190},{field:"mCpuvBusiness90Picture",headerName:"外溢进店中位数(图文)",width:190},{field:"mCpuvBusiness90Video",headerName:"外溢进店中位数(视频)",width:190}',
+    "add coop 90d cpuv grid columns",
   );
 }
-if (!fs.readFileSync(mainBundle, "utf8").includes('{group:"近期笔记波动",label:"中位数",key:"recentNoteInteractionMedian"}')) {
+if (!fs.readFileSync(mainBundle, "utf8").includes('{group:"合作30天",label:"外溢进店中位数(图文+视频)"}')) {
+  replaceOnce(
+    mainBundle,
+    '{group:"合作30天",label:"曝光中位数",key:"impMedianBusiness30"}',
+    '{group:"合作30天",label:"曝光中位数",key:"impMedianBusiness30"},{group:"合作30天",label:"外溢进店中位数(图文+视频)",key:"mCpuvBusiness30"},{group:"合作30天",label:"外溢进店中位数(图文)",key:"mCpuvBusiness30Picture"},{group:"合作30天",label:"外溢进店中位数(视频)",key:"mCpuvBusiness30Video"}',
+    "add coop 30d cpuv export headers",
+  );
+}
+if (!fs.readFileSync(mainBundle, "utf8").includes('{group:"合作90天",label:"外溢进店中位数(图文+视频)"}')) {
   replaceOnce(
     mainBundle,
     '{group:"合作90天",label:"曝光中位数",key:"impMedianBusiness90"}',
-    '{group:"合作90天",label:"曝光中位数",key:"impMedianBusiness90"},{group:"合作90天",label:"外溢进店中位数",key:"mCpuvBusiness90"},{group:"近期笔记波动",label:"中位数",key:"recentNoteInteractionMedian"}',
-    "add recent note interaction median export header after business-90",
+    '{group:"合作90天",label:"曝光中位数",key:"impMedianBusiness90"},{group:"合作90天",label:"外溢进店中位数(图文+视频)",key:"mCpuvBusiness90"},{group:"合作90天",label:"外溢进店中位数(图文)",key:"mCpuvBusiness90Picture"},{group:"合作90天",label:"外溢进店中位数(视频)",key:"mCpuvBusiness90Video"}',
+    "add coop 90d cpuv export headers",
   );
 }
-if (!fs.readFileSync(mainBundle, "utf8").includes('groupKey:"recent-note-fluctuation"')) {
+if (!fs.readFileSync(mainBundle, "utf8").includes('{key:"mCpuvBusiness30"')) {
   replaceOnce(
     mainBundle,
-    '{key:"impMedianBusiness90",label:"曝光中位数"}]},{groupKey:"fans-core"',
-    '{key:"impMedianBusiness90",label:"曝光中位数"},{key:"mCpuvBusiness90",label:"外溢进店中位数",defaultSelected:!0}]},{groupKey:"recent-note-fluctuation",groupLabel:"近期笔记波动",description:"近期笔记互动量波动中位数",fields:[{key:"recentNoteInteractionMedian",label:"中位数",defaultSelected:!0}]},{groupKey:"fans-core"',
-    "add recent note interaction median selector group after business-90",
+    '{key:"impMedianBusiness30",label:"曝光中位数"}]},{groupKey:"business-90"',
+    '{key:"impMedianBusiness30",label:"曝光中位数"},{key:"mCpuvBusiness30",label:"外溢进店中位数(图文+视频)",defaultSelected:!0},{key:"mCpuvBusiness30Picture",label:"外溢进店中位数(图文)",defaultSelected:!0},{key:"mCpuvBusiness30Video",label:"外溢进店中位数(视频)",defaultSelected:!0}]},{groupKey:"business-90"',
+    "add coop 30d cpuv selector fields",
+  );
+}
+if (!fs.readFileSync(mainBundle, "utf8").includes('{key:"mCpuvBusiness90"')) {
+  replaceOnce(
+    mainBundle,
+    '{key:"impMedianBusiness90",label:"曝光中位数"}]},{groupKey:"recent-note-fluctuation"',
+    '{key:"impMedianBusiness90",label:"曝光中位数"},{key:"mCpuvBusiness90",label:"外溢进店中位数(图文+视频)",defaultSelected:!0},{key:"mCpuvBusiness90Picture",label:"外溢进店中位数(图文)",defaultSelected:!0},{key:"mCpuvBusiness90Video",label:"外溢进店中位数(视频)",defaultSelected:!0}]},{groupKey:"recent-note-fluctuation"',
+    "add coop 90d cpuv selector fields",
   );
 }
 
@@ -1364,3 +1388,11 @@ const normalizedMainBundle = fs
 fs.writeFileSync(mainBundle, normalizedMainBundle);
 
 console.log("Applied magiorix frontend patches.");
+
+if (!fs.readFileSync(mainBundle, "utf8").includes('C=we.task.onProgress(A=>{r(A.taskId,A.current,A.total,A.percent)})')) {
+  replaceOnce(mainBundle, 'C=we.task.onProgress(A=>{r(A.taskId,A.current,A.total)})', 'C=we.task.onProgress(A=>{r(A.taskId,A.current,A.total,A.percent)})', "onProgress passes percent");
+}
+
+if (!fs.readFileSync(mainBundle, "utf8").includes('updateProgress:(r,a,n,p)=>{e(l=>{const s=new Map(l.tasks),i=s.get(r);const pct=(typeof p==="number"&&Number.isFinite(p))?p:(n===0?0:Math.round(a/n*100));return i&&s.set(r,{...i,current:a,total:n,percent:pct}),{tasks:s}})}')) {
+  replaceOnce(mainBundle, 'updateProgress:(r,a,n)=>{e(l=>{const s=new Map(l.tasks),i=s.get(r);return i&&s.set(r,{...i,current:a,total:n,percent:n===0?0:Math.round(a/n*100)}),{tasks:s}})}', 'updateProgress:(r,a,n,p)=>{e(l=>{const s=new Map(l.tasks),i=s.get(r);const pct=(typeof p==="number"&&Number.isFinite(p))?p:(n===0?0:Math.round(a/n*100));return i&&s.set(r,{...i,current:a,total:n,percent:pct}),{tasks:s}})}', "updateProgress respects percent");
+}
