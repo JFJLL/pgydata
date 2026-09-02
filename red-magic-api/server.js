@@ -117,6 +117,7 @@ function logError(event, details = {}) {
 
 function requestLogInfo(req) {
   return {
+    requestId: req.requestId || null,
     method: req.method,
     path: requestLogPath(req),
     ip: redactIp(req.ip),
@@ -719,11 +720,20 @@ app.set("trust proxy", trustProxyValue());
 // WeChat Pay signs the exact raw request body, so the notify endpoint must
 // capture it as a Buffer before the JSON parser runs for every other route.
 app.use("/api/shumiao/wxpay/notify", express.raw({ type: "*/*", limit: "1mb" }));
+app.use("/api/diagnostics/reports/:reportId/upload", express.raw({ type: "*/*", limit: "21mb" }));
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
+  const incoming = req.get("x-magiorix-request-id") || "";
+  const valid = /^req_[A-Za-z0-9_-]{8,100}$/.test(incoming);
+  req.requestId = valid ? incoming : ('req_' + crypto.randomBytes(8).toString('hex'));
+  res.setHeader("X-Magiorix-Request-Id", req.requestId);
+  return next();
+});
+app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, satoken, Authorization");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, satoken, Authorization, X-Magiorix-Request-Id, X-Magiorix-File-Sha256");
+  res.setHeader("Access-Control-Expose-Headers", "X-Magiorix-Request-Id");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   return next();
@@ -1199,12 +1209,29 @@ app.post("/api/auth/logout", authRequired, asyncHandler(async (req, res) => {
 
 app.post("/api/auth/delete-account", authRequired, asyncHandler(async (req, res) => {
   const deletedAt = nowIso();
+  try {
+    const userReports = await dbAll("SELECT id FROM diagnostic_reports WHERE user_id = ?", [req.user.id]);
+    for (const r of userReports) {
+      const file = path.join(DIAGNOSTICS_DIR, r.id + ".zip");
+      const tempFile = path.join(DIAGNOSTICS_DIR, r.id + ".uploading");
+      if (fs.existsSync(file)) {
+        try { fs.unlinkSync(file); } catch (e) { logError("delete_account_diag_file_failed", { reportId: r.id, error: e.message }); }
+      }
+      if (fs.existsSync(tempFile)) {
+        try { fs.unlinkSync(tempFile); } catch {}
+      }
+    }
+  } catch (err) {
+    logError("delete_account_diag_query_failed", { error: err.message });
+  }
+
   await withTransaction(async (tx) => {
     await tx.run(
       "UPDATE users SET status = 0, deleted_at = ?, updated_at = ? WHERE id = ?",
       [deletedAt, deletedAt, req.user.id],
     );
     await tx.run("DELETE FROM user_tokens WHERE user_id = ?", [req.user.id]);
+    await tx.run("DELETE FROM diagnostic_reports WHERE user_id = ?", [req.user.id]);
   });
   return success(res, { deletedAt }, "账号已注销");
 }));
@@ -2497,6 +2524,305 @@ app.get("/api/admin/user-transactions", adminRequired, asyncHandler(async (req, 
   });
 }));
 
+
+// ==========================================
+// 诊断中心 / 诊断与反馈 (Diagnostics API)
+// ==========================================
+const DIAGNOSTICS_DIR = process.env.DIAGNOSTICS_DIR
+  ? path.resolve(process.env.DIAGNOSTICS_DIR)
+  : path.join(__dirname, "data", "diagnostics");
+try { fs.mkdirSync(DIAGNOSTICS_DIR, { recursive: true }); } catch (err) {
+  logError("diagnostics_dir_create_failed", { dir: DIAGNOSTICS_DIR, error: err.message });
+}
+
+const DIAGNOSTICS_RATE_LIMIT_PER_HOUR = Number(process.env.DIAGNOSTICS_RATE_LIMIT_PER_HOUR) || 5;
+const DIAGNOSTICS_MAX_BYTES = Number(process.env.DIAGNOSTICS_MAX_BYTES) || 20 * 1024 * 1024;
+const DIAGNOSTICS_RETENTION_DAYS = Number(process.env.DIAGNOSTICS_RETENTION_DAYS) || 30;
+const DIAGNOSTICS_PENDING_RETENTION_HOURS = Number(process.env.DIAGNOSTICS_PENDING_RETENTION_HOURS) || 24;
+
+async function cleanupExpiredDiagnostics(db = database) {
+  try {
+    const now = nowIso();
+    const pendingCutoff = new Date(Date.now() - DIAGNOSTICS_PENDING_RETENTION_HOURS * 3600 * 1000).toISOString();
+    const expiredCutoff = new Date(Date.now() - DIAGNOSTICS_RETENTION_DAYS * 86400 * 1000).toISOString();
+    const expiredReports = await db.all(
+      "SELECT id FROM diagnostic_reports WHERE (expires_at < ?) OR (created_at < ?) OR (status IN ('pending', 'failed') AND created_at < ?)",
+      [now, expiredCutoff, pendingCutoff],
+    );
+    for (const r of expiredReports) {
+      const file = path.join(DIAGNOSTICS_DIR, r.id + ".zip");
+      const temp = path.join(DIAGNOSTICS_DIR, r.id + ".uploading");
+      if (fs.existsSync(file)) { try { fs.unlinkSync(file); } catch {} }
+      if (fs.existsSync(temp)) { try { fs.unlinkSync(temp); } catch {} }
+    }
+    if (expiredReports.length > 0) {
+      const ids = expiredReports.map((r) => r.id);
+      const placeholders = ids.map(() => "?").join(",");
+      await db.run("DELETE FROM diagnostic_reports WHERE id IN (" + placeholders + ")", ids);
+    }
+    if (fs.existsSync(DIAGNOSTICS_DIR)) {
+      const files = fs.readdirSync(DIAGNOSTICS_DIR);
+      for (const f of files) {
+        if (f.endsWith(".uploading")) {
+          const fp = path.join(DIAGNOSTICS_DIR, f);
+          try {
+            const stat = fs.statSync(fp);
+            if (Date.now() - stat.mtimeMs > DIAGNOSTICS_PENDING_RETENTION_HOURS * 3600 * 1000) {
+              fs.unlinkSync(fp);
+            }
+          } catch {}
+        }
+      }
+    }
+  } catch (err) {
+    logWarn("diagnostics_cleanup_failed", { error: err.message });
+  }
+}
+
+// 1. 创建诊断报告元数据
+app.post("/api/diagnostics/reports", authRequired, asyncHandler(async (req, res) => {
+  const {
+    clientReportId, appVersion, assetsVersion, platform, arch, installId, sessionId,
+    relatedTaskId, issueOccurredAt, userNote, fileSizeBytes, fileSha256, summary,
+  } = req.body || {};
+
+  // 幂等性检查：必须先于 rate limit 检查，同一个 clientReportId 重试返回原 report
+  if (clientReportId) {
+    const existing = await dbGet(
+      "SELECT id, status FROM diagnostic_reports WHERE user_id = ? AND client_report_id = ?",
+      [req.user.id, String(clientReportId).slice(0, 64)],
+    );
+    if (existing) {
+      return success(res, {
+        reportId: existing.id,
+        uploadUrl: "/api/diagnostics/reports/" + encodeURIComponent(existing.id) + "/upload",
+        status: existing.status,
+      });
+    }
+  }
+
+  // 数据库持久化频控：默认 5 次 / 用户 / 小时
+  const oneHourAgo = new Date(Date.now() - 3600 * 1000).toISOString();
+  const recentReports = await dbGet(
+    "SELECT COUNT(*) AS count FROM diagnostic_reports WHERE user_id = ? AND created_at >= ?",
+    [req.user.id, oneHourAgo],
+  );
+  if (Number(recentReports?.count || 0) >= DIAGNOSTICS_RATE_LIMIT_PER_HOUR) {
+    return res.status(429).json({
+      code: 429,
+      message: "上传过于频繁，每小时最多允许上传 " + DIAGNOSTICS_RATE_LIMIT_PER_HOUR + " 次诊断信息",
+      data: null,
+    });
+  }
+
+  if (fileSizeBytes && (Number(fileSizeBytes) > DIAGNOSTICS_MAX_BYTES || Number(fileSizeBytes) <= 0)) {
+    return fail(res, 400, "诊断包大小超出限制 (最大 20MB)");
+  }
+  if (fileSha256 && !/^[a-f0-9]{64}$/i.test(String(fileSha256))) {
+    return fail(res, 400, "非法文件哈希");
+  }
+
+  const cleanNote = userNote ? String(userNote).slice(0, 1000).trim() : null;
+  const summaryStr = summary ? JSON.stringify(summary).slice(0, 100 * 1024) : null;
+  const nowForDate = new Date();
+  const dateStr = nowForDate.getFullYear().toString() + String(nowForDate.getMonth() + 1).padStart(2, "0") + String(nowForDate.getDate()).padStart(2, "0");
+  const reportId = "MGR-" + dateStr + "-" + crypto.randomBytes(3).toString("hex").toUpperCase();
+  const createdAt = nowIso();
+  const expiresAt = new Date(Date.now() + DIAGNOSTICS_RETENTION_DAYS * 86400 * 1000).toISOString();
+
+  try {
+    await dbRun(
+      "INSERT INTO diagnostic_reports (id, user_id, client_report_id, install_id, session_id, app_version, assets_version, platform, arch, os_type, os_version, related_task_id, issue_occurred_at, user_note, status, expected_size_bytes, expected_sha256, summary_json, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        reportId, req.user.id,
+        clientReportId ? String(clientReportId).slice(0, 64) : null,
+        installId ? String(installId).slice(0, 64) : null,
+        sessionId ? String(sessionId).slice(0, 64) : null,
+        appVersion ? String(appVersion).slice(0, 32) : null,
+        assetsVersion ? String(assetsVersion).slice(0, 32) : null,
+        platform ? String(platform).slice(0, 32) : null,
+        arch ? String(arch).slice(0, 32) : null,
+        summary?.system?.osType ? String(summary.system.osType).slice(0, 64) : null,
+        summary?.system?.osVersion ? String(summary.system.osVersion).slice(0, 64) : null,
+        relatedTaskId ? String(relatedTaskId).slice(0, 128) : null,
+        issueOccurredAt ? String(issueOccurredAt).slice(0, 64) : null,
+        cleanNote, "pending",
+        fileSizeBytes ? Number(fileSizeBytes) : null,
+        fileSha256 ? String(fileSha256).toLowerCase() : null,
+        summaryStr, createdAt, expiresAt,
+      ],
+    );
+  } catch (err) {
+    if (clientReportId && String(err.message).includes("UNIQUE")) {
+      const dup = await dbGet(
+        "SELECT id, status FROM diagnostic_reports WHERE user_id = ? AND client_report_id = ?",
+        [req.user.id, String(clientReportId).slice(0, 64)],
+      );
+      if (dup) {
+        return success(res, {
+          reportId: dup.id,
+          uploadUrl: "/api/diagnostics/reports/" + encodeURIComponent(dup.id) + "/upload",
+          status: dup.status,
+        });
+      }
+    }
+    throw err;
+  }
+
+  return success(res, {
+    reportId,
+    uploadUrl: "/api/diagnostics/reports/" + encodeURIComponent(reportId) + "/upload",
+  });
+}));
+
+// 2. 上传诊断包 ZIP 文件 (流式落盘与哈希计算)
+app.post("/api/diagnostics/reports/:reportId/upload", authRequired, asyncHandler(async (req, res) => {
+  const { reportId } = req.params;
+  if (!reportId || !/^MGR-[0-9]{8}-[A-F0-9]{6}$/.test(reportId)) {
+    return fail(res, 400, "非法诊断报告编号");
+  }
+
+  const report = await dbGet("SELECT * FROM diagnostic_reports WHERE id = ?", [reportId]);
+  if (!report) return fail(res, 404, "诊断报告不存在");
+  if (report.user_id !== req.user.id) return fail(res, 403, "无权上传此诊断报告");
+
+  const buffer = req.body;
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) return fail(res, 400, "上传内容为空");
+  if (buffer.length > DIAGNOSTICS_MAX_BYTES) return fail(res, 400, "诊断包大小超出限制 (最大 20MB)");
+
+  // 严格检查 ZIP magic 头
+  if (buffer[0] !== 0x50 || buffer[1] !== 0x4B) {
+    return fail(res, 400, "文件格式必须为 ZIP 压缩包");
+  }
+
+  const actualSha = crypto.createHash("sha256").update(buffer).digest("hex");
+  const actualSize = buffer.length;
+  const tempFile = path.join(DIAGNOSTICS_DIR, reportId + ".uploading");
+  const targetFile = path.join(DIAGNOSTICS_DIR, reportId + ".zip");
+
+  // 校验 expected_sha256 与 expected_size_bytes
+  const expectedSha = report.expected_sha256 || req.get("x-magiorix-file-sha256");
+  if (expectedSha && expectedSha.toLowerCase() !== actualSha.toLowerCase()) {
+    await dbRun(
+      "UPDATE diagnostic_reports SET status = 'failed', actual_size_bytes = ?, actual_sha256 = ? WHERE id = ?",
+      [actualSize, actualSha, reportId],
+    );
+    return fail(res, 400, "文件 SHA256 哈希校验失败");
+  }
+
+  if (report.expected_size_bytes && report.expected_size_bytes !== actualSize) {
+    await dbRun(
+      "UPDATE diagnostic_reports SET status = 'failed', actual_size_bytes = ?, actual_sha256 = ? WHERE id = ?",
+      [actualSize, actualSha, reportId],
+    );
+    return fail(res, 400, "文件大小与预期不一致");
+  }
+
+  await fs.promises.writeFile(tempFile, buffer);
+  await fs.promises.rename(tempFile, targetFile);
+
+  const uploadedAt = nowIso();
+  await dbRun(
+    "UPDATE diagnostic_reports SET status = 'uploaded', file_path = ?, actual_size_bytes = ?, actual_sha256 = ?, uploaded_at = ? WHERE id = ?",
+    ["diagnostics/" + reportId + ".zip", actualSize, actualSha, uploadedAt, reportId],
+  );
+
+  return success(res, {
+    reportId, status: "uploaded", fileSizeBytes: actualSize, sha256: actualSha,
+  });
+}));
+
+// 3. 管理后台：诊断报告列表
+app.get("/api/admin/diagnostics", adminRequired, asyncHandler(async (req, res) => {
+  const { page, pageSize } = parsePageParams(req.query);
+  const keyword = String(req.query.keyword || "").trim();
+  const platform = String(req.query.platform || "").trim();
+  const status = String(req.query.status || "").trim();
+
+  const whereConditions = [];
+  const params = [];
+  if (keyword) {
+    whereConditions.push("(r.id LIKE ? OR r.related_task_id LIKE ? OR u.phone LIKE ? OR u.nickname LIKE ?)");
+    const kwLike = "%" + keyword + "%";
+    params.push(kwLike, kwLike, kwLike, kwLike);
+  }
+  if (platform) { whereConditions.push("r.platform = ?"); params.push(platform); }
+  if (status) { whereConditions.push("r.status = ?"); params.push(status); }
+
+  const whereClause = whereConditions.length > 0 ? "WHERE " + whereConditions.join(" AND ") : "";
+  const total = await dbGet(
+    "SELECT COUNT(*) AS count FROM diagnostic_reports r JOIN users u ON r.user_id = u.id " + whereClause,
+    params,
+  );
+  const offset = (page - 1) * pageSize;
+  const rows = await dbAll(
+    "SELECT r.id, r.user_id AS userId, u.phone AS userPhone, u.nickname AS userNickname, r.app_version AS appVersion, r.assets_version AS assetsVersion, r.platform, r.arch, r.os_type AS osType, r.os_version AS osVersion, r.related_task_id AS relatedTaskId, r.issue_occurred_at AS issueOccurredAt, r.user_note AS userNote, r.status, r.expected_size_bytes AS expectedSizeBytes, r.actual_size_bytes AS actualSizeBytes, r.expected_sha256 AS expectedSha256, r.actual_sha256 AS actualSha256, r.created_at AS createdAt, r.uploaded_at AS uploadedAt, r.summary_json AS summaryJson FROM diagnostic_reports r JOIN users u ON r.user_id = u.id " + whereClause + " ORDER BY datetime(r.created_at) DESC LIMIT ? OFFSET ?",
+    [...params, pageSize, offset],
+  );
+
+  const list = rows.map((r) => {
+    let summary = null;
+    try { if (r.summaryJson) summary = JSON.parse(r.summaryJson); } catch {}
+    const topError = summary?.topErrors?.[0] || summary?.recentTasks?.[0]?.errorCode || null;
+    return {
+      id: r.id, userId: r.userId, userPhone: r.userPhone, userNickname: r.userNickname,
+      appVersion: r.appVersion, assetsVersion: r.assetsVersion, platform: r.platform, arch: r.arch,
+      osType: r.osType, osVersion: r.osVersion, relatedTaskId: r.relatedTaskId, issueOccurredAt: r.issueOccurredAt,
+      userNote: r.userNote, status: r.status, fileSize: r.actualSizeBytes ?? r.expectedSizeBytes ?? null,
+      createdAt: r.createdAt, uploadedAt: r.uploadedAt,
+      topError: typeof topError === "string" ? topError : (topError?.errorCode || topError?.name || null),
+    };
+  });
+
+  return success(res, { list, total: Number(total?.count || 0), page, pageSize });
+}));
+
+// 4. 管理后台：诊断报告详情
+app.get("/api/admin/diagnostics/:reportId", adminRequired, asyncHandler(async (req, res) => {
+  const { reportId } = req.params;
+  const row = await dbGet(
+    "SELECT r.*, u.phone AS userPhone, u.nickname AS userNickname FROM diagnostic_reports r JOIN users u ON r.user_id = u.id WHERE r.id = ?",
+    [reportId],
+  );
+  if (!row) return fail(res, 404, "诊断报告不存在");
+
+  let summary = null;
+  try { if (row.summary_json) summary = JSON.parse(row.summary_json); } catch {}
+
+  const integrityVerified = row.status === "uploaded" && (
+    (!row.expected_sha256 || row.expected_sha256.toLowerCase() === (row.actual_sha256 || "").toLowerCase()) &&
+    (!row.expected_size_bytes || row.expected_size_bytes === row.actual_size_bytes)
+  );
+
+  return success(res, {
+    id: row.id, userId: row.user_id, userPhone: row.userPhone, userNickname: row.userNickname,
+    clientReportId: row.client_report_id, installId: row.install_id, sessionId: row.session_id,
+    appVersion: row.app_version, assetsVersion: row.assets_version, platform: row.platform, arch: row.arch,
+    osType: row.os_type, osVersion: row.os_version, relatedTaskId: row.related_task_id,
+    issueOccurredAt: row.issue_occurred_at, userNote: row.user_note, status: row.status,
+    expectedSizeBytes: row.expected_size_bytes, actualSizeBytes: row.actual_size_bytes,
+    expectedSha256: row.expected_sha256, actualSha256: row.actual_sha256, integrityVerified,
+    createdAt: row.created_at, uploadedAt: row.uploaded_at, expiresAt: row.expires_at, summary,
+  });
+}));
+
+// 5. 管理后台：安全下载诊断包 (只支持 Authorization: Bearer)
+app.get("/api/admin/diagnostics/:reportId/download", adminRequired, asyncHandler(async (req, res) => {
+  const { reportId } = req.params;
+  const row = await dbGet("SELECT * FROM diagnostic_reports WHERE id = ?", [reportId]);
+  if (!row || !row.file_path || row.status !== "uploaded") {
+    return fail(res, 404, "诊断包文件不存在或尚未上传完成");
+  }
+  const absoluteZipPath = path.join(DIAGNOSTICS_DIR, reportId + ".zip");
+  if (!fs.existsSync(absoluteZipPath)) {
+    return fail(res, 404, "诊断包文件未在存储中找到");
+  }
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", 'attachment; filename="magiorix-diagnostic-' + reportId + '.zip"');
+  const stream = fs.createReadStream(absoluteZipPath);
+  stream.pipe(res);
+}));
+
 function buildSafeDashboardStatistics() {
   const today = startOfDay();
   const categories = [];
@@ -2759,9 +3085,10 @@ async function runReconciliation() {
   return results;
 }
 
-initDb()
-  .then(() => {
-    app.listen(PORT, () => {
+if (require.main === module) {
+  initDb()
+    .then(() => {
+      app.listen(PORT, () => {
       logInfo("server_started", {
         port: PORT,
         baseUrl: BASE_URL,
@@ -2774,6 +3101,11 @@ initDb()
       }
       console.log(`red-magic-api listening on http://127.0.0.1:${PORT}`);
     });
+    cleanupExpiredDiagnostics().catch((e) => logWarn("startup_diag_cleanup_failed", { error: e.message }));
+    const diagInterval = setInterval(() => {
+      cleanupExpiredDiagnostics().catch((e) => logWarn("interval_diag_cleanup_failed", { error: e.message }));
+    }, 6 * 3600 * 1000);
+    diagInterval.unref();
     if (paymentEnabled && process.env.RECONCILIATION_ENABLED === "1") {
       const interval = setInterval(() => {
         runReconciliation().catch((error) => logError("reconciliation_failed", { error: error.message }));
@@ -2799,3 +3131,6 @@ process.on("uncaughtException", (err) => {
   console.error("Uncaught exception:", err);
   process.exit(1);
 });
+}
+
+module.exports = { app, database, initDb, cleanupExpiredDiagnostics };

@@ -1,6 +1,6 @@
 import os from "node:os";
 
-const SENSITIVE_KEY_PATTERN = /^(authorization|proxy-authorization|satoken|cookie|set-cookie|x-api-key|api-key|password|passwd|pwd|token|access_?token|refresh_?token|secret|api_?key|sms_?code|verification_?code|payment_?token|sec_?key|sign|signature|a1|web_session|session_?id)$/i;
+const SENSITIVE_KEY_PATTERN = /^(authorization|proxy-authorization|satoken|cookie|set-cookie|x-api-key|api-key|password|passwd|pwd|token|access_?token|refresh_?token|secret|api_?key|sms_?code|verification_?code|payment_?token|sec_?key|sign|signature|a1|web_session|session_?token|session_?cookie|sid)$/i;
 
 const SENSITIVE_HEADER_NAMES = new Set([
   "authorization",
@@ -62,7 +62,7 @@ export function redactUrl(urlString) {
 
 export function redactPhone(text) {
   if (typeof text !== "string") return text;
-  return text.replace(/(?<!\d)(?:(?:\+?86[- ]?)?1[3-9]\d)(\d{4})(\d{4})(?!\d)/g, "138****$2");
+  return text.replace(/(?<!\d)(?:\+?86[- ]?)?(1[3-9]\d)(\d{4})(\d{4})(?!\d)/g, "$1****$3");
 }
 
 export function redactEmail(text) {

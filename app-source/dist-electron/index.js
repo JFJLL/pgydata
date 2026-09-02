@@ -1,4 +1,4 @@
-﻿var br = Object.defineProperty;
+var br = Object.defineProperty;
 var wr = (a, e, t) => e in a ? br(a, e, { enumerable: !0, configurable: !0, writable: !0, value: t }) : a[e] = t;
 var w = (a, e, t) => wr(a, typeof e != "symbol" ? e + "" : e, t);
 import { ipcMain as F, BrowserWindow as Dt, app as ye, screen as Gi, shell as Ji, dialog as Ki, net as Jt, Notification as Et, session as Pn, nativeImage as PgyNativeImage } from "electron";
@@ -43,6 +43,25 @@ const pgyTaskAnalytics = createTaskAnalyticsLifecycleReporter(
   (eventName, fields, options) => {
     try {
       Le.get().reportAnalyticsEvent(eventName, fields, options);
+    } catch {}
+  },
+  ({ eventName, fields }) => {
+    try {
+      const eventMap = {
+        task_start: "task_started",
+        task_complete: "task_completed",
+        task_failed: "task_failed",
+        task_cancelled: "task_cancelled",
+      };
+      const diagEvent = eventMap[eventName] || eventName;
+      pgyDiagnosticManager?.recordTrace({
+        module: fields?.module || fields?.pluginId || "collection",
+        event: diagEvent,
+        taskId: fields?.taskId || null,
+        errorCode: fields?.errorCode || null,
+        level: eventName === "task_failed" ? "error" : "info",
+        message: fields?.errorCode ? `Task terminal status: ${fields.errorCode}` : null,
+      });
     } catch {}
   }
 );

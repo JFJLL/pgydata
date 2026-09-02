@@ -11,8 +11,8 @@ export function collectAppInfo(options = {}) {
     installId: options.installId || null,
     sessionId: options.sessionId || null,
     currentFrontendAssetVersion: options.currentFrontendAssetVersion || options.assetsVersion || "1.4.5",
-    frontendIntegrityStatus: options.frontendIntegrityStatus || "valid",
-    currentUpdateState: options.currentUpdateState || "idle",
+    frontendIntegrityStatus: options.frontendIntegrityStatus || "unknown",
+    currentUpdateState: options.currentUpdateState || "unknown",
     generatedAt: new Date().toISOString(),
   };
 }

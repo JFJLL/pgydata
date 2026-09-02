@@ -29,7 +29,7 @@ test("DiagnosticRedactor: redacts passwords, sms codes, and api keys in text", (
 test("DiagnosticRedactor: redacts phone numbers and emails", () => {
   const phoneInput = "Contact phone: 13812345678 or 18698765432.";
   const phoneOutput = redactPhone(phoneInput);
-  assert.equal(phoneOutput, "Contact phone: 138****5678 or 138****5432.");
+  assert.equal(phoneOutput, "Contact phone: 138****5678 or 186****5432.");
 
   const emailInput = "Email zhangsan@example.com and admin@company.org";
   const emailOutput = redactEmail(emailInput);
@@ -78,7 +78,7 @@ test("DiagnosticRedactor: redacts nested objects, maps, errors, and handles circ
   assert.equal(redacted.user.name, "Tester");
   assert.equal(redacted.user.password, "<REDACTED>");
   assert.equal(redacted.user.satoken, "<REDACTED>");
-  assert.equal(redacted.user.phone, "138****1111");
+  assert.equal(redacted.user.phone, "139****1111");
   assert.equal(redacted.headers.Authorization, "<REDACTED>");
   assert.equal(redacted.headers.Cookie, "<REDACTED>");
   assert.equal(redacted.items[0], "138****9999");

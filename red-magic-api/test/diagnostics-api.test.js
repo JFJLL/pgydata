@@ -4,167 +4,237 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const sqlite3 = require("sqlite3").verbose();
-const { runMigrations } = require("../lib/database-migrations");
+const http = require("node:http");
 
-function openDatabase(file) {
-  const db = new sqlite3.Database(file);
-  return {
-    run(sql, params = []) { return new Promise((resolve, reject) => db.run(sql, params, function done(error) { if (error) reject(error); else resolve(this); })); },
-    get(sql, params = []) { return new Promise((resolve, reject) => db.get(sql, params, (error, row) => error ? reject(error) : resolve(row))); },
-    all(sql, params = []) { return new Promise((resolve, reject) => db.all(sql, params, (error, rows) => error ? reject(error) : resolve(rows))); },
-    close() { return new Promise((resolve, reject) => db.close((error) => error ? reject(error) : resolve())); },
-  };
-}
-
-test("Diagnostics Server E2E: Idempotency, Rate Limit, Expected/Actual Integrity, Retention & Deletion", async () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "magiorix-diag-e2e-"));
-  const dbFile = path.join(tempDir, "test.sqlite");
+test("Diagnostics Real HTTP Server E2E: Register, Auth, RateLimit, Idempotency, SHA Verification, Admin APIs & Account Deletion", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "magiorix-http-e2e-"));
+  const dbPath = path.join(tempDir, "e2e.sqlite");
   const diagDir = path.join(tempDir, "diagnostics");
   fs.mkdirSync(diagDir, { recursive: true });
-  const db = openDatabase(dbFile);
+
+  process.env.DB_PATH = dbPath;
+  process.env.DIAGNOSTICS_DIR = diagDir;
+  process.env.DIAGNOSTICS_RATE_LIMIT_PER_HOUR = "5";
+  process.env.DIAGNOSTICS_MAX_BYTES = "20971520";
+  process.env.ADMIN_USERNAME = "admin";
+  process.env.ADMIN_PASSWORD = "AdminPassword123!";
+  process.env.NODE_ENV = "test";
+
+  // Require server instance which exports app and database
+  const { app, database, initDb } = require("../server");
+  await initDb();
+
+  // Start real HTTP server on dynamic port
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = server.address().port;
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  // Helper to make HTTP requests
+  async function httpRequest(method, reqPath, headers = {}, body = null) {
+    return new Promise((resolve, reject) => {
+      const url = new URL(reqPath, baseUrl);
+      const req = http.request(url, { method, headers }, (res) => {
+        const chunks = [];
+        res.on("data", (c) => chunks.push(c));
+        res.on("end", () => {
+          const raw = Buffer.concat(chunks);
+          let json = null;
+          try { json = JSON.parse(raw.toString("utf8")); } catch {}
+          resolve({ status: res.statusCode, headers: res.headers, body: json, raw });
+        });
+      });
+      req.on("error", reject);
+      if (body) {
+        if (Buffer.isBuffer(body)) req.write(body);
+        else if (typeof body === "object") {
+          req.setHeader("Content-Type", "application/json");
+          req.write(JSON.stringify(body));
+        } else {
+          req.write(String(body));
+        }
+      }
+      req.end();
+    });
+  }
 
   try {
-    await runMigrations(db);
+    // 1. Register and login User 1
+    const regRes = await httpRequest("POST", "/api/auth/register", {}, {
+      phone: "13912345678",
+      password: "UserPassword123!",
+      nickname: "DiagnosticTester",
+    });
+    assert.equal(regRes.status, 200);
+    const tokenUser1 = regRes.body.data.token;
+    assert.ok(tokenUser1, "Token must be returned");
 
-    const now = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + 30 * 86400 * 1000).toISOString();
+    // 2. Test Request ID Middleware on standard API
+    const customReqId = "req_custom_1234567890abcdef";
+    const infoRes = await httpRequest("GET", "/api/auth/info", {
+      satoken: tokenUser1,
+      "X-Magiorix-Request-Id": customReqId,
+    });
+    assert.equal(infoRes.status, 200);
+    assert.equal(infoRes.headers["x-magiorix-request-id"], customReqId, "Server must preserve valid client request id");
 
-    // 1. Seed two users
-    await db.run("INSERT INTO users (id, phone, nickname, status, created_at, updated_at) VALUES (1, '13800000001', 'UserOne', 1, ?, ?)", [now, now]);
-    await db.run("INSERT INTO users (id, phone, nickname, status, created_at, updated_at) VALUES (2, '13800000002', 'UserTwo', 1, ?, ?)", [now, now]);
+    // 3. Test Unauthorized access to diagnostic report creation
+    const unauthRes = await httpRequest("POST", "/api/diagnostics/reports", {}, { clientReportId: "c1" });
+    assert.equal(unauthRes.body.code, 401);
 
-    // 2. Test clientReportId idempotency constraint and duplicate handling
-    const reportId1 = "MGR-20260902-AAAAAA";
-    const clientReportId = "client_uuid_1001";
+    // 4. Test Valid diagnostic report creation & Idempotency
+    const clientReportId = "client_uuid_e2e_001";
+    const fakeZipHeader = Buffer.from([0x50, 0x4B, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00]);
+    const fakeZip = Buffer.concat([fakeZipHeader, Buffer.from("test diagnostic zip content")]);
+    const validSha = crypto.createHash("sha256").update(fakeZip).digest("hex");
 
-    await db.run(
-      `INSERT INTO diagnostic_reports (
-        id, user_id, client_report_id, app_version, assets_version, platform, arch,
-        status, expected_size_bytes, expected_sha256, summary_json, created_at, expires_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [reportId1, 1, clientReportId, "1.4.5", "1.4.5", "win32", "x64", "pending", 1024, "abc", "{}", now, expiresAt],
-    );
+    const createRes1 = await httpRequest("POST", "/api/diagnostics/reports", { satoken: tokenUser1 }, {
+      clientReportId,
+      appVersion: "1.4.5",
+      assetsVersion: "1.4.5",
+      platform: "win32",
+      arch: "x64",
+      fileSizeBytes: fakeZip.length,
+      fileSha256: validSha,
+      userNote: "Task stopped at step 2",
+    });
+    assert.equal(createRes1.status, 200);
+    const reportId1 = createRes1.body.data.reportId;
+    assert.match(reportId1, /^MGR-[0-9]{8}-[A-F0-9]{6}$/);
 
-    // Unique constraint should reject duplicate client_report_id for same user
-    await assert.rejects(async () => {
-      await db.run(
-        `INSERT INTO diagnostic_reports (
-          id, user_id, client_report_id, app_version, assets_version, platform, arch,
-          status, created_at, expires_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ["MGR-20260902-BBBBBB", 1, clientReportId, "1.4.5", "1.4.5", "win32", "x64", "pending", now, expiresAt],
-      );
-    }, /UNIQUE constraint failed/);
+    // Same clientReportId -> Returns identical reportId (Idempotent)
+    const createRes2 = await httpRequest("POST", "/api/diagnostics/reports", { satoken: tokenUser1 }, {
+      clientReportId,
+      appVersion: "1.4.5",
+      fileSizeBytes: fakeZip.length,
+      fileSha256: validSha,
+    });
+    assert.equal(createRes2.status, 200);
+    assert.equal(createRes2.body.data.reportId, reportId1, "Duplicate clientReportId must return same reportId");
 
-    // 3. Test Rate Limiter DB query (5 per hour per user)
+    // 5. Test Rate Limiter (5 per hour per user)
     for (let i = 2; i <= 5; i++) {
-      await db.run(
-        `INSERT INTO diagnostic_reports (
-          id, user_id, client_report_id, app_version, assets_version, platform, arch,
-          status, created_at, expires_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [`MGR-20260902-RATE0${i}`, 1, `client_uuid_${i}`, "1.4.5", "1.4.5", "win32", "x64", "pending", now, expiresAt],
-      );
+      const res = await httpRequest("POST", "/api/diagnostics/reports", { satoken: tokenUser1 }, {
+        clientReportId: `client_uuid_rate_${i}`,
+        appVersion: "1.4.5",
+        fileSizeBytes: 100,
+        fileSha256: validSha,
+      });
+      assert.equal(res.status, 200);
     }
+    // 6th report should return HTTP 429
+    const rateLimitRes = await httpRequest("POST", "/api/diagnostics/reports", { satoken: tokenUser1 }, {
+      clientReportId: "client_uuid_rate_6",
+      appVersion: "1.4.5",
+      fileSizeBytes: 100,
+      fileSha256: validSha,
+    });
+    assert.equal(rateLimitRes.status, 429, "6th report in 1h must trigger HTTP 429");
 
-    const oneHourAgo = new Date(Date.now() - 3600 * 1000).toISOString();
-    const countUser1 = await db.get("SELECT COUNT(*) AS count FROM diagnostic_reports WHERE user_id = ? AND created_at >= ?", [1, oneHourAgo]);
-    assert.equal(countUser1.count, 5, "User 1 should have reached limit of 5 reports in 1h");
+    // 6. Test User 2 does not get affected by User 1 rate limit
+    const regUser2 = await httpRequest("POST", "/api/auth/register", {}, {
+      phone: "13888889999",
+      password: "UserPassword123!",
+      nickname: "UserTwo",
+    });
+    const tokenUser2 = regUser2.body.data.token;
+    const user2Create = await httpRequest("POST", "/api/diagnostics/reports", { satoken: tokenUser2 }, {
+      clientReportId: "user2_report_1",
+      appVersion: "1.4.5",
+      fileSizeBytes: fakeZip.length,
+      fileSha256: validSha,
+    });
+    assert.equal(user2Create.status, 200, "User 2 must succeed despite User 1 limit");
 
-    const countUser2 = await db.get("SELECT COUNT(*) AS count FROM diagnostic_reports WHERE user_id = ? AND created_at >= ?", [2, oneHourAgo]);
-    assert.equal(countUser2.count, 0, "User 2 should not be affected by User 1 rate limit");
+    // 7. Test Upload Authorization & Cross-user Isolation
+    // User 2 attempts to upload file to User 1's reportId1 -> Should be 403
+    const crossUpload = await httpRequest("POST", `/api/diagnostics/reports/${reportId1}/upload`, {
+      satoken: tokenUser2,
+      "Content-Type": "application/zip",
+    }, fakeZip);
+    assert.equal(crossUpload.body.code, 403, "User 2 cannot upload to User 1's report");
 
-    // 4. Test Expected vs. Actual Integrity Verification
-    const zipHeader = Buffer.from([0x50, 0x4B, 0x03, 0x04, 0x00, 0x00]);
-    const validZip = Buffer.concat([zipHeader, Buffer.from("actual test diagnostic content")]);
-    const validSha = crypto.createHash("sha256").update(validZip).digest("hex");
+    // 8. Test Invalid ZIP Magic Header
+    const badMagic = Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04]);
+    const badMagicUpload = await httpRequest("POST", `/api/diagnostics/reports/${reportId1}/upload`, {
+      satoken: tokenUser1,
+      "Content-Type": "application/zip",
+    }, badMagic);
+    assert.equal(badMagicUpload.body.code, 400, "Non-zip magic bytes must be rejected");
 
-    // Case A: SHA Mismatch
-    const mismatchReportId = "MGR-20260902-SHABAD";
-    await db.run(
-      `INSERT INTO diagnostic_reports (
-        id, user_id, client_report_id, expected_sha256, expected_size_bytes, status, created_at, expires_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [mismatchReportId, 2, "client_sha_bad", "0000000000000000000000000000000000000000000000000000000000000000", validZip.length, "pending", now, expiresAt],
-    );
+    // 9. Test SHA256 Mismatch Handling
+    const badShaZip = Buffer.concat([fakeZipHeader, Buffer.from("mismatched content")]);
+    const badShaUpload = await httpRequest("POST", `/api/diagnostics/reports/${reportId1}/upload`, {
+      satoken: tokenUser1,
+      "Content-Type": "application/zip",
+    }, badShaZip);
+    assert.equal(badShaUpload.body.code, 400, "SHA mismatch must fail");
 
-    const reportA = await db.get("SELECT * FROM diagnostic_reports WHERE id = ?", [mismatchReportId]);
-    const shaMatches = reportA.expected_sha256 === validSha;
-    assert.equal(shaMatches, false);
+    // Check that status was marked 'failed' and temp uploading file was removed
+    const failedReport = await database.get("SELECT status FROM diagnostic_reports WHERE id = ?", [reportId1]);
+    assert.equal(failedReport.status, "failed");
+    assert.equal(fs.existsSync(path.join(diagDir, `${reportId1}.uploading`)), false);
 
-    // Case B: Size Mismatch
-    const sizeMismatchReportId = "MGR-20260902-SIZEBD";
-    await db.run(
-      `INSERT INTO diagnostic_reports (
-        id, user_id, client_report_id, expected_sha256, expected_size_bytes, status, created_at, expires_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [sizeMismatchReportId, 2, "client_size_bad", validSha, 999999, "pending", now, expiresAt],
-    );
-    const reportB = await db.get("SELECT * FROM diagnostic_reports WHERE id = ?", [sizeMismatchReportId]);
-    const sizeMatches = reportB.expected_size_bytes === validZip.length;
-    assert.equal(sizeMatches, false);
+    // 10. Test Successful Upload on User 2's report
+    const user2ReportId = user2Create.body.data.reportId;
+    const validUpload = await httpRequest("POST", `/api/diagnostics/reports/${user2ReportId}/upload`, {
+      satoken: tokenUser2,
+      "Content-Type": "application/zip",
+      "X-Magiorix-File-Sha256": validSha,
+    }, fakeZip);
+    assert.equal(validUpload.status, 200);
+    assert.equal(validUpload.body.data.status, "uploaded");
+    assert.ok(fs.existsSync(path.join(diagDir, `${user2ReportId}.zip`)), "Zip file must exist on disk");
 
-    // Case C: Valid Match -> uploaded
-    const validReportId = "MGR-20260902-VALID1";
-    await db.run(
-      `INSERT INTO diagnostic_reports (
-        id, user_id, client_report_id, expected_sha256, expected_size_bytes, status, created_at, expires_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [validReportId, 2, "client_valid_1", validSha, validZip.length, "pending", now, expiresAt],
-    );
+    // 11. Test Admin Authentication & Diagnostics Inspection
+    // Non-admin token accessing admin API -> 401
+    const nonAdminRes = await httpRequest("GET", "/api/admin/diagnostics", { Authorization: `Bearer ${tokenUser1}` });
+    assert.equal(nonAdminRes.body.code, 401);
 
-    const zipPath = path.join(diagDir, `${validReportId}.zip`);
-    fs.writeFileSync(zipPath, validZip);
+    // Admin Login
+    const adminLogin = await httpRequest("POST", "/api/admin/login", {}, {
+      username: "admin",
+      password: "AdminPassword123!",
+    });
+    assert.equal(adminLogin.status, 200);
+    const adminToken = adminLogin.body.data.token;
+    assert.ok(adminToken, "Admin token received");
 
-    await db.run(
-      `UPDATE diagnostic_reports
-       SET status = 'uploaded', file_path = ?, actual_size_bytes = ?, actual_sha256 = ?, uploaded_at = ?
-       WHERE id = ?`,
-      [`diagnostics/${validReportId}.zip`, validZip.length, validSha, now, validReportId],
-    );
+    // Admin List
+    const adminList = await httpRequest("GET", "/api/admin/diagnostics?pageSize=10", {
+      Authorization: `Bearer ${adminToken}`,
+    });
+    assert.equal(adminList.status, 200);
+    assert.ok(adminList.body.data.total >= 6);
 
-    const updatedValid = await db.get("SELECT * FROM diagnostic_reports WHERE id = ?", [validReportId]);
-    assert.equal(updatedValid.status, "uploaded");
-    assert.equal(updatedValid.expected_sha256, updatedValid.actual_sha256);
-    assert.equal(updatedValid.expected_size_bytes, updatedValid.actual_size_bytes);
+    // Admin Detail
+    const adminDetail = await httpRequest("GET", `/api/admin/diagnostics/${user2ReportId}`, {
+      Authorization: `Bearer ${adminToken}`,
+    });
+    assert.equal(adminDetail.status, 200);
+    assert.equal(adminDetail.body.data.id, user2ReportId);
+    assert.equal(adminDetail.body.data.integrityVerified, true);
 
-    // 5. Test Retention Cleaner
-    const oldDate = new Date(Date.now() - 31 * 86400 * 1000).toISOString();
-    const expiredReportId = "MGR-20260701-EXPIRE";
-    const expiredZip = path.join(diagDir, `${expiredReportId}.zip`);
-    fs.writeFileSync(expiredZip, validZip);
-    await db.run(
-      `INSERT INTO diagnostic_reports (id, user_id, status, file_path, created_at, expires_at)
-       VALUES (?, ?, 'uploaded', ?, ?, ?)`,
-      [expiredReportId, 2, `diagnostics/${expiredReportId}.zip`, oldDate, oldDate],
-    );
+    // 12. Test Admin Download with Authorization: Bearer
+    const downloadRes = await httpRequest("GET", `/api/admin/diagnostics/${user2ReportId}/download`, {
+      Authorization: `Bearer ${adminToken}`,
+    });
+    assert.equal(downloadRes.status, 200);
+    assert.equal(downloadRes.headers["content-type"], "application/zip");
+    const downloadedSha = crypto.createHash("sha256").update(downloadRes.raw).digest("hex");
+    assert.equal(downloadedSha, validSha, "Downloaded ZIP SHA256 must match original ZIP");
 
-    // Run cleanup
-    const expired = await db.all("SELECT id FROM diagnostic_reports WHERE expires_at < ?", [now]);
-    assert.ok(expired.some((r) => r.id === expiredReportId));
-    for (const r of expired) {
-      const file = path.join(diagDir, `${r.id}.zip`);
-      if (fs.existsSync(file)) fs.unlinkSync(file);
-    }
-    await db.run("DELETE FROM diagnostic_reports WHERE expires_at < ?", [now]);
+    // 13. Test Account Deletion cleans up diagnostic files & database metadata
+    const deleteRes = await httpRequest("POST", "/api/auth/delete-account", { satoken: tokenUser2 });
+    assert.equal(deleteRes.status, 200);
+    // ZIP file on disk must be removed
+    assert.equal(fs.existsSync(path.join(diagDir, `${user2ReportId}.zip`)), false, "Disk zip must be deleted");
+    // Database metadata for user 2 must be deleted
+    const dbCheck = await database.get("SELECT * FROM diagnostic_reports WHERE id = ?", [user2ReportId]);
+    assert.equal(dbCheck, undefined, "Diagnostic report database record must be cleared");
 
-    assert.equal(fs.existsSync(expiredZip), false, "Expired zip file should be deleted");
-    assert.equal((await db.get("SELECT id FROM diagnostic_reports WHERE id = ?", [expiredReportId])), null);
-
-    // 6. Test User Deletion & Cascade Clean
-    assert.equal(fs.existsSync(zipPath), true, "Active zip should exist before deletion");
-    // Delete User 2 and all their diagnostic files
-    const user2Reports = await db.all("SELECT id FROM diagnostic_reports WHERE user_id = ?", [2]);
-    for (const r of user2Reports) {
-      const file = path.join(diagDir, `${r.id}.zip`);
-      if (fs.existsSync(file)) fs.unlinkSync(file);
-    }
-    await db.run("DELETE FROM users WHERE id = ?", [2]);
-    assert.equal(fs.existsSync(zipPath), false, "User 2 zip file should be removed upon account deletion");
-    assert.equal((await db.get("SELECT id FROM diagnostic_reports WHERE user_id = ?", [2])), null);
   } finally {
-    await db.close();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    await new Promise((resolve) => server.close(resolve));
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
   }
 });

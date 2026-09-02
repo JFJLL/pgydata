@@ -551,7 +551,7 @@
         <td>
           <div class="table-actions">
             <button class="text-button" data-diag-detail="${escape(row.id)}">详情</button>
-            ${row.status === 'uploaded' ? `<a class="text-button" href="/api/admin/diagnostics/${encodeURIComponent(row.id)}/download?satoken=${encodeURIComponent(state.token)}" download target="_blank">下载包</a>` : ""}
+            ${row.status === 'uploaded' ? `<button class="text-button" data-diag-download="${escape(row.id)}">下载包</button>` : ""}
           </div>
         </td>
       </tr>
@@ -559,6 +559,30 @@
     $("diagTableMeta").textContent = `共 ${integer(data.total)} 份报告 · 第 ${data.page} / ${pages} 页`;
     $("diagPrev").disabled = state.diagPage <= 1;
     $("diagNext").disabled = state.diagPage >= pages;
+  }
+
+
+  async function downloadDiagnosticFile(reportId) {
+    try {
+      const response = await fetch(`/api/admin/diagnostics/${encodeURIComponent(reportId)}/download`, {
+        headers: { Authorization: `Bearer ${state.token}` },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.message || `下载失败: HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `magiorix-diagnostic-${reportId}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      alert(err.message);
+    }
   }
 
   async function showDiagnosticDetail(reportId) {
@@ -601,7 +625,7 @@
 
       const traceHtml = trace.length > 0 ? `<div class="detail-section"><h3>任务执行轨迹 (最近 ${trace.length} 条)</h3><div style="max-height: 240px; overflow-y:auto; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:8px; font-size:12px; font-family:monospace;">${trace.map((tr) => `<div style="padding:2px 0; border-bottom:1px dashed #e2e8f0; color:${tr.level === 'error' ? '#ef4444' : tr.level === 'warn' ? '#f59e0b' : '#334155'}"><strong>[${cstDateLabel(tr.time)} ${new Date(tr.time).toTimeString().slice(0,8)}]</strong> <span>${escape(tr.module || "")}</span> · <strong>${escape(tr.event || "")}</strong> ${tr.step ? `(step: ${escape(tr.step)})` : ""} ${tr.httpStatus ? `[HTTP ${escape(tr.httpStatus)}]` : ""} ${tr.errorCode ? `[${escape(tr.errorCode)}]` : ""} ${tr.message ? ` - ${escape(tr.message)}` : ""}</div>`).join("")}</div></div>` : "";
 
-      const downloadBtnHtml = data.status === "uploaded" ? `<div style="margin-top:20px; display:flex; gap:12px;"><a class="primary" style="display:inline-flex; align-items:center; gap:6px; padding:9px 18px; border-radius:6px; text-decoration:none; color:#fff; font-weight:600;" href="/api/admin/diagnostics/${encodeURIComponent(data.id)}/download?satoken=${encodeURIComponent(state.token)}" download>下载完整诊断包 (ZIP)</a></div>` : `<div style="margin-top:16px; color:#94a3b8; font-size:13px;">客户端尚未完成文件上传</div>`;
+      const downloadBtnHtml = data.status === "uploaded" ? `<div style="margin-top:20px; display:flex; gap:12px;"><button type="button" class="primary" style="display:inline-flex; align-items:center; gap:6px; padding:9px 18px; border-radius:6px; font-weight:600;" data-diag-download="${escape(data.id)}">下载完整诊断包 (ZIP)</button></div>` : `<div style="margin-top:16px; color:#94a3b8; font-size:13px;">客户端尚未完成文件上传</div>`;
 
       $("diagDetailContent").innerHTML = `
         <div class="detail-grid">${baseFields.map(([k, v]) => `<div><span>${escape(k)}</span><strong>${escape(v ?? "-")}</strong></div>`).join("")}</div>
@@ -818,8 +842,14 @@
     loadDiagnostics().catch((e) => alert(e.message));
   });
   $("diagRows").addEventListener("click", (event) => {
-    const target = event.target.closest("[data-diag-detail]");
-    if (target) showDiagnosticDetail(target.dataset.diagDetail);
+    const detailTarget = event.target.closest("[data-diag-detail]");
+    if (detailTarget) showDiagnosticDetail(detailTarget.dataset.diagDetail);
+    const downloadTarget = event.target.closest("[data-diag-download]");
+    if (downloadTarget) downloadDiagnosticFile(downloadTarget.dataset.diagDownload);
+  });
+  $("diagDetailModal").addEventListener("click", (event) => {
+    const downloadTarget = event.target.closest("[data-diag-download]");
+    if (downloadTarget) downloadDiagnosticFile(downloadTarget.dataset.diagDownload);
   });
 
   if (state.token) {

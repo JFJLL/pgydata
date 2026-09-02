@@ -20,10 +20,11 @@ export class DiagnosticManager {
 
     const diagDir = path.join(this.userDataDir, "diagnostics");
     this.traceStore = new DiagnosticTraceStore({ baseDir: diagDir });
-    this.networkCollector = new NetworkDiagnosticCollector();
+    this.networkCollector = new NetworkDiagnosticCollector(this.traceStore);
     this.errorCollector = new ErrorCollector(this.traceStore);
     this.uploader = new DiagnosticUploader({ getApiClient: this.getApiClient });
     this.lastShutdownClean = false;
+    this.pendingDiagnosticPackage = null;
   }
 
   async init() {
@@ -93,8 +94,18 @@ export class DiagnosticManager {
     // 2. Create and upload diagnostic package
     ipcMain.handle("diagnostics:create-and-upload", async (event, params = {}) => {
       try {
-        const packagerResult = await this.generatePackage(params);
+        // 重试机制：若当前存在未完成且未超期的 pending package，直接复用同一 clientReportId、同一 ZIP 与同一 SHA
+        let packagerResult = this.pendingDiagnosticPackage;
+        if (!packagerResult || Date.now() - (packagerResult.createdAt || 0) > 24 * 3600 * 1000) {
+          packagerResult = await this.generatePackage(params);
+          packagerResult.createdAt = Date.now();
+          this.pendingDiagnosticPackage = packagerResult;
+        }
+
         const uploadResult = await this.uploader.uploadPackage(packagerResult, params);
+        // 上传成功后清理 pending 释放内存
+        this.pendingDiagnosticPackage = null;
+
         return {
           success: true,
           reportId: uploadResult.reportId,
@@ -102,6 +113,7 @@ export class DiagnosticManager {
           sha256: uploadResult.sha256,
         };
       } catch (err) {
+        // 上传失败时保留 this.pendingDiagnosticPackage，方便重试或本地导出同一份 ZIP
         return {
           success: false,
           error: err.message || "上传失败",
@@ -112,7 +124,11 @@ export class DiagnosticManager {
     // 3. Export package to local ZIP file (fallback / offline)
     ipcMain.handle("diagnostics:export-local", async (event, params = {}) => {
       try {
-        const packagerResult = await this.generatePackage(params);
+        // 优先保存失败的同一份 ZIP，保证本地导出的 SHA 与上传的一致
+        let packagerResult = this.pendingDiagnosticPackage;
+        if (!packagerResult) {
+          packagerResult = await this.generatePackage(params);
+        }
         const defaultFilename = `magiorix-diagnostic-${new Date().toISOString().slice(0, 10)}.zip`;
         
         if (dialog?.showSaveDialog) {
@@ -180,7 +196,7 @@ export class DiagnosticManager {
       errors,
       tasks,
       network,
-      update: { status: "idle" },
+      update: { status: "unknown" },
       relatedTaskId,
       issueOccurredAt,
       userNote,
