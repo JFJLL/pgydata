@@ -1,4 +1,4 @@
-const LATEST_SCHEMA_VERSION = 5;
+const LATEST_SCHEMA_VERSION = 6;
 
 const LEGACY_PACKAGE_IDS = new Set([
   "pkg_990",
@@ -340,7 +340,6 @@ async function applyVersion4(db, clock) {
   `);
 }
 
-
 function analyticsText(value, maxLength = 64) {
   const text = String(value || "").trim();
   return text ? text.slice(0, maxLength) : null;
@@ -352,10 +351,6 @@ function analyticsNonNegativeInteger(value) {
   return Math.min(1000000000, Math.floor(parsed));
 }
 
-/**
- * v5 keeps historical JSON intact but promotes analytics fields into indexed
- * columns. Invalid legacy JSON is ignored so migration cannot lose data.
- */
 async function applyVersion5(db) {
   for (const [column, definition] of [
     ["plugin_id", "TEXT"],
@@ -415,6 +410,52 @@ async function applyVersion5(db) {
   await db.run("CREATE INDEX IF NOT EXISTS idx_client_events_version_created ON client_events(app_version, created_at)");
 }
 
+async function applyVersion6(db) {
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS diagnostic_reports (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      client_report_id TEXT,
+      install_id TEXT,
+      session_id TEXT,
+      app_version TEXT,
+      assets_version TEXT,
+      platform TEXT,
+      arch TEXT,
+      os_type TEXT,
+      os_version TEXT,
+      related_task_id TEXT,
+      issue_occurred_at TEXT,
+      user_note TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      file_path TEXT,
+      expected_size_bytes INTEGER,
+      actual_size_bytes INTEGER,
+      expected_sha256 TEXT,
+      actual_sha256 TEXT,
+      summary_json TEXT,
+      created_at TEXT NOT NULL,
+      uploaded_at TEXT,
+      expires_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  for (const [col, def] of [
+    ["expected_size_bytes", "INTEGER"],
+    ["actual_size_bytes", "INTEGER"],
+    ["expected_sha256", "TEXT"],
+    ["actual_sha256", "TEXT"],
+  ]) {
+    await ensureColumn(db, "diagnostic_reports", col, def);
+  }
+  await db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_diag_user_client_report ON diagnostic_reports(user_id, client_report_id) WHERE client_report_id IS NOT NULL");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_diag_user_id ON diagnostic_reports(user_id)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_diag_status ON diagnostic_reports(status)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_diag_created_at ON diagnostic_reports(created_at)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_diag_related_task ON diagnostic_reports(related_task_id)");
+  await db.run("CREATE INDEX IF NOT EXISTS idx_diag_app_version ON diagnostic_reports(app_version)");
+}
+
 async function runMigrations(db, options = {}) {
   const clock = options.clock || nowIso;
   await db.run("PRAGMA foreign_keys = ON");
@@ -449,10 +490,16 @@ async function runMigrations(db, options = {}) {
     if (Number(afterVersion3.version) < 4) {
       await applyVersion4(db, clock);
       await db.run("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)", [4, "magiorix-1.4.1-recharge-packages-v2", clock()]);
-    }    const afterVersion4 = await db.get("SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations");
+    }
+    const afterVersion4 = await db.get("SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations");
     if (Number(afterVersion4.version) < 5) {
       await applyVersion5(db);
       await db.run("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)", [5, "admin-analytics-center-v1", clock()]);
+    }
+    const afterVersion5 = await db.get("SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations");
+    if (Number(afterVersion5.version) < 6) {
+      await applyVersion6(db);
+      await db.run("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)", [6, "diagnostics-center-v1", clock()]);
     }
 
     await db.run("COMMIT");

@@ -18,7 +18,6 @@ function fieldsOf(task, final = {}) {
   };
 }
 
-/** The store currently generates UUID task ids; normalize defensively for the API event-id contract. */
 function lifecycleEventId(prefix, taskId) {
   const normalized = String(taskId || "").trim().replace(/[^A-Za-z0-9_-]/g, "_");
   if (!normalized) return null;
@@ -26,16 +25,14 @@ function lifecycleEventId(prefix, taskId) {
   return value.length <= EVENT_ID_LIMIT ? value : null;
 }
 
-/**
- * Converts persisted CollectionHistoryStore snapshots into lifecycle analytics.
- * `paused`, `interrupted` and `auth_expired` are recoverable: they intentionally
- * do not create terminal telemetry or consume the terminal dedupe slot.
- */
-export function createTaskAnalyticsLifecycleReporter(report) {
+export function createTaskAnalyticsLifecycleReporter(report, onDiagnosticTrace = null) {
   const started = new Set();
   const terminal = new Set();
   const emit = (eventName, fields, eventId) => {
     try { report(eventName, fields, eventId ? { eventId } : undefined); } catch {}
+    if (onDiagnosticTrace) {
+      try { onDiagnosticTrace({ eventName, fields, eventId }); } catch {}
+    }
   };
   return {
     start(task) {

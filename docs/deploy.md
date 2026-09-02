@@ -94,3 +94,12 @@ https://redmagic.oss-cn-beijing.aliyuncs.com/exe/magiorix-desktop-<version>-wind
 - 主进程日志已改为北京时间。
 - 未使用的 Scheduler 云端同步已关闭，日志中应看到 `采集调度器云端同步已关闭`。
 - 如果已安装软件仍然出现旧日志行为，通常是安装目录里的旧 `app.asar` 没更新，应重新安装最新安装包。
+
+## Nginx 反向代理配置建议
+
+如果前端使用 Nginx 作为反向代理，需注意：客户端一键上传诊断包最大允许 20MB，Nginx 默认 `client_max_body_size 1m` 会导致上传失败返回 413。建议在 Nginx 对应 location 或 server 块中配置：
+
+```nginx
+# 预留 HTTP 头部开销，建议设置为 25m（Node 后端应用内部严格限制 20MB）
+client_max_body_size 25m;
+```

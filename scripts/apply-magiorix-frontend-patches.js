@@ -1,4 +1,4 @@
-﻿const fs = require("fs");
+const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
@@ -1177,6 +1177,29 @@ replaceOnce(
   'const[r,a]=m.useState("appearance"),n=se(),{checkStatus:s}=it();return o.jsxs(ue',
   "settings dialog no longer auto-checks updates",
 );
+replaceOnce(
+  mainBundle,
+  'const G0=""+new URL("feishu-group-qr.png",import.meta.url).href,K0=[{key:"appearance",label:"外观",icon:"solar:pallete-2-bold-duotone"},{key:"about",label:"关于 magiorix",icon:"solar:info-circle-bold-duotone"}];',
+  'const G0=""+new URL("feishu-group-qr.png",import.meta.url).href,K0=[{key:"appearance",label:"外观",icon:"solar:pallete-2-bold-duotone"},{key:"diagnostics",label:"诊断与反馈",icon:"solar:shield-warning-bold-duotone"},{key:"about",label:"关于 magiorix",icon:"solar:info-circle-bold-duotone"}];',
+  "settings dialog add diagnostics tab item",
+);
+
+const diagComponentCode = 'function Ds(){const[e,t]=m.useState([]),[r,a]=m.useState(""),[n,l]=m.useState(""),[s,i]=m.useState("idle"),[d,c]=m.useState(""),[u,f]=m.useState(""),[b,C]=m.useState(!1);m.useEffect(()=>{window.bridge?.diagnostics?.getStatus().then(g=>{g&&Array.isArray(g.recentTasks)&&t(g.recentTasks)}).catch(()=>{})},[]);const h=async()=>{i("uploading"),f("");try{const g=await window.bridge?.diagnostics?.createAndUpload({relatedTaskId:r||null,userNote:n||null});g&&g.success&&g.reportId?(c(g.reportId),i("success")):(f((g==null?void 0:g.error)||"上传失败，请检查网络后重试"),i("error"))}catch(g){f((g==null?void 0:g.message)||"上传异常，请检查网络后重试"),i("error")}};const p=async()=>{try{const g=await window.bridge?.diagnostics?.exportLocal({relatedTaskId:r||null,userNote:n||null});g&&g.success&&alert("诊断包已成功导出")}catch(g){alert("导出失败: "+((g==null?void 0:g.message)||g))}};const y=()=>{d&&navigator.clipboard?.writeText(d).then(()=>{C(!0),setTimeout(()=>C(!1),2e3)})};return o.jsxs(x,{sx:{display:"flex",flexDirection:"column",gap:2},children:[o.jsxs(x,{children:[o.jsx(w,{variant:"subtitle2",fontWeight:700,sx:{mb:.5},children:"一键上传诊断信息"}),o.jsx(w,{variant:"caption",color:"text.secondary",children:"遇到软件异常或任务采集失败时，可在此上传诊断信息协助排查。系统将自动对账号、Cookie、敏感采集数据与本地路径进行脱敏。"})]}),s==="idle"&&o.jsxs(o.Fragment,{children:[o.jsxs(x,{children:[o.jsx(w,{variant:"body2",fontWeight:600,sx:{mb:.5},children:"关联最近任务（可选）"}),o.jsxs("select",{value:r,onChange:g=>a(g.target.value),style:{width:"100%",padding:"8px 10px",borderRadius:6,border:"1px solid #d0d7de",fontSize:13,background:"#fff",color:"#333",outline:"none"},children:[o.jsx("option",{value:"",children:"不关联特定任务（常规诊断）"}),e.map(g=>o.jsx("option",{value:g.taskId,children:`[${g.status==="completed"?"完成":g.status==="failed"?"失败":g.status}] ${g.taskId} (${g.taskType||"采集"} · 失败:${g.failedCount||0})`},g.taskId))]})]}),o.jsxs(x,{children:[o.jsx(w,{variant:"body2",fontWeight:600,sx:{mb:.5},children:"问题描述（可选）"}),o.jsx("textarea",{value:n,onChange:g=>l(g.target.value),placeholder:"请简要描述您遇到的问题现象（如：某任务采集到第 2 页卡住、提示网络超时等）",rows:3,maxLength:500,style:{width:"100%",padding:"8px 10px",borderRadius:6,border:"1px solid #d0d7de",fontSize:13,resize:"vertical",boxSizing:"border-box",outline:"none"}})]}),o.jsx($,{variant:"contained",size:"medium",onClick:h,startIcon:o.jsx(B,{icon:"solar:upload-bold",width:18,height:18}),sx:{mt:1,textTransform:"none",alignSelf:"flex-start"},children:"上传诊断信息"})]}),s==="uploading"&&o.jsxs(x,{sx:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",py:4,gap:1.5},children:[o.jsx(de,{size:32}),o.jsx(w,{variant:"body2",fontWeight:600,color:"text.secondary",children:"正在收集诊断信息、脱敏并打包上传，请稍候..."})]}),s==="success"&&o.jsxs(x,{sx:{display:"flex",flexDirection:"column",alignItems:"center",bgcolor:"action.hover",p:3,borderRadius:2,gap:1.5,textAlign:"center"},children:[o.jsx(B,{icon:"solar:check-circle-bold",width:44,height:44,color:"#22C55E"}),o.jsx(w,{variant:"subtitle1",fontWeight:700,color:"success.main",children:"诊断信息已成功上传"}),o.jsx(w,{variant:"body2",color:"text.secondary",children:"请将下方诊断报告编号提供给技术客服或开发人员："}),o.jsxs(x,{sx:{display:"inline-flex",alignItems:"center",gap:1,bgcolor:"background.paper",px:2,py:1,borderRadius:1.5,border:1,borderColor:"divider",my:.5},children:[o.jsx(w,{variant:"h6",fontWeight:800,sx:{letterSpacing:1,fontFamily:"monospace",color:"primary.main"},children:d}),o.jsx($,{variant:"outlined",size:"small",onClick:y,startIcon:o.jsx(B,{icon:b?"solar:check-circle-bold":"solar:copy-bold",width:14,height:14}),sx:{textTransform:"none"},children:b?"已复制":"复制编号"})]}),o.jsx($,{variant:"text",size:"small",onClick:()=>{i("idle"),c("")},sx:{mt:1,textTransform:"none"},children:"返回"})]}),s==="error"&&o.jsxs(x,{sx:{display:"flex",flexDirection:"column",alignItems:"center",bgcolor:"action.hover",p:2.5,borderRadius:2,gap:1.5,textAlign:"center"},children:[o.jsx(B,{icon:"solar:danger-circle-bold",width:40,height:40,color:"#EF4444"}),o.jsx(w,{variant:"subtitle2",fontWeight:700,color:"error.main",children:"诊断信息上传失败"}),o.jsx(w,{variant:"body2",color:"text.secondary",children:u}),o.jsxs(x,{sx:{display:"flex",gap:1.5,mt:1},children:[o.jsx($,{variant:"contained",size:"small",onClick:h,sx:{textTransform:"none"},children:"重试上传"}),o.jsx($,{variant:"outlined",size:"small",onClick:p,startIcon:o.jsx(B,{icon:"solar:download-bold",width:14,height:14}),sx:{textTransform:"none"},children:"保存诊断包到本地"}),o.jsx($,{variant:"text",size:"small",onClick:()=>i("idle"),sx:{textTransform:"none"},children:"返回"})]})]})]})}';
+
+replaceOnce(
+  mainBundle,
+  'function Es({open:e,onClose:t}){',
+  diagComponentCode + 'function Es({open:e,onClose:t}){',
+  "settings dialog add diagnostics component",
+);
+
+replaceOnce(
+  mainBundle,
+  'r==="appearance"&&o.jsx(Ss,{}),r==="about"&&o.jsx(js,{})',
+  'r==="appearance"&&o.jsx(Ss,{}),r==="diagnostics"&&o.jsx(Ds,{}),r==="about"&&o.jsx(js,{})',
+  "settings dialog render diagnostics tab",
+);
+
 
 for (const entry of fs.readdirSync(assetsDir)) {
   if (!/\.(js|css|html|svg)$/i.test(entry)) continue;

@@ -19,6 +19,13 @@
     resetUser: null,
     pointsUser: null,
     transactionDetails: new Map(),
+    diagPage: 1,
+    diagPageSize: 10,
+    diagTotal: 0,
+    diagKeyword: "",
+    diagPlatform: "",
+    diagStatus: "",
+    diagList: [],
   };
   const $ = (id) => document.getElementById(id);
   const VIEW_META = {
@@ -29,6 +36,7 @@
     system: ["系统质量", "任务、更新与支付状态的轻量质量视图"],
     userManagement: ["用户管理", "保留搜索、积分调整与密码重置能力"],
     transactions: ["流水记录", "按任务汇总的有效采集消耗记录"],
+    diagnosticsCenter: ["诊断中心", "客户端诊断报告、环境信息与高价值任务轨迹排查"],
   };
   const ANALYTICS_VIEWS = new Set(["overview", "usersAnalytics", "usage", "finance", "system"]);
   const endpoint = { overview: "overview", usersAnalytics: "users", usage: "usage", finance: "finance", system: "system" };
@@ -476,6 +484,7 @@
     if (state.view === "system") return loadSystem(force);
     if (state.view === "userManagement") return loadUsers();
     if (state.view === "transactions") return loadTransactions();
+    if (state.view === "diagnosticsCenter") return loadDiagnostics();
   }
   function switchView(view) {
     state.view = view;
@@ -516,6 +525,98 @@
     $("transactionDetailContent").innerHTML = `<p class="event-cover">详情为服务端脱敏结构；不展示 rows、URL 或原始采集内容。</p><div class="detail-grid">${fields.map(([name, value]) => `<div><span>${escape(name)}</span><strong>${escape(value ?? "-")}</strong></div>`).join("")}</div>`;
     showModal("transactionDetailModal", true);
   }
+
+  async function loadDiagnostics() {
+    const params = new URLSearchParams({
+      page: String(state.diagPage),
+      pageSize: String(state.diagPageSize),
+      keyword: state.diagKeyword,
+      platform: state.diagPlatform,
+      status: state.diagStatus,
+    });
+    const data = await api(`/api/admin/diagnostics?${params}`);
+    state.diagTotal = data.total;
+    state.diagList = data.list || [];
+    const pages = Math.max(1, Math.ceil(data.total / state.diagPageSize));
+    $("diagRows").innerHTML = data.list.map((row) => `
+      <tr>
+        <td><code>${escape(row.id)}</code></td>
+        <td><strong>${escape(row.userNickname || "用户")}</strong><br/><span class="kpi-label">${escape(row.userPhone || "-")}</span></td>
+        <td>${date(row.createdAt)}</td>
+        <td>${escape(row.appVersion || "-")}</td>
+        <td>${escape(row.platform || "-")} / ${escape(row.osType || "-")}</td>
+        <td>${escape(row.relatedTaskId || "-")}</td>
+        <td><span style="color: ${row.topError ? '#ef4444' : '#64748b'}; font-weight: 600;">${escape(row.topError || "-")}</span></td>
+        <td><span class="badge ${row.status === 'uploaded' ? '' : 'deleted'}">${row.status === 'uploaded' ? '已上传' : '待上传'}</span></td>
+        <td>
+          <div class="table-actions">
+            <button class="text-button" data-diag-detail="${escape(row.id)}">详情</button>
+            ${row.status === 'uploaded' ? `<a class="text-button" href="/api/admin/diagnostics/${encodeURIComponent(row.id)}/download?satoken=${encodeURIComponent(state.token)}" download target="_blank">下载包</a>` : ""}
+          </div>
+        </td>
+      </tr>
+    `).join("") || `<tr><td colspan="9">暂无诊断报告</td></tr>`;
+    $("diagTableMeta").textContent = `共 ${integer(data.total)} 份报告 · 第 ${data.page} / ${pages} 页`;
+    $("diagPrev").disabled = state.diagPage <= 1;
+    $("diagNext").disabled = state.diagPage >= pages;
+  }
+
+  async function showDiagnosticDetail(reportId) {
+    showModal("diagDetailModal", true);
+    $("diagDetailContent").innerHTML = "正在加载诊断报告详情…";
+    try {
+      const data = await api(`/api/admin/diagnostics/${encodeURIComponent(reportId)}`);
+      const sys = data.summary?.system || {};
+      const app = data.summary?.app || {};
+      const tasks = data.summary?.recentTasks || [];
+      const trace = data.summary?.taskTrace || [];
+      const errors = data.summary?.topErrors || [];
+
+      const baseFields = [
+        ["报告编号", data.id],
+        ["用户", `${data.userNickname || "未命名"} (${data.userPhone || "-"})`],
+        ["上传时间", date(data.uploadedAt || data.createdAt)],
+        ["发生时间", date(data.issueOccurredAt)],
+        ["关联任务", data.relatedTaskId || "-"],
+        ["状态", data.status === "uploaded" ? "已上传" : "待上传"],
+        ["文件大小", data.fileSize ? `${(data.fileSize / 1024).toFixed(1)} KB` : "-"],
+        ["SHA256", data.fileSha256 || "-"],
+      ];
+
+      const envFields = [
+        ["软件版本", `${data.appVersion || "-"} (assets: ${data.assetsVersion || "-"})`],
+        ["Electron / Node", `${app.electronVersion || "-"} / ${app.nodeVersion || "-"}`],
+        ["平台 / 架构", `${data.platform || "-"} (${data.arch || "-"})`],
+        ["操作系统", `${data.osType || "-"} ${data.osVersion || ""}`],
+        ["CPU", `${sys.cpuModel || "-"} (${sys.cpuCount || "-"} 核)`],
+        ["内存总量 / 空闲", sys.totalMemoryBytes ? `${(sys.totalMemoryBytes / (1024**3)).toFixed(1)} GB / ${(sys.freeMemoryBytes / (1024**3)).toFixed(1)} GB` : "-"],
+        ["目录可写", `userData: ${sys.userDataWritable ? "是" : "否"} | logs: ${sys.logsWritable ? "是" : "否"}`],
+      ];
+
+      const userNoteHtml = data.userNote ? `<div class="detail-section"><h3>用户问题描述</h3><div class="event-cover" style="white-space: pre-wrap; word-break: break-all; color: #1e293b; background: #f8fafc; padding: 10px; border-radius: 6px;">${escape(data.userNote)}</div></div>` : "";
+
+      const tasksHtml = tasks.length > 0 ? `<div class="detail-section"><h3>最近任务摘要</h3>${htmlTable(["任务 ID", "类型", "状态", "总数/成功/失败", "错误码", "耗时"], tasks.map((t) => `<tr><td><code>${escape(t.taskId)}</code></td><td>${escape(t.taskType || "-")}</td><td><span class="badge ${t.status === 'completed' ? '' : 'deleted'}">${escape(t.status)}</span></td><td>${integer(t.total)} / ${integer(t.successCount)} / ${integer(t.failedCount)}</td><td><span style="color:#ef4444">${escape(t.errorCode || "-")}</span></td><td>${t.durationMs ? (t.durationMs / 1000).toFixed(1) + "s" : "-"}</td></tr>`).join(""))}</div>` : "";
+
+      const errorsHtml = errors.length > 0 ? `<div class="detail-section"><h3>错误摘要</h3><div style="display:flex; flex-direction:column; gap:8px;">${errors.map((e) => `<div style="background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:8px 12px; font-size:12px;"><strong>${escape(e.name || e.code || "Error")}</strong>: ${escape(e.message || "-")} <span style="color:#94a3b8">(${date(e.time)})</span>${e.stack ? `<pre style="margin:6px 0 0; padding:6px; background:#fff; border-radius:4px; font-size:11px; overflow-x:auto;">${escape(e.stack)}</pre>` : ""}</div>`).join("")}</div></div>` : "";
+
+      const traceHtml = trace.length > 0 ? `<div class="detail-section"><h3>任务执行轨迹 (最近 ${trace.length} 条)</h3><div style="max-height: 240px; overflow-y:auto; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:8px; font-size:12px; font-family:monospace;">${trace.map((tr) => `<div style="padding:2px 0; border-bottom:1px dashed #e2e8f0; color:${tr.level === 'error' ? '#ef4444' : tr.level === 'warn' ? '#f59e0b' : '#334155'}"><strong>[${cstDateLabel(tr.time)} ${new Date(tr.time).toTimeString().slice(0,8)}]</strong> <span>${escape(tr.module || "")}</span> · <strong>${escape(tr.event || "")}</strong> ${tr.step ? `(step: ${escape(tr.step)})` : ""} ${tr.httpStatus ? `[HTTP ${escape(tr.httpStatus)}]` : ""} ${tr.errorCode ? `[${escape(tr.errorCode)}]` : ""} ${tr.message ? ` - ${escape(tr.message)}` : ""}</div>`).join("")}</div></div>` : "";
+
+      const downloadBtnHtml = data.status === "uploaded" ? `<div style="margin-top:20px; display:flex; gap:12px;"><a class="primary" style="display:inline-flex; align-items:center; gap:6px; padding:9px 18px; border-radius:6px; text-decoration:none; color:#fff; font-weight:600;" href="/api/admin/diagnostics/${encodeURIComponent(data.id)}/download?satoken=${encodeURIComponent(state.token)}" download>下载完整诊断包 (ZIP)</a></div>` : `<div style="margin-top:16px; color:#94a3b8; font-size:13px;">客户端尚未完成文件上传</div>`;
+
+      $("diagDetailContent").innerHTML = `
+        <div class="detail-grid">${baseFields.map(([k, v]) => `<div><span>${escape(k)}</span><strong>${escape(v ?? "-")}</strong></div>`).join("")}</div>
+        ${userNoteHtml}
+        <div class="detail-section"><h3>运行环境</h3><div class="detail-grid">${envFields.map(([k, v]) => `<div><span>${escape(k)}</span><strong>${escape(v ?? "-")}</strong></div>`).join("")}</div></div>
+        ${tasksHtml}
+        ${errorsHtml}
+        ${traceHtml}
+        ${downloadBtnHtml}
+      `;
+    } catch (error) {
+      $("diagDetailContent").textContent = `加载详情失败：${error.message}`;
+    }
+  }
+
   async function login(event) {
     event.preventDefault();
     $("loginBtn").disabled = true;
@@ -682,6 +783,44 @@
   });
 
   initAllCustomSelects();
+
+
+  // 诊断中心事件绑定
+  $("diagSearchForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    state.diagKeyword = $("diagKeyword").value.trim();
+    state.diagPlatform = $("diagPlatform").value;
+    state.diagStatus = $("diagStatus").value;
+    state.diagPage = 1;
+    loadDiagnostics().catch((e) => alert(e.message));
+  });
+  $("diagPlatform").addEventListener("change", (e) => {
+    state.diagPlatform = e.target.value;
+    state.diagPage = 1;
+    loadDiagnostics().catch((err) => alert(err.message));
+  });
+  $("diagStatus").addEventListener("change", (e) => {
+    state.diagStatus = e.target.value;
+    state.diagPage = 1;
+    loadDiagnostics().catch((err) => alert(err.message));
+  });
+  $("diagPrev").addEventListener("click", () => {
+    state.diagPage = Math.max(1, state.diagPage - 1);
+    loadDiagnostics().catch((e) => alert(e.message));
+  });
+  $("diagNext").addEventListener("click", () => {
+    state.diagPage += 1;
+    loadDiagnostics().catch((e) => alert(e.message));
+  });
+  $("diagPageSize").addEventListener("change", (e) => {
+    state.diagPageSize = Number(e.target.value) || 10;
+    state.diagPage = 1;
+    loadDiagnostics().catch((e) => alert(e.message));
+  });
+  $("diagRows").addEventListener("click", (event) => {
+    const target = event.target.closest("[data-diag-detail]");
+    if (target) showDiagnosticDetail(target.dataset.diagDetail);
+  });
 
   if (state.token) {
     $("loginView").classList.add("hidden");

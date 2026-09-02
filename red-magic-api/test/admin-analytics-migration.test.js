@@ -16,7 +16,7 @@ function openDatabase(file) {
   };
 }
 
-test("v4 database upgrades to v5 without losing records and safely backfills analytics columns", async () => {
+test("v4 database upgrades to v6 without losing records and safely backfills analytics columns", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "magiorix-v5-"));
   const db = openDatabase(path.join(tempDir, "legacy.sqlite"));
   try {
@@ -34,8 +34,8 @@ test("v4 database upgrades to v5 without losing records and safely backfills ana
     await db.run("CREATE TABLE admin_balance_adjustments (id INTEGER PRIMARY KEY, user_id INTEGER, delta INTEGER, created_at TEXT)");
 
     await runMigrations(db, { clock: () => "2026-08-02T00:00:00.000Z" });
-    assert.equal(LATEST_SCHEMA_VERSION, 5);
-    assert.equal((await db.get("SELECT MAX(version) AS version FROM schema_migrations")).version, 5);
+    assert.equal(LATEST_SCHEMA_VERSION, 6);
+    assert.equal((await db.get("SELECT MAX(version) AS version FROM schema_migrations")).version, 6);
     assert.equal((await db.get("SELECT COUNT(*) AS count FROM users")).count, 1);
     assert.equal((await db.get("SELECT balance FROM shumiao_accounts WHERE user_id = 1")).balance, 96);
     assert.equal((await db.get("SELECT COUNT(*) AS count FROM recharge_orders")).count, 1);
@@ -46,11 +46,12 @@ test("v4 database upgrades to v5 without losing records and safely backfills ana
     assert.equal((await db.get("SELECT detail_json AS json FROM consume_records WHERE id = 1")).json.includes("pluginId"), true);
     assert.equal((await db.get("SELECT COUNT(*) AS count FROM client_events")).count, 0);
     assert.ok((await db.all("PRAGMA index_list('client_events')")).some((row) => row.name.includes("idx_client_events_name_created")));
+    assert.ok((await db.all("PRAGMA index_list('diagnostic_reports')")).some((row) => row.name.includes("idx_diag_user_id")));
 
     await runMigrations(db, { clock: () => "2026-08-03T00:00:00.000Z" });
     assert.equal((await db.get("SELECT COUNT(*) AS count FROM consume_records")).count, 2);
     assert.equal((await db.get("SELECT balance FROM shumiao_accounts WHERE user_id = 1")).balance, 96);
-    assert.equal((await db.get("SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 5")).count, 1);
+    assert.equal((await db.get("SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 6")).count, 1);
   } finally {
     await db.close();
     fs.rmSync(tempDir, { recursive: true, force: true });

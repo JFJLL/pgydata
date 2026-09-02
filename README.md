@@ -50,7 +50,8 @@ npm start
 %APPDATA%\magiorix-desktop
 ```
 
-日志和排障入口见 [docs/troubleshooting.md](docs/troubleshooting.md)。
+- 日志和排障入口见 [docs/troubleshooting.md](docs/troubleshooting.md)。
+- 诊断与反馈系统：用户可在「设置」→「诊断与反馈」一键生成并上传脱敏诊断包，管理员可在后台「诊断中心」（`/admin`）输入报告编号查看运行环境、任务轨迹并安全下载诊断包。
 
 ## Windows 打包
 

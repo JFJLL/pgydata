@@ -1,4 +1,4 @@
-﻿const fs = require("fs");
+const fs = require("fs");
 const path = require("path");
 
 const projectRoot = process.env.MAGIORIX_PATCH_PROJECT_ROOT
@@ -156,6 +156,14 @@ main = insertAfterOnce(
   "collection export headers import",
 );
 
+main = insertAfterOnce(
+  main,
+  'import { buildCollectionHistoryExportPayload } from "../electron-main/collection-export-headers.mjs";',
+  'import { DiagnosticManager } from "../electron-main/diagnostics/diagnostic-manager.mjs";',
+  'import { DiagnosticManager }',
+  "diagnostic manager import",
+);
+
 if (!main.includes("const pgyCollectionHistory")) {
   main = replaceOnce(
     main,
@@ -167,13 +175,150 @@ if (!main.includes("const pgyCollectionHistory")) {
   ye.setName("magiorix"), ye.setPath("userData", pgyUserDataDir);
 } catch {
 }
-const pgyCollectionHistory = new CollectionHistoryStore({ baseDir: Oe(pgyUserDataDir, "collection-history"), retentionDays: 90 });`,
+const pgyCollectionHistory = new CollectionHistoryStore({ baseDir: Oe(pgyUserDataDir, "collection-history"), retentionDays: 90 });
+const pgyDiagnosticManager = new DiagnosticManager({
+  userDataDir: pgyUserDataDir,
+  historyStore: pgyCollectionHistory,
+  getApiClient: () => Le.get(),
+  appVersion: ye.getVersion(),
+  assetsVersion: "1.4.5",
+});
+void pgyDiagnosticManager.init().catch(() => {});`,
     "collection history store initialization",
+  );
+} else if (!main.includes("const pgyDiagnosticManager")) {
+  main = replaceOnce(
+    main,
+    `const pgyCollectionHistory = new CollectionHistoryStore({ baseDir: Oe(pgyUserDataDir, "collection-history"), retentionDays: 90 });`,
+    `const pgyCollectionHistory = new CollectionHistoryStore({ baseDir: Oe(pgyUserDataDir, "collection-history"), retentionDays: 90 });
+const pgyDiagnosticManager = new DiagnosticManager({
+  userDataDir: pgyUserDataDir,
+  historyStore: pgyCollectionHistory,
+  getApiClient: () => Le.get(),
+  appVersion: ye.getVersion(),
+  assetsVersion: "1.4.5",
+});
+void pgyDiagnosticManager.init().catch(() => {});`,
+    "diagnostic manager initialization",
   );
 }
 
 const legacyHost = `https://${"api"}.red-magic.cn`;
 main = main.split(legacyHost).join("https://magiorix.red-magic.cn");
+
+if (!main.includes("X-Magiorix-Request-Id")) {
+  main = replaceOnce(
+    main,
+    `  async request(e, t, n) {
+    if (!this.baseUrl)
+      throw new Error("SchedulerApi: baseUrl 未设置");
+    if (!this.token)
+      throw new Error("SchedulerApi: token 未设置（用户未登录）");
+    const s = this.baseUrl + t;
+    return new Promise((i, o) => {
+      const r = Jt.request({ url: s, method: e });
+      r.setHeader("Content-Type", "application/json"), r.setHeader("satoken", this.token);
+      const c = [], u = setTimeout(() => {
+        r.abort(), o(new Error(\`请求超时: \${e} \${t}\`));
+      }, 2e4);
+      r.on("error", (l) => {
+        clearTimeout(u), o(l);
+      }), r.on("response", (l) => {
+        l.on("data", (p) => c.push(p)), l.on("end", () => {
+          clearTimeout(u);
+          const p = Buffer.concat(c).toString("utf8");
+          let d;
+          try {
+            d = JSON.parse(p);
+          } catch (h) {
+            Wt.warn(\`响应非 JSON: \${e} \${t}\`, h), o(new Error(\`响应解析失败 (status=\${l.statusCode})\`));
+            return;
+          }
+          if (l.statusCode === 401) {
+            const h = !!this.token;
+            if (this.token = null, h && this.onAuthExpired)
+              try {
+                this.onAuthExpired();
+              } catch (m) {
+                Wt.warn("onAuthExpired 回调异常:", m);
+              }
+            o(new Error("未授权（401）"));
+            return;
+          }
+          if (l.statusCode === 403 || d.code === 403) {
+            this.noEnterprise || Wt.info(\`API 返回 403，标记为未加入企业（\${e} \${t}）\`), this.noEnterprise = !0, o(new Error(d.message || \`HTTP \${l.statusCode}\`));
+            return;
+          }
+          if (l.statusCode >= 400 || d.code >= 400) {
+            o(new Error(d.message || \`HTTP \${l.statusCode}\`));
+            return;
+          }
+          i(d);
+        });
+      }), n !== void 0 && r.write(JSON.stringify(n)), r.end();
+    });
+  }`,
+    `  async request(e, t, n) {
+    if (!this.baseUrl)
+      throw new Error("SchedulerApi: baseUrl 未设置");
+    if (!this.token)
+      throw new Error("SchedulerApi: token 未设置（用户未登录）");
+    const s = this.baseUrl + t;
+    const requestId = "req_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
+    const startedAt = Date.now();
+    return new Promise((i, o) => {
+      const r = Jt.request({ url: s, method: e });
+      r.setHeader("Content-Type", "application/json"), r.setHeader("satoken", this.token), r.setHeader("X-Magiorix-Request-Id", requestId);
+      const c = [], u = setTimeout(() => {
+        r.abort();
+        try { pgyDiagnosticManager?.networkCollector?.recordRequest({ httpMethod: e, endpoint: t, host: "magiorix.red-magic.cn", isTimeout: true, durationMs: Date.now() - startedAt, requestId, errorCode: "NETWORK_TIMEOUT" }); } catch {}
+        o(new Error(\`请求超时: \${e} \${t}\`));
+      }, 2e4);
+      r.on("error", (l) => {
+        clearTimeout(u);
+        try { pgyDiagnosticManager?.networkCollector?.recordRequest({ httpMethod: e, endpoint: t, host: "magiorix.red-magic.cn", httpStatus: 0, durationMs: Date.now() - startedAt, requestId, errorCode: "NETWORK_ERROR", error: l?.message }); } catch {}
+        o(l);
+      }), r.on("response", (l) => {
+        l.on("data", (p) => c.push(p)), l.on("end", () => {
+          clearTimeout(u);
+          const durationMs = Date.now() - startedAt;
+          try { pgyDiagnosticManager?.networkCollector?.recordRequest({ httpMethod: e, endpoint: t, host: "magiorix.red-magic.cn", httpStatus: l.statusCode, durationMs, requestId }); } catch {}
+          const p = Buffer.concat(c).toString("utf8");
+          let d;
+          try {
+            d = JSON.parse(p);
+          } catch (h) {
+            Wt.warn(\`响应非 JSON: \${e} \${t}\`, h), o(new Error(\`响应解析失败 (status=\${l.statusCode})\`));
+            return;
+          }
+          if (l.statusCode === 401) {
+            const h = !!this.token;
+            if (this.token = null, h && this.onAuthExpired)
+              try {
+                this.onAuthExpired();
+              } catch (m) {
+                Wt.warn("onAuthExpired 回调异常:", m);
+              }
+            o(new Error("未授权（401）"));
+            return;
+          }
+          if (l.statusCode === 403 || d.code === 403) {
+            this.noEnterprise || Wt.info(\`API 返回 403，标记为未加入企业（\${e} \${t}）\`), this.noEnterprise = !0, o(new Error(d.message || \`HTTP \${l.statusCode}\`));
+            return;
+          }
+          if (l.statusCode >= 400 || d.code >= 400) {
+            o(new Error(d.message || \`HTTP \${l.statusCode}\`));
+            return;
+          }
+          i(d);
+        });
+      }), n !== void 0 && r.write(JSON.stringify(n)), r.end();
+    });
+  }`,
+    "scheduler api request id and network diagnostic tracing",
+  );
+}
+
 
 if (!main.includes("pgyPaymentExternalOrigin")) {
   main = replaceOnce(
@@ -4823,5 +4968,13 @@ main = replaceOnce(
 );
 
 if (main !== originalMain) fs.writeFileSync(mainPath, main);
+if (!preload.includes("diagnostics:")) {
+  preload = replaceOnce(
+    preload,
+    'getSchemaFields:()=>r.ipcRenderer.invoke("pgy-kol:schema-fields")}});',
+    'getSchemaFields:()=>r.ipcRenderer.invoke("pgy-kol:schema-fields")},diagnostics:{getStatus:()=>r.ipcRenderer.invoke("diagnostics:get-status"),createAndUpload:e=>r.ipcRenderer.invoke("diagnostics:create-and-upload",e),exportLocal:e=>r.ipcRenderer.invoke("diagnostics:export-local",e),reportRendererError:e=>r.ipcRenderer.send("diagnostics:renderer-error",e)}});',
+    "expose diagnostics in preload bridge",
+  );
+}
 if (preload !== originalPreload) fs.writeFileSync(preloadPath, preload);
 console.log("Applied magiorix runtime patches.");

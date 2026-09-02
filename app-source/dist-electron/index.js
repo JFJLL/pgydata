@@ -5,6 +5,7 @@ import { ipcMain as F, BrowserWindow as Dt, app as ye, screen as Gi, shell as Ji
 import { CollectionHistoryStore, isCollectionTaskExportReady } from "../electron-main/collection-history-store.mjs";
 import { createTaskAnalyticsLifecycleReporter } from "../electron-main/task-analytics-lifecycle.mjs";
 import { buildCollectionHistoryExportPayload } from "../electron-main/collection-export-headers.mjs";
+import { DiagnosticManager } from "../electron-main/diagnostics/diagnostic-manager.mjs";
 import { createPgyKolService, registerPgyKolIpc } from "../pgy-kol/pgy-kol-service.mjs";
 import { redactLocalPathText as pgyRedactLocalPath } from "../pgy-kol/pgy-session-request.mjs";
 import * as Xi from "path";
@@ -30,6 +31,14 @@ try {
 } catch {
 }
 const pgyCollectionHistory = new CollectionHistoryStore({ baseDir: Oe(pgyUserDataDir, "collection-history"), retentionDays: 90 });
+const pgyDiagnosticManager = new DiagnosticManager({
+  userDataDir: pgyUserDataDir,
+  historyStore: pgyCollectionHistory,
+  getApiClient: () => Le.get(),
+  appVersion: ye.getVersion(),
+  assetsVersion: "1.4.5",
+});
+void pgyDiagnosticManager.init().catch(() => {});
 const pgyTaskAnalytics = createTaskAnalyticsLifecycleReporter(
   (eventName, fields, options) => {
     try {
@@ -16616,17 +16625,25 @@ const W = {
     if (!this.token)
       throw new Error("SchedulerApi: token 未设置（用户未登录）");
     const s = this.baseUrl + t;
+    const requestId = "req_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
+    const startedAt = Date.now();
     return new Promise((i, o) => {
       const r = Jt.request({ url: s, method: e });
-      r.setHeader("Content-Type", "application/json"), r.setHeader("satoken", this.token);
+      r.setHeader("Content-Type", "application/json"), r.setHeader("satoken", this.token), r.setHeader("X-Magiorix-Request-Id", requestId);
       const c = [], u = setTimeout(() => {
-        r.abort(), o(new Error(`请求超时: ${e} ${t}`));
+        r.abort();
+        try { pgyDiagnosticManager?.networkCollector?.recordRequest({ httpMethod: e, endpoint: t, host: "magiorix.red-magic.cn", isTimeout: true, durationMs: Date.now() - startedAt, requestId, errorCode: "NETWORK_TIMEOUT" }); } catch {}
+        o(new Error(`请求超时: ${e} ${t}`));
       }, 2e4);
       r.on("error", (l) => {
-        clearTimeout(u), o(l);
+        clearTimeout(u);
+        try { pgyDiagnosticManager?.networkCollector?.recordRequest({ httpMethod: e, endpoint: t, host: "magiorix.red-magic.cn", httpStatus: 0, durationMs: Date.now() - startedAt, requestId, errorCode: "NETWORK_ERROR", error: l?.message }); } catch {}
+        o(l);
       }), r.on("response", (l) => {
         l.on("data", (p) => c.push(p)), l.on("end", () => {
           clearTimeout(u);
+          const durationMs = Date.now() - startedAt;
+          try { pgyDiagnosticManager?.networkCollector?.recordRequest({ httpMethod: e, endpoint: t, host: "magiorix.red-magic.cn", httpStatus: l.statusCode, durationMs, requestId }); } catch {}
           const p = Buffer.concat(c).toString("utf8");
           let d;
           try {
