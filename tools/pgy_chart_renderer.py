@@ -1033,19 +1033,36 @@ def save_trend(chart):
     min_v = min(values)
     max_v = max(values)
 
-    raw_step = max((max_v - min_v) / 5.0, 1.0)
-    magnitude = 10 ** math.floor(math.log10(raw_step))
-    step = 10 * magnitude
-    for candidate in (1, 2, 3, 5, 10):
-        candidate_step = candidate * magnitude
-        if candidate_step >= raw_step:
-            step = candidate_step
+    def nice_step_at_least(value):
+        magnitude = 10 ** math.floor(math.log10(max(value, 1.0)))
+        for candidate in (1, 2, 3, 5, 10):
+            candidate_step = candidate * magnitude
+            if candidate_step >= value:
+                return candidate_step
+        return 10 * magnitude
+
+    def next_nice_step(value):
+        magnitude = 10 ** math.floor(math.log10(max(value, 1.0)))
+        normalized = value / magnitude
+        for candidate in (1, 2, 3, 5, 10):
+            if candidate > normalized + 1e-9:
+                return candidate * magnitude
+        return 10 * magnitude
+
+    # Five fixed intervals match the web card. Recompute from the lower bound and
+    # grow the nice step at most eight times; never shift both bounds upward while
+    # testing a lower outlier (that made some real fan histories loop forever).
+    step = nice_step_at_least((max_v - min_v) / 5.0)
+    for _ in range(8):
+        axis_min = math.floor(min_v / step) * step
+        axis_max = axis_min + 5 * step
+        if max_v <= axis_max:
             break
-    axis_max = math.ceil(max_v / step) * step
-    axis_min = axis_max - 5 * step
-    while min_v < axis_min:
-        axis_max += step
-        axis_min = axis_max - 5 * step
+        step = next_nice_step(step)
+    else:
+        axis_min = min_v
+        axis_max = max(max_v, min_v + 5.0)
+        step = (axis_max - axis_min) / 5.0
 
     for index in range(5):
         y = plot_top + index * 52
@@ -1137,6 +1154,12 @@ def main():
         except Exception as exc:
             if field:
                 errors[field] = str(exc)
+        progress = json.dumps(
+            {"progress": True, "field": field, "ok": bool(field and field in paths)},
+            ensure_ascii=False,
+        )
+        sys.stdout.buffer.write((progress + "\n").encode("utf-8"))
+        sys.stdout.buffer.flush()
     output = json.dumps({"ok": True, "paths": paths, "errors": errors}, ensure_ascii=False)
     sys.stdout.buffer.write((output + "\n").encode("utf-8"))
     sys.stdout.buffer.flush()

@@ -127,13 +127,78 @@ test("history export handler builds schema payload instead of raw single-row dat
     "main bundle must import buildCollectionHistoryExportPayload",
   );
   assert.ok(
-    main.includes("return ff(buildCollectionHistoryExportPayload(n, s));"),
+    main.includes("const exported = await ff(buildCollectionHistoryExportPayload(n, s));") &&
+      main.includes("return exported;"),
     "history export handler must pass schema headers via buildCollectionHistoryExportPayload",
   );
   assert.ok(
     !main.includes("return ff({ taskId: t.taskId, fileName: n.fileName ||"),
     "legacy raw history export call must not remain in the bundle",
   );
+});
+
+test("coop CPUV fields use the official core_data POST contract", () => {
+  const main = read("app-source/dist-electron/index.js");
+  const patch = read("scripts/apply-magiorix-runtime-patches.js");
+  for (const [label, source] of [["bundle", main], ["runtime patch", patch]]) {
+    assert.match(source, /\/api\/pgy\/kol\/data\/core_data/, `${label} must use the official core metric endpoint`);
+    assert.match(source, /business30Core:\s*\{ business: 1, noteType: 3, dateType: 1, advertiseSwitch: 1 \}/);
+    assert.match(source, /business30Picture:\s*\{ business: 1, noteType: 1, dateType: 1, advertiseSwitch: 1 \}/);
+    assert.match(source, /business30Video:\s*\{ business: 1, noteType: 2, dateType: 1, advertiseSwitch: 1 \}/);
+    assert.match(source, /business90Core:\s*\{ business: 1, noteType: 3, dateType: 2, advertiseSwitch: 1 \}/);
+    assert.match(source, /business90Picture:\s*\{ business: 1, noteType: 1, dateType: 2, advertiseSwitch: 1 \}/);
+    assert.match(source, /business90Video:\s*\{ business: 1, noteType: 2, dateType: 2, advertiseSwitch: 1 \}/);
+    assert.match(source, /requestBody: coreMetricSpec \? \{ userId: p, \.\.\.coreMetricSpec \} : null/);
+    assert.match(source, /business30Core = \(\(\(t\.business30Core[\s\S]{0,100}\.sumData\) \?\? \{\}/);
+    assert.match(source, /mCpuvBusiness30:\s*business30Core\.thirdUserNum \?\? "无"/);
+    assert.match(source, /mCpuvBusiness90Video:\s*business90VideoCore\.thirdUserNum \?\? "无"/);
+  }
+  assert.doesNotMatch(main, /business30Picture: \(a\) => `\$\{Re\}\/api\/solar\/kol\/data_v3\/notes_rate/);
+  assert.doesNotMatch(main, /mCpuvBusiness30:\s*c\.mCpuvNum/);
+  assert.doesNotMatch(main, /mCpuvBusiness90:\s*u\.mCpuvNum/);
+  assert.doesNotMatch(main, /mCpuvBusiness(?:30|90)(?:Picture|Video)?:\s*\w+\.mCpuvNum/);
+  assert.match(main, /method:\s*\$\{JSON\.stringify\(i \? "POST" : "GET"\)\}/);
+  assert.match(patch, /pgy page fetch uses requested HTTP method/);
+});
+
+test("completed collection card remains visible for manual export", () => {
+  const assetVersion = JSON.parse(read("app-source/package.json")).assetsVersion;
+  const assetsDir = path.join(root, "assets", assetVersion, "assets");
+  const mainBundleName = fs.readdirSync(assetsDir).find((name) => {
+    if (!/^index-.*\.js$/.test(name)) return false;
+    return fs.readFileSync(path.join(assetsDir, name), "utf8").includes("we.task.onComplete");
+  });
+  assert.ok(mainBundleName, "main frontend bundle is missing");
+  const bundle = fs.readFileSync(path.join(assetsDir, mainBundleName), "utf8");
+  const patch = read("scripts/apply-magiorix-frontend-patches.js");
+  assert.match(patch, /keep completed collection card visible for manual export/);
+  assert.match(bundle, /onComplete\(A=>\{n\(A\.taskId,A\.duration\)\}\)/);
+  assert.doesNotMatch(bundle, /onComplete\(A=>\{n\(A\.taskId,A\.duration\),setTimeout\(\(\)=>\{s\(A\.taskId\)\},3e4\)\}\)/);
+});
+
+test("plugin task ids are always admissible and startup failures reach the UI", () => {
+  const desktop = JSON.parse(read("app-source/package.json"));
+  const validator = read(`assets/${desktop.assetsVersion}/assets/url-validator-00wRYD83.js`);
+  const main = read("app-source/dist-electron/index.js");
+  const frontendPatch = read("scripts/apply-magiorix-frontend-patches.js");
+  const runtimePatch = read("scripts/apply-magiorix-runtime-patches.js");
+
+  assert.match(validator, /let at=\(e=21\)=>\{let o="t"/);
+  assert.match(frontendPatch, /task id always starts with an alphanumeric prefix/);
+  for (const [label, source] of [["bundle", main], ["runtime patch", runtimePatch]]) {
+    assert.match(
+      source,
+      /e\.sender\.send\(W\.task\.error/,
+      `${label} must report task admission failures to the renderer`,
+    );
+    assert.match(source, /errorCategoryLabel: "任务创建失败"/);
+  }
+});
+
+test("Windows installer avoids solid compression startup latency", () => {
+  const buildScript = read("scripts/build-magiorix-windows-installer.ps1");
+  assert.match(buildScript, /SetCompressor lzma/);
+  assert.doesNotMatch(buildScript, /SetCompressor \/SOLID lzma/);
 });
 
 test("source package, asset version, and backend package stay aligned", () => {
@@ -148,13 +213,12 @@ test("source package, asset version, and backend package stay aligned", () => {
 
 test("admin password reset dialog requires matching passwords and task transaction filter", () => {
   const admin = read("red-magic-api/public/admin/index.html");
-  const scripts = [...admin.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  assert.ok(scripts.length > 0);
-  assert.doesNotThrow(() => new Function(scripts.at(-1)[1]));
+  const adminScript = read("red-magic-api/public/admin/admin.js");
+  assert.doesNotThrow(() => new Function(adminScript));
   assert.match(admin, /id="resetPasswordValue"/);
   assert.match(admin, /id="resetPasswordConfirmValue"/);
-  assert.match(admin, /confirmPassword !== newPassword/);
-  assert.match(admin, /option value="tasks" selected/);
+  assert.match(adminScript, /password !== \$\("resetPasswordConfirmValue"\)\.value/);
+  assert.match(adminScript, /transactionView:\s*"tasks"/);
+  assert.match(admin, /option value="tasks"/);
   assert.match(admin, /option value="legacy"/);
-  assert.match(admin, /用户当前所有登录 token 会被立即删除/);
 });

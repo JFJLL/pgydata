@@ -101,7 +101,7 @@ const NOTEBOOK_ROW = {
 test("蒲公英博主字段：近期笔记波动中位数独立位于合作90天之后", () => {
   const schema = resolveCollectionExportHeaders("pgy", "blogger");
   const dailyMedian = schema.find((header) => header.key === "mEngagementNum30");
-  const business90End = schema.findIndex((header) => header.key === "impMedianBusiness90");
+  const business90End = schema.findIndex((header) => header.key === "mCpuvBusiness90Video");
   const recentMedian = schema.findIndex((header) => header.key === "recentNoteInteractionMedian");
   assert.equal(dailyMedian?.group, "日常30天");
   assert.equal(recentMedian, business90End + 1);

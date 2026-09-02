@@ -43,6 +43,46 @@ function replaceAllIfExists(filePath, from, to) {
   return true;
 }
 
+function collapseRepeatedListFragment(filePath, fragment) {
+  let source = fs.readFileSync(filePath, "utf8");
+  const repeated = `${fragment},${fragment}`;
+  let changed = false;
+  while (source.includes(repeated)) {
+    source = source.split(repeated).join(fragment);
+    changed = true;
+  }
+  if (changed) fs.writeFileSync(filePath, source);
+  return changed;
+}
+
+function writeIntegrityManifest(rootDir) {
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+      if (!entry.isFile() || !/[.](?:html|js|css)$/i.test(entry.name)) continue;
+      const relativePath = path.relative(rootDir, fullPath).replaceAll("\\", "/");
+      if (relativePath === "integrity-manifest.json") continue;
+      const content = fs.readFileSync(fullPath);
+      files.push({
+        path: relativePath,
+        size: content.length,
+        sha256: crypto.createHash("sha256").update(content).digest("hex"),
+      });
+    }
+  };
+  walk(rootDir);
+  files.sort((a, b) => a.path.localeCompare(b.path, "en", { sensitivity: "base" }));
+  const manifestPath = path.join(rootDir, "integrity-manifest.json");
+  const next = `${JSON.stringify({ version: assetVersion, algorithm: "sha256", files }, null, 2)}\n`;
+  const current = fs.existsSync(manifestPath) ? fs.readFileSync(manifestPath, "utf8") : "";
+  if (current.replace(/\r\n/g, "\n") !== next) fs.writeFileSync(manifestPath, next);
+}
+
 function replaceAnyOnce(filePath, fromList, to, label) {
   let source = fs.readFileSync(filePath, "utf8");
   for (const from of fromList) {
@@ -322,19 +362,33 @@ if (!fs.readFileSync(mainBundle, "utf8").includes('field:"mCpuvBusiness90Picture
     "add coop 90d cpuv grid columns",
   );
 }
-if (!fs.readFileSync(mainBundle, "utf8").includes('{group:"合作30天",label:"外溢进店中位数(图文+视频)"}')) {
+const cpuv30ExportHeaderFragment = [
+  '{group:"合作30天",label:"外溢进店中位数(图文+视频)",key:"mCpuvBusiness30"}',
+  '{group:"合作30天",label:"外溢进店中位数(图文)",key:"mCpuvBusiness30Picture"}',
+  '{group:"合作30天",label:"外溢进店中位数(视频)",key:"mCpuvBusiness30Video"}',
+].join(",");
+const cpuv90ExportHeaderFragment = [
+  '{group:"合作90天",label:"外溢进店中位数(图文+视频)",key:"mCpuvBusiness90"}',
+  '{group:"合作90天",label:"外溢进店中位数(图文)",key:"mCpuvBusiness90Picture"}',
+  '{group:"合作90天",label:"外溢进店中位数(视频)",key:"mCpuvBusiness90Video"}',
+].join(",");
+
+collapseRepeatedListFragment(mainBundle, cpuv30ExportHeaderFragment);
+collapseRepeatedListFragment(mainBundle, cpuv90ExportHeaderFragment);
+
+if (!fs.readFileSync(mainBundle, "utf8").includes('{group:"合作30天",label:"外溢进店中位数(图文+视频)",key:"mCpuvBusiness30"}')) {
   replaceOnce(
     mainBundle,
     '{group:"合作30天",label:"曝光中位数",key:"impMedianBusiness30"}',
-    '{group:"合作30天",label:"曝光中位数",key:"impMedianBusiness30"},{group:"合作30天",label:"外溢进店中位数(图文+视频)",key:"mCpuvBusiness30"},{group:"合作30天",label:"外溢进店中位数(图文)",key:"mCpuvBusiness30Picture"},{group:"合作30天",label:"外溢进店中位数(视频)",key:"mCpuvBusiness30Video"}',
+    `{group:"合作30天",label:"曝光中位数",key:"impMedianBusiness30"},${cpuv30ExportHeaderFragment}`,
     "add coop 30d cpuv export headers",
   );
 }
-if (!fs.readFileSync(mainBundle, "utf8").includes('{group:"合作90天",label:"外溢进店中位数(图文+视频)"}')) {
+if (!fs.readFileSync(mainBundle, "utf8").includes('{group:"合作90天",label:"外溢进店中位数(图文+视频)",key:"mCpuvBusiness90"}')) {
   replaceOnce(
     mainBundle,
     '{group:"合作90天",label:"曝光中位数",key:"impMedianBusiness90"}',
-    '{group:"合作90天",label:"曝光中位数",key:"impMedianBusiness90"},{group:"合作90天",label:"外溢进店中位数(图文+视频)",key:"mCpuvBusiness90"},{group:"合作90天",label:"外溢进店中位数(图文)",key:"mCpuvBusiness90Picture"},{group:"合作90天",label:"外溢进店中位数(视频)",key:"mCpuvBusiness90Video"}',
+    `{group:"合作90天",label:"曝光中位数",key:"impMedianBusiness90"},${cpuv90ExportHeaderFragment}`,
     "add coop 90d cpuv export headers",
   );
 }
@@ -399,6 +453,16 @@ replaceOnce(
     '(n.required||a.defaultSelected)&&r.add(a.key)',
     '(n.required||a.required||a.defaultSelected)&&r.add(a.key)',
     "select required fields by default",
+);
+
+// 历史默认模板“all”保存的是当时的字段快照。版本新增字段后如果原样套用，
+// 新字段会在弹窗里被旧快照取消勾选，最终连请求都不会发出。“all/全部”本身
+// 表达的就是全选语义，因此在每次打开时按当前 schema 展开，其他自定义模板不变。
+replaceOnce(
+  exportFieldSelectorBundle,
+  'const j=E.getState().getDefaultTemplate(n);if(j){p(j.id);const y=o.applyTemplate(j.fieldKeys);',
+  'const j=E.getState().getDefaultTemplate(n);if(j){p(j.id);const allTemplateFieldKeys=/^(?:all|全部|全部字段)$/i.test(String(j.name||"").trim())?Array.from(pe(a)):j.fieldKeys;const y=o.applyTemplate(allTemplateFieldKeys);',
+  "migrate all-field templates to the current schema",
 );
 
 replaceOnce(
@@ -788,6 +852,15 @@ replaceOnce(
   'function nt(e){return I.blogger.test(e)||I.shortLink.test(e)||I.starmapBlogger.test(e)}',
   'function nt(e){return I.blogger.test(e)||I.shortLink.test(e)||I.starmapBlogger.test(e)||I.secUid.test(e)}',
   "douyin sec_uid validator",
+);
+
+// nanoid 的默认字符表包含 "-" 和 "_"，但本地任务存储要求 ID 首字符必须是字母或数字。
+// 旧实现因此会以约 1/32 的概率随机生成无法落盘的任务 ID，界面则一直停在 0/N。
+replaceOnce(
+  urlValidatorBundle,
+  'let at=(e=21)=>{let o="",s=crypto.getRandomValues(new Uint8Array(e|=0));for(;e--;)o+=K[s[e]&63];return o}',
+  'let at=(e=21)=>{let o="t",s=crypto.getRandomValues(new Uint8Array(e=Math.max(1,e|0)-1));for(;e--;)o+=K[s[e]&63];return o}',
+  "task id always starts with an alphanumeric prefix",
 );
 
 replaceOnce(
@@ -1386,6 +1459,7 @@ const normalizedMainBundle = fs
   .replace(/\r\n/g, "\n")
   .replace(/\n/g, "\r\n");
 fs.writeFileSync(mainBundle, normalizedMainBundle);
+writeIntegrityManifest(assetsRoot);
 
 console.log("Applied magiorix frontend patches.");
 
@@ -1395,4 +1469,15 @@ if (!fs.readFileSync(mainBundle, "utf8").includes('C=we.task.onProgress(A=>{r(A.
 
 if (!fs.readFileSync(mainBundle, "utf8").includes('updateProgress:(r,a,n,p)=>{e(l=>{const s=new Map(l.tasks),i=s.get(r);const pct=(typeof p==="number"&&Number.isFinite(p))?p:(n===0?0:Math.round(a/n*100));return i&&s.set(r,{...i,current:a,total:n,percent:pct}),{tasks:s}})}')) {
   replaceOnce(mainBundle, 'updateProgress:(r,a,n)=>{e(l=>{const s=new Map(l.tasks),i=s.get(r);return i&&s.set(r,{...i,current:a,total:n,percent:n===0?0:Math.round(a/n*100)}),{tasks:s}})}', 'updateProgress:(r,a,n,p)=>{e(l=>{const s=new Map(l.tasks),i=s.get(r);const pct=(typeof p==="number"&&Number.isFinite(p))?p:(n===0?0:Math.round(a/n*100));return i&&s.set(r,{...i,current:a,total:n,percent:pct}),{tasks:s}})}', "updateProgress respects percent");
+}
+
+// 完成后的任务卡片保持可见，让用户可以继续查看结果并手动选择下载路径。
+// 旧逻辑会在 30 秒后自动从任务列表移除，表现为“跑完以后直接结束”。
+if (fs.readFileSync(mainBundle, "utf8").includes('h=we.task.onComplete(A=>{n(A.taskId,A.duration),setTimeout(()=>{s(A.taskId)},3e4)})')) {
+  replaceOnce(
+    mainBundle,
+    'h=we.task.onComplete(A=>{n(A.taskId,A.duration),setTimeout(()=>{s(A.taskId)},3e4)})',
+    'h=we.task.onComplete(A=>{n(A.taskId,A.duration)})',
+    "keep completed collection card visible for manual export",
+  );
 }

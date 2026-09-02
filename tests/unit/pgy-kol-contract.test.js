@@ -64,11 +64,13 @@ test("preload exposes the minimal read-only pgyKol bridge", () => {
   );
 });
 
-test("existing PGY detail GET fetch path is untouched", () => {
+test("PGY detail fetch keeps GET by default and supports core_data POST", () => {
   const main = read("app-source/dist-electron/index.js");
   assert.ok(main.includes("async fetchPgyApiInPage"), "window fetch helper must remain");
-  assert.match(main, /method: 'GET',\s+credentials: 'include'/);
-  assert.match(main, /method: 'GET',\s+credentials: 'include'[\s\S]*AbortSignal\.timeout\(12000\)/);
+  assert.match(main, /const r = e\.replace\(Re, ""\), c = sm\.encryptSign\(r\), u = o \? "POST" : "GET"/);
+  assert.match(main, /method: \$\{JSON\.stringify\(i \? "POST" : "GET"\)\},\s+credentials: 'include'/);
+  assert.match(main, /credentials: 'include'[\s\S]*AbortSignal\.timeout\(12000\)/);
+  assert.match(main, /\/api\/pgy\/kol\/data\/core_data/);
 });
 
 test("pgy-kol sources and fixtures stay desensitized and brand-free", () => {
@@ -100,10 +102,10 @@ test("pgy-kol sources and fixtures stay desensitized and brand-free", () => {
   }
 });
 
-test("version stays at 1.3.3 with approved password registration when SMS is disabled", () => {
+test("desktop and assets stay aligned at 1.4.4", () => {
   const desktop = JSON.parse(read("app-source/package.json"));
-  assert.equal(desktop.version, "1.4.1");
-  assert.equal(desktop.assetsVersion, "1.4.1");
+  assert.equal(desktop.version, "1.4.4");
+  assert.equal(desktop.assetsVersion, "1.4.4");
 });
 
 test("Phase 4：批量任务 IPC 通道、preload bridge 与主进程接线", () => {

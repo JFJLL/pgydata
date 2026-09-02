@@ -49,7 +49,7 @@ function runPython(source, payload) {
         windowsHide: true,
         maxBuffer: 64 * 1024 * 1024,
       });
-      if (!result.error && result.status === 0) return result.stdout.trim();
+      if (!result.error && result.status === 0) return result.stdout.trim().split(/\r?\n/).pop() || "";
       failures.push(result.error?.message || result.stderr || result.stdout || `${candidate[0]} exited ${result.status}`);
     }
   } finally {
@@ -511,22 +511,27 @@ test("Python renderer creates a reference-sized marker-free 30-day fan trend car
   t.after(() => rmSync(tempDir, { recursive: true, force: true }));
   const output = path.join(tempDir, "fans-trend.png");
   const unorderedOutput = path.join(tempDir, "fans-trend-unordered.png");
+  const boundaryOutput = path.join(tempDir, "fans-trend-boundary.png");
   const values = [107174, 107172, 107169, 107174, 107190, 107190, 107192, 107193, 107187, 107186, 107176, 107174, 107168, 107164, 107163, 107169, 107174, 107218, 107249, 107270, 107286, 107294, 107292, 107280, 107277, 107286, 107286, 107284, 107276, 107268];
   const rows = values.map((num, index) => {
     const date = new Date(Date.UTC(2026, 6, 13 + index));
     return { dateKey: date.toISOString().slice(0, 10).replace(/-/g, ""), num };
   });
   const unorderedRows = [{ dateKey: "20260712", num: 107170 }, ...rows, { ...rows[0] }].reverse();
+  const boundaryRows = rows.map((row, index) => ({ ...row, num: index === 0 ? 107150 : row.num }));
   const result = JSON.parse(runPython(pythonSource, {
     charts: [
       { field: "fansGrowthTrendChart", type: "trend", rows, output },
       { field: "fansGrowthTrendChartUnordered", type: "trend", rows: unorderedRows, output: unorderedOutput },
+      { field: "fansGrowthTrendChartBoundary", type: "trend", rows: boundaryRows, output: boundaryOutput },
     ],
   }));
 
   assert.deepEqual(result.errors, {});
   assert.equal(result.paths.fansGrowthTrendChart, output);
+  assert.equal(result.paths.fansGrowthTrendChartBoundary, boundaryOutput, "lower-bound rounding must finish instead of looping until the renderer timeout");
   assert.deepEqual(pngSize(output), { width: 813, height: 419 });
+  assert.deepEqual(pngSize(boundaryOutput), { width: 813, height: 419 });
   assert.deepEqual(readFileSync(unorderedOutput), readFileSync(output), "date sorting, de-duplication and recent-30 selection must preserve every daily bend");
   const trendSection = pythonSource.slice(pythonSource.indexOf("def save_trend(chart):"), pythonSource.indexOf("def main():"));
   assert.doesNotMatch(trendSection, /for x, y in points:/, "trend line must not draw point markers");
@@ -534,6 +539,7 @@ test("Python renderer creates a reference-sized marker-free 30-day fan trend car
   assert.match(trendSection, /for sample in range\(12\)/, "smooth curve must interpolate through every daily value");
   assert.match(trendSection, /draw\.line\(curve, fill="#3f6eff"/);
   assert.match(trendSection, /for candidate in \(1, 2, 3, 5, 10\)/, "107163–107294 must use a 30-fan axis step");
+  assert.doesNotMatch(trendSection, /while min_v < axis_min/, "lower outliers must not enter an upward-only axis loop");
   assert.match(trendSection, /rows = trend_points\(chart\.get\("rows"\)\)\[-30:\]/);
   assert.match(trendSection, /label_indices = \[0, 6, 12, 18, 24\]/);
   assert.match(pythonSource, /return sorted\(points_by_date\.values\(\), key=lambda point: point\["date_key"\]\)/);
@@ -672,15 +678,20 @@ test("production Excel embedder adds typed daily-note and blogger-overview PNGs 
   );
   assert.ok(embedMatch, "production Excel image embedder must be present");
   const embedSource = embedMatch[0].replace(/\r?\nasync function ff\(a\) \{$/, "");
+  const imageFields = new Set(["dailyNotePerformanceChart", "dailyNotePicturePerformanceChart", "dailyNoteVideoPerformanceChart", "bloggerOverviewChart", "fansGenderAgeChart"]);
   const { pgyEmbedImagesInWorkbook } = new Function(
     "PGY_IMAGE_FIELDS",
+    "isPgyImageKey",
+    "Xi",
     "kt",
     "Qi",
     "Zi",
     "JSZip",
     `${embedSource}; return { pgyEmbedImagesInWorkbook };`,
   )(
-    new Set(["dailyNotePerformanceChart", "dailyNotePicturePerformanceChart", "dailyNoteVideoPerformanceChart", "bloggerOverviewChart", "fansGenderAgeChart"]),
+    imageFields,
+    (key) => typeof key === "string" && (imageFields.has(key) || key.startsWith("noteImage_")),
+    path,
     existsSync,
     readFileSync,
     writeFileSync,
@@ -751,6 +762,18 @@ test("production Excel embedder adds typed daily-note and blogger-overview PNGs 
     windowsHide: true,
   });
   assert.equal(renderProcess.status, 0, renderProcess.stderr || renderProcess.stdout);
+  const rendererOutputLines = renderProcess.stdout.trim().split(/\r?\n/).filter(Boolean);
+  const rendererProgress = rendererOutputLines.slice(0, -1).map((line) => JSON.parse(line));
+  assert.equal(rendererProgress.length, 4, "bundled renderer must report progress for every chart");
+  assert.deepEqual(
+    rendererProgress.map(({ field, ok }) => ({ field, ok })),
+    [
+      { field: "dailyNotePerformanceChart", ok: true },
+      { field: "dailyNotePicturePerformanceChart", ok: true },
+      { field: "dailyNoteVideoPerformanceChart", ok: true },
+      { field: "bloggerOverviewChart", ok: true },
+    ],
+  );
   assert.deepEqual(pngSize(pngPath), { width: 808, height: 378 });
   assert.deepEqual(pngSize(picturePath), { width: 808, height: 378 });
   assert.deepEqual(pngSize(videoPath), { width: 808, height: 378 });
@@ -795,11 +818,11 @@ test("production Excel embedder adds typed daily-note and blogger-overview PNGs 
   );
 
   const archive = await JSZip.loadAsync(readFileSync(xlsxPath));
-  assert.ok(archive.file("xl/media/pgy_chart_1.png"));
-  assert.ok(archive.file("xl/media/pgy_chart_2.png"));
-  assert.ok(archive.file("xl/media/pgy_chart_3.png"));
-  assert.ok(archive.file("xl/media/pgy_chart_4.png"));
-  assert.ok(archive.file("xl/media/pgy_chart_5.png"));
+  assert.ok(archive.file("xl/media/pgy_img_1.png"));
+  assert.ok(archive.file("xl/media/pgy_img_2.png"));
+  assert.ok(archive.file("xl/media/pgy_img_3.png"));
+  assert.ok(archive.file("xl/media/pgy_img_4.png"));
+  assert.ok(archive.file("xl/media/pgy_img_5.png"));
   const drawing = await archive.file("xl/drawings/drawing1.xml").async("string");
   const anchors = [...drawing.matchAll(
     /<xdr:twoCellAnchor[^>]*><xdr:from><xdr:col>(\d+)<\/xdr:col>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>[\s\S]*?<xdr:cNvPr[^>]*name="([^"]+)"/g,

@@ -424,7 +424,9 @@ InstallDirRegKey HKCU "${APP_REG_KEY}" "InstallLocation"
 RequestExecutionLevel user
 ShowInstDetails show
 XPStyle on
-SetCompressor /SOLID lzma
+; 非固实 LZMA 避免双击后先初始化整个 100MB 级压缩流，提升安装界面出现速度。
+; 安装包会略微增大，但不改变安装内容和校验流程。
+SetCompressor lzma
 
 !define MUI_ICON "$iconNsis"
 !define MUI_UNICON "$iconNsis"

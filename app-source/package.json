@@ -1,14 +1,26 @@
 {
   "name": "magiorix-desktop",
   "productName": "magiorix",
-  "version": "1.4.2",
-  "assetsVersion": "1.4.2",
+  "version": "1.4.4",
+  "assetsVersion": "1.4.4",
   "description": "Local PGY data collection desktop client",
   "main": "dist-electron/index.js",
   "type": "module",
   "author": "magiorix",
   "license": "MIT",
   "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build:mac": "electron-builder --mac dmg",
+    "build:mac:arm64": "electron-builder --mac dmg --arm64",
+    "build:mac:x64": "electron-builder --mac dmg --x64",
+    "build:mac:universal": "electron-builder --mac dmg --universal",
+    "pack:mac": "electron-builder --mac --dir"
+  },
+  "devDependencies": {
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3"
+  },
   "dependencies": {
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
@@ -41,5 +53,62 @@
     "xlsx": "^0.18.5",
     "xlsx-js-style": "^1.2.0",
     "zustand": "^4.5.0"
+  },
+  "build": {
+    "appId": "cn.red-magic.magiorix",
+    "productName": "magiorix",
+    "directories": {
+      "output": "dist-mac"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "electron-main/**/*",
+      "pgy-kol/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist-electron/static",
+        "to": "dist-electron/static"
+      }
+    ],
+    "mac": {
+      "icon": "dist-electron/static/logo.png",
+      "category": "public.app-category.utilities",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "identity": null
+    },
+    "dmg": {
+      "title": "magiorix ${version}",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
   }
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
 const javascriptFiles = [
   "red-magic-api/server.js",
@@ -148,6 +149,7 @@ assert.doesNotMatch(buildScript, /Write-Warning [^\n]*rcedit/, "missing rcedit m
 
 const runtimePatch = readFileSync("scripts/apply-magiorix-runtime-patches.js", "utf8");
 const frontendPatch = readFileSync("scripts/apply-magiorix-frontend-patches.js", "utf8");
+const chartRendererSource = readFileSync("tools/pgy_chart_renderer.py", "utf8");
 const dailyNoteSvgSource = readFileSync("tools/pgy_daily_note_svg.js", "utf8");
 const bloggerOverviewSvgSource = readFileSync("tools/pgy_blogger_overview_svg.js", "utf8");
 assert.match(runtimePatch, /pgyHasSingleInstanceLock/, "runtime patch must enforce a single desktop instance");
@@ -184,6 +186,10 @@ assert.match(runtimePatch, /pgy-kol Phase 4 batch event broadcast wiring/, "runt
 assert.match(runtimePatch, /bloggerOverviewChart/, "runtime patch must generate the blogger overview chart");
 assert.match(runtimePatch, /blogger-overview/, "runtime patch must route the blogger overview renderer");
 assert.match(runtimePatch, /pgy_blogger_overview_svg\.js/, "runtime patch must load the maintained blogger overview SVG source");
+assert.match(runtimePatch, /pgyArmChartRendererWatchdog/, "runtime patch must preserve active chart-renderer progress");
+assert.match(runtimePatch, /pgyArmPythonChartWatchdog/, "runtime patch must preserve fallback chart-renderer progress");
+assert.match(runtimePatch, /逐张渲染进度/, "runtime patch must isolate chart rendering so one slow chart cannot discard the others");
+assert.match(chartRendererSource, /"progress": True/, "chart renderer must emit progress after every chart");
 assert.match(runtimePatch, /data_summary\?userId=\\\$\{a\}&business=0/, "runtime patch must request the web overview data_summary endpoint");
 assert.match(runtimePatch, /overviewSummary: \["bloggerOverviewChart"\]/, "overview summary endpoint must stay scoped to the overview chart");
 assert.match(dailyNoteSvgSource, /width="808" height="378"/, "daily note SVG must use the web-layout canvas");
@@ -209,6 +215,15 @@ const packageConfig = JSON.parse(readFileSync("app-source/package.json", "utf8")
 const assetRoot = `assets/${packageConfig.assetsVersion}`;
 const integrityManifest = JSON.parse(readFileSync(`${assetRoot}/integrity-manifest.json`, "utf8"));
 assert.equal(integrityManifest.version, packageConfig.assetsVersion, "asset manifest version must match package.json");
+const primaryBundlePath = `${assetRoot}/assets/index-B09sHfUO.js`;
+const primaryBundleManifest = integrityManifest.files.find((entry) => entry.path === "assets/index-B09sHfUO.js");
+assert.ok(primaryBundleManifest, "asset manifest must include the primary frontend bundle");
+assert.equal(primaryBundleManifest.size, statSync(primaryBundlePath).size, "asset manifest must carry the current primary bundle size");
+assert.equal(
+  primaryBundleManifest.sha256,
+  createHash("sha256").update(readFileSync(primaryBundlePath)).digest("hex"),
+  "asset manifest must carry the current primary bundle checksum",
+);
 const frontendBundleSources = readdirSync(`${assetRoot}/assets`)
   .filter((file) => /\.(?:js|css|html|svg)$/i.test(file))
   .map((file) => readFileSync(`${assetRoot}/assets/${file}`, "utf8"))
@@ -233,6 +248,17 @@ const mainBundle = readdirSync(`${assetRoot}/assets`)
   .map((file) => readFileSync(`${assetRoot}/assets/${file}`, "utf8"))
   .find((source) => source.includes('field:"dailyNotePerformanceChart"'));
 assert.ok(mainBundle, "frontend must expose the daily note performance chart field");
+const countExact = (source, needle) => source.split(needle).length - 1;
+assert.equal(
+  countExact(mainBundle, '{group:"合作30天",label:"外溢进店中位数(图文+视频)",key:"mCpuvBusiness30"}'),
+  1,
+  "coop 30d CPUV export headers must not be duplicated by repeated patch runs",
+);
+assert.equal(
+  countExact(mainBundle, '{group:"合作90天",label:"外溢进店中位数(图文+视频)",key:"mCpuvBusiness90"}'),
+  1,
+  "coop 90d CPUV export headers must not be duplicated by repeated patch runs",
+);
 assert.match(
   mainBundle,
   /fansGrowthTrendChart",headerName:"粉丝增长趋势图",width:320\},\{field:"dailyNotePerformanceChart",headerName:"日常笔记表现图（图文\+视频）"/,
@@ -266,5 +292,10 @@ assert.ok(fieldSelectorBundle, "frontend field selector bundle must exist");
 assert.match(fieldSelectorBundle, /l=s\|\|!!g\.required/, "required nickname must be disabled");
 assert.match(fieldSelectorBundle, /\(n\.required\|\|a\.required\)&&r\.add\(a\.key\)/, "required nickname must survive group toggles and templates");
 assert.match(fieldSelectorBundle, /n\.required\|\|a\.required\|\|a\.defaultSelected/, "required nickname must be selected by default");
+assert.match(
+  fieldSelectorBundle,
+  /allTemplateFieldKeys=\/\^\(\?:all\|全部\|全部字段\)\$\/i\.test\(String\(j\.name\|\|""\)\.trim\(\)\)\?Array\.from\(pe\(a\)\):j\.fieldKeys/,
+  "legacy all-field templates must expand against the current schema so newly added CPUV fields are collected",
+);
 
 console.log(`Static checks passed for ${javascriptFiles.length} JavaScript files.`);

@@ -17721,16 +17721,20 @@ const Re = "https://pgy.xiaohongshu.com", Yd = `${Re}/api/solar/user/info`, Qd =
   daily90: (a) => `${Re}/api/solar/kol/data_v3/notes_rate?userId=${a}&business=0&noteType=3&dateType=2&advertiseSwitch=1`,
   /** 合作笔记近30天 */
   business30: (a) => `${Re}/api/solar/kol/data_v3/notes_rate?userId=${a}&business=1&noteType=3&dateType=1&advertiseSwitch=1`,
-  /** 合作图文笔记近30天 */
-  business30Picture: (a) => `${Re}/api/solar/kol/data_v3/notes_rate?userId=${a}&business=1&noteType=1&dateType=1&advertiseSwitch=1`,
-  /** 合作视频笔记近30天 */
-  business30Video: (a) => `${Re}/api/solar/kol/data_v3/notes_rate?userId=${a}&business=1&noteType=2&dateType=1&advertiseSwitch=1`,
+  /** 合作笔记近30天核心指标（外溢进店中位数） */
+  business30Core: () => `${Re}/api/pgy/kol/data/core_data`,
+  /** 合作图文笔记近30天核心指标 */
+  business30Picture: () => `${Re}/api/pgy/kol/data/core_data`,
+  /** 合作视频笔记近30天核心指标 */
+  business30Video: () => `${Re}/api/pgy/kol/data/core_data`,
   /** 合作笔记近90天 */
   business90: (a) => `${Re}/api/solar/kol/data_v3/notes_rate?userId=${a}&business=1&noteType=3&dateType=2&advertiseSwitch=1`,
-  /** 合作图文笔记近90天 */
-  business90Picture: (a) => `${Re}/api/solar/kol/data_v3/notes_rate?userId=${a}&business=1&noteType=1&dateType=2&advertiseSwitch=1`,
-  /** 合作视频笔记近90天 */
-  business90Video: (a) => `${Re}/api/solar/kol/data_v3/notes_rate?userId=${a}&business=1&noteType=2&dateType=2&advertiseSwitch=1`,
+  /** 合作笔记近90天核心指标（外溢进店中位数） */
+  business90Core: () => `${Re}/api/pgy/kol/data/core_data`,
+  /** 合作图文笔记近90天核心指标 */
+  business90Picture: () => `${Re}/api/pgy/kol/data/core_data`,
+  /** 合作视频笔记近90天核心指标 */
+  business90Video: () => `${Re}/api/pgy/kol/data/core_data`,
   /** 粉丝核心数据 */
   fansSummary: (a) => `${Re}/api/solar/kol/data_v3/fans_summary?userId=${a}`,
   /** 数据概览汇总（网页数据概览卡片同源接口） */
@@ -17749,9 +17753,11 @@ const Re = "https://pgy.xiaohongshu.com", Yd = `${Re}/api/solar/user/info`, Qd =
   "daily30Video",
   "daily90",
   "business30",
+  "business30Core",
   "business30Picture",
   "business30Video",
   "business90",
+  "business90Core",
   "business90Picture",
   "business90Video",
   "fansSummary",
@@ -17759,7 +17765,14 @@ const Re = "https://pgy.xiaohongshu.com", Yd = `${Re}/api/solar/user/info`, Qd =
   "fansProfile",
   "fansTrend",
   "noteList10"
-], em = (a) => `${Re}/api/solar/note/${a}/detail?bizCode=`, Si = (a) => `${Re}/solar/pre-trade/blogger-detail/${a}`, tm = 3e4, Ct = Y("PgyAuth"), nm = 1e4;
+], pgyCoreMetricRequestSpecs = {
+  business30Core: { business: 1, noteType: 3, dateType: 1, advertiseSwitch: 1 },
+  business30Picture: { business: 1, noteType: 1, dateType: 1, advertiseSwitch: 1 },
+  business30Video: { business: 1, noteType: 2, dateType: 1, advertiseSwitch: 1 },
+  business90Core: { business: 1, noteType: 3, dateType: 2, advertiseSwitch: 1 },
+  business90Picture: { business: 1, noteType: 1, dateType: 2, advertiseSwitch: 1 },
+  business90Video: { business: 1, noteType: 2, dateType: 2, advertiseSwitch: 1 }
+}, em = (a) => `${Re}/api/solar/note/${a}/detail?bizCode=`, Si = (a) => `${Re}/solar/pre-trade/blogger-detail/${a}`, tm = 3e4, Ct = Y("PgyAuth"), nm = 1e4;
 class am {
   constructor(e) {
     w(this, "windowManager");
@@ -18063,9 +18076,9 @@ const dm = {
     "picture3sViewRateBusiness30",
     "mEngagementNumBusiness30",
     "impMedianBusiness30",
-    "mCpuvBusiness30",
     "interactRate"
   ],
+  business30Core: ["mCpuvBusiness30"],
   business30Picture: ["mCpuvBusiness30Picture"],
   business30Video: ["mCpuvBusiness30Video"],
   business90: [
@@ -18078,9 +18091,9 @@ const dm = {
     "picture3sViewRateBusiness90",
     "mEngagementNumBusiness90",
     "impMedianBusiness90",
-    "mCpuvBusiness90",
     "interactRate"
   ],
+  business90Core: ["mCpuvBusiness90"],
   business90Picture: ["mCpuvBusiness90Picture"],
   business90Video: ["mCpuvBusiness90Video"],
   fansSummary: ["activeFansRate", "fansIncreaseNum", "fansGrowthRate", "engageFansRate", "bloggerOverviewChart"],
@@ -19384,19 +19397,36 @@ def save_trend(chart):
     min_v = min(values)
     max_v = max(values)
 
-    raw_step = max((max_v - min_v) / 5.0, 1.0)
-    magnitude = 10 ** math.floor(math.log10(raw_step))
-    step = 10 * magnitude
-    for candidate in (1, 2, 3, 5, 10):
-        candidate_step = candidate * magnitude
-        if candidate_step >= raw_step:
-            step = candidate_step
+    def nice_step_at_least(value):
+        magnitude = 10 ** math.floor(math.log10(max(value, 1.0)))
+        for candidate in (1, 2, 3, 5, 10):
+            candidate_step = candidate * magnitude
+            if candidate_step >= value:
+                return candidate_step
+        return 10 * magnitude
+
+    def next_nice_step(value):
+        magnitude = 10 ** math.floor(math.log10(max(value, 1.0)))
+        normalized = value / magnitude
+        for candidate in (1, 2, 3, 5, 10):
+            if candidate > normalized + 1e-9:
+                return candidate * magnitude
+        return 10 * magnitude
+
+    # Five fixed intervals match the web card. Recompute from the lower bound and
+    # grow the nice step at most eight times; never shift both bounds upward while
+    # testing a lower outlier (that made some real fan histories loop forever).
+    step = nice_step_at_least((max_v - min_v) / 5.0)
+    for _ in range(8):
+        axis_min = math.floor(min_v / step) * step
+        axis_max = axis_min + 5 * step
+        if max_v <= axis_max:
             break
-    axis_max = math.ceil(max_v / step) * step
-    axis_min = axis_max - 5 * step
-    while min_v < axis_min:
-        axis_max += step
-        axis_min = axis_max - 5 * step
+        step = next_nice_step(step)
+    else:
+        axis_min = min_v
+        axis_max = max(max_v, min_v + 5.0)
+        step = (axis_max - axis_min) / 5.0
 
     for index in range(5):
         y = plot_top + index * 52
@@ -19488,6 +19518,12 @@ def main():
         except Exception as exc:
             if field:
                 errors[field] = str(exc)
+        progress = json.dumps(
+            {"progress": True, "field": field, "ok": bool(field and field in paths)},
+            ensure_ascii=False,
+        )
+        sys.stdout.buffer.write((progress + "\n").encode("utf-8"))
+        sys.stdout.buffer.flush()
     output = json.dumps({"ok": True, "paths": paths, "errors": errors}, ensure_ascii=False)
     sys.stdout.buffer.write((output + "\n").encode("utf-8"))
     sys.stdout.buffer.flush()
@@ -19513,7 +19549,7 @@ function pgyPythonCandidates() {
   const a = [];
   for (const e of [process.env.PGY_PYTHON, process.env.PYTHON])
     e && a.push({ cmd: e, args: [] });
-  return a.push({ cmd: "python", args: [] }, { cmd: "py", args: ["-3"] }), a;
+  return a.push({ cmd: "python3", args: [] }, { cmd: "python", args: [] }, { cmd: "py", args: ["-3"] }), a;
 }
 function pgyChinaGeoJsonPath() {
   const a = [
@@ -19531,35 +19567,39 @@ function pgyChartRendererEnv() {
 }
 function pgySpawnChartRenderer(a, e, t) {
   return new Promise((n, s) => {
-    let i = "", o = "", r = !1;
+    let i = "", o = "", r = !1, l;
     const c = Tr(a, [], {
       windowsHide: !0,
       stdio: ["pipe", "pipe", "pipe"],
       env: pgyChartRendererEnv()
     }), u = (p) => {
       r || (r = !0, clearTimeout(l), p ? s(p) : n(i));
-    }, l = setTimeout(() => {
-      try {
-        c.kill();
-      } catch {
-      }
-      u(new Error(`chart renderer timeout after ${t}ms${o ? `; stderr: ${o.slice(0, 1200)}` : ""}`));
-    }, t);
+    }, pgyArmChartRendererWatchdog = () => {
+      r || (clearTimeout(l), l = setTimeout(() => {
+        try {
+          c.kill();
+        } catch {
+        }
+        u(new Error("chart renderer inactive for " + t + "ms" + (o ? "; stderr: " + o.slice(0, 1200) : "")));
+      }, t));
+    };
+    pgyArmChartRendererWatchdog();
     c.on("error", (p) => u(p)), c.stdout.on("data", (p) => {
-      i += p.toString("utf8");
+      i += p.toString("utf8"), pgyArmChartRendererWatchdog();
     }), c.stderr.on("data", (p) => {
-      o += p.toString("utf8");
+      o += p.toString("utf8"), pgyArmChartRendererWatchdog();
     }), c.on("close", (p) => {
-      p === 0 ? u(null) : u(new Error(`renderer exit ${p}: ${o.slice(0, 1200)}`));
+      p === 0 ? u(null) : u(new Error("renderer exit " + p + ": " + o.slice(0, 1200)));
     }), c.stdin.end(Buffer.from(e, "utf8"));
   });
 }
+
 function pgySpawnPythonChart(a, e, t, n) {
   return new Promise((s, i) => {
-    let o = "", r = "", c = !1, z = "";
+    let o = "", r = "", c = !1, z = "", p;
     try {
       const q = process.env.TEMP || process.env.TMP || ".";
-      z = Oe(q, `magiorix-pychart-${Date.now()}-${Math.random().toString(36).slice(2)}.py`);
+      z = Oe(q, "magiorix-pychart-" + Date.now() + "-" + Math.random().toString(36).slice(2) + ".py");
       Zi(z, PGY_PYTHON_CHART_SCRIPT);
     } catch (q) {
       i(q);
@@ -19571,50 +19611,80 @@ function pgySpawnPythonChart(a, e, t, n) {
       env: pgyChartRendererEnv()
     }), l = (h) => {
       c || (c = !0, clearTimeout(p), h ? i(h) : s(o));
-    }, p = setTimeout(() => {
-      try {
-        u.kill();
-      } catch {
-      }
-      l(new Error(`Python chart timeout after ${n}ms`));
-    }, n);
+    }, pgyArmPythonChartWatchdog = () => {
+      c || (clearTimeout(p), p = setTimeout(() => {
+        try {
+          u.kill();
+        } catch {
+        }
+        l(new Error("Python chart renderer inactive for " + n + "ms"));
+      }, n));
+    };
+    pgyArmPythonChartWatchdog();
     u.on("error", (h) => l(h)), u.stdout.on("data", (h) => {
-      o += h.toString("utf8");
+      o += h.toString("utf8"), pgyArmPythonChartWatchdog();
     }), u.stderr.on("data", (h) => {
-      r += h.toString("utf8");
+      r += h.toString("utf8"), pgyArmPythonChartWatchdog();
     }), u.on("close", (h) => {
       try {
         Rr(z);
       } catch {
       }
-      h === 0 ? l(null) : l(new Error(`python exit ${h}: ${r.slice(0, 1200)}`));
+      h === 0 ? l(null) : l(new Error("python exit " + h + ": " + r.slice(0, 1200)));
     }), u.stdin.end(t);
   });
 }
+
 async function pgyRenderChartsWithPython(a) {
   if (!a.length) return {};
-  const e = JSON.stringify({ charts: a }), t = Math.min(20e3, Math.max(10e3, 3e3 + a.length * 1500)), n = [];
-  for (const s of pgyChartRendererCandidates())
-    try {
-      j.info(`[pgy-chart] 调用内置绘图程序: ${s}, charts=${a.length}, timeout=${t}`);
-      const i = await pgySpawnChartRenderer(s, e, t), o = JSON.parse(i.trim().split(/\r?\n/).pop() || "{}");
-      if (o && o.ok)
-        return o.errors && Object.keys(o.errors).length && j.warn(`[pgy-chart] 内置绘图程序部分图表生成失败: ${JSON.stringify(o.errors)}`), j.info(`[pgy-chart] 使用内置绘图程序: ${s}`), o.paths ?? {};
-      n.push(`${s}: invalid response`);
-    } catch (i) {
-      n.push(`${s}: ${i instanceof Error ? i.message : String(i)}`);
-    }
-  for (const s of pgyPythonCandidates())
-    try {
-      const i = await pgySpawnPythonChart(s.cmd, s.args, e, 8e3), o = JSON.parse(i.trim().split(/\r?\n/).pop() || "{}");
-      if (o && o.ok)
-        return o.errors && Object.keys(o.errors).length && j.warn(`[pgy-chart] Python 部分图表生成失败: ${JSON.stringify(o.errors)}`), o.paths ?? {};
-      n.push(`${s.cmd}: invalid response`);
-    } catch (i) {
-      n.push(`${s.cmd}: ${i instanceof Error ? i.message : String(i)}`);
-    }
-  throw new Error(n.join("; "));
+  const timeout = 45e3, failures = [], paths = {};
+  const renderOne = async (chart) => {
+    const payload = JSON.stringify({ charts: [chart] });
+    const payloadBytes = Buffer.byteLength(payload, "utf8");
+    for (const candidate of pgyChartRendererCandidates())
+      try {
+        j.info("[pgy-chart] 逐张渲染: field=" + chart.field + ", renderer=" + candidate + ", payloadBytes=" + payloadBytes + ", inactivityTimeout=" + timeout);
+        const output = await pgySpawnChartRenderer(candidate, payload, timeout);
+        const response = JSON.parse(output.trim().split(/\r?\n/).pop() || "{}");
+        if (response && response.ok) {
+          if (response.errors && Object.keys(response.errors).length)
+            j.warn("[pgy-chart] 内置绘图程序单图失败: " + JSON.stringify(response.errors));
+          const renderedPath = response.paths == null ? void 0 : response.paths[chart.field];
+          if (typeof renderedPath == "string" && renderedPath) return renderedPath;
+          failures.push(candidate + ": missing " + chart.field);
+        } else {
+          failures.push(candidate + ": invalid response for " + chart.field);
+        }
+      } catch (error) {
+        failures.push(candidate + ": " + (error instanceof Error ? error.message : String(error)));
+      }
+    for (const candidate of pgyPythonCandidates())
+      try {
+        const output = await pgySpawnPythonChart(candidate.cmd, candidate.args, payload, timeout);
+        const response = JSON.parse(output.trim().split(/\r?\n/).pop() || "{}");
+        if (response && response.ok) {
+          if (response.errors && Object.keys(response.errors).length)
+            j.warn("[pgy-chart] Python 单图失败: " + JSON.stringify(response.errors));
+          const renderedPath = response.paths == null ? void 0 : response.paths[chart.field];
+          if (typeof renderedPath == "string" && renderedPath) return renderedPath;
+          failures.push(candidate.cmd + ": missing " + chart.field);
+        } else {
+          failures.push(candidate.cmd + ": invalid response for " + chart.field);
+        }
+      } catch (error) {
+        failures.push(candidate.cmd + ": " + (error instanceof Error ? error.message : String(error)));
+      }
+    return "";
+  };
+  for (let index = 0; index < a.length; index++) {
+    const chart = a[index], renderedPath = await renderOne(chart);
+    if (renderedPath) paths[chart.field] = renderedPath;
+    j.info("[pgy-chart] 逐张渲染进度: " + (index + 1) + "/" + a.length + ", field=" + chart.field + ", ok=" + Boolean(renderedPath));
+  }
+  if (Object.keys(paths).length) return paths;
+  throw new Error(failures.join("; "));
 }
+
 function pgyPct(a) {
   const e = Number(a);
   return Number.isFinite(e) ? e * 100 : 0;
@@ -20467,12 +20537,17 @@ class hm {
           (b) => Se(r, mm[b])
         ).map((b) => {
           const S = Qd[b](p);
-          return { key: b, apiUrl: S };
+          const coreMetricSpec = pgyCoreMetricRequestSpecs[b];
+          return {
+            key: b,
+            apiUrl: S,
+            requestBody: coreMetricSpec ? { userId: p, ...coreMetricSpec } : null
+          };
         });
         j.info(`[blogger] 准备调用 ${h.length} 个蒲公英接口`);
         const m = await Promise.allSettled(
           h.map(
-            ({ key: b, apiUrl: S }) => pgyTimeout(this.fetchBloggerApi(S, t, n, d, s), b === "fansTrend" ? 1e4 : 35e3, `pgy.${b}`)
+            ({ key: b, apiUrl: S, requestBody: coreMetricBody }) => pgyTimeout(this.fetchBloggerApi(S, t, n, d, s, coreMetricBody), b === "fansTrend" ? 1e4 : 35e3, `pgy.${b}`)
           )
         ), f = {};
         for (let b = 0; b < h.length; b++) {
@@ -20633,77 +20708,82 @@ class hm {
       });
     });
   }
-  async fetchBloggerApi(e, t, n, s, i) {
-    return this.fetchPgyApi(e, t, n, s, i);
+  async fetchBloggerApi(e, t, n, s, i, o = null) {
+    return this.fetchPgyApi(e, t, n, s, i, o);
   }
-  async fetchPgyApi(e, t, n, s, i) {
-    const o = e.replace(Re, ""), r = sm.encryptSign(o);
-    if (o.includes("/fans_overall_new_history")) {
-      return j.info(`[pgy-fetch] 粉丝趋势接口使用主进程请求，避免页面渲染线程卡顿: url=${o}`), await gt.requestJson({
+  async fetchPgyApi(e, t, n, s, i, o = null) {
+    const r = e.replace(Re, ""), c = sm.encryptSign(r), u = o ? "POST" : "GET", l = o ? JSON.stringify(o) : void 0;
+    if (r.includes("/fans_overall_new_history")) {
+      return j.info(`[pgy-fetch] 粉丝趋势接口使用主进程请求，避免页面渲染线程卡顿: url=${r}`), await gt.requestJson({
         url: e,
+        method: u,
         session: t,
         headers: {
           ...n,
           referer: s,
           "Sec-Fetch-Mode": "no-cors",
-          "X-s": r["X-s"],
-          "X-t": String(r["X-t"])
+          "X-s": c["X-s"],
+          "X-t": String(c["X-t"])
         },
+        body: l,
         timeout: tm
       });
     }
     if (i && !i.isDestroyed()) {
-      const c = await this.fetchPgyApiInPage(i, e, s, r);
-      if (c) {
-        if (qa.has(c.code)) {
-          const u = await this.describeSessionCookies(t);
+      const p = await this.fetchPgyApiInPage(i, e, s, c, o);
+      if (p) {
+        if (qa.has(p.code)) {
+          const h = await this.describeSessionCookies(t);
           j.warn(
-            `[pgy-fetch] 窗口 fetch 返回登录失效: pageCode=${c.code}, cookieCount=${u.count}, cookieNames=${u.names.join("|")}, url=${o}`
+            `[pgy-fetch] 窗口 fetch 返回登录失效: pageCode=${p.code}, cookieCount=${h.count}, cookieNames=${h.names.join("|")}, url=${r}`
           );
         }
-        return c;
+        return p;
       }
-      j.warn(`[pgy-fetch] 窗口 fetch 不可用，降级 net.request: url=${o}`);
+      j.warn(`[pgy-fetch] 窗口 fetch 不可用，降级 net.request: url=${r}`);
     }
     return await gt.requestJson({
       url: e,
+      method: u,
       session: t,
       headers: {
         ...n,
         referer: s,
         "Sec-Fetch-Mode": "no-cors",
-        "X-s": r["X-s"],
-        "X-t": String(r["X-t"])
+        "X-s": c["X-s"],
+        "X-t": String(c["X-t"]),
+        ...(o ? { "Content-Type": "application/json" } : {})
       },
+      body: l,
       timeout: tm
     });
   }
-  async fetchPgyApiInPage(e, t, n, s) {
+  async fetchPgyApiInPage(e, t, n, s, i = null) {
     try {
-      const i = `
+      const o = `
         (async () => {
           const response = await fetch(${JSON.stringify(t)}, {
-            method: 'GET',
+            method: ${JSON.stringify(i ? "POST" : "GET")},
             credentials: 'include',
             referrer: ${JSON.stringify(n)},
             signal: AbortSignal.timeout(12000),
             headers: {
               'X-s': ${JSON.stringify(s["X-s"])},
-              'X-t': ${JSON.stringify(String(s["X-t"]))}
-            }
+              'X-t': ${JSON.stringify(String(s["X-t"]))}${i ? ",\n              'Content-Type': 'application/json'" : ""}
+            }${i ? `,\n            body: ${JSON.stringify(JSON.stringify(i))}` : ""}
           });
           return {
             httpStatusCode: response.status,
             text: await response.text()
           };
         })()
-      `, o = await pgyTimeout(e.webContents.executeJavaScript(i, !0), 15e3, "pgy.windowFetch");
-      if (!um(o))
+      `, r = await pgyTimeout(e.webContents.executeJavaScript(o, !0), 15e3, "pgy.windowFetch");
+      if (!um(r))
         return j.warn("[pgy-fetch] 窗口 fetch 返回结构异常"), null;
-      const r = JSON.parse(o.text);
-      return pm(r) ? r : (j.warn(`[pgy-fetch] 窗口 fetch JSON 结构异常: httpStatusCode=${o.httpStatusCode}`), null);
-    } catch (i) {
-      return j.warn("[pgy-fetch] 窗口 fetch 复核失败:", i), null;
+      const c = JSON.parse(r.text);
+      return pm(c) ? c : (j.warn(`[pgy-fetch] 窗口 fetch JSON 结构异常: httpStatusCode=${r.httpStatusCode}`), null);
+    } catch (o) {
+      return j.warn("[pgy-fetch] 窗口 fetch 复核失败:", o), null;
     }
   }
   async describeSessionCookies(e) {
@@ -20720,7 +20800,7 @@ class hm {
   /** 组装博主完整数据 */
   async assembleBloggerData(e, t, n, I) {
     var O, le, de, H, N, q, M, A, R, $, ae, X, fe, De;
-    const s = ((O = t.profile) == null ? void 0 : O.data) ?? {}, i = ((le = t.effective) == null ? void 0 : le.data) ?? {}, o = ((de = t.daily30) == null ? void 0 : de.data) ?? {}, dailyPicture = (t.daily30Picture == null ? void 0 : t.daily30Picture.data) ?? {}, dailyVideo = (t.daily30Video == null ? void 0 : t.daily30Video.data) ?? {}, r = ((H = t.daily90) == null ? void 0 : H.data) ?? {}, c = ((N = t.business30) == null ? void 0 : N.data) ?? {}, u = ((q = t.business90) == null ? void 0 : q.data) ?? {}, l = ((M = t.fansSummary) == null ? void 0 : M.data) ?? {}, p = ((A = t.fansProfile) == null ? void 0 : A.data) ?? {}, h = (((R = t.noteList10) == null ? void 0 : R.data) ?? {}).list ?? [];
+    const s = ((O = t.profile) == null ? void 0 : O.data) ?? {}, i = ((le = t.effective) == null ? void 0 : le.data) ?? {}, o = ((de = t.daily30) == null ? void 0 : de.data) ?? {}, dailyPicture = (t.daily30Picture == null ? void 0 : t.daily30Picture.data) ?? {}, dailyVideo = (t.daily30Video == null ? void 0 : t.daily30Video.data) ?? {}, r = ((H = t.daily90) == null ? void 0 : H.data) ?? {}, c = ((N = t.business30) == null ? void 0 : N.data) ?? {}, business30Core = (((t.business30Core == null ? void 0 : t.business30Core.data) ?? {}).sumData) ?? {}, business30PictureCore = (((t.business30Picture == null ? void 0 : t.business30Picture.data) ?? {}).sumData) ?? {}, business30VideoCore = (((t.business30Video == null ? void 0 : t.business30Video.data) ?? {}).sumData) ?? {}, u = ((q = t.business90) == null ? void 0 : q.data) ?? {}, business90Core = (((t.business90Core == null ? void 0 : t.business90Core.data) ?? {}).sumData) ?? {}, business90PictureCore = (((t.business90Picture == null ? void 0 : t.business90Picture.data) ?? {}).sumData) ?? {}, business90VideoCore = (((t.business90Video == null ? void 0 : t.business90Video.data) ?? {}).sumData) ?? {}, l = ((M = t.fansSummary) == null ? void 0 : M.data) ?? {}, p = ((A = t.fansProfile) == null ? void 0 : A.data) ?? {}, h = (((R = t.noteList10) == null ? void 0 : R.data) ?? {}).list ?? [];
     let m = 0, f = 0, g = 0, v = 0;
     for (const Q of h)
       Q.isVideo && m++, f += Q.collectNum ?? 0, g += Q.likeNum ?? 0, v += Q.readNum ?? 0;
@@ -20798,9 +20878,9 @@ class hm {
       picture3sViewRateBusiness30: c.picture3sViewRate + "%",
       mEngagementNumBusiness30: c.mEngagementNum,
       impMedianBusiness30: c.impMedian,
-      mCpuvBusiness30: c.mCpuv ?? c.overflowNum ?? c.mCpuv30d ?? c.cpuvMedian ?? c.overflowMedian ?? c.overflow ?? "无",
-      mCpuvBusiness30Picture: ((t.business30Picture == null ? void 0 : t.business30Picture.data) ?? {}).mCpuv ?? ((t.business30Picture == null ? void 0 : t.business30Picture.data) ?? {}).overflowNum ?? ((t.business30Picture == null ? void 0 : t.business30Picture.data) ?? {}).mCpuv30d ?? ((t.business30Picture == null ? void 0 : t.business30Picture.data) ?? {}).cpuvMedian ?? ((t.business30Picture == null ? void 0 : t.business30Picture.data) ?? {}).overflowMedian ?? ((t.business30Picture == null ? void 0 : t.business30Picture.data) ?? {}).overflow ?? "无",
-      mCpuvBusiness30Video: ((t.business30Video == null ? void 0 : t.business30Video.data) ?? {}).mCpuv ?? ((t.business30Video == null ? void 0 : t.business30Video.data) ?? {}).overflowNum ?? ((t.business30Video == null ? void 0 : t.business30Video.data) ?? {}).mCpuv30d ?? ((t.business30Video == null ? void 0 : t.business30Video.data) ?? {}).cpuvMedian ?? ((t.business30Video == null ? void 0 : t.business30Video.data) ?? {}).overflowMedian ?? ((t.business30Video == null ? void 0 : t.business30Video.data) ?? {}).overflow ?? "无",
+      mCpuvBusiness30: business30Core.thirdUserNum ?? "无",
+      mCpuvBusiness30Picture: business30PictureCore.thirdUserNum ?? "无",
+      mCpuvBusiness30Video: business30VideoCore.thirdUserNum ?? "无",
       // 合作90天
       noteNumberBusiness90: u.noteNumber,
       thousandLikePercentBusiness90: u.thousandLikePercent + "%",
@@ -20811,9 +20891,9 @@ class hm {
       picture3sViewRateBusiness90: u.picture3sViewRate + "%",
       mEngagementNumBusiness90: u.mEngagementNum,
       impMedianBusiness90: u.impMedian,
-      mCpuvBusiness90: u.mCpuv ?? u.overflowNum ?? u.mCpuv90d ?? u.cpuvMedian ?? u.overflowMedian ?? u.overflow ?? "无",
-      mCpuvBusiness90Picture: ((t.business90Picture == null ? void 0 : t.business90Picture.data) ?? {}).mCpuv ?? ((t.business90Picture == null ? void 0 : t.business90Picture.data) ?? {}).overflowNum ?? ((t.business90Picture == null ? void 0 : t.business90Picture.data) ?? {}).mCpuv90d ?? ((t.business90Picture == null ? void 0 : t.business90Picture.data) ?? {}).cpuvMedian ?? ((t.business90Picture == null ? void 0 : t.business90Picture.data) ?? {}).overflowMedian ?? ((t.business90Picture == null ? void 0 : t.business90Picture.data) ?? {}).overflow ?? "无",
-      mCpuvBusiness90Video: ((t.business90Video == null ? void 0 : t.business90Video.data) ?? {}).mCpuv ?? ((t.business90Video == null ? void 0 : t.business90Video.data) ?? {}).overflowNum ?? ((t.business90Video == null ? void 0 : t.business90Video.data) ?? {}).mCpuv90d ?? ((t.business90Video == null ? void 0 : t.business90Video.data) ?? {}).cpuvMedian ?? ((t.business90Video == null ? void 0 : t.business90Video.data) ?? {}).overflowMedian ?? ((t.business90Video == null ? void 0 : t.business90Video.data) ?? {}).overflow ?? "无",
+      mCpuvBusiness90: business90Core.thirdUserNum ?? "无",
+      mCpuvBusiness90Picture: business90PictureCore.thirdUserNum ?? "无",
+      mCpuvBusiness90Video: business90VideoCore.thirdUserNum ?? "无",
       // 粉丝核心数据
       activeFansRate: l.activeFansRate + "%",
       fansIncreaseNum: l.fansIncreaseNum,
@@ -23524,6 +23604,12 @@ function vf(a) {
     pgyCollectionHistory.createTask(t).then(() => ge.startTask(t)).catch(async (n) => {
       Qe.error("任务启动失败:", n);
       await pgyCollectionHistory.setStatus(t.taskId, "interrupted").catch(() => {});
+      e.sender.isDestroyed() || e.sender.send(W.task.error, {
+        taskId: typeof (t == null ? void 0 : t.taskId) == "string" ? t.taskId : "",
+        message: n instanceof Error ? n.message : String(n),
+        errorCategory: "invalid-input",
+        errorCategoryLabel: "任务创建失败"
+      });
     });
   }), F.on(W.task.pause, (e, t) => {
     ge.pauseTask(t.taskId);
