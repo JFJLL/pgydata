@@ -80,10 +80,10 @@ test("Diagnostics Real HTTP Server E2E: Register, Auth, RateLimit, Idempotency, 
 
     // 3. Test Unauthorized access to diagnostic report creation
     const unauthRes = await httpRequest("POST", "/api/diagnostics/reports", {}, { clientReportId: "c1" });
-    assert.equal(unauthRes.body.code, 401);
+    assert.equal(unauthRes.status, 401);
 
     // 4. Test Valid diagnostic report creation & Idempotency
-    const clientReportId = "client_uuid_e2e_001";
+    const clientReportId = crypto.randomUUID();
     const fakeZipHeader = Buffer.from([0x50, 0x4B, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00]);
     const fakeZip = Buffer.concat([fakeZipHeader, Buffer.from("test diagnostic zip content")]);
     const validSha = crypto.createHash("sha256").update(fakeZip).digest("hex");
@@ -115,7 +115,7 @@ test("Diagnostics Real HTTP Server E2E: Register, Auth, RateLimit, Idempotency, 
     // 5. Test Rate Limiter (5 per hour per user)
     for (let i = 2; i <= 5; i++) {
       const res = await httpRequest("POST", "/api/diagnostics/reports", { satoken: tokenUser1 }, {
-        clientReportId: `client_uuid_rate_${i}`,
+        clientReportId: crypto.randomUUID(),
         appVersion: "1.4.5",
         fileSizeBytes: 100,
         fileSha256: validSha,
@@ -124,7 +124,7 @@ test("Diagnostics Real HTTP Server E2E: Register, Auth, RateLimit, Idempotency, 
     }
     // 6th report should return HTTP 429
     const rateLimitRes = await httpRequest("POST", "/api/diagnostics/reports", { satoken: tokenUser1 }, {
-      clientReportId: "client_uuid_rate_6",
+      clientReportId: crypto.randomUUID(),
       appVersion: "1.4.5",
       fileSizeBytes: 100,
       fileSha256: validSha,
@@ -139,7 +139,7 @@ test("Diagnostics Real HTTP Server E2E: Register, Auth, RateLimit, Idempotency, 
     });
     const tokenUser2 = regUser2.body.data.token;
     const user2Create = await httpRequest("POST", "/api/diagnostics/reports", { satoken: tokenUser2 }, {
-      clientReportId: "user2_report_1",
+      clientReportId: crypto.randomUUID(),
       appVersion: "1.4.5",
       fileSizeBytes: fakeZip.length,
       fileSha256: validSha,
@@ -152,7 +152,7 @@ test("Diagnostics Real HTTP Server E2E: Register, Auth, RateLimit, Idempotency, 
       satoken: tokenUser2,
       "Content-Type": "application/zip",
     }, fakeZip);
-    assert.equal(crossUpload.body.code, 403, "User 2 cannot upload to User 1's report");
+    assert.equal(crossUpload.status, 403, "User 2 cannot upload to User 1's report");
 
     // 8. Test Invalid ZIP Magic Header
     const badMagic = Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04]);
@@ -160,7 +160,7 @@ test("Diagnostics Real HTTP Server E2E: Register, Auth, RateLimit, Idempotency, 
       satoken: tokenUser1,
       "Content-Type": "application/zip",
     }, badMagic);
-    assert.equal(badMagicUpload.body.code, 400, "Non-zip magic bytes must be rejected");
+    assert.equal(badMagicUpload.status, 400, "Non-zip magic bytes must be rejected");
 
     // 9. Test SHA256 Mismatch Handling
     const badShaZip = Buffer.concat([fakeZipHeader, Buffer.from("mismatched content")]);
@@ -168,7 +168,7 @@ test("Diagnostics Real HTTP Server E2E: Register, Auth, RateLimit, Idempotency, 
       satoken: tokenUser1,
       "Content-Type": "application/zip",
     }, badShaZip);
-    assert.equal(badShaUpload.body.code, 400, "SHA mismatch must fail");
+    assert.equal(badShaUpload.status, 400, "SHA mismatch must fail");
 
     // Check that status was marked 'failed' and temp uploading file was removed
     const failedReport = await database.get("SELECT status FROM diagnostic_reports WHERE id = ?", [reportId1]);
@@ -189,7 +189,7 @@ test("Diagnostics Real HTTP Server E2E: Register, Auth, RateLimit, Idempotency, 
     // 11. Test Admin Authentication & Diagnostics Inspection
     // Non-admin token accessing admin API -> 401
     const nonAdminRes = await httpRequest("GET", "/api/admin/diagnostics", { Authorization: `Bearer ${tokenUser1}` });
-    assert.equal(nonAdminRes.body.code, 401);
+    assert.equal(nonAdminRes.status, 401);
 
     // Admin Login
     const adminLogin = await httpRequest("POST", "/api/admin/login", {}, {
@@ -232,6 +232,32 @@ test("Diagnostics Real HTTP Server E2E: Register, Auth, RateLimit, Idempotency, 
     // Database metadata for user 2 must be deleted
     const dbCheck = await database.get("SELECT * FROM diagnostic_reports WHERE id = ?", [user2ReportId]);
     assert.equal(dbCheck, undefined, "Diagnostic report database record must be cleared");
+
+    // 14. Test Orphan ZIP Cleaner (scan disk and delete if not in DB after grace period)
+    const orphanZipId = "MGR-20260101-ORPHAN";
+    const orphanZipPath = path.join(diagDir, `${orphanZipId}.zip`);
+    fs.writeFileSync(orphanZipPath, fakeZip);
+    // Set mtime to 2 hours ago (past 1 hour grace period)
+    const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000);
+    fs.utimesSync(orphanZipPath, twoHoursAgo, twoHoursAgo);
+    assert.ok(fs.existsSync(orphanZipPath));
+
+    const { cleanupExpiredDiagnostics } = require("../server");
+    await cleanupExpiredDiagnostics(database);
+    assert.equal(fs.existsSync(orphanZipPath), false, "Orphan zip older than grace period must be purged");
+
+    // 15. Test Server Log RequestId correlation
+    const loggedReqId = "req_log_test_" + Date.now().toString(36);
+    await httpRequest("GET", "/api/non-existent-route-for-log-test", {
+      "X-Magiorix-Request-Id": loggedReqId,
+    });
+    // Read today's server log
+    const todayDate = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const logFile = path.join(__dirname, "..", "logs", `access-${todayDate}.log`);
+    if (fs.existsSync(logFile)) {
+      const logContent = fs.readFileSync(logFile, "utf8");
+      assert.ok(logContent.includes(loggedReqId), "Server log must record request ID");
+    }
 
   } finally {
     await new Promise((resolve) => server.close(resolve));

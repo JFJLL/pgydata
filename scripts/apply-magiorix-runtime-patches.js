@@ -203,118 +203,54 @@ void pgyDiagnosticManager.init().catch(() => {});`,
   );
 }
 
+if (!main.includes("pgyDiagnosticManager?.recordTrace")) {
+  main = replaceOnce(
+    main,
+    `const pgyTaskAnalytics = createTaskAnalyticsLifecycleReporter(
+  (eventName, fields, options) => {
+    try {
+      Le.get().reportAnalyticsEvent(eventName, fields, options);
+    } catch {}
+  }
+);`,
+    `const pgyTaskAnalytics = createTaskAnalyticsLifecycleReporter(
+  (eventName, fields, options) => {
+    try {
+      Le.get().reportAnalyticsEvent(eventName, fields, options);
+    } catch {}
+  },
+  ({ eventName, fields }) => {
+    try {
+      const eventMap = {
+        task_start: "task_started",
+        task_complete: "task_completed",
+        task_failed: "task_failed",
+        task_cancelled: "task_cancelled",
+      };
+      const diagEvent = eventMap[eventName] || eventName;
+      pgyDiagnosticManager?.recordTrace({
+        module: fields?.module || fields?.pluginId || "collection",
+        event: diagEvent,
+        taskId: fields?.taskId || null,
+        errorCode: fields?.errorCode || null,
+        level: eventName === "task_failed" ? "error" : "info",
+        message: fields?.errorCode ? ('Task terminal status: ' + fields.errorCode) : null,
+      });
+    } catch {}
+  }
+);`,
+    "task analytics lifecycle diagnostics trace wiring",
+  );
+}
+
 const legacyHost = `https://${"api"}.red-magic.cn`;
 main = main.split(legacyHost).join("https://magiorix.red-magic.cn");
 
-if (!main.includes("X-Magiorix-Request-Id")) {
+if (!main.includes("reqTracer")) {
   main = replaceOnce(
     main,
-    `  async request(e, t, n) {
-    if (!this.baseUrl)
-      throw new Error("SchedulerApi: baseUrl 未设置");
-    if (!this.token)
-      throw new Error("SchedulerApi: token 未设置（用户未登录）");
-    const s = this.baseUrl + t;
-    return new Promise((i, o) => {
-      const r = Jt.request({ url: s, method: e });
-      r.setHeader("Content-Type", "application/json"), r.setHeader("satoken", this.token);
-      const c = [], u = setTimeout(() => {
-        r.abort(), o(new Error(\`请求超时: \${e} \${t}\`));
-      }, 2e4);
-      r.on("error", (l) => {
-        clearTimeout(u), o(l);
-      }), r.on("response", (l) => {
-        l.on("data", (p) => c.push(p)), l.on("end", () => {
-          clearTimeout(u);
-          const p = Buffer.concat(c).toString("utf8");
-          let d;
-          try {
-            d = JSON.parse(p);
-          } catch (h) {
-            Wt.warn(\`响应非 JSON: \${e} \${t}\`, h), o(new Error(\`响应解析失败 (status=\${l.statusCode})\`));
-            return;
-          }
-          if (l.statusCode === 401) {
-            const h = !!this.token;
-            if (this.token = null, h && this.onAuthExpired)
-              try {
-                this.onAuthExpired();
-              } catch (m) {
-                Wt.warn("onAuthExpired 回调异常:", m);
-              }
-            o(new Error("未授权（401）"));
-            return;
-          }
-          if (l.statusCode === 403 || d.code === 403) {
-            this.noEnterprise || Wt.info(\`API 返回 403，标记为未加入企业（\${e} \${t}）\`), this.noEnterprise = !0, o(new Error(d.message || \`HTTP \${l.statusCode}\`));
-            return;
-          }
-          if (l.statusCode >= 400 || d.code >= 400) {
-            o(new Error(d.message || \`HTTP \${l.statusCode}\`));
-            return;
-          }
-          i(d);
-        });
-      }), n !== void 0 && r.write(JSON.stringify(n)), r.end();
-    });
-  }`,
-    `  async request(e, t, n) {
-    if (!this.baseUrl)
-      throw new Error("SchedulerApi: baseUrl 未设置");
-    if (!this.token)
-      throw new Error("SchedulerApi: token 未设置（用户未登录）");
-    const s = this.baseUrl + t;
-    const requestId = "req_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
-    const startedAt = Date.now();
-    return new Promise((i, o) => {
-      const r = Jt.request({ url: s, method: e });
-      r.setHeader("Content-Type", "application/json"), r.setHeader("satoken", this.token), r.setHeader("X-Magiorix-Request-Id", requestId);
-      const c = [], u = setTimeout(() => {
-        r.abort();
-        try { pgyDiagnosticManager?.networkCollector?.recordRequest({ httpMethod: e, endpoint: t, host: "magiorix.red-magic.cn", isTimeout: true, durationMs: Date.now() - startedAt, requestId, errorCode: "NETWORK_TIMEOUT" }); } catch {}
-        o(new Error(\`请求超时: \${e} \${t}\`));
-      }, 2e4);
-      r.on("error", (l) => {
-        clearTimeout(u);
-        try { pgyDiagnosticManager?.networkCollector?.recordRequest({ httpMethod: e, endpoint: t, host: "magiorix.red-magic.cn", httpStatus: 0, durationMs: Date.now() - startedAt, requestId, errorCode: "NETWORK_ERROR", error: l?.message }); } catch {}
-        o(l);
-      }), r.on("response", (l) => {
-        l.on("data", (p) => c.push(p)), l.on("end", () => {
-          clearTimeout(u);
-          const durationMs = Date.now() - startedAt;
-          try { pgyDiagnosticManager?.networkCollector?.recordRequest({ httpMethod: e, endpoint: t, host: "magiorix.red-magic.cn", httpStatus: l.statusCode, durationMs, requestId }); } catch {}
-          const p = Buffer.concat(c).toString("utf8");
-          let d;
-          try {
-            d = JSON.parse(p);
-          } catch (h) {
-            Wt.warn(\`响应非 JSON: \${e} \${t}\`, h), o(new Error(\`响应解析失败 (status=\${l.statusCode})\`));
-            return;
-          }
-          if (l.statusCode === 401) {
-            const h = !!this.token;
-            if (this.token = null, h && this.onAuthExpired)
-              try {
-                this.onAuthExpired();
-              } catch (m) {
-                Wt.warn("onAuthExpired 回调异常:", m);
-              }
-            o(new Error("未授权（401）"));
-            return;
-          }
-          if (l.statusCode === 403 || d.code === 403) {
-            this.noEnterprise || Wt.info(\`API 返回 403，标记为未加入企业（\${e} \${t}）\`), this.noEnterprise = !0, o(new Error(d.message || \`HTTP \${l.statusCode}\`));
-            return;
-          }
-          if (l.statusCode >= 400 || d.code >= 400) {
-            o(new Error(d.message || \`HTTP \${l.statusCode}\`));
-            return;
-          }
-          i(d);
-        });
-      }), n !== void 0 && r.write(JSON.stringify(n)), r.end();
-    });
-  }`,
+    '  async request(e, t, n) {\n    if (!this.baseUrl)\n      throw new Error("SchedulerApi: baseUrl 未设置");\n    if (!this.token)\n      throw new Error("SchedulerApi: token 未设置（用户未登录）");\n    const s = this.baseUrl + t;\n    return new Promise((i, o) => {\n      const r = Jt.request({ url: s, method: e });\n      r.setHeader("Content-Type", "application/json"), r.setHeader("satoken", this.token);\n      const c = [], u = setTimeout(() => {\n        r.abort(), o(new Error(`请求超时: ${e} ${t}`));\n      }, 2e4);\n      r.on("error", (l) => {\n        clearTimeout(u), o(l);\n      }), r.on("response", (l) => {\n        l.on("data", (p) => c.push(p)), l.on("end", () => {\n          clearTimeout(u);\n          const p = Buffer.concat(c).toString("utf8");\n          let d;\n          try {\n            d = JSON.parse(p);\n          } catch (h) {\n            Wt.warn(`响应非 JSON: ${e} ${t}`, h), o(new Error(`响应解析失败 (status=${l.statusCode})`));\n            return;\n          }\n          if (l.statusCode === 401) {\n            const h = !!this.token;\n            if (this.token = null, h && this.onAuthExpired)\n              try {\n                this.onAuthExpired();\n              } catch (m) {\n                Wt.warn("onAuthExpired 回调异常:", m);\n              }\n            o(new Error("未授权（401）"));\n            return;\n          }\n          if (l.statusCode === 403 || d.code === 403) {\n            this.noEnterprise || Wt.info(`API 返回 403，标记为未加入企业（${e} ${t}）`), this.noEnterprise = !0, o(new Error(d.message || `HTTP ${l.statusCode}`));\n            return;\n          }\n          if (l.statusCode >= 400 || d.code >= 400) {\n            o(new Error(d.message || `HTTP ${l.statusCode}`));\n            return;\n          }\n          i(d);\n        });\n      }), n !== void 0 && r.write(JSON.stringify(n)), r.end();\n    });\n  }',
+    'async request(e, t, n, diagnosticContext = {}) {\n    if (!this.baseUrl)\n      throw new Error("SchedulerApi: baseUrl 未设置");\n    if (!this.token)\n      throw new Error("SchedulerApi: token 未设置（用户未登录）");\n    const s = this.baseUrl + t;\n    const reqTracer = pgyDiagnosticManager?.requestTracer;\n    const taskId = diagnosticContext?.taskId || (n && typeof n === "object" && n.taskId) || null;\n    const traceCtx = reqTracer ? reqTracer.startRequest({ method: e, endpoint: t, taskId }) : { requestId: "req_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10), startedAt: Date.now(), method: e, endpoint: t, taskId };\n    return new Promise((i, o) => {\n      const r = Jt.request({ url: s, method: e });\n      r.setHeader("Content-Type", "application/json"), r.setHeader("satoken", this.token), r.setHeader("X-Magiorix-Request-Id", traceCtx.requestId);\n      const c = [], u = setTimeout(() => {\n        r.abort();\n        try { reqTracer?.completeRequest(traceCtx, { isTimeout: true }); } catch {}\n        o(new Error(`请求超时: ${e} ${t}`));\n      }, 2e4);\n      r.on("error", (l) => {\n        clearTimeout(u);\n        try { reqTracer?.completeRequest(traceCtx, { error: l }); } catch {}\n        o(l);\n      }), r.on("response", (l) => {\n        l.on("data", (p) => c.push(p)), l.on("end", () => {\n          clearTimeout(u);\n          const p = Buffer.concat(c).toString("utf8");\n          let d;\n          try {\n            d = JSON.parse(p);\n          } catch (h) {\n            try { reqTracer?.completeRequest(traceCtx, { httpStatus: l.statusCode, error: new Error("响应非 JSON") }); } catch {}\n            Wt.warn(`响应非 JSON: ${e} ${t}`, h), o(new Error(`响应解析失败 (status=${l.statusCode})`));\n            return;\n          }\n          try { reqTracer?.completeRequest(traceCtx, { httpStatus: l.statusCode, parsedBody: d }); } catch {}\n          if (l.statusCode === 401 || d.code === 401) {\n            const h = !!this.token;\n            if (this.token = null, h && this.onAuthExpired)\n              try {\n                this.onAuthExpired();\n              } catch (m) {\n                Wt.warn("onAuthExpired 回调异常:", m);\n              }\n            o(new Error(d.message || "未授权（401）"));\n            return;\n          }\n          if (l.statusCode === 403 || d.code === 403) {\n            this.noEnterprise || Wt.info(`API 返回 403，标记为未加入企业（${e} ${t}）`), this.noEnterprise = !0, o(new Error(d.message || `HTTP ${l.statusCode}`));\n            return;\n          }\n          if (l.statusCode >= 400 || d.code >= 400) {\n            o(new Error(d.message || `HTTP ${l.statusCode}`));\n            return;\n          }\n          i(d);\n        });\n      }), n !== void 0 && r.write(JSON.stringify(n)), r.end();\n    });\n  }',
     "scheduler api request id and network diagnostic tracing",
   );
 }

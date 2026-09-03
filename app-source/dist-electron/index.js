@@ -16638,40 +16638,41 @@ const W = {
       Wt.debug("analytics event ignored:", error?.message || error);
     });
   }
-  async request(e, t, n) {
+  async request(e, t, n, diagnosticContext = {}) {
     if (!this.baseUrl)
       throw new Error("SchedulerApi: baseUrl 未设置");
     if (!this.token)
       throw new Error("SchedulerApi: token 未设置（用户未登录）");
     const s = this.baseUrl + t;
-    const requestId = "req_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
-    const startedAt = Date.now();
+    const reqTracer = pgyDiagnosticManager?.requestTracer;
+    const taskId = diagnosticContext?.taskId || (n && typeof n === "object" && n.taskId) || null;
+    const traceCtx = reqTracer ? reqTracer.startRequest({ method: e, endpoint: t, taskId }) : { requestId: "req_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10), startedAt: Date.now(), method: e, endpoint: t, taskId };
     return new Promise((i, o) => {
       const r = Jt.request({ url: s, method: e });
-      r.setHeader("Content-Type", "application/json"), r.setHeader("satoken", this.token), r.setHeader("X-Magiorix-Request-Id", requestId);
+      r.setHeader("Content-Type", "application/json"), r.setHeader("satoken", this.token), r.setHeader("X-Magiorix-Request-Id", traceCtx.requestId);
       const c = [], u = setTimeout(() => {
         r.abort();
-        try { pgyDiagnosticManager?.networkCollector?.recordRequest({ httpMethod: e, endpoint: t, host: "magiorix.red-magic.cn", isTimeout: true, durationMs: Date.now() - startedAt, requestId, errorCode: "NETWORK_TIMEOUT" }); } catch {}
+        try { reqTracer?.completeRequest(traceCtx, { isTimeout: true }); } catch {}
         o(new Error(`请求超时: ${e} ${t}`));
       }, 2e4);
       r.on("error", (l) => {
         clearTimeout(u);
-        try { pgyDiagnosticManager?.networkCollector?.recordRequest({ httpMethod: e, endpoint: t, host: "magiorix.red-magic.cn", httpStatus: 0, durationMs: Date.now() - startedAt, requestId, errorCode: "NETWORK_ERROR", error: l?.message }); } catch {}
+        try { reqTracer?.completeRequest(traceCtx, { error: l }); } catch {}
         o(l);
       }), r.on("response", (l) => {
         l.on("data", (p) => c.push(p)), l.on("end", () => {
           clearTimeout(u);
-          const durationMs = Date.now() - startedAt;
-          try { pgyDiagnosticManager?.networkCollector?.recordRequest({ httpMethod: e, endpoint: t, host: "magiorix.red-magic.cn", httpStatus: l.statusCode, durationMs, requestId }); } catch {}
           const p = Buffer.concat(c).toString("utf8");
           let d;
           try {
             d = JSON.parse(p);
           } catch (h) {
+            try { reqTracer?.completeRequest(traceCtx, { httpStatus: l.statusCode, error: new Error("响应非 JSON") }); } catch {}
             Wt.warn(`响应非 JSON: ${e} ${t}`, h), o(new Error(`响应解析失败 (status=${l.statusCode})`));
             return;
           }
-          if (l.statusCode === 401) {
+          try { reqTracer?.completeRequest(traceCtx, { httpStatus: l.statusCode, parsedBody: d }); } catch {}
+          if (l.statusCode === 401 || d.code === 401) {
             const h = !!this.token;
             if (this.token = null, h && this.onAuthExpired)
               try {
@@ -16679,7 +16680,7 @@ const W = {
               } catch (m) {
                 Wt.warn("onAuthExpired 回调异常:", m);
               }
-            o(new Error("未授权（401）"));
+            o(new Error(d.message || "未授权（401）"));
             return;
           }
           if (l.statusCode === 403 || d.code === 403) {

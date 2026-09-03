@@ -9,6 +9,7 @@ import { NetworkDiagnosticCollector } from "./network-diagnostic-collector.mjs";
 import { ErrorCollector } from "./error-collector.mjs";
 import { buildDiagnosticPackage } from "./diagnostic-packager.mjs";
 import { DiagnosticUploader } from "./diagnostic-uploader.mjs";
+import { RequestDiagnosticTracer } from "./request-diagnostic-tracer.mjs";
 
 export class DiagnosticManager {
   constructor(options = {}) {
@@ -22,6 +23,7 @@ export class DiagnosticManager {
     this.traceStore = new DiagnosticTraceStore({ baseDir: diagDir });
     this.networkCollector = new NetworkDiagnosticCollector(this.traceStore);
     this.errorCollector = new ErrorCollector(this.traceStore);
+    this.requestTracer = new RequestDiagnosticTracer(this.traceStore, this.networkCollector);
     this.uploader = new DiagnosticUploader({ getApiClient: this.getApiClient });
     this.lastShutdownClean = false;
     this.pendingDiagnosticPackage = null;
@@ -85,25 +87,23 @@ export class DiagnosticManager {
           installId: this.traceStore.installId,
           sessionId: this.traceStore.sessionId,
           appVersion: this.appVersion,
+          hasPending: !!this.pendingDiagnosticPackage,
         };
       } catch (err) {
         return { success: false, error: err.message, recentTasks: [] };
       }
     });
 
-    // 2. Create and upload diagnostic package
+    // 2. Create and upload a brand new diagnostic package
     ipcMain.handle("diagnostics:create-and-upload", async (event, params = {}) => {
       try {
-        // 重试机制：若当前存在未完成且未超期的 pending package，直接复用同一 clientReportId、同一 ZIP 与同一 SHA
-        let packagerResult = this.pendingDiagnosticPackage;
-        if (!packagerResult || Date.now() - (packagerResult.createdAt || 0) > 24 * 3600 * 1000) {
-          packagerResult = await this.generatePackage(params);
-          packagerResult.createdAt = Date.now();
-          this.pendingDiagnosticPackage = packagerResult;
-        }
+        // 创建新包，并记录为 pending 供失败重试使用
+        const packagerResult = await this.generatePackage(params);
+        packagerResult.createdAt = Date.now();
+        this.pendingDiagnosticPackage = packagerResult;
 
         const uploadResult = await this.uploader.uploadPackage(packagerResult, params);
-        // 上传成功后清理 pending 释放内存
+        // 成功后清除 pending
         this.pendingDiagnosticPackage = null;
 
         return {
@@ -113,7 +113,6 @@ export class DiagnosticManager {
           sha256: uploadResult.sha256,
         };
       } catch (err) {
-        // 上传失败时保留 this.pendingDiagnosticPackage，方便重试或本地导出同一份 ZIP
         return {
           success: false,
           error: err.message || "上传失败",
@@ -121,10 +120,39 @@ export class DiagnosticManager {
       }
     });
 
-    // 3. Export package to local ZIP file (fallback / offline)
+    // 3. Retry upload with exact same pending package (same clientReportId, zipBuffer, SHA)
+    ipcMain.handle("diagnostics:retry-upload", async (event, params = {}) => {
+      try {
+        if (!this.pendingDiagnosticPackage) {
+          throw new Error("没有可重试的待上传诊断包，请重新上传");
+        }
+        const packagerResult = this.pendingDiagnosticPackage;
+        const uploadResult = await this.uploader.uploadPackage(packagerResult, params);
+        this.pendingDiagnosticPackage = null;
+
+        return {
+          success: true,
+          reportId: uploadResult.reportId,
+          fileSizeBytes: uploadResult.fileSizeBytes,
+          sha256: uploadResult.sha256,
+        };
+      } catch (err) {
+        return {
+          success: false,
+          error: err.message || "重试上传失败",
+        };
+      }
+    });
+
+    // 4. Discard pending package (when user clicks cancel/back)
+    ipcMain.handle("diagnostics:discard-pending", async () => {
+      this.pendingDiagnosticPackage = null;
+      return { success: true };
+    });
+
+    // 5. Export package to local ZIP file (fallback / offline)
     ipcMain.handle("diagnostics:export-local", async (event, params = {}) => {
       try {
-        // 优先保存失败的同一份 ZIP，保证本地导出的 SHA 与上传的一致
         let packagerResult = this.pendingDiagnosticPackage;
         if (!packagerResult) {
           packagerResult = await this.generatePackage(params);
@@ -152,7 +180,7 @@ export class DiagnosticManager {
       }
     });
 
-    // 4. Renderer error IPC event
+    // 6. Renderer error IPC event
     ipcMain.on("diagnostics:renderer-error", (event, errorInfo) => {
       try {
         this.errorCollector.recordError("renderer", errorInfo);
@@ -175,7 +203,7 @@ export class DiagnosticManager {
         historyStore: this.historyStore,
         traceStore: this.traceStore,
         relatedTaskId,
-        limit: 10,
+        limit: 5,
       }).catch(() => null),
     ]);
 
