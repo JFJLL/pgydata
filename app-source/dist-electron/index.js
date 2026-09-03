@@ -16344,7 +16344,7 @@ const W = {
     const n = await this.request("POST", `/api/scraping-tasks/${encodeURIComponent(e)}/runs`, {
       targetCount: t.targetCount ?? 0,
       ...t.fromRunId ? { fromRunId: t.fromRunId } : {}
-    });
+    }, { taskId: e });
     if (!((s = n.data) != null && s.id))
       throw new Error("创建 run 失败：返回缺 id");
     return {
@@ -16387,7 +16387,8 @@ const W = {
     await this.request(
       "POST",
       `/api/scraping-task-runs/${encodeURIComponent(e)}/resume`,
-      void 0
+      void 0,
+      { taskId: e }
     );
   }
   async recoverInterruptedRuns() {
@@ -16499,7 +16500,7 @@ const W = {
       throw new Error("未登录，无法判定积分余额");
     if (s <= 0)
       return 0;
-    const i = await this.request("GET", `/api/shumiao/check-balance?count=${encodeURIComponent(String(s))}`), o = Number(i.data?.balance ?? 0), r = Number(i.data?.required ?? s), c = Number(i.data?.shortage ?? Math.max(0, r - o));
+    const i = await this.request("GET", `/api/shumiao/check-balance?count=${encodeURIComponent(String(s))}`, void 0, { taskId: e.taskId }), o = Number(i.data?.balance ?? 0), r = Number(i.data?.required ?? s), c = Number(i.data?.shortage ?? Math.max(0, r - o));
     if (!i.data?.sufficient)
       throw new Error(`积分余额不足：当前 ${o}，本次待采集需要 ${r}，还差 ${c}`);
     return o;
@@ -16593,7 +16594,7 @@ const W = {
    * 续跑用：按 ID 批量拉达人（接口对侧最多 1000 个 id，多了分批）
    * 返回值与 BloggerQueueItem 同构 — dispatcher 取出后过滤掉 url 为空的项。
    */
-  async listBloggersByIds(e) {
+  async listBloggersByIds(e, diagnosticContext = {}) {
     var s;
     if (e.length === 0) return [];
     const t = [], n = 500;
@@ -16601,7 +16602,8 @@ const W = {
       const o = e.slice(i, i + n), c = ((s = (await this.request(
         "POST",
         "/api/bloggers/by-ids",
-        { ids: o }
+        { ids: o },
+        diagnosticContext
       )).data) == null ? void 0 : s.list) ?? [];
       t.push(...c);
     }
@@ -16954,6 +16956,17 @@ class Xd {
         );
         if (!m.authorized) {
           await pgyCollectionHistory.setStatus(t, "auth_expired");
+          try {
+            pgyDiagnosticManager?.recordTrace({
+              level: "error",
+              module: e.pluginId || "collection",
+              event: "auth_expired",
+              taskId: t,
+              step: "auth",
+              errorCode: "AUTH_EXPIRED",
+              message: `${u.name} 授权不可用`,
+            });
+          } catch {}
           this.sendToRenderer(W.task.error, {
             taskId: t,
             message: `${u.name} 授权不可用，请重新授权后再开始采集`,
@@ -16964,6 +16977,17 @@ class Xd {
         }
       } catch (m) {
         await pgyCollectionHistory.setStatus(t, "auth_expired");
+        try {
+          pgyDiagnosticManager?.recordTrace({
+            level: "error",
+            module: e.pluginId || "collection",
+            event: "auth_expired",
+            taskId: t,
+            step: "auth",
+            errorCode: "AUTH_CHECK_FAILED",
+            message: m instanceof Error ? m.message : String(m),
+          });
+        } catch {}
         this.sendToRenderer(W.task.error, {
           taskId: t,
           message: m instanceof Error ? m.message : String(m),
@@ -24447,7 +24471,7 @@ const Bn = class Bn {
         } catch (S) {
           return ne.error(`[task=${e.id}] resumeRun 失败:`, S), null;
         }
-        b.length > 0 && (n = (await this.api.listBloggersByIds(b)).filter((C) => !!C.url).map((C) => ({
+        b.length > 0 && (n = (await this.api.listBloggersByIds(b, { taskId: e.id })).filter((C) => !!C.url).map((C) => ({
           id: C.id,
           platform: C.platform,
           url: C.url,

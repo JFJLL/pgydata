@@ -596,6 +596,11 @@
       const trace = data.summary?.taskTrace || [];
       const errors = data.summary?.topErrors || [];
 
+      const displaySize = data.actualSizeBytes ?? data.expectedSizeBytes;
+      const displaySha = data.actualSha256 ?? data.expectedSha256;
+      const integrityText = data.status === "uploaded"
+        ? (data.integrityVerified ? "通过" : "未通过")
+        : "待上传";
       const baseFields = [
         ["报告编号", data.id],
         ["用户", `${data.userNickname || "未命名"} (${data.userPhone || "-"})`],
@@ -603,8 +608,9 @@
         ["发生时间", date(data.issueOccurredAt)],
         ["关联任务", data.relatedTaskId || "-"],
         ["状态", data.status === "uploaded" ? "已上传" : "待上传"],
-        ["文件大小", data.fileSize ? `${(data.fileSize / 1024).toFixed(1)} KB` : "-"],
-        ["SHA256", data.fileSha256 || "-"],
+        ["文件大小", displaySize ? `${(displaySize / 1024).toFixed(1)} KB` : "-"],
+        ["SHA256", displaySha || "-"],
+        ["完整性校验", integrityText],
       ];
 
       const envFields = [

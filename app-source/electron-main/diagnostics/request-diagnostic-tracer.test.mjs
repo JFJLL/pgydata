@@ -56,3 +56,30 @@ test("RequestDiagnosticTracer: request_start, request_success, effective failure
   assert.ok(timeoutTrace);
   assert.equal(timeoutTrace.errorCode, "NETWORK_TIMEOUT");
 });
+test("RequestDiagnosticTracer: once-only completion prevents duplicate request terminal events", () => {
+  const traces = [];
+  const mockTraceStore = { record: (item) => traces.push(item) };
+  const networkRecords = [];
+  const mockNetCollector = { recordRequest: (item) => networkRecords.push(item) };
+
+  const tracer = new RequestDiagnosticTracer(mockTraceStore, mockNetCollector);
+  const ctx = tracer.startRequest({ method: "POST", endpoint: "/api/test", taskId: "task_once" });
+
+  // First complete with timeout
+  const res1 = tracer.completeRequest(ctx, { isTimeout: true });
+  assert.equal(res1.ignoredDuplicate, undefined);
+
+  // Subsequent complete with error (e.g., abort triggered error event)
+  const res2 = tracer.completeRequest(ctx, { error: new Error("aborted") });
+  assert.equal(res2.ignoredDuplicate, true);
+
+  // Verify only 1 request_start and 1 request_timeout, NO request_failed
+  const startTraces = traces.filter((t) => t.event === "request_start");
+  const timeoutTraces = traces.filter((t) => t.event === "request_timeout");
+  const failTraces = traces.filter((t) => t.event === "request_failed");
+
+  assert.equal(startTraces.length, 1);
+  assert.equal(timeoutTraces.length, 1);
+  assert.equal(failTraces.length, 0);
+  assert.equal(networkRecords.length, 1);
+});

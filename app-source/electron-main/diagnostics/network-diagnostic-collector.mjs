@@ -1,8 +1,7 @@
 import { redactUrl, redactText } from "./diagnostic-redactor.mjs";
 
 export class NetworkDiagnosticCollector {
-  constructor(traceStore = null) {
-    this.traceStore = traceStore;
+  constructor() {
     this.reset();
   }
 
@@ -50,23 +49,7 @@ export class NetworkDiagnosticCollector {
         errorCode: info.errorCode ? String(info.errorCode).slice(0, 64) : null,
         requestId: info.requestId ? String(info.requestId).slice(0, 128) : null,
       });
-      // If traceStore is present, connect network events to diagnostic trace
-      if (this.traceStore && typeof this.traceStore.record === "function") {
-        const eventName = isTimeout ? "request_timeout" : isFailure ? "request_failed" : "request_success";
-        this.traceStore.record({
-          time: new Date().toISOString(),
-          level: isFailure ? "error" : "info",
-          module: "network",
-          event: eventName,
-          requestId: info.requestId ? String(info.requestId).slice(0, 128) : null,
-          httpMethod: info.httpMethod ? String(info.httpMethod).toUpperCase() : "GET",
-          endpoint: info.endpoint ? redactUrl(String(info.endpoint).slice(0, 128)) : "/",
-          httpStatus: httpStatus || null,
-          durationMs,
-          errorCode: info.errorCode ? String(info.errorCode).slice(0, 64) : null,
-          message: info.error ? redactText(String(info.error).slice(0, 500)) : null,
-        });
-      }
+
     } catch {}
   }
 

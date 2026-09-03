@@ -36,10 +36,15 @@ export class RequestDiagnosticTracer {
       endpoint: sanitizedEndpoint,
       taskId,
       host,
+      completed: false,
     };
   }
 
   completeRequest(context, { httpStatus = 200, parsedBody = null, error = null, isTimeout = false }) {
+    if (!context || context.completed) {
+      return { ignoredDuplicate: true };
+    }
+    context.completed = true;
     const durationMs = Date.now() - (context.startedAt || Date.now());
     const taskId = context.taskId || null;
     const requestId = context.requestId || null;

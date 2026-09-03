@@ -1021,7 +1021,7 @@ if (!main.includes("checkShumiaoBalanceForTask(e)")) {
       throw new Error("未登录，无法判定积分余额");
     if (s <= 0)
       return 0;
-    const i = await this.request("GET", \`/api/shumiao/check-balance?count=\${encodeURIComponent(String(s))}\`), o = Number(i.data?.balance ?? 0), r = Number(i.data?.required ?? s), c = Number(i.data?.shortage ?? Math.max(0, r - o));
+    const i = await this.request("GET", \`/api/shumiao/check-balance?count=\${encodeURIComponent(String(s))}\`, void 0, { taskId: e.taskId }), o = Number(i.data?.balance ?? 0), r = Number(i.data?.required ?? s), c = Number(i.data?.shortage ?? Math.max(0, r - o));
     if (!i.data?.sufficient)
       throw new Error(\`积分余额不足：当前 \${o}，本次待采集需要 \${r}，还差 \${c}\`);
     return o;
@@ -3668,9 +3668,11 @@ main = replaceOnce(
   "send one-based original item index to billing API",
 );
 
-main = replaceOnce(
-  main,
-  `  async checkShumiaoBalanceForTask(e) {
+if (!main.includes("checkShumiaoBalanceForTask") || !main.includes("taskId: e.taskId")) {
+  main = replaceAnyOnce(
+    main,
+    [
+      `  async checkShumiaoBalanceForTask(e) {
     const t = Array.isArray(e.urls) ? e.urls.length : 0;
     if (t <= 0)
       throw new Error("没有可计费的采集链接");
@@ -3681,7 +3683,7 @@ main = replaceOnce(
       throw new Error(\`积分余额不足：当前 \${s}，本次需要 \${i}，还差 \${o}\`);
     return s;
   }`,
-  `  async checkShumiaoBalanceForTask(e) {
+      `  async checkShumiaoBalanceForTask(e) {
     const t = Array.isArray(e.urls) ? e.urls.length : 0, n = Array.isArray(e.pendingCharges) ? e.pendingCharges.length : 0, s = Math.max(0, t - n);
     if (t <= 0)
       throw new Error("没有可计费的采集链接");
@@ -3694,8 +3696,23 @@ main = replaceOnce(
       throw new Error(\`积分余额不足：当前 \${o}，本次待采集需要 \${r}，还差 \${c}\`);
     return o;
   }`,
-  "pending charge reconciliation does not overstate required balance",
-);
+    ],
+    `  async checkShumiaoBalanceForTask(e) {
+    const t = Array.isArray(e.urls) ? e.urls.length : 0, n = Array.isArray(e.pendingCharges) ? e.pendingCharges.length : 0, s = Math.max(0, t - n);
+    if (t <= 0)
+      throw new Error("没有可计费的采集链接");
+    if (!this.isAuthenticated())
+      throw new Error("未登录，无法判定积分余额");
+    if (s <= 0)
+      return 0;
+    const i = await this.request("GET", \`/api/shumiao/check-balance?count=\${encodeURIComponent(String(s))}\`, void 0, { taskId: e.taskId }), o = Number(i.data?.balance ?? 0), r = Number(i.data?.required ?? s), c = Number(i.data?.shortage ?? Math.max(0, r - o));
+    if (!i.data?.sufficient)
+      throw new Error(\`积分余额不足：当前 \${o}，本次待采集需要 \${r}，还差 \${c}\`);
+    return o;
+  }`,
+    "pending charge reconciliation does not overstate required balance",
+  );
+}
 
 if (!main.includes("pgyCollectionHistory.createTask(t)")) {
   main = replaceOnce(

@@ -2627,24 +2627,54 @@ app.post("/api/diagnostics/reports", diagnosticsAuthRequired, asyncHandler(async
   }
 
   if (fileSizeBytes === undefined || !Number.isSafeInteger(Number(fileSizeBytes)) || Number(fileSizeBytes) <= 0 || Number(fileSizeBytes) > DIAGNOSTICS_MAX_BYTES) {
-    return failHttp(res, 400, 400, "fileSizeBytes 必须是 1 到 20MB 之间的安全整数");
+    return failHttp(res, 400, 400, `fileSizeBytes 必须是 1 到 ${DIAGNOSTICS_MAX_BYTES} 之间的安全整数`);
   }
 
   if (!fileSha256 || typeof fileSha256 !== "string" || !/^[a-f0-9]{64}$/i.test(fileSha256.trim())) {
     return failHttp(res, 400, 400, "fileSha256 必须是 64 位十六进制 SHA256 哈希");
   }
 
-  if (platform && !["win32", "darwin", "linux"].includes(String(platform))) {
+  if (platform !== undefined && platform !== null && !["win32", "darwin", "linux"].includes(platform)) {
     return failHttp(res, 400, 400, "platform 不合法");
   }
 
-  if (userNote && (typeof userNote !== "string" || userNote.length > 1000)) {
+  if (appVersion !== undefined && appVersion !== null && (typeof appVersion !== "string" || appVersion.length > 32)) {
+    return failHttp(res, 400, 400, "appVersion 必须是 32 字符以内的字符串");
+  }
+
+  if (assetsVersion !== undefined && assetsVersion !== null && (typeof assetsVersion !== "string" || assetsVersion.length > 32)) {
+    return failHttp(res, 400, 400, "assetsVersion 必须是 32 字符以内的字符串");
+  }
+
+  if (arch !== undefined && arch !== null && (typeof arch !== "string" || arch.length > 32)) {
+    return failHttp(res, 400, 400, "arch 必须是 32 字符以内的字符串");
+  }
+
+  if (installId !== undefined && installId !== null && (typeof installId !== "string" || installId.length > 64)) {
+    return failHttp(res, 400, 400, "installId 必须是 64 字符以内的字符串");
+  }
+
+  if (sessionId !== undefined && sessionId !== null && (typeof sessionId !== "string" || sessionId.length > 64)) {
+    return failHttp(res, 400, 400, "sessionId 必须是 64 字符以内的字符串");
+  }
+
+  if (relatedTaskId !== undefined && relatedTaskId !== null && (typeof relatedTaskId !== "string" || relatedTaskId.length > 128)) {
+    return failHttp(res, 400, 400, "relatedTaskId 必须是 128 字符以内的字符串");
+  }
+
+  if (issueOccurredAt !== undefined && issueOccurredAt !== null) {
+    if (typeof issueOccurredAt !== "string" || Number.isNaN(Date.parse(issueOccurredAt))) {
+      return failHttp(res, 400, 400, "issueOccurredAt 必须是有效 ISO 时间戳或 null");
+    }
+  }
+
+  if (userNote !== undefined && userNote !== null && (typeof userNote !== "string" || userNote.length > 1000)) {
     return failHttp(res, 400, 400, "userNote 不能超过 1000 字符");
   }
 
   let summaryStr = null;
   if (summary) {
-    if (typeof summary !== "object") return failHttp(res, 400, 400, "summary 必须是合法对象");
+    if (typeof summary !== "object" || Array.isArray(summary)) return failHttp(res, 400, 400, "summary 必须是合法对象");
     try {
       summaryStr = JSON.stringify(summary);
       if (Buffer.byteLength(summaryStr, "utf8") > 100 * 1024) {
@@ -2738,7 +2768,7 @@ app.post("/api/diagnostics/reports/:reportId/upload", diagnosticsAuthRequired, (
   }
 
   dbGet("SELECT * FROM diagnostic_reports WHERE id = ?", [reportId])
-    .then((report) => {
+    .then(async (report) => {
       if (!report) return failHttp(res, 404, 404, "诊断报告不存在");
       if (report.user_id !== req.user.id) return failHttp(res, 403, 403, "无权上传此诊断报告");
 
@@ -2750,103 +2780,139 @@ app.post("/api/diagnostics/reports/:reportId/upload", diagnosticsAuthRequired, (
       let magicBuffer = Buffer.alloc(0);
       let aborted = false;
 
-      const fileStream = fs.createWriteStream(tempFile);
-
       function cleanupTemp() {
-        try { fileStream.destroy(); } catch {}
         try { if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile); } catch {}
       }
 
-      req.on("data", (chunk) => {
-        if (aborted) return;
-        bytesCount += chunk.length;
+      const fileStream = fs.createWriteStream(tempFile);
 
-        if (bytesCount > DIAGNOSTICS_MAX_BYTES) {
-          aborted = true;
-          cleanupTemp();
-          req.pause();
-          return failHttp(res, 413, 413, "诊断包大小超出 20MB 上限");
-        }
+      // 使用 Promise 保证写流彻底 finish / close 后才触发后续操作
+      const streamPromise = new Promise((resolve, reject) => {
+        req.on("data", (chunk) => {
+          if (aborted) return;
+          bytesCount += chunk.length;
 
-        if (!magicChecked) {
-          magicBuffer = Buffer.concat([magicBuffer, chunk]);
-          if (magicBuffer.length >= 4) {
-            magicChecked = true;
-            const b0 = magicBuffer[0], b1 = magicBuffer[1], b2 = magicBuffer[2], b3 = magicBuffer[3];
-            const isZipMagic = (b0 === 0x50 && b1 === 0x4B) && (
-              (b2 === 0x03 && b3 === 0x04) ||
-              (b2 === 0x05 && b3 === 0x06) ||
-              (b2 === 0x07 && b3 === 0x08)
-            );
-            if (!isZipMagic) {
-              aborted = true;
-              cleanupTemp();
-              req.pause();
-              return failHttp(res, 400, 400, "文件格式必须为合法 ZIP 压缩包 (无效的 ZIP 签名)");
+          if (bytesCount > DIAGNOSTICS_MAX_BYTES) {
+            aborted = true;
+            cleanupTemp();
+            req.pause();
+            const err = new Error("诊断包大小超出 20MB 上限");
+            err.status = 413;
+            return reject(err);
+          }
+
+          if (!magicChecked) {
+            magicBuffer = Buffer.concat([magicBuffer, chunk]);
+            if (magicBuffer.length >= 4) {
+              magicChecked = true;
+              const b0 = magicBuffer[0], b1 = magicBuffer[1], b2 = magicBuffer[2], b3 = magicBuffer[3];
+              const isZip = (b0 === 0x50 && b1 === 0x4B) && (
+                (b2 === 0x03 && b3 === 0x04) ||
+                (b2 === 0x05 && b3 === 0x06) ||
+                (b2 === 0x07 && b3 === 0x08)
+              );
+              if (!isZip) {
+                aborted = true;
+                cleanupTemp();
+                req.pause();
+                const err = new Error("文件格式必须为合法 ZIP 压缩包 (无效的 ZIP 签名)");
+                err.status = 400;
+                return reject(err);
+              }
             }
           }
-        }
 
-        hash.update(chunk);
-        fileStream.write(chunk);
-      });
-
-      req.on("error", (err) => {
-        if (!aborted) {
-          aborted = true;
-          cleanupTemp();
-          next(err);
-        }
-      });
-
-      req.on("end", async () => {
-        if (aborted) return;
-        fileStream.end();
-
-        if (bytesCount === 0) {
-          cleanupTemp();
-          return failHttp(res, 400, 400, "上传内容为空");
-        }
-
-        const actualSha = hash.digest("hex");
-        const actualSize = bytesCount;
-
-        const expectedSha = report.expected_sha256 || req.get("x-magiorix-file-sha256");
-        if (expectedSha && expectedSha.toLowerCase() !== actualSha.toLowerCase()) {
-          cleanupTemp();
-          await dbRun(
-            "UPDATE diagnostic_reports SET status = 'failed', actual_size_bytes = ?, actual_sha256 = ? WHERE id = ?",
-            [actualSize, actualSha, reportId],
-          );
-          return failHttp(res, 400, 400, "文件 SHA256 哈希校验失败");
-        }
-
-        if (report.expected_size_bytes && report.expected_size_bytes !== actualSize) {
-          cleanupTemp();
-          await dbRun(
-            "UPDATE diagnostic_reports SET status = 'failed', actual_size_bytes = ?, actual_sha256 = ? WHERE id = ?",
-            [actualSize, actualSha, reportId],
-          );
-          return failHttp(res, 400, 400, "文件大小与预期不一致");
-        }
-
-        try {
-          if (fs.existsSync(targetFile)) fs.unlinkSync(targetFile);
-          fs.renameSync(tempFile, targetFile);
-        } catch (err) {
-          cleanupTemp();
-          return next(err);
-        }
-
-        const uploadedAt = nowIso();
-        await dbRun(
-          "UPDATE diagnostic_reports SET status = 'uploaded', file_path = ?, actual_size_bytes = ?, actual_sha256 = ?, uploaded_at = ? WHERE id = ?",
-          ["diagnostics/" + reportId + ".zip", actualSize, actualSha, uploadedAt, reportId],
-        );
-
-        return success(res, {
-          reportId, status: "uploaded", fileSizeBytes: actualSize, sha256: actualSha,
+          hash.update(chunk);
+          fileStream.write(chunk);
         });
+
+        req.on("error", (err) => {
+          if (!aborted) {
+            aborted = true;
+            cleanupTemp();
+            reject(err);
+          }
+        });
+
+        req.on("aborted", () => {
+          if (!aborted) {
+            aborted = true;
+            cleanupTemp();
+            const err = new Error("客户端连接意外中断");
+            err.status = 400;
+            reject(err);
+          }
+        });
+
+        fileStream.on("error", (err) => {
+          if (!aborted) {
+            aborted = true;
+            cleanupTemp();
+            reject(err);
+          }
+        });
+
+        req.on("end", () => {
+          if (aborted) return;
+          fileStream.end(() => {
+            resolve();
+          });
+        });
+      });
+
+      try {
+        await streamPromise;
+      } catch (streamErr) {
+        cleanupTemp();
+        if (streamErr.status) {
+          return failHttp(res, streamErr.status, streamErr.status, streamErr.message);
+        }
+        return next(streamErr);
+      }
+
+      if (bytesCount === 0) {
+        cleanupTemp();
+        return failHttp(res, 400, 400, "上传内容为空");
+      }
+
+      const actualSha = hash.digest("hex");
+      const actualSize = bytesCount;
+
+      const expectedSha = report.expected_sha256 || req.get("x-magiorix-file-sha256");
+      if (expectedSha && expectedSha.toLowerCase() !== actualSha.toLowerCase()) {
+        cleanupTemp();
+        await dbRun(
+          "UPDATE diagnostic_reports SET status = 'failed', actual_size_bytes = ?, actual_sha256 = ? WHERE id = ?",
+          [actualSize, actualSha, reportId],
+        );
+        return failHttp(res, 400, 400, "文件 SHA256 哈希校验失败");
+      }
+
+      if (report.expected_size_bytes && report.expected_size_bytes !== actualSize) {
+        cleanupTemp();
+        await dbRun(
+          "UPDATE diagnostic_reports SET status = 'failed', actual_size_bytes = ?, actual_sha256 = ? WHERE id = ?",
+          [actualSize, actualSha, reportId],
+        );
+        return failHttp(res, 400, 400, "文件大小与预期不一致");
+      }
+
+      try {
+        if (fs.existsSync(targetFile)) fs.unlinkSync(targetFile);
+        fs.renameSync(tempFile, targetFile);
+      } catch (err) {
+        cleanupTemp();
+        return next(err);
+      }
+
+      const uploadedAt = nowIso();
+      await dbRun(
+        "UPDATE diagnostic_reports SET status = 'uploaded', file_path = ?, actual_size_bytes = ?, actual_sha256 = ?, uploaded_at = ? WHERE id = ?",
+        ["diagnostics/" + reportId + ".zip", actualSize, actualSha, uploadedAt, reportId],
+      );
+
+      return success(res, {
+        reportId, status: "uploaded", fileSizeBytes: actualSize, sha256: actualSha,
       });
     })
     .catch(next);
